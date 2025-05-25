@@ -54,11 +54,11 @@ jobs:
           ~/.gradle/wrapper
         key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }} 
 
-    - name: Add google-services.json
+    - name: Prepare build files
       run: |
+        curl -u ${{ secrets.BASIC_AUTH }} -o key.properties ${{ secrets.URL_PREFIX }}key.properties
+        curl -u ${{ secrets.BASIC_AUTH }} -o app/app.key ${{ secrets.URL_PREFIX }}app.key
         echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
-      env:
-        GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
 
     - name: Gradle Build
       run: |
