@@ -37,6 +37,8 @@
     <string name="chat_page_edit_title_warning">請先聊天再編輯標題吧</string>
     <string name="chat_page_search_placeholder">搜尋對話記錄</string>
     <string name="chat_page_clear_context">清空上下文</string>
+    <string name="chat_page_restore_context">恢復上下文</string>
+    <string name="chat_page_context_truncated">上下文已截斷</string>
 
     <!-- Export Chat -->
     <string name="chat_page_export_format">匯出格式</string>
@@ -71,13 +73,13 @@
     <string name="setting_page_config_api_title">請配置API和模型</string>
     <string name="setting_page_config_api_desc">你還沒有配置API和模型，請先配置</string>
     <string name="setting_page_config">配置</string>
-    
+
     <!-- Setting Model Page -->
     <string name="setting_model_page_title">模型設定</string>
     <string name="setting_model_page_chat_model">聊天模型</string>
     <string name="setting_model_page_title_model">標題摘要模型</string>
     <string name="setting_model_page_translate_model">翻譯模型</string>
-    
+
     <!-- Translator Page -->
     <string name="translator_page_title">翻譯</string>
     <string name="translator_page_input_text">輸入文字</string>
@@ -87,7 +89,7 @@
     <string name="translator_page_target_language">目標語言:</string>
     <string name="translator_page_translate">翻譯</string>
     <string name="translator_page_cancel">取消</string>
-    
+
     <!-- Assistant Page -->
     <string name="assistant_page_title">助手設定</string>
     <string name="assistant_page_add">添加</string>
@@ -123,7 +125,7 @@
     <string name="assistant_page_thinking_budget_tokens">%s token</string>
     <string name="assistant_page_thinking_budget_default">預設</string>
     <string name="assistant_page_thinking_budget_warning">注意，由於不同提供商定義了各種不同的思考預算API格式，APP無法考慮到，因此這個選項不一定起作用，如果不起作用，推薦使用下面的自定義body來自定義請求</string>
-    
+
     <!-- Custom Headers and Bodies -->
     <string name="assistant_page_custom_headers">自定義 Headers</string>
     <string name="assistant_page_header_name">Header 名稱</string>
@@ -136,10 +138,10 @@
     <string name="assistant_page_invalid_json">無效的 JSON: %s</string>
     <string name="assistant_page_delete_body">刪除 Body</string>
     <string name="assistant_page_add_body">添加 Body</string>
-    
+
     <!-- Notification -->
     <string name="notification_channel_chat_completed">聊天完成</string>
-    
+
     <!-- Theme Types -->
     <string name="setting_page_theme_type_standard">標準</string>
     <string name="setting_page_theme_type_medium_contrast">中對比</string>
@@ -170,7 +172,7 @@
     <!-- Code Block -->
     <string name="code_block_copy">複製代碼</string>
     <string name="code_block_preview">預覽</string>
-    
+
     <!-- Mermaid Diagram -->
     <string name="mermaid_export">匯出</string>
     <string name="mermaid_export_success">匯出成功</string>
@@ -186,7 +188,7 @@
     <string name="setting_display_page_show_updates_title">顯示更新</string>
     <string name="setting_display_page_show_updates_desc">是否顯示應用更新通知</string>
     <string name="setting_display_page_title">顯示設定</string>
-    
+
     <!-- Color Mode -->
     <string name="setting_page_color_mode">顏色模式</string>
     <string name="setting_page_color_mode_system">跟隨系統</string>
@@ -200,4 +202,4 @@
     <string name="assistant_page_tab_request">自定義請求</string>
     <string name="assistant_page_stream_output">串流輸出</string>
     <string name="assistant_page_stream_output_desc">是否啟用訊息的串流輸出</string>
-</resources> 
+</resources>

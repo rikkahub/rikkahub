@@ -37,6 +37,8 @@
     <string name="chat_page_edit_title_warning">请先聊天再编辑标题吧</string>
     <string name="chat_page_search_placeholder">搜索聊天记录</string>
     <string name="chat_page_clear_context">清空上下文</string>
+    <string name="chat_page_restore_context">恢复上下文</string>
+    <string name="chat_page_context_truncated">上下文已截断</string>
 
     <!-- Export Chat -->
     <string name="chat_page_export_format">导出格式</string>
@@ -71,13 +73,13 @@
     <string name="setting_page_config_api_title">请配置API和模型</string>
     <string name="setting_page_config_api_desc">你还没有配置API和模型，请先配置</string>
     <string name="setting_page_config">配置</string>
-    
+
     <!-- Setting Model Page -->
     <string name="setting_model_page_title">模型设置</string>
     <string name="setting_model_page_chat_model">聊天模型</string>
     <string name="setting_model_page_title_model">标题总结模型</string>
     <string name="setting_model_page_translate_model">翻译模型</string>
-    
+
     <!-- Translator Page -->
     <string name="translator_page_title">翻译</string>
     <string name="translator_page_input_text">输入文本</string>
@@ -87,7 +89,7 @@
     <string name="translator_page_target_language">目标语言:</string>
     <string name="translator_page_translate">翻译</string>
     <string name="translator_page_cancel">取消</string>
-    
+
     <!-- Assistant Page -->
     <string name="assistant_page_title">助手设置</string>
     <string name="assistant_page_add">添加</string>
@@ -123,7 +125,7 @@
     <string name="assistant_page_thinking_budget_tokens">%s token</string>
     <string name="assistant_page_thinking_budget_default">默认</string>
     <string name="assistant_page_thinking_budget_warning">注意，由于不同提供商定义了各种不同的思考预算API格式，APP无法考虑到，因此这个选项不一定起作用，如果不起作用，推荐使用下面的自定义body来自定义请求</string>
-    
+
     <!-- Custom Headers and Bodies -->
     <string name="assistant_page_custom_headers">自定义 Headers</string>
     <string name="assistant_page_header_name">Header 名称</string>
@@ -136,21 +138,21 @@
     <string name="assistant_page_invalid_json">无效的 JSON: %s</string>
     <string name="assistant_page_delete_body">删除 Body</string>
     <string name="assistant_page_add_body">添加 Body</string>
-    
+
     <!-- Notification -->
     <string name="notification_channel_chat_completed">聊天完成</string>
-    
+
     <!-- Theme Types -->
     <string name="setting_page_theme_type_standard">标准</string>
     <string name="setting_page_theme_type_medium_contrast">中对比</string>
     <string name="setting_page_theme_type_high_contrast">高对比</string>
-    
+
     <!-- Theme Names -->
     <string name="theme_name_black">中性黑</string>
     <string name="theme_name_sakura">樱花粉</string>
     <string name="theme_name_ocean">海湾蓝</string>
     <string name="theme_name_spring">原野绿</string>
-    
+
     <!-- Menu Page -->
     <string name="menu_page_morning_greeting">早上好\uD83D\uDC4B</string>
     <string name="menu_page_afternoon_greeting">下午好\uD83D\uDC4B</string>
@@ -159,18 +161,18 @@
     <string name="menu_page_ai_translator">AI翻译</string>
     <string name="menu_page_knowledge_base">知识库 (施工中)</string>
     <string name="menu_page_llm_leaderboard">LLM排行榜</string>
-    
+
     <!-- ModelList Page -->
     <string name="model_list_select_model">选择模型</string>
     <string name="model_list_no_providers">没有可用AI提供商, 请在设置添加</string>
     <string name="model_list_favorite">收藏</string>
     <string name="model_list_chat">聊天</string>
     <string name="model_list_embedding">嵌入</string>
-    
+
     <!-- Code Block -->
     <string name="code_block_copy">复制代码</string>
     <string name="code_block_preview">预览</string>
-    
+
     <!-- Mermaid Diagram -->
     <string name="mermaid_export">导出</string>
     <string name="mermaid_export_success">导出成功</string>
@@ -186,7 +188,7 @@
     <string name="setting_display_page_show_updates_title">显示更新</string>
     <string name="setting_display_page_show_updates_desc">是否显示应用更新通知</string>
     <string name="setting_display_page_title">显示设置</string>
-    
+
     <!-- Color Mode -->
     <string name="setting_page_color_mode">颜色模式</string>
     <string name="setting_page_color_mode_system">跟随系统</string>
@@ -200,4 +202,4 @@
     <string name="assistant_page_tab_request">自定义请求</string>
     <string name="assistant_page_stream_output">流式输出</string>
     <string name="assistant_page_stream_output_desc">是否启用消息的流式输出</string>
-</resources> 
+</resources>

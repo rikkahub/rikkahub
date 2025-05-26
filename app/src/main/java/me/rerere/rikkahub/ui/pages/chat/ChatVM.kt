@@ -89,6 +89,11 @@ class ChatVM(
         get() = _conversation
     var useWebSearch by mutableStateOf(false)
 
+    // 上下文截断状态
+    var isContextTruncated by mutableStateOf(false)
+        private set
+    private var contextTruncationIndex: Int = 0
+
     // 异步任务
     val conversationJob = MutableStateFlow<Job?>(null)
 
@@ -154,6 +159,21 @@ class ChatVM(
             )
         }
     }
+
+    // 切换上下文截断状态
+    fun toggleContextTruncation() {
+        if (isContextTruncated) {
+            // 恢复上下文
+            isContextTruncated = false
+        } else {
+            // 截断上下文 - 记录当前消息数量作为截断点
+            contextTruncationIndex = conversation.value.messages.size
+            isContextTruncated = true
+        }
+    }
+
+    // 获取上下文截断索引
+    fun getContextTruncationIndex(): Int = contextTruncationIndex
 
     // Update checker
     val updateState = updateChecker.checkUpdate()
@@ -233,10 +253,22 @@ class ChatVM(
 //                assistant = settings.value.getCurrentAssistant(),
 //                conversation = conversation.value
 //            )
+            // 保存完整的消息列表，用于后续合并
+            val fullMessagesList = conversation.value.messages
+
+            // 根据上下文截断状态决定发送哪些消息
+            val messagesToSend = if (isContextTruncated) {
+                // 如果上下文被截断，只发送从截断点开始的消息
+                conversation.value.messages.drop(contextTruncationIndex)
+            } else {
+                // 正常情况下发送所有消息
+                conversation.value.messages
+            }
+
             generationHandler.generateText(
                 settings = settings.value,
                 model = model,
-                messages = conversation.value.messages,
+                messages = messagesToSend,
                 assistant = settings.value.getCurrentAssistant(),
                 memories = { memoryRepository.getMemoriesOfAssistant(settings.value.assistantId.toString()) },
                 inputTransformers = buildList {
@@ -271,7 +303,17 @@ class ChatVM(
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
-                        updateConversation(conversation.value.copy(messages = chunk.messages))
+                        // 正确合并消息：保留完整的消息历史，只更新相关部分
+                        val fullMessages = if (isContextTruncated) {
+                            // 如果上下文被截断，需要将生成的消息合并到完整的消息列表中
+                            // 保留截断点之前的消息，然后添加生成的新消息
+                            val existingMessages = fullMessagesList.take(contextTruncationIndex)
+                            existingMessages + chunk.messages
+                        } else {
+                            // 正常情况下直接使用生成的消息
+                            chunk.messages
+                        }
+                        updateConversation(conversation.value.copy(messages = fullMessages))
                     }
 
                     is GenerationChunk.TokenUsage -> {
@@ -311,7 +353,7 @@ class ChatVM(
                                 2. 不要使用标点符号和其他特殊符号
                                 3. 直接回复标题即可
                                 4. 使用 ${Locale.getDefault().displayName} 语言总结
-                                
+
                                 <content>
                                 ${conversation.messages.joinToString("\n\n") { it.summaryAsText() }}
                                 </content>
