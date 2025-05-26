@@ -1,11 +1,13 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +74,7 @@ import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Download
+import com.composables.icons.lucide.Eraser
 import com.composables.icons.lucide.History
 import com.composables.icons.lucide.ListTree
 import com.composables.icons.lucide.Lucide
@@ -202,9 +205,9 @@ fun ChatPage(id: Uuid, vm: ChatVM = koinViewModel()) {
                         )
                     },
                     onClearContext = {
-                        vm.updateConversation(conversation.copy(messages = emptyList()))
-                        vm.saveConversationAsync()
-                    }
+                        vm.toggleContextTruncation()
+                    },
+                    isContextTruncated = vm.isContextTruncated
                 )
             }
         ) { innerPadding ->
@@ -214,6 +217,8 @@ fun ChatPage(id: Uuid, vm: ChatVM = koinViewModel()) {
                 loading = loadingJob != null,
                 model = currentChatModel ?: Model(),
                 settings = setting,
+                isContextTruncated = vm.isContextTruncated,
+                contextTruncationIndex = vm.getContextTruncationIndex(),
                 onRegenerate = {
                     vm.regenerateAtMessage(it)
                 },
@@ -246,6 +251,8 @@ private fun ChatList(
     loading: Boolean,
     model: Model,
     settings: Settings,
+    isContextTruncated: Boolean = false,
+    contextTruncationIndex: Int = 0,
     onRegenerate: (UIMessage) -> Unit = {},
     onEdit: (UIMessage) -> Unit = {},
     onForkMessage: (UIMessage) -> Unit = {},
@@ -289,6 +296,14 @@ private fun ChatList(
             }
         }
 
+        // 上下文截断状态改变时自动滚动到底部
+        LaunchedEffect(isContextTruncated) {
+            delay(100) // 等待UI更新
+            if (state.layoutInfo.totalItemsCount > 0) {
+                state.animateScrollToItem(state.layoutInfo.totalItemsCount - 1)
+            }
+        }
+
         // 判断最近是否滚动
         LaunchedEffect(state.isScrollInProgress) {
             if (state.isScrollInProgress) {
@@ -308,42 +323,92 @@ private fun ChatList(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxSize()
         ) {
-            items(conversation.messages, key = { it.id }) { message ->
-                ListSelectableItem(
-                    key = message.id,
-                    onSelectChange = {
-                        if (!selectedItems.contains(message.id)) {
-                            selectedItems.add(message.id)
-                        } else {
-                            selectedItems.remove(message.id)
+            // 渲染消息，在截断点后插入指示器
+            conversation.messages.forEachIndexed { index, message ->
+                item(key = "message_${message.id}") {
+                    ListSelectableItem(
+                        key = message.id,
+                        onSelectChange = {
+                            if (!selectedItems.contains(message.id)) {
+                                selectedItems.add(message.id)
+                            } else {
+                                selectedItems.remove(message.id)
+                            }
+                        },
+                        selectedKeys = selectedItems,
+                        enabled = selecting && message.isValidToShowActions(),
+                    ) {
+                        ChatMessage(
+                            message = message,
+                            showIcon = settings.displaySetting.showModelIcon,
+                            model = message.modelId?.let { settings.providers.findModelById(it) },
+                            onRegenerate = {
+                                onRegenerate(message)
+                            },
+                            onEdit = {
+                                onEdit(message)
+                            },
+                            onFork = {
+                                onForkMessage(message)
+                            },
+                            onDelete = {
+                                onDelete(message)
+                            },
+                            onShare = {
+                                selecting = true
+                                selectedItems.clear()
+                                selectedItems.addAll(conversation.messages.map { it.id }
+                                    .subList(0, conversation.messages.indexOf(message) + 1))
+                            }
+                        )
+                    }
+                }
+
+                // 在截断点后插入指示器
+                if (isContextTruncated && index == contextTruncationIndex - 1) {
+                    item(key = "truncation_indicator") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 左侧分隔线
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(1.dp)
+                                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                            )
+
+                            // 中间的指示器
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    Lucide.Eraser,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                                )
+                                Text(
+                                    text = stringResource(R.string.chat_page_context_truncated),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.8f)
+                                )
+                            }
+
+                            // 右侧分隔线
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(1.dp)
+                                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                            )
                         }
-                    },
-                    selectedKeys = selectedItems,
-                    enabled = selecting && message.isValidToShowActions(),
-                ) {
-                    ChatMessage(
-                        message = message,
-                        showIcon = settings.displaySetting.showModelIcon,
-                        model = message.modelId?.let { settings.providers.findModelById(it) },
-                        onRegenerate = {
-                            onRegenerate(message)
-                        },
-                        onEdit = {
-                            onEdit(message)
-                        },
-                        onFork = {
-                            onForkMessage(message)
-                        },
-                        onDelete = {
-                            onDelete(message)
-                        },
-                        onShare = {
-                            selecting = true
-                            selectedItems.clear()
-                            selectedItems.addAll(conversation.messages.map { it.id }
-                                .subList(0, conversation.messages.indexOf(message) + 1))
-                        }
-                    )
+                    }
                 }
             }
 
@@ -375,6 +440,8 @@ private fun ChatList(
                     }
                 }
             }
+
+
 
             // 为了能正确滚动到这
             item(ScrollBottomKey) {

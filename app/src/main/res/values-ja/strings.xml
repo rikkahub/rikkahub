@@ -37,6 +37,8 @@
     <string name="chat_page_edit_title_warning">まずチャットしてからタイトルを編集してください</string>
     <string name="chat_page_search_placeholder">会話を検索</string>
     <string name="chat_page_clear_context">コンテキストをクリア</string>
+    <string name="chat_page_restore_context">コンテキストを復元</string>
+    <string name="chat_page_context_truncated">コンテキストが切り詰められました</string>
 
     <!-- Export Chat -->
     <string name="chat_page_export_format">エクスポート形式</string>
@@ -71,14 +73,14 @@
     <string name="setting_page_config_api_title">APIとモデルを設定してください</string>
     <string name="setting_page_config_api_desc">APIとモデルを設定してください</string>
     <string name="setting_page_config">設定</string>
-    
+
 
     <!-- Setting Model Page -->
     <string name="setting_model_page_title">モデル設定</string>
     <string name="setting_model_page_chat_model">チャットモデル</string>
     <string name="setting_model_page_title_model">タイトル要約モデル</string>
     <string name="setting_model_page_translate_model">翻訳モデル</string>
-    
+
     <!-- Translator Page -->
     <string name="translator_page_title">翻訳</string>
     <string name="translator_page_input_text">入力テキスト</string>
@@ -88,7 +90,7 @@
     <string name="translator_page_target_language">対象言語:</string>
     <string name="translator_page_translate">翻訳</string>
     <string name="translator_page_cancel">キャンセル</string>
-    
+
     <!-- Assistant Page -->
     <string name="assistant_page_title">アシスタント設定</string>
     <string name="assistant_page_add">追加</string>
@@ -124,7 +126,7 @@
     <string name="assistant_page_thinking_budget_tokens">%s トークン</string>
     <string name="assistant_page_thinking_budget_default">デフォルト</string>
     <string name="assistant_page_thinking_budget_warning">注意：異なるプロバイダーは様々な思考バジェットAPIフォーマットを定義しており、アプリはすべてに対応できないため、このオプションが機能しない場合があります。機能しない場合は、下のカスタムボディを使用してリクエストをカスタマイズすることをお勧めします。</string>
-    
+
     <!-- Custom Headers and Bodies -->
     <string name="assistant_page_custom_headers">カスタムヘッダー</string>
     <string name="assistant_page_header_name">ヘッダー名</string>
@@ -137,10 +139,10 @@
     <string name="assistant_page_invalid_json">無効なJSON: %s</string>
     <string name="assistant_page_delete_body">ボディを削除</string>
     <string name="assistant_page_add_body">ボディを追加</string>
-    
+
     <!-- Notification -->
     <string name="notification_channel_chat_completed">チャット完了</string>
-    
+
     <!-- Theme Types -->
     <string name="setting_page_theme_type_standard">標準</string>
     <string name="setting_page_theme_type_medium_contrast">中コントラスト</string>
@@ -171,7 +173,7 @@
     <!-- Code Block -->
     <string name="code_block_copy">コードをコピー</string>
     <string name="code_block_preview">プレビュー</string>
-    
+
     <!-- Mermaid Diagram -->
     <string name="mermaid_export">エクスポート</string>
     <string name="mermaid_export_success">エクスポートに成功しました</string>
@@ -187,7 +189,7 @@
     <string name="setting_display_page_auto_collapse_thinking_desc">思考が完了したら思考内容を自動的に折りたたむ</string>
     <string name="setting_display_page_show_updates_title">アップデートを表示</string>
     <string name="setting_display_page_show_updates_desc">アプリのアップデート通知を表示するかどうか</string>
-    
+
     <!-- Color Mode -->
     <string name="setting_page_color_mode">カラーモード</string>
     <string name="setting_page_color_mode_system">システム設定に従う</string>
@@ -201,4 +203,4 @@
     <string name="assistant_page_tab_request">カスタムリクエスト</string>
     <string name="assistant_page_stream_output">ストリーミング出力</string>
     <string name="assistant_page_stream_output_desc">メッセージをストリーミング出力するかどうか</string>
-</resources> 
+</resources>

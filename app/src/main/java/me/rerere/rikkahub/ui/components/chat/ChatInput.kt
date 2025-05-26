@@ -197,6 +197,7 @@ fun ChatInput(
     onClearContext: () -> Unit,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
+    isContextTruncated: Boolean = false,
 ) {
     val text =
         state.messageContent.filterIsInstance<UIMessagePart.Text>().firstOrNull()
@@ -400,7 +401,8 @@ fun ChatInput(
                 }
 
                 MoreOptionsButton(
-                    onClearContext = onClearContext
+                    onClearContext = onClearContext,
+                    isContextTruncated = isContextTruncated
                 )
 
                 Spacer(Modifier.weight(1f))
@@ -460,6 +462,7 @@ fun ChatInput(
 @Composable
 private fun MoreOptionsButton(
     onClearContext: () -> Unit = {},
+    isContextTruncated: Boolean = false,
 ) {
     var showMoreOptions by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
@@ -480,14 +483,22 @@ private fun MoreOptionsButton(
         ) {
             DropdownMenuItem(
                 text = {
-                    Text(stringResource(R.string.chat_page_clear_context))
+                    Text(
+                        stringResource(
+                            if (isContextTruncated) R.string.chat_page_restore_context
+                            else R.string.chat_page_clear_context
+                        )
+                    )
                 },
                 onClick = {
                     showMoreOptions = false
                     onClearContext()
                 },
                 leadingIcon = {
-                    Icon(Lucide.Eraser, null)
+                    Icon(
+                        if (isContextTruncated) Lucide.ArrowUp else Lucide.Eraser,
+                        null
+                    )
                 }
             )
         }
