@@ -212,6 +212,7 @@ data class DisplaySetting(
     val showTokenUsage: Boolean = true,
     val autoCloseThinking: Boolean = true,
     val showUpdates: Boolean = true,
+    val limitReasoningHeightDuringLoading: Boolean = true
 )
 
 fun Settings.isNotConfigured() = providers.all { it.models.isEmpty() }

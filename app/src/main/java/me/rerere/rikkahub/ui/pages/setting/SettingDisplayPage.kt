@@ -113,6 +113,25 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
             item {
                 ListItem(
                     headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_limit_reasoning_height_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_limit_reasoning_height_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.limitReasoningHeightDuringLoading,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(limitReasoningHeightDuringLoading = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
+                    headlineContent = {
                         Text(stringResource(R.string.setting_display_page_show_updates_title))
                     },
                     supportingContent = {
