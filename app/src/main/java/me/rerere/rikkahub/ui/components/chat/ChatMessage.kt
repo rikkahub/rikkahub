@@ -659,7 +659,10 @@ fun ReasoningCard(
     LaunchedEffect(reasoning, loading) {
         if (loading) {
             if (!expanded) expanded = true
-            scrollState.animateScrollTo(scrollState.maxValue)
+            // 只有在限制高度且内容可滚动时，滚动到底部才有意义
+            if (settings.displaySetting.limitReasoningHeightDuringLoading) {
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
         } else {
             if (expanded && settings.displaySetting.autoCloseThinking) expanded = false
         }
@@ -741,12 +744,11 @@ fun ReasoningCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .let {
+                        .let { currentModifier -> // 使用 let 链式调用修饰符
                             if (loading) {
-                                it
+                                var chainedModifier = currentModifier
                                     .graphicsLayer { alpha = 0.99f } // 触发离屏渲染，保证蒙版生效
                                     .drawWithCache {
-                                        // 创建顶部和底部的渐变蒙版
                                         val brush = Brush.verticalGradient(
                                             startY = 0f,
                                             endY = size.height,
@@ -762,14 +764,22 @@ fun ReasoningCard(
                                             drawRect(
                                                 brush = brush,
                                                 size = Size(size.width, size.height),
-                                                blendMode = androidx.compose.ui.graphics.BlendMode.DstIn // 用蒙版做透明渐变
+                                                blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
                                             )
                                         }
                                     }
-                                    .heightIn(max = 100.dp)
-                                    .verticalScroll(scrollState)
+
+                                // 根据设置决定是否限制高度和是否可滚动
+                                if (settings.displaySetting.limitReasoningHeightDuringLoading) {
+                                    chainedModifier = chainedModifier
+                                        .heightIn(max = 100.dp)
+                                        .verticalScroll(scrollState) // 只有在限制高度时才使其内部可滚动
+                                }
+                                // 如果不限制高度，则不添加 verticalScroll，让外部 LazyColumn 处理滚动
+                                chainedModifier
                             } else {
-                                it
+                                // 非加载状态，不应用特殊高度限制或渐变，也不需要内部滚动
+                                currentModifier
                             }
                         }
 

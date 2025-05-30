@@ -182,6 +182,8 @@
     <string name="setting_display_page_show_token_usage_desc">Display token usage at the bottom of the conversation</string>
     <string name="setting_display_page_auto_collapse_thinking_title">Auto Collapse Thinking</string>
     <string name="setting_display_page_auto_collapse_thinking_desc">Automatically collapse thinking content after thinking is complete</string>
+    <string name="setting_display_page_limit_reasoning_height_title">Limit Reasoning Height During Loading</string>
+    <string name="setting_display_page_limit_reasoning_height_desc">Limit the height of reasoning content during loading to prevent it from taking up too much space</string>
     <string name="setting_display_page_show_updates_title">Show Updates</string>
     <string name="setting_display_page_show_updates_desc">Whether to display app update notifications</string>
     <string name="setting_display_page_title">Display Settings</string>

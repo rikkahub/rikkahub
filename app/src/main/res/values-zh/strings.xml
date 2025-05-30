@@ -183,6 +183,8 @@
     <string name="setting_display_page_show_token_usage_desc">在对话底部显示Token消耗</string>
     <string name="setting_display_page_auto_collapse_thinking_title">自动折叠思考</string>
     <string name="setting_display_page_auto_collapse_thinking_desc">思考完成自动折叠思考内容</string>
+    <string name="setting_display_page_limit_reasoning_height_title">限制思考时高度</string>
+    <string name="setting_display_page_limit_reasoning_height_desc">在AI思考过程中是否限制思考内容区域的最大高度。</string>
     <string name="setting_display_page_show_updates_title">显示更新</string>
     <string name="setting_display_page_show_updates_desc">是否显示应用更新通知</string>
     <string name="setting_display_page_title">显示设置</string>
