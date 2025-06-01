@@ -205,4 +205,35 @@
     <string name="assistant_page_tab_request">自定義請求</string>
     <string name="assistant_page_stream_output">串流輸出</string>
     <string name="assistant_page_stream_output_desc">是否啟用訊息的串流輸出</string>
+
+    <!-- MCP Setting Page -->
+    <string name="setting_mcp_page_title">MCP</string>
+    <string name="setting_mcp_page_basic_settings">基本設定</string>
+    <string name="setting_mcp_page_tools">工具</string>
+    <string name="setting_mcp_page_enable">啟用</string>
+    <string name="setting_mcp_page_enable_desc">是否啟用此MCP伺服器</string>
+    <string name="setting_mcp_page_name">名稱</string>
+    <string name="setting_mcp_page_name_desc">MCP伺服器的顯示名稱</string>
+    <string name="setting_mcp_page_name_placeholder">例如：My MCP Server</string>
+    <string name="setting_mcp_page_transport_type">傳輸類型</string>
+    <string name="setting_mcp_page_transport_type_desc">選擇MCP伺服器的傳輸協定類型</string>
+    <string name="setting_mcp_page_server_url">伺服器地址</string>
+    <string name="setting_mcp_page_sse_url_desc">SSE傳輸伺服器的URL地址</string>
+    <string name="setting_mcp_page_websocket_url_desc">WebSocket伺服器的URL地址</string>
+    <string name="setting_mcp_page_sse_url_placeholder">https://example.com/sse</string>
+    <string name="setting_mcp_page_websocket_url_placeholder">wss://example.com/ws</string>
+    <string name="setting_mcp_page_custom_headers">自定義請求頭</string>
+    <string name="setting_mcp_page_custom_headers_desc">為MCP伺服器請求添加自定義HTTP頭</string>
+    <string name="setting_mcp_page_header_name">請求頭名稱</string>
+    <string name="setting_mcp_page_header_name_placeholder">例如：Authorization</string>
+    <string name="setting_mcp_page_header_value">請求頭值</string>
+    <string name="setting_mcp_page_header_value_placeholder">例如：Bearer token123</string>
+    <string name="setting_mcp_page_delete_header">刪除請求頭</string>
+    <string name="setting_mcp_page_add_header">添加請求頭</string>
+    <string name="setting_mcp_page_save">保存</string>
+    <string name="setting_mcp_page_url_label">URL</string>
+
+    <!-- MCP Picker -->
+    <string name="mcp_picker_title">MCP伺服器</string>
+    <string name="mcp_picker_syncing">正在同步MCP伺服器...</string>
 </resources> 

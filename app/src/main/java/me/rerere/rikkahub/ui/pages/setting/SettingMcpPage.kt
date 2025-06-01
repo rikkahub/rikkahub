@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Lucide
@@ -60,6 +61,7 @@ import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.mcp.McpServerConfig
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -99,7 +101,7 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
         topBar = {
             TopAppBar(
                 title = {
-                    Text("MCP")
+                    Text(stringResource(R.string.setting_mcp_page_title))
                 },
                 navigationIcon = {
                     BackButton()
@@ -268,7 +270,7 @@ private fun McpServerConfigModal(state: EditState<McpServerConfig>) {
                             }
                         },
                         text = {
-                            Text("基础设置")
+                            Text(stringResource(R.string.setting_mcp_page_basic_settings))
                         }
                     )
                     Tab(
@@ -279,7 +281,7 @@ private fun McpServerConfigModal(state: EditState<McpServerConfig>) {
                             }
                         },
                         text = {
-                            Text("工具")
+                            Text(stringResource(R.string.setting_mcp_page_tools))
                         }
                     )
                 }
@@ -314,7 +316,7 @@ private fun McpServerConfigModal(state: EditState<McpServerConfig>) {
                             state.confirm()
                         }
                     ) {
-                        Text("保存")
+                        Text(stringResource(R.string.setting_mcp_page_save))
                     }
                 }
             }
@@ -338,10 +340,10 @@ private fun McpCommonOptionsConfigure(
         // 启用/禁用开关
         FormItem(
             label = {
-                Text("启用")
+                Text(stringResource(R.string.setting_mcp_page_enable))
             },
             description = {
-                Text("是否启用此MCP服务器")
+                Text(stringResource(R.string.setting_mcp_page_enable_desc))
             }
         ) {
             Row(
@@ -349,7 +351,7 @@ private fun McpCommonOptionsConfigure(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("启用")
+                Text(stringResource(R.string.setting_mcp_page_enable))
                 Spacer(Modifier.weight(1f))
                 Switch(
                     checked = config.commonOptions.enable,
@@ -375,10 +377,10 @@ private fun McpCommonOptionsConfigure(
         // 名称输入框
         FormItem(
             label = {
-                Text("名称")
+                Text(stringResource(R.string.setting_mcp_page_name))
             },
             description = {
-                Text("MCP服务器的显示名称")
+                Text(stringResource(R.string.setting_mcp_page_name_desc))
             }
         ) {
             OutlinedTextField(
@@ -396,9 +398,9 @@ private fun McpCommonOptionsConfigure(
                         }
                     )
                 },
-                label = { Text("名称") },
+                label = { Text(stringResource(R.string.setting_mcp_page_name)) },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("例如：My MCP Server") }
+                placeholder = { Text(stringResource(R.string.setting_mcp_page_name_placeholder)) }
             )
         }
 
@@ -407,10 +409,10 @@ private fun McpCommonOptionsConfigure(
         // 传输类型选择
         FormItem(
             label = {
-                Text("传输类型")
+                Text(stringResource(R.string.setting_mcp_page_transport_type))
             },
             description = {
-                Text("选择MCP服务器的传输协议类型")
+                Text(stringResource(R.string.setting_mcp_page_transport_type_desc))
             }
         ) {
             val transportTypes = listOf("SSE", "WebSocket")
@@ -464,13 +466,13 @@ private fun McpCommonOptionsConfigure(
         // 服务器地址配置
         FormItem(
             label = {
-                Text("服务器地址")
+                Text(stringResource(R.string.setting_mcp_page_server_url))
             },
             description = {
                 Text(
                     when (config) {
-                        is McpServerConfig.SseTransportServer -> "SSE传输服务器的URL地址"
-                        is McpServerConfig.WebSocketServer -> "WebSocket服务器的URL地址"
+                        is McpServerConfig.SseTransportServer -> stringResource(R.string.setting_mcp_page_sse_url_desc)
+                        is McpServerConfig.WebSocketServer -> stringResource(R.string.setting_mcp_page_websocket_url_desc)
                     }
                 )
             }
@@ -488,13 +490,13 @@ private fun McpCommonOptionsConfigure(
                         }
                     )
                 },
-                label = { Text("URL") },
+                label = { Text(stringResource(R.string.setting_mcp_page_url_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = {
                     Text(
                         when (config) {
-                            is McpServerConfig.SseTransportServer -> "https://example.com/sse"
-                            is McpServerConfig.WebSocketServer -> "wss://example.com/ws"
+                            is McpServerConfig.SseTransportServer -> stringResource(R.string.setting_mcp_page_sse_url_placeholder)
+                            is McpServerConfig.WebSocketServer -> stringResource(R.string.setting_mcp_page_websocket_url_placeholder)
                         }
                     )
                 }
@@ -506,10 +508,10 @@ private fun McpCommonOptionsConfigure(
         // 请求头配置
         FormItem(
             label = {
-                Text("自定义请求头")
+                Text(stringResource(R.string.setting_mcp_page_custom_headers))
             },
             description = {
-                Text("为MCP服务器请求添加自定义HTTP头")
+                Text(stringResource(R.string.setting_mcp_page_custom_headers_desc))
             }
         ) {
             Column(
@@ -544,9 +546,9 @@ private fun McpCommonOptionsConfigure(
                                         }
                                     )
                                 },
-                                label = { Text("请求头名称") },
+                                label = { Text(stringResource(R.string.setting_mcp_page_header_name)) },
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("例如：Authorization") }
+                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_name_placeholder)) }
                             )
                             Spacer(Modifier.height(8.dp))
                             OutlinedTextField(
@@ -568,9 +570,9 @@ private fun McpCommonOptionsConfigure(
                                         }
                                     )
                                 },
-                                label = { Text("请求头值") },
+                                label = { Text(stringResource(R.string.setting_mcp_page_header_value)) },
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("例如：Bearer token123") }
+                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_value_placeholder)) }
                             )
                         }
                         IconButton(onClick = {
@@ -588,7 +590,7 @@ private fun McpCommonOptionsConfigure(
                                 }
                             )
                         }) {
-                            Icon(Lucide.Trash2, contentDescription = "删除请求头")
+                            Icon(Lucide.Trash2, contentDescription = stringResource(R.string.setting_mcp_page_delete_header))
                         }
                     }
                 }
@@ -611,9 +613,9 @@ private fun McpCommonOptionsConfigure(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Lucide.Plus, contentDescription = "添加请求头")
+                    Icon(Lucide.Plus, contentDescription = stringResource(R.string.setting_mcp_page_add_header))
                     Spacer(Modifier.width(4.dp))
-                    Text("添加请求头")
+                    Text(stringResource(R.string.setting_mcp_page_add_header))
                 }
             }
         }

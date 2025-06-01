@@ -206,4 +206,35 @@
     <string name="assistant_page_tab_request">カスタムリクエスト</string>
     <string name="assistant_page_stream_output">ストリーミング出力</string>
     <string name="assistant_page_stream_output_desc">メッセージをストリーミング出力するかどうか</string>
+
+    <!-- MCP Setting Page -->
+    <string name="setting_mcp_page_title">MCP</string>
+    <string name="setting_mcp_page_basic_settings">基本設定</string>
+    <string name="setting_mcp_page_tools">ツール</string>
+    <string name="setting_mcp_page_enable">有効</string>
+    <string name="setting_mcp_page_enable_desc">このMCPサーバーを有効にするかどうか</string>
+    <string name="setting_mcp_page_name">名前</string>
+    <string name="setting_mcp_page_name_desc">MCPサーバーの表示名</string>
+    <string name="setting_mcp_page_name_placeholder">例：My MCP Server</string>
+    <string name="setting_mcp_page_transport_type">転送タイプ</string>
+    <string name="setting_mcp_page_transport_type_desc">MCPサーバーの転送プロトコルタイプを選択</string>
+    <string name="setting_mcp_page_server_url">サーバーURL</string>
+    <string name="setting_mcp_page_sse_url_desc">SSE転送サーバーのURLアドレス</string>
+    <string name="setting_mcp_page_websocket_url_desc">WebSocketサーバーのURLアドレス</string>
+    <string name="setting_mcp_page_sse_url_placeholder">https://example.com/sse</string>
+    <string name="setting_mcp_page_websocket_url_placeholder">wss://example.com/ws</string>
+    <string name="setting_mcp_page_custom_headers">カスタムヘッダー</string>
+    <string name="setting_mcp_page_custom_headers_desc">MCPサーバーリクエストにカスタムHTTPヘッダーを追加</string>
+    <string name="setting_mcp_page_header_name">ヘッダー名</string>
+    <string name="setting_mcp_page_header_name_placeholder">例：Authorization</string>
+    <string name="setting_mcp_page_header_value">ヘッダー値</string>
+    <string name="setting_mcp_page_header_value_placeholder">例：Bearer token123</string>
+    <string name="setting_mcp_page_delete_header">ヘッダーを削除</string>
+    <string name="setting_mcp_page_add_header">ヘッダーを追加</string>
+    <string name="setting_mcp_page_save">保存</string>
+    <string name="setting_mcp_page_url_label">URL</string>
+
+    <!-- MCP Picker -->
+    <string name="mcp_picker_title">MCPサーバー</string>
+    <string name="mcp_picker_syncing">MCPサーバーを同期中...</string>
 </resources> 
