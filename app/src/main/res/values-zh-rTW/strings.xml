@@ -18,6 +18,8 @@
     <string name="citations_count">%1$d 條引用</string>
     <string name="back">返回</string>
     <string name="settings">設定</string>
+    <string name="confirm">確認</string>
+    <string name="cancel">取消</string>
 
     <!-- Chat Page -->
     <string name="chat_page_no_conversations">沒有對話記錄</string>
@@ -111,6 +113,7 @@
     <string name="assistant_page_save">保存</string>
     <string name="assistant_page_manage_memory_title">管理記憶</string>
     <string name="assistant_page_delete">刪除</string>
+    <string name="assistant_page_delete_dialog_text">確定要刪除這個助手嗎？此操作無法撤銷。</string>
     <string name="assistant_page_default_assistant">預設助手</string>
     <string name="assistant_page_temperature_value">溫度: %s</string>
     <string name="assistant_page_memory_count">記憶: %d</string>

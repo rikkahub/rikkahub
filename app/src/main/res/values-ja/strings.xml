@@ -18,6 +18,8 @@
     <string name="citations_count">%1$d 件の引用</string>
     <string name="back">戻る</string>
     <string name="settings">設定</string>
+    <string name="confirm">確認</string>
+    <string name="cancel">キャンセル</string>
 
     <!-- Chat Page -->
     <string name="chat_page_no_conversations">会話がありません</string>
@@ -112,6 +114,7 @@
     <string name="assistant_page_save">保存</string>
     <string name="assistant_page_manage_memory_title">記憶を管理</string>
     <string name="assistant_page_delete">削除</string>
+    <string name="assistant_page_delete_dialog_text">このアシスタントを削除してもよろしいですか？この操作は元に戻せません。</string>
     <string name="assistant_page_default_assistant">デフォルトアシスタント</string>
     <string name="assistant_page_temperature_value">温度: %s</string>
     <string name="assistant_page_memory_count">記憶: %d</string>
