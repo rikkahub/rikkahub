@@ -393,31 +393,49 @@ private fun ChatList(
             }
 
             // NEW: Combined Token and Context Usage Item
-            item(ContextUsageItemKey) { // 仍然使用 ContextUsageItemKey 作为这个合并项的键
-                val configuredContextSize = settings.getCurrentAssistant().contextMessageSize
-                val effectiveMessagesAfterTruncation = conversation.messages.size - conversation.truncateIndex.coerceAtLeast(0)
-                val actualContextMessageCount = minOf(effectiveMessagesAfterTruncation, configuredContextSize)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), // 居中对齐，并提供间距
-                ) {
-                    // 只有当设置允许显示Token使用量且实际有Token数据时才显示
-                    if (settings.displaySetting.showTokenUsage && conversation.tokenUsage != null) {
-                        Text(
-                            text = "Tokens: ${conversation.tokenUsage.totalTokens} (${conversation.tokenUsage.promptTokens} -> ${conversation.tokenUsage.completionTokens})",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                        )
+            // 首先判断是否应该显示Token使用量
+            val shouldShowTokenUsage = settings.displaySetting.showTokenUsage && conversation.tokenUsage != null
+            // 然后判断是否应该显示Context使用量 (即消息列表不为空)
+            val shouldShowContextUsage = conversation.messages.isNotEmpty()
+
+            // 只有当至少有一个统计信息需要显示时，才添加这个item
+            if (shouldShowTokenUsage || shouldShowContextUsage) {
+                item(ContextUsageItemKey) { // 仍然使用 ContextUsageItemKey 作为这个合并项的键
+                    val configuredContextSize = settings.getCurrentAssistant().contextMessageSize
+                    // 当消息为空时，有效消息数为0，否则按原逻辑计算
+                    val effectiveMessagesAfterTruncation = if (conversation.messages.isEmpty()) 0
+                                                          else conversation.messages.size - conversation.truncateIndex.coerceAtLeast(0)
+                    val actualContextMessageCount = minOf(effectiveMessagesAfterTruncation, configuredContextSize)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        // 如果两个都显示，则使用间隔并居中；如果只显示一个，则简单居中
+                        horizontalArrangement = if (shouldShowTokenUsage && shouldShowContextUsage) {
+                            Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                        } else {
+                            Arrangement.Center
+                        }
+                    ) {
+                        // 只有当应该显示Token使用量时才显示
+                        if (shouldShowTokenUsage) {
+                            Text(
+                                text = "Tokens: ${conversation.tokenUsage!!.totalTokens} (${conversation.tokenUsage.promptTokens} -> ${conversation.tokenUsage.completionTokens})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
+                        // 只有当应该显示Context使用量时才显示
+                        if (shouldShowContextUsage) {
+                            Text(
+                                text = "Context: $actualContextMessageCount/$configuredContextSize",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
                     }
-                    // 始终显示上下文数量
-                    Text(
-                        text = "Context: $actualContextMessageCount/$configuredContextSize",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                    )
                 }
             }
 
