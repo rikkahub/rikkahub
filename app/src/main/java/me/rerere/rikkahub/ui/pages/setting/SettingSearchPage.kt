@@ -143,6 +143,13 @@ private fun ProviderOptions(
                     }
                 }
 
+                is SearchServiceOptions.SearXNGOptions -> {
+                    SearXNGOptions(options as SearchServiceOptions.SearXNGOptions) {
+                        options = it
+                        onUpdateOptions(options)
+                    }
+                }
+
                 is SearchServiceOptions.BingLocalOptions -> {}
             }
             ProvideTextStyle(MaterialTheme.typography.labelMedium) {
@@ -257,5 +264,29 @@ private fun CommonOptions(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SearXNGOptions(
+    options: SearchServiceOptions.SearXNGOptions,
+    onUpdateOptions: (SearchServiceOptions.SearXNGOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API URL")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.url,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        url = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

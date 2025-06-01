@@ -18,6 +18,8 @@
     <string name="citations_count">%1$d 条引用</string>
     <string name="back">返回</string>
     <string name="settings">设置</string>
+    <string name="confirm">确认</string>
+    <string name="cancel">取消</string>
 
     <!-- Chat Page -->
     <string name="chat_page_no_conversations">没有对话记录</string>
@@ -111,6 +113,7 @@
     <string name="assistant_page_save">保存</string>
     <string name="assistant_page_manage_memory_title">管理记忆</string>
     <string name="assistant_page_delete">删除</string>
+    <string name="assistant_page_delete_dialog_text">确定要删除这个助手吗？此操作无法撤销。</string>
     <string name="assistant_page_default_assistant">默认助手</string>
     <string name="assistant_page_temperature_value">温度: %s</string>
     <string name="assistant_page_memory_count">记忆: %d</string>
@@ -202,4 +205,35 @@
     <string name="assistant_page_tab_request">自定义请求</string>
     <string name="assistant_page_stream_output">流式输出</string>
     <string name="assistant_page_stream_output_desc">是否启用消息的流式输出</string>
+
+    <!-- MCP Setting Page -->
+    <string name="setting_mcp_page_title">MCP</string>
+    <string name="setting_mcp_page_basic_settings">基础设置</string>
+    <string name="setting_mcp_page_tools">工具</string>
+    <string name="setting_mcp_page_enable">启用</string>
+    <string name="setting_mcp_page_enable_desc">是否启用此MCP服务器</string>
+    <string name="setting_mcp_page_name">名称</string>
+    <string name="setting_mcp_page_name_desc">MCP服务器的显示名称</string>
+    <string name="setting_mcp_page_name_placeholder">例如：My MCP Server</string>
+    <string name="setting_mcp_page_transport_type">传输类型</string>
+    <string name="setting_mcp_page_transport_type_desc">选择MCP服务器的传输协议类型</string>
+    <string name="setting_mcp_page_server_url">服务器地址</string>
+    <string name="setting_mcp_page_sse_url_desc">SSE传输服务器的URL地址</string>
+    <string name="setting_mcp_page_websocket_url_desc">WebSocket服务器的URL地址</string>
+    <string name="setting_mcp_page_sse_url_placeholder">https://example.com/sse</string>
+    <string name="setting_mcp_page_websocket_url_placeholder">wss://example.com/ws</string>
+    <string name="setting_mcp_page_custom_headers">自定义请求头</string>
+    <string name="setting_mcp_page_custom_headers_desc">为MCP服务器请求添加自定义HTTP头</string>
+    <string name="setting_mcp_page_header_name">请求头名称</string>
+    <string name="setting_mcp_page_header_name_placeholder">例如：Authorization</string>
+    <string name="setting_mcp_page_header_value">请求头值</string>
+    <string name="setting_mcp_page_header_value_placeholder">例如：Bearer token123</string>
+    <string name="setting_mcp_page_delete_header">删除请求头</string>
+    <string name="setting_mcp_page_add_header">添加请求头</string>
+    <string name="setting_mcp_page_save">保存</string>
+    <string name="setting_mcp_page_url_label">URL</string>
+
+    <!-- MCP Picker -->
+    <string name="mcp_picker_title">MCP服务器</string>
+    <string name="mcp_picker_syncing">正在同步MCP服务器...</string>
 </resources> 

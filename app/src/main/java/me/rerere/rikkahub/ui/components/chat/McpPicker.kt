@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.chat
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
@@ -31,8 +33,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFilter
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.stringResource
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Terminal
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.mcp.McpManager
 import me.rerere.rikkahub.data.mcp.McpServerConfig
 import me.rerere.rikkahub.data.model.Assistant
@@ -74,11 +78,24 @@ fun McpPickerButton(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "MCP服务器",
+                    text = stringResource(id = R.string.mcp_picker_title),
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold
                     )
                 )
+                AnimatedVisibility(loading) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    ) {
+                        LinearWavyProgressIndicator()
+                        Text(
+                            text = stringResource(id = R.string.mcp_picker_syncing),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
                 McpPicker(
                     assistant = assistant,
                     servers = servers,

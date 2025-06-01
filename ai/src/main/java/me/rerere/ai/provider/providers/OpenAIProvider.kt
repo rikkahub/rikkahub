@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -21,7 +22,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.core.Schema
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -274,7 +274,7 @@ object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
             put("model", params.model.modelId)
             put("messages", buildMessages(messages))
 
-            if(isModelAllowTemperature(params.model)) {
+            if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
                 if (params.topP != null) put("top_p", params.topP)
             }
@@ -296,7 +296,6 @@ object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
                                 put(
                                     "parameters",
                                     json.encodeToJsonElement(
-                                        Schema.serializer(),
                                         tool.parameters
                                     )
                                 )
@@ -313,7 +312,8 @@ object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
         return !model.modelId.matches(Regex("o[0-9](-.+)?"))
     }
 
-    private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {111
+    private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+        111
         messages
             .filter {
                 it.isValidToUpload()
