@@ -244,7 +244,8 @@ fun ChatPage(id: Uuid, vm: ChatVM = koinViewModel()) {
                 },
                 onDelete = {
                     vm.deleteMessage(it)
-                }
+                },
+                onMessageListClick = {} // Add the missing parameter
             )
         }
     }
@@ -259,13 +260,14 @@ private const val ContextUsageItemKey = "ContextUsageItemKey"
 private fun ChatList(
     innerPadding: PaddingValues,
     conversation: Conversation,
-    loading: Boolean,
+    loading: Boolean, // 这个 loading 代表整个会话是否在等待AI回复
     model: Model,
     settings: Settings,
     onRegenerate: (UIMessage) -> Unit = {},
     onEdit: (UIMessage) -> Unit = {},
     onForkMessage: (UIMessage) -> Unit = {},
     onDelete: (UIMessage) -> Unit = {},
+    onMessageListClick: () -> Unit // 保留这个参数
 ) {
     val state = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -344,6 +346,7 @@ private fun ChatList(
                             message = message,
                             showIcon = settings.displaySetting.showModelIcon,
                             model = message.modelId?.let { settings.providers.findModelById(it) },
+                            isLoadingConversation = loading, // <--- 传递会话加载状态
                             onRegenerate = {
                                 onRegenerate(message)
                             },

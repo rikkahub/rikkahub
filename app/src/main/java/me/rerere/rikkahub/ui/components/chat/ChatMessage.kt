@@ -122,27 +122,65 @@ fun ChatMessage(
     modifier: Modifier = Modifier,
     showIcon: Boolean = true,
     model: Model? = null,
+    isLoadingConversation: Boolean, // 用于判断AI消息是否正在加载
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit
 ) {
+    // 用于控制用户消息的操作按钮和详情的显示状态
+    var showUserMessageActionsAndDetails by remember(message.id) { mutableStateOf(false) }
+
+    val isUserMessage = message.role == MessageRole.USER
+    val isAssistantMessage = message.role == MessageRole.ASSISTANT
+
+    // AI消息完成的判断 (沿用之前的逻辑)
+    val isAssistantMessageEffectivelyComplete = !isLoadingConversation && isAssistantMessage
+
+    // 最终决定是否显示操作按钮和详情的条件
+    val shouldShowActionsAndDetails =
+        (isUserMessage && showUserMessageActionsAndDetails) || isAssistantMessageEffectivelyComplete
+
     Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
+        horizontalAlignment = if (isUserMessage) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         ModelIcon(showIcon, message, model)
-        MessagePartsBlock(
-            message.role,
-            message.parts,
-            message.annotations,
-        )
-        if (message.isValidToShowActions()) {
+
+        // 为用户消息的消息内容块添加点击事件
+        val messageContentModifier = if (isUserMessage) {
+            Modifier.clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = LocalIndication.current, // 可以设为 null 如果不想要点击效果
+                onClick = {
+                    showUserMessageActionsAndDetails = !showUserMessageActionsAndDetails
+                }
+            )
+        } else {
+            Modifier
+        }
+
+        // 将 MessagePartsBlock 包裹在 Box 中，以便应用 clickable 修饰符
+        Box(modifier = messageContentModifier) {
+            MessagePartsBlock(
+                message.role,
+                message.parts,
+                message.annotations,
+            )
+        }
+
+        // 根据条件显示 Actions
+        // isValidToShowActions 确保消息有实际内容才显示操作
+        if (message.isValidToShowActions() && shouldShowActionsAndDetails) {
             Actions(
                 message = message,
                 model = model,
+                // isMessageComplete 传递给 Actions，用于其内部的 AnimatedVisibility
+                // 对于用户消息，当 showUserMessageActionsAndDetails 为 true 时，我们认为它是“完成”并可交互的
+                // 对于AI消息，它依赖 isAssistantMessageEffectivelyComplete
+                isMessageComplete = if(isUserMessage) showUserMessageActionsAndDetails else isAssistantMessageEffectivelyComplete,
                 onRegenerate = onRegenerate,
                 onEdit = onEdit,
                 onFork = onFork,
@@ -180,6 +218,7 @@ private fun ModelIcon(
 private fun ColumnScope.Actions(
     message: UIMessage,
     model: Model?,
+    isMessageComplete: Boolean, // 此参数现在控制 Actions 内部 AnimatedVisibility 的显隐
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
@@ -187,158 +226,188 @@ private fun ColumnScope.Actions(
     onDelete: () -> Unit
 ) {
     val context = LocalContext.current
-    var showInformation by remember { mutableStateOf(false) }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Icon(
-            Lucide.Copy, stringResource(R.string.copy), modifier = Modifier
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = LocalIndication.current,
-                    onClick = {
-                        context.copyMessageToClipboard(message)
-                    }
-                )
-                .padding(8.dp)
-                .size(16.dp)
-        )
+    // showInformation 状态现在也应该只在 isMessageComplete 为 true 时才有意义切换
+    var showInformation by remember(message.id, isMessageComplete) { mutableStateOf(false) }
 
-        Icon(
-            Lucide.RefreshCw, stringResource(R.string.regenerate), modifier = Modifier
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = LocalIndication.current,
-                    onClick = {
-                        onRegenerate()
-                    }
-                )
-                .padding(8.dp)
-                .size(16.dp)
-        )
-
-        if (message.role == MessageRole.USER || message.role == MessageRole.ASSISTANT) {
-            Icon(
-                Lucide.Pencil, stringResource(R.string.edit), modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = LocalIndication.current,
-                        onClick = {
-                            onEdit()
-                        }
-                    )
-                    .padding(8.dp)
-                    .size(16.dp)
-            )
-            Icon(
-                Lucide.Trash, "Delete",
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = LocalIndication.current,
-                        onClick = {
-                            onDelete()
-                        }
-                    )
-                    .padding(8.dp)
-                    .size(16.dp)
-            )
-        }
-        if (message.role == MessageRole.ASSISTANT) {
-            val tts = rememberTtsState()
-            val isSpeaking by tts.isSpeaking.collectAsState()
-            Icon(
-                imageVector = if (isSpeaking) Lucide.CircleStop else Lucide.Volume2,
-                contentDescription = stringResource(R.string.tts),
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = LocalIndication.current,
-                        onClick = {
-                            if (!isSpeaking) {
-                                tts.speak(message.toText(), TextToSpeech.QUEUE_FLUSH)
-                            } else {
-                                tts.stop()
-                            }
-                        }
-                    )
-                    .padding(8.dp)
-                    .size(16.dp)
-            )
-        }
-        if (message.role == MessageRole.USER || message.role == MessageRole.ASSISTANT) {
-            Icon(
-                imageVector = if (showInformation) Lucide.ChevronUp else Lucide.ChevronDown,
-                contentDescription = "Info",
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = LocalIndication.current,
-                        onClick = {
-                            showInformation = !showInformation
-                        }
-                    )
-                    .padding(8.dp)
-                    .size(16.dp)
-            )
-        }
-    }
-
-    // Information
-    AnimatedVisibility(showInformation) {
-        ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+    // 如果 isMessageComplete 为 false，则不显示任何操作按钮或信息详情
+    AnimatedVisibility(visible = isMessageComplete) {
+        Column( // 使用 Column 包裹按钮行和信息详情，确保它们垂直排列
+            modifier = Modifier.fillMaxWidth(), // 让 Column 占据可用宽度
+            // 根据消息角色决定 Column 内容的水平对齐方式
+            horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start
+        ) {
+            // 按钮行
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
+                // Modifier.wrapContentWidth() 确保 Row 只占据其内容所需的宽度
+                // Alignment.Start 或 Alignment.End 取决于消息角色
+                modifier = Modifier.wrapContentWidth(
+                    align = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
+                    unbounded = true // 允许内容超出父级约束，虽然这里可能不需要
+                ),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), // 按钮间的固定间距
+                verticalAlignment = Alignment.CenterVertically // 垂直居中对齐按钮
             ) {
+                // 复制按钮
                 Icon(
-                    imageVector = Lucide.Share,
-                    contentDescription = "Share",
-                    modifier = Modifier
+                    Lucide.Copy, stringResource(R.string.copy), modifier = Modifier
                         .clip(CircleShape)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = LocalIndication.current,
                             onClick = {
-                                onShare()
+                                context.copyMessageToClipboard(message)
                             }
                         )
                         .padding(8.dp)
                         .size(16.dp)
                 )
 
+                // 重新生成按钮
                 Icon(
-                    Lucide.GitFork, "Fork", modifier = Modifier
+                    Lucide.RefreshCw, stringResource(R.string.regenerate), modifier = Modifier
                         .clip(CircleShape)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = LocalIndication.current,
                             onClick = {
-                                onFork()
+                                onRegenerate()
                             }
                         )
                         .padding(8.dp)
                         .size(16.dp)
                 )
 
-                Column {
-                    Text(message.createdAt.toJavaLocalDateTime().toLocalString())
-                    if (model != null) {
-                        Text(model.displayName)
+                // 编辑和删除按钮
+                if (message.role == MessageRole.USER || message.role == MessageRole.ASSISTANT) {
+                    Icon(
+                        Lucide.Pencil, stringResource(R.string.edit), modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = LocalIndication.current,
+                                onClick = {
+                                    onEdit()
+                                }
+                            )
+                            .padding(8.dp)
+                            .size(16.dp)
+                    )
+                    Icon(
+                        Lucide.Trash, "Delete",
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = LocalIndication.current,
+                                onClick = {
+                                    onDelete()
+                                }
+                            )
+                            .padding(8.dp)
+                            .size(16.dp)
+                    )
+                }
+
+                // TTS 按钮
+                if (message.role == MessageRole.ASSISTANT) {
+                    val tts = rememberTtsState()
+                    val isSpeaking by tts.isSpeaking.collectAsState()
+                    Icon(
+                        imageVector = if (isSpeaking) Lucide.CircleStop else Lucide.Volume2,
+                        contentDescription = stringResource(R.string.tts),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = LocalIndication.current,
+                                onClick = {
+                                    if (!isSpeaking) {
+                                        tts.speak(message.toText(), TextToSpeech.QUEUE_FLUSH)
+                                    } else {
+                                        tts.stop()
+                                    }
+                                }
+                            )
+                            .padding(8.dp)
+                            .size(16.dp)
+                    )
+                }
+
+                // 信息详情展开/收起按钮
+                if (message.role == MessageRole.USER || message.role == MessageRole.ASSISTANT) {
+                    Icon(
+                        imageVector = if (showInformation) Lucide.ChevronUp else Lucide.ChevronDown,
+                        contentDescription = "Info",
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = LocalIndication.current,
+                                onClick = {
+                                    showInformation = !showInformation
+                                }
+                            )
+                            .padding(8.dp)
+                            .size(16.dp)
+                    )
+                }
+            } // End of buttons Row
+
+            // 信息详情部分
+            AnimatedVisibility(visible = showInformation) {
+                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                    // 信息详情的 Row 应该占据全部可用宽度，并且内容居中
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth() // 让信息详情行占据全部宽度
+                            .padding(top = 4.dp, start = 8.dp, end = 8.dp, bottom = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceAround, // 或者根据需要调整
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Lucide.Share,
+                            contentDescription = "Share",
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = LocalIndication.current,
+                                    onClick = {
+                                        onShare()
+                                    }
+                                )
+                                .padding(8.dp)
+                                .size(16.dp)
+                        )
+
+                        Icon(
+                            Lucide.GitFork, "Fork", modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = LocalIndication.current,
+                                    onClick = {
+                                        onFork()
+                                    }
+                                )
+                                .padding(8.dp)
+                                .size(16.dp)
+                        )
+
+                        Column(
+                            // 如果希望文本也根据消息角色对齐
+                            horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start
+                        ) {
+                            Text(message.createdAt.toJavaLocalDateTime().toLocalString())
+                            if (model != null) {
+                                Text(model.displayName)
+                            }
+                        }
                     }
                 }
-            }
-        }
-    }
+            } // End of AnimatedVisibility for information
+        } // End of outer Column for Actions
+    } // End of outer AnimatedVisibility
 }
 
 @Composable
