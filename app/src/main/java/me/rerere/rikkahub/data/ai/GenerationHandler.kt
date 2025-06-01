@@ -15,8 +15,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.core.SchemaBuilder
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
@@ -139,7 +140,6 @@ class GenerationHandler(
                     val tool = toolsInternal.find { tool -> tool.name == toolCall.toolName }
                         ?: error("Tool ${toolCall.toolName} not found")
                     val args = json.parseToJsonElement(toolCall.arguments.ifBlank { "{}" })
-                    tool.parameters.validate(args)
                     val result = tool.execute(args)
                     results += UIMessagePart.ToolResult(
                         toolName = toolCall.toolName,
@@ -249,8 +249,13 @@ class GenerationHandler(
         Tool(
             name = "create_memory",
             description = "create a memory record",
-            parameters = SchemaBuilder.obj(
-                "content" to SchemaBuilder.str(),
+            parameters = InputSchema.Obj(
+                properties = buildJsonObject {
+                    put("content", buildJsonObject {
+                        put("type", "string")
+                        put("description", "The content of the memory record")
+                    })
+                },
                 required = listOf("content")
             ),
             execute = {
@@ -263,10 +268,18 @@ class GenerationHandler(
         Tool(
             name = "edit_memory",
             description = "update a memory record",
-            parameters = SchemaBuilder.obj(
-                "id" to SchemaBuilder.int(),
-                "content" to SchemaBuilder.str(),
-                required = listOf("id", "content")
+            parameters = InputSchema.Obj(
+                properties = buildJsonObject {
+                    put("id", buildJsonObject {
+                        put("type", "integer")
+                        put("description", "The id of the memory record")
+                    })
+                    put("content", buildJsonObject {
+                        put("type", "string")
+                        put("description", "The content of the memory record")
+                    })
+                },
+                required = listOf("id", "content"),
             ),
             execute = {
                 val params = it.jsonObject
@@ -281,8 +294,13 @@ class GenerationHandler(
         Tool(
             name = "delete_memory",
             description = "delete a memory record",
-            parameters = SchemaBuilder.obj(
-                "id" to SchemaBuilder.int(),
+            parameters = InputSchema.Obj(
+                properties = buildJsonObject {
+                    put("id", buildJsonObject {
+                        put("type", "integer")
+                        put("description", "The id of the memory record")
+                    })
+                },
                 required = listOf("id")
             ),
             execute = {
