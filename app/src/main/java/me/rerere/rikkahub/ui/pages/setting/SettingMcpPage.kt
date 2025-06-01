@@ -313,7 +313,9 @@ private fun McpServerConfigModal(state: EditState<McpServerConfig>) {
                 ) {
                     TextButton(
                         onClick = {
-                            state.confirm()
+                            if(config.commonOptions.name.isNotBlank()) {
+                                state.confirm()
+                            }
                         }
                     ) {
                         Text(stringResource(R.string.setting_mcp_page_save))

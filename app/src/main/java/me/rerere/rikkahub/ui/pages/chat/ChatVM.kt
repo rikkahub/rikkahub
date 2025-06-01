@@ -20,11 +20,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.core.SchemaBuilder
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderManager
@@ -163,8 +165,13 @@ class ChatVM(
     private val searchTool = Tool(
         name = "search_web",
         description = "search web for information",
-        parameters = SchemaBuilder.obj(
-            "query" to SchemaBuilder.str(),
+        parameters = InputSchema.Obj(
+            buildJsonObject {
+                put("query", buildJsonObject {
+                    put("type", "string")
+                    put("description", "search keyword")
+                })
+            },
             required = listOf("query")
         ),
         execute = {
@@ -264,13 +271,13 @@ class ChatVM(
                     mcpManager.getAllAvailableTools().forEach { tool ->
                         add(
                             Tool(
-                            name = tool.name,
-                            description = tool.description ?: "",
-                            parameters = tool.inputSchema,
-                            execute = {
-                                mcpManager.callTool(tool.name, it.jsonObject)
-                            }
-                        ))
+                                name = tool.name,
+                                description = tool.description ?: "",
+                                parameters = tool.inputSchema,
+                                execute = {
+                                    mcpManager.callTool(tool.name, it.jsonObject)
+                                }
+                            ))
                     }
                 },
                 truncateIndex = conversation.value.truncateIndex,
@@ -278,10 +285,10 @@ class ChatVM(
                 // 可能被取消了，或者意外结束，兜底更新
                 updateConversation(
                     conversation = conversation.value.copy(
-                    messages = conversation.value.messages.map { message ->
-                        message.finishReasoning() // 结束思考
-                    }
-                ))
+                        messages = conversation.value.messages.map { message ->
+                            message.finishReasoning() // 结束思考
+                        }
+                    ))
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {

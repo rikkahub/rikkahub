@@ -14,6 +14,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -21,7 +22,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.core.Schema
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -38,6 +38,7 @@ import me.rerere.ai.util.await
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
+import me.rerere.ai.util.removeElements
 import me.rerere.ai.util.toHeaders
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -393,11 +394,9 @@ object GoogleProvider : Provider<ProviderSetting.Google> {
                                 put("name", JsonPrimitive(tool.name))
                                 put("description", JsonPrimitive(tool.description))
                                 put(
-                                    "parameters",
-                                    json.encodeToJsonElement(
-                                        Schema.serializer(),
-                                        tool.parameters
-                                    )
+                                    key = "parameters",
+                                    element = json.encodeToJsonElement(tool.parameters)
+                                        .removeElements(listOf("const", "exclusiveMaximum", "exclusiveMinimum", "format"))
                                 )
                             })
                         }
