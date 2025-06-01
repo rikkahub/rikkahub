@@ -149,25 +149,27 @@ fun ChatMessage(
     ) {
         ModelIcon(showIcon, message, model)
 
-        // 为用户消息的消息内容块添加点击事件
-        val messageContentModifier = if (isUserMessage) {
-            Modifier.clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = LocalIndication.current, // 可以设为 null 如果不想要点击效果
-                onClick = {
-                    showUserMessageActionsAndDetails = !showUserMessageActionsAndDetails
-                }
-            )
-        } else {
-            Modifier
-        }
-
-        // 将 MessagePartsBlock 包裹在 Box 中，以便应用 clickable 修饰符
-        Box(modifier = messageContentModifier) {
-            MessagePartsBlock(
-                message.role,
-                message.parts,
-                message.annotations,
+        // 包裹 MessagePartsBlock 的 Box，用于控制其宽度和对齐
+        Box(
+            // 对于用户消息，让 Box 包裹其内容宽度；对于AI消息，让 Box 占据全部宽度
+            modifier = if (isUserMessage) {
+                Modifier
+                    .wrapContentWidth(align = Alignment.End, unbounded = true) // 用户消息内容自适应宽度并靠右
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = LocalIndication.current,
+                        onClick = {
+                            showUserMessageActionsAndDetails = !showUserMessageActionsAndDetails
+                        }
+                    )
+            } else {
+                Modifier.fillMaxWidth() // AI 消息内容块默认占据全部宽度
+            }
+        ) {
+            MessagePartsBlock( // MessagePartsBlock 内部的 Column 会根据父 Box 的约束来布局
+                role = message.role,
+                parts = message.parts,
+                annotations = message.annotations,
             )
         }
 
@@ -352,18 +354,21 @@ private fun ColumnScope.Actions(
                     )
                 }
             } // End of buttons Row
-
             // 信息详情部分
             AnimatedVisibility(visible = showInformation) {
                 ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                    // 信息详情的 Row 应该占据全部可用宽度，并且内容居中
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth() // 让信息详情行占据全部宽度
+                            .fillMaxWidth() // 信息详情行总是占据全部宽度
                             .padding(top = 4.dp, start = 8.dp, end = 8.dp, bottom = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceAround, // 或者根据需要调整
+                        // 信息详情内部元素可以根据需要调整 Arrangement
+                        horizontalArrangement = if (message.role == MessageRole.USER) Arrangement.End else Arrangement.Start,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // 如果是用户消息，并且希望信息详情内部元素也靠右，可以调整这里的排列
+                        // 例如，将 Column 放在最右边
+                        if (message.role == MessageRole.USER) Spacer(Modifier.weight(1f))
+
                         Icon(
                             imageVector = Lucide.Share,
                             contentDescription = "Share",
@@ -395,7 +400,6 @@ private fun ColumnScope.Actions(
                         )
 
                         Column(
-                            // 如果希望文本也根据消息角色对齐
                             horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start
                         ) {
                             Text(message.createdAt.toJavaLocalDateTime().toLocalString())
@@ -403,9 +407,10 @@ private fun ColumnScope.Actions(
                                 Text(model.displayName)
                             }
                         }
+                        if (message.role == MessageRole.ASSISTANT) Spacer(Modifier.weight(1f))
                     }
                 }
-            } // End of AnimatedVisibility for information
+            }
         } // End of outer Column for Actions
     } // End of outer AnimatedVisibility
 }
@@ -429,169 +434,197 @@ fun MessagePartsBlock(
 //        }
     }
 
-    // Reasoning
-    parts.filterIsInstance<UIMessagePart.Reasoning>().fastForEach { reasoning ->
-        ReasoningCard(
-            reasoning = reasoning,
-        )
-    }
 
-    // Text
-    parts.filterIsInstance<UIMessagePart.Text>().fastForEach { part ->
-        SelectionContainer {
-            if (role == MessageRole.USER) {
-                Card(
-                    modifier = Modifier
-                        .animateContentSize(),
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        MarkdownBlock(
-                            content = part.text,
-                            onClickCitation = { id ->
-                                handleClickCitation(id)
-                            }
-                        )
-                    }
-                }
-            } else {
-                MarkdownBlock(
-                    content = part.text,
-                    onClickCitation = { id ->
-                        handleClickCitation(id)
-                    },
-                    modifier = Modifier.animateContentSize()
-                )
-            }
+    // MessagePartsBlock 内部的 Column 现在会根据其父 Box 的宽度约束来表现
+    // 如果父 Box 是 wrapContentWidth (用户消息)，则此 Column 也会自适应内容宽度
+    // 如果父 Box 是 fillMaxWidth (AI消息)，则此 Column 也会占据全部宽度
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        // 确保 Column 内部元素也根据角色对齐（如果父 Box 是 fillMaxWidth）
+        horizontalAlignment = if (role == MessageRole.USER) Alignment.End else Alignment.Start
+    ) {
+        // Reasoning
+        parts.filterIsInstance<UIMessagePart.Reasoning>().fastForEach { reasoning ->
+            ReasoningCard(
+                reasoning = reasoning,
+                // ReasoningCard 总是 fillMaxWidth 看起来比较统一
+                modifier = Modifier.fillMaxWidth()
+            )
         }
-    }
 
-    // Tool Calls
-    parts.filterIsInstance<UIMessagePart.ToolResult>().fastForEachIndexed { index, toolCall ->
-        key(index) {
-            var showResult by remember { mutableStateOf(false) }
-            Box(
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.small)
-                    .clickable {
-                        showResult = true
+        // Text
+        parts.filterIsInstance<UIMessagePart.Text>().fastForEach { part ->
+            SelectionContainer {
+                // 对于用户消息，Card 的宽度将由其内容（MarkdownBlock）决定，
+                // 因为 MessagePartsBlock 的父 Box 是 wrapContentWidth。
+                // 对于AI消息，MarkdownBlock 会 fillMaxWidth。
+                if (role == MessageRole.USER) {
+                    Card(
+                        modifier = Modifier.animateContentSize(), // Card 自适应内容宽度
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) { // 内边距
+                            MarkdownBlock(
+                                content = part.text,
+                                onClickCitation = { id ->
+                                    handleClickCitation(id)
+                                }
+                            )
+                        }
                     }
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .padding(vertical = 4.dp, horizontal = 8.dp)
-                        .height(IntrinsicSize.Min)
-                ) {
-                    Icon(
-                        imageVector = when (toolCall.toolName) {
-                            "create_memory", "edit_memory" -> Lucide.BookHeart
-                            "delete_memory" -> Lucide.BookDashed
-                            "search_web" -> Lucide.Earth
-                            else -> Lucide.Wrench
+                } else { // AI 助手的文本消息
+                    MarkdownBlock(
+                        content = part.text,
+                        onClickCitation = { id ->
+                            handleClickCitation(id)
                         },
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = contentColor.copy(alpha = 0.7f)
+                        modifier = Modifier
+                            .animateContentSize()
+                            .fillMaxWidth() // AI 消息的 MarkdownBlock 占据全部宽度
                     )
-                    Column {
-                        Text(
-                            text = when (toolCall.toolName) {
-                                "create_memory" -> "创建了记忆"
-                                "edit_memory" -> "更新了记忆"
-                                "delete_memory" -> "删除了记忆"
-                                "search_web" -> "搜索网页: ${toolCall.arguments.jsonObject["query"]?.jsonPrimitive?.content}"
-                                else -> "调用工具 ${toolCall.toolName}"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
                 }
             }
-            if (showResult) {
-                ToolCallPreviewDialog(
-                    toolCall = toolCall,
-                    onDismissRequest = {
-                        showResult = false
-                    }
-                )
-            }
         }
-    }
 
-    // Annotations
-    if (annotations.isNotEmpty()) {
-        Column(
-            modifier = Modifier.animateContentSize(),
-        ) {
-            var expand by remember { mutableStateOf(false) }
-            if (expand) {
-                ProvideTextStyle(
-                    MaterialTheme.typography.labelMedium.copy(
-                        color = MaterialTheme.extendColors.gray8.copy(alpha = 0.65f)
-                    )
+        // Tool Calls / Tool Results
+        parts.filterIsInstance<UIMessagePart.ToolResult>().fastForEachIndexed { index, toolResult ->
+            key(index) {
+                var showResult by remember { mutableStateOf(false) }
+                // ToolResult 的外层 Box 保持 fillMaxWidth，内部 UI 通过 wrapContentWidth 对齐
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth() // 确保 ToolResult 区域有机会根据角色对齐
+                        .wrapContentWidth(
+                            align = if (role == MessageRole.USER) Alignment.End else Alignment.Start,
+                            unbounded = true
+                        )
                 ) {
-                    Column(
+                    Box( // 实际的 ToolResult UI
                         modifier = Modifier
-                            .drawWithContent {
-                                drawContent()
-                                drawRoundRect(
-                                    color = contentColor.copy(alpha = 0.2f),
-                                    size = Size(width = 10f, height = size.height),
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable { showResult = true }
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .padding(vertical = 4.dp, horizontal = 8.dp)
+                                .height(IntrinsicSize.Min)
+                        ) {
+                            Icon(
+                                imageVector = when (toolResult.toolName) {
+                                    "create_memory", "edit_memory" -> Lucide.BookHeart
+                                    "delete_memory" -> Lucide.BookDashed
+                                    "search_web" -> Lucide.Earth
+                                    else -> Lucide.Wrench
+                                },
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = contentColor.copy(alpha = 0.7f)
+                            )
+                            Column {
+                                Text(
+                                    text = when (toolResult.toolName) {
+                                        "create_memory" -> "创建了记忆"
+                                        "edit_memory" -> "更新了记忆"
+                                        "delete_memory" -> "删除了记忆"
+                                        "search_web" -> "搜索网页: ${toolResult.arguments.jsonObject["query"]?.jsonPrimitive?.content}"
+                                        else -> "调用工具 ${toolResult.toolName}"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
                                 )
                             }
-                            .padding(start = 16.dp)
-                            .padding(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        }
+                    }
+                }
+                if (showResult) {
+                    ToolCallPreviewDialog(
+                        toolCall = toolResult,
+                        onDismissRequest = { showResult = false }
+                    )
+                }
+            }
+        }
+
+        // Annotations
+        if (annotations.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .animateContentSize()
+                    .fillMaxWidth(), // 注解部分也占据全部宽度
+                horizontalAlignment = if (role == MessageRole.USER) Alignment.End else Alignment.Start // 根据角色对齐
+            ) {
+                var expand by remember { mutableStateOf(false) }
+                // ... (Annotations 内容不变) ...
+                if (expand) {
+                    ProvideTextStyle(
+                        MaterialTheme.typography.labelMedium.copy(
+                            color = MaterialTheme.extendColors.gray8.copy(alpha = 0.65f)
+                        )
                     ) {
-                        annotations.fastForEachIndexed { index, annotation ->
-                            when (annotation) {
-                                is UIMessageAnnotation.UrlCitation -> {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Favicon(annotation.url, modifier = Modifier.size(20.dp))
-                                        Text(
-                                            text = buildAnnotatedString {
-                                                append("${index + 1}. ")
-                                                withLink(LinkAnnotation.Url(annotation.url)) {
-                                                    append(annotation.title.urlDecode())
+                        Column(
+                            modifier = Modifier
+                                .drawWithContent {
+                                    drawContent()
+                                    drawRoundRect(
+                                        color = contentColor.copy(alpha = 0.2f),
+                                        size = Size(width = 10f, height = size.height),
+                                    )
+                                }
+                                .padding(start = 16.dp)
+                                .padding(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            annotations.fastForEachIndexed { index, annotation ->
+                                when (annotation) {
+                                    is UIMessageAnnotation.UrlCitation -> {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Favicon(annotation.url, modifier = Modifier.size(20.dp))
+                                            Text(
+                                                text = buildAnnotatedString {
+                                                    append("${index + 1}. ")
+                                                    withLink(LinkAnnotation.Url(annotation.url)) {
+                                                        append(annotation.title.urlDecode())
+                                                    }
                                                 }
-                                            }
-                                        )
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-            TextButton(
-                onClick = {
-                    expand = !expand
+                TextButton(
+                    onClick = {
+                        expand = !expand
+                    }
+                ) {
+                    Text(stringResource(R.string.citations_count, annotations.size))
                 }
-            ) {
-                Text(stringResource(R.string.citations_count, annotations.size))
             }
         }
-    }
 
-    // Images
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        val images = parts.filterIsInstance<UIMessagePart.Image>()
-        images.fastForEach {
-            ZoomableAsyncImage(
-                model = it.url,
-                contentDescription = null,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .width(72.dp)
-            )
-        }
+        // Images
+        // FlowRow 默认会根据内容换行，其对齐方式会继承父 Column
+        FlowRow(
+            horizontalArrangement = if (role == MessageRole.USER) Arrangement.End else Arrangement.Start, // 让图片也根据角色对齐
+            modifier = Modifier.fillMaxWidth() // FlowRow 占据全部宽度
+        ) {
+            val images = parts.filterIsInstance<UIMessagePart.Image>()
+            images.fastForEach {
+                ZoomableAsyncImage(
+                    model = it.url,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .width(72.dp)
+                )
+            }
+         }
     }
 }
 
