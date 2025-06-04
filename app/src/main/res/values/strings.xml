@@ -236,4 +236,12 @@
     <!-- MCP Picker -->
     <string name="mcp_picker_title">MCP Servers</string>
     <string name="mcp_picker_syncing">Syncing MCP servers...</string>
+
+    <!-- Export Conversations -->
+    <string name="setting_page_export_conversations_title">Export Conversations</string>
+    <string name="setting_page_export_conversations_desc">Export all your conversations to a JSON file.</string>
+    <string name="export_conversations_success">Conversations exported successfully to %1$s</string>
+    <string name="export_conversations_cancelled">Export cancelled</string>
+    <string name="export_conversations_failed">Export failed</string>
+    <string name="export_conversations_uri_null">Export cancelled or failed to get file location.</string>
 </resources>
