@@ -2,7 +2,10 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +43,7 @@ import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Compass
+import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Heart
 import com.composables.icons.lucide.Lucide
@@ -63,6 +67,18 @@ import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun SettingPage(vm: SettingVM = koinViewModel()) {
+    val context = LocalContext.current
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+        onResult = { uri: Uri? ->
+            if (uri != null) {
+                vm.exportConversations(context, uri)
+            } else {
+                Toast.makeText(context, context.getString(R.string.export_conversations_cancelled), Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
+
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -284,6 +300,18 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     icon = {
                         Icon(Lucide.HardDrive, "Storage")
                     },
+                )
+            }
+
+            item {
+                SettingItem(
+                    navController = navController,
+                    title = { Text(stringResource(R.string.setting_page_export_conversations_title)) },
+                    description = { Text(stringResource(R.string.setting_page_export_conversations_desc)) },
+                    icon = { Icon(Lucide.Download, "Export Conversations") },
+                    onClick = {
+                        exportLauncher.launch("conversations-export.json")
+                    }
                 )
             }
 
