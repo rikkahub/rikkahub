@@ -150,6 +150,7 @@ fun ChatMessage(
     showIcon: Boolean = true,
     model: Model? = null,
     showActions: Boolean,
+    onClick: () -> Unit, // 新增：接收点击事件的回调
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
@@ -160,7 +161,12 @@ fun ChatMessage(
     val message = node.messages[node.selectIndex]
     Column(
         modifier = modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null, // 设置为 null 以禁用点击时的视觉效果
+                onClick = onClick
+            ),
         horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {

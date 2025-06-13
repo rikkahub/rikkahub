@@ -701,6 +701,7 @@ private fun AssistantPromptSettings(
                         ChatMessage(
                             node = message.toMessageNode(),
                             showActions = true,
+                            onClick = {}, 
                             onFork = {},
                             onRegenerate = {},
                             onEdit = {},

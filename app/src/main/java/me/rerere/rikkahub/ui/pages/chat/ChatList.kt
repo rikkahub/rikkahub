@@ -86,6 +86,8 @@ fun ChatList(
     val state = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
+    var expandedMessageId by remember { mutableStateOf<Uuid?>(null) }
+
     val viewPortSize by remember { derivedStateOf { state.layoutInfo.viewportSize } }
     var isRecentScroll by remember { mutableStateOf(false) }
 
@@ -173,17 +175,25 @@ fun ChatList(
                         val isAssistantMessage = node.role == MessageRole.ASSISTANT
 
                         // 计算是否显示操作菜单的最终标志
-                        val showActionsForThisMessage = if (isLastMessage && isAssistantMessage) {
-                            !loading
-                        } else {
-                            node.currentMessage.isValidToShowActions()
-                        }
+                        // 修改：计算操作菜单可见性的逻辑
+                        val showActions = (expandedMessageId == node.id) ||
+                                (isLastMessage && isAssistantMessage && !loading)
 
                         ChatMessage(
                             node = node,
                             showIcon = settings.displaySetting.showModelIcon,
                             model = node.currentMessage.modelId?.let { settings.findModelById(it) },
-                            showActions = showActionsForThisMessage,
+                            showActions = showActions, 
+
+                            onClick = {
+                                if (!selecting) {
+                                    expandedMessageId = if (expandedMessageId == node.id) {
+                                        null 
+                                    } else {
+                                        node.id 
+                                    }
+                                }
+                            },
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)
                             },
