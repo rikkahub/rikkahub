@@ -114,16 +114,17 @@ private fun MarkdownPreview() {
     ) {
         MarkdownBlock(
             content = """
-                # Hello World
-                
-                1. To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer
+                # 🌍 This is Markdown Test, This is Markdown Test
+                1. How many roads must a man walk down
                     * the slings and arrows of outrageous fortune, Or to take arms against a sea of troubles,
                     * by opposing end them.
-                2. To die: to sleep; No more; and by a sleep to say we end the heart-ache and the thousand natural shocks
-                * that flesh is heir to, 'tis a consummation devoutly to be wish'd.
-                * TTL
-                3. To die, to sleep; To sleep: perchance to dream: ay, there's the rub;
-                4. For in that sleep of death what dreams may come
+                        * How many times must a man look up, Before he can see the sky?
+                2. How many times must a man look up, Before he can see the sky?  
+                * Before they're allowed to be free? Yes, 'n' how many times can a man turn his head  
+                * Before they're allowed to be free? Yes, 'n' how many times can a man turn his head
+                3. How many times must a man look up, Before he can see the sky?  
+                4. For in that sleep of death what dreams may come [citation](1)
+                # 🌍 This is Markdown Test
                 
                 | A | B |
                 | - | - |
@@ -158,10 +159,7 @@ fun MarkdownBlock(
     }
 
     ProvideTextStyle(style) {
-        Column(
-            modifier = modifier,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
+        Column(modifier = modifier) {
             astTree.children.fastForEach { child ->
                 MarkdownNode(
                     node = child,
@@ -224,7 +222,8 @@ fun MarkdownNode(
     node: ASTNode,
     content: String,
     modifier: Modifier = Modifier,
-    onClickCitation: (Int) -> Unit
+    onClickCitation: (Int) -> Unit,
+    listLevel: Int = 0
 ) {
     when (node.type) {
         // 文件根节点
@@ -244,7 +243,7 @@ fun MarkdownNode(
             Paragraph(
                 node = node,
                 content = content,
-                modifier = Modifier.padding(vertical = 0.dp),
+                modifier = modifier,
                 onClickCitation = onClickCitation
             )
         }
@@ -266,7 +265,7 @@ fun MarkdownNode(
                 else -> throw IllegalArgumentException("Unknown header type")
             }
             ProvideTextStyle(value = style) {
-                FlowRow(modifier = modifier.padding(vertical = 8.dp)) {
+                FlowRow(modifier = modifier.padding(vertical = 16.dp)) {
                     node.children.forEach { child ->
                         MarkdownNode(
                             node = child,
@@ -281,61 +280,23 @@ fun MarkdownNode(
 
         // 列表
         MarkdownElementTypes.UNORDERED_LIST -> {
-            Column(
-                modifier = modifier.padding(start = 4.dp, bottom = 8.dp)
-            ) {
-                node.children.fastForEach { child ->
-                    if (child.type == MarkdownElementTypes.LIST_ITEM) {
-                        Row(
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        ) {
-                            Text(
-                                text = "• ",
-                                modifier = Modifier.alignByBaseline()
-                            )
-                            FlowRow {
-                                child.children.fastForEach { listItemChild ->
-                                    MarkdownNode(
-                                        node = listItemChild,
-                                        content = content,
-                                        onClickCitation = onClickCitation
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            UnorderedListNode(
+                node = node,
+                content = content,
+                modifier = modifier,
+                onClickCitation = onClickCitation,
+                level = listLevel
+            )
         }
 
         MarkdownElementTypes.ORDERED_LIST -> {
-            Column(
-                modifier = modifier.padding(start = 4.dp, bottom = 8.dp)
-            ) {
-                var index = 1
-                node.children.fastForEach { child ->
-                    if (child.type == MarkdownElementTypes.LIST_ITEM) {
-                        Row(
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        ) {
-                            Text(
-                                text = child.findChildOfType(MarkdownTokenTypes.LIST_NUMBER)
-                                    ?.getTextInNode(content) ?: "-",
-                            )
-                            FlowRow {
-                                child.children.fastForEach { listItemChild ->
-                                    MarkdownNode(
-                                        node = listItemChild,
-                                        content = content,
-                                        onClickCitation = onClickCitation
-                                    )
-                                }
-                            }
-                        }
-                        index++
-                    }
-                }
-            }
+            OrderedListNode(
+                node = node,
+                content = content,
+                modifier = modifier,
+                onClickCitation = onClickCitation,
+                level = listLevel
+            )
         }
 
         // 引用块
@@ -509,10 +470,6 @@ fun MarkdownNode(
             )
         }
 
-        MarkdownTokenTypes.EOL -> {
-            Spacer(Modifier.fillMaxWidth())
-        }
-
         // 其他类型的节点，递归处理子节点
         else -> {
             // 递归处理其他节点的子节点
@@ -526,6 +483,128 @@ fun MarkdownNode(
             }
         }
     }
+}
+
+@Composable
+private fun UnorderedListNode(
+    node: ASTNode,
+    content: String,
+    modifier: Modifier = Modifier,
+    onClickCitation: (Int) -> Unit,
+    level: Int = 0
+) {
+    val bulletStyle = when (level % 3) {
+        0 -> "• "
+        1 -> "◦ "
+        else -> "▪ "
+    }
+
+    Column(
+        modifier = modifier.padding(vertical = 8.dp).padding(start = (level * 8).dp)
+    ) {
+        node.children.fastForEach { child ->
+            if (child.type == MarkdownElementTypes.LIST_ITEM) {
+                ListItemNode(
+                    node = child,
+                    content = content,
+                    bulletText = bulletStyle,
+                    onClickCitation = onClickCitation,
+                    level = level
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OrderedListNode(
+    node: ASTNode,
+    content: String,
+    modifier: Modifier = Modifier,
+    onClickCitation: (Int) -> Unit,
+    level: Int = 0
+) {
+    Column(
+        modifier.padding(vertical = 8.dp).padding(start = (level * 8).dp)
+    ) {
+        var index = 1
+        node.children.fastForEach { child ->
+            if (child.type == MarkdownElementTypes.LIST_ITEM) {
+                val numberText = child.findChildOfType(MarkdownTokenTypes.LIST_NUMBER)
+                    ?.getTextInNode(content) ?: "$index. "
+
+                ListItemNode(
+                    node = child,
+                    content = content,
+                    bulletText = numberText,
+                    onClickCitation = onClickCitation,
+                    level = level
+                )
+                index++
+            }
+        }
+    }
+}
+
+@Composable
+private fun ListItemNode(
+    node: ASTNode,
+    content: String,
+    bulletText: String,
+    onClickCitation: (Int) -> Unit,
+    level: Int
+) {
+    Column {
+        // 处理列表项的直接内容和嵌套列表
+        val (directContent, nestedLists) = separateContentAndLists(node)
+        // 渲染列表项的直接内容
+        if (directContent.isNotEmpty()) {
+            Row {
+                Text(
+                    text = bulletText,
+                    modifier = Modifier.alignByBaseline()
+                )
+                FlowRow {
+                    directContent.fastForEach { contentChild ->
+                        MarkdownNode(
+                            node = contentChild,
+                            content = content,
+                            onClickCitation = onClickCitation,
+                            listLevel = level
+                        )
+                    }
+                }
+            }
+        }
+        // 渲染嵌套的列表
+        nestedLists.fastForEach { nestedList ->
+            MarkdownNode(
+                node = nestedList,
+                content = content,
+                onClickCitation = onClickCitation,
+                listLevel = level + 1 // 增加层级
+            )
+        }
+    }
+}
+
+// 分离列表项的直接内容和嵌套列表
+private fun separateContentAndLists(listItemNode: ASTNode): Pair<List<ASTNode>, List<ASTNode>> {
+    val directContent = mutableListOf<ASTNode>()
+    val nestedLists = mutableListOf<ASTNode>()
+    listItemNode.children.fastForEach { child ->
+        when (child.type) {
+            MarkdownElementTypes.UNORDERED_LIST,
+            MarkdownElementTypes.ORDERED_LIST -> {
+                nestedLists.add(child)
+            }
+            else -> {
+                directContent.add(child)
+            }
+        }
+    }
+
+    return directContent to nestedLists
 }
 
 @Composable
@@ -556,10 +635,7 @@ private fun Paragraph(
 
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
-    Box(
-        modifier = Modifier
-            .padding(start = 4.dp)
-    ) {
+    Box {
         val annotatedString = remember(content) {
             buildAnnotatedString {
                 node.children.fastForEach { child ->
