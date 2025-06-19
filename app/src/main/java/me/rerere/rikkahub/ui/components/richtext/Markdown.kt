@@ -114,7 +114,7 @@ private fun MarkdownPreview() {
     ) {
         MarkdownBlock(
             content = """
-                # 🌍 This is Markdown Test, This is Markdown Test
+                # 🌍 This is Markdown Test This is Markdown Test
                 1. How many roads must a man walk down
                     * the slings and arrows of outrageous fortune, Or to take arms against a sea of troubles,
                     * by opposing end them.
@@ -270,7 +270,7 @@ fun MarkdownNode(
             ProvideTextStyle(value = style) {
                 FlowRow(modifier = modifier.padding(vertical = 16.dp)) {
                     node.children.forEach { child ->
-                        MarkdownNode(
+                        Paragraph(
                             node = child,
                             content = content,
                             modifier = Modifier.align(Alignment.CenterVertically),
