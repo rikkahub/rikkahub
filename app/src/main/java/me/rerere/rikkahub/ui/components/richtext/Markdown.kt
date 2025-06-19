@@ -121,11 +121,12 @@ private fun MarkdownPreview() {
                         * How many times must a man look up, Before he can see the sky?
                 2. How many times must a man look up, Before he can see the sky?  
                 * Before they're allowed to be free? Yes, 'n' how many times can a man turn his head  
-                * Before they're allowed to be free? Yes, 'n' how many times can a man turn his head
                 3. How many times must a man look up, Before he can see the sky?  
                 4. For in that sleep of death what dreams may come [citation](1)
-                # 🌍 This is Markdown Test
+                This is Markdown Test, This is Markdown Test.
                 
+                This is Markdown Test, This is Markdown Test.
+
                 | A | B |
                 | - | - |
                 | 1 | 2 |
@@ -159,7 +160,9 @@ fun MarkdownBlock(
     }
 
     ProvideTextStyle(style) {
-        Column(modifier = modifier) {
+        Column(
+            modifier = modifier.padding(start = 4.dp)
+        ) {
             astTree.children.fastForEach { child ->
                 MarkdownNode(
                     node = child,
@@ -283,7 +286,7 @@ fun MarkdownNode(
             UnorderedListNode(
                 node = node,
                 content = content,
-                modifier = modifier,
+                modifier = modifier.padding(vertical = 4.dp),
                 onClickCitation = onClickCitation,
                 level = listLevel
             )
@@ -293,7 +296,7 @@ fun MarkdownNode(
             OrderedListNode(
                 node = node,
                 content = content,
-                modifier = modifier,
+                modifier = modifier.padding(vertical = 4.dp),
                 onClickCitation = onClickCitation,
                 level = listLevel
             )
@@ -500,7 +503,7 @@ private fun UnorderedListNode(
     }
 
     Column(
-        modifier = modifier.padding(vertical = 8.dp).padding(start = (level * 8).dp)
+        modifier = modifier.padding(start = (level * 8).dp)
     ) {
         node.children.fastForEach { child ->
             if (child.type == MarkdownElementTypes.LIST_ITEM) {
@@ -524,15 +527,12 @@ private fun OrderedListNode(
     onClickCitation: (Int) -> Unit,
     level: Int = 0
 ) {
-    Column(
-        modifier.padding(vertical = 8.dp).padding(start = (level * 8).dp)
-    ) {
+    Column(modifier.padding(start = (level * 8).dp)) {
         var index = 1
         node.children.fastForEach { child ->
             if (child.type == MarkdownElementTypes.LIST_ITEM) {
                 val numberText = child.findChildOfType(MarkdownTokenTypes.LIST_NUMBER)
                     ?.getTextInNode(content) ?: "$index. "
-
                 ListItemNode(
                     node = child,
                     content = content,
@@ -555,9 +555,9 @@ private fun ListItemNode(
     level: Int
 ) {
     Column {
-        // 处理列表项的直接内容和嵌套列表
+        // 分离列表项的直接内容和嵌套列表
         val (directContent, nestedLists) = separateContentAndLists(node)
-        // 渲染列表项的直接内容
+        // directContent 渲染处理
         if (directContent.isNotEmpty()) {
             Row {
                 Text(
@@ -576,7 +576,7 @@ private fun ListItemNode(
                 }
             }
         }
-        // 渲染嵌套的列表
+        // nestedLists 渲染处理
         nestedLists.fastForEach { nestedList ->
             MarkdownNode(
                 node = nestedList,
@@ -603,7 +603,6 @@ private fun separateContentAndLists(listItemNode: ASTNode): Pair<List<ASTNode>, 
             }
         }
     }
-
     return directContent to nestedLists
 }
 
@@ -636,29 +635,33 @@ private fun Paragraph(
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
     Box {
-        val annotatedString = remember(content) {
-            buildAnnotatedString {
-                node.children.fastForEach { child ->
-                    appendMarkdownNodeContent(
-                        node = child,
-                        content = content,
-                        inlineContents = inlineContents,
-                        colorScheme = colorScheme,
-                        onClickCitation = onClickCitation,
-                        style = textStyle,
-                        density = density
-                    )
+        FlowRow(
+            modifier = Modifier.padding(bottom = 4.dp)
+        ) {
+            val annotatedString = remember(content) {
+                buildAnnotatedString {
+                    node.children.fastForEach { child ->
+                        appendMarkdownNodeContent(
+                            node = child,
+                            content = content,
+                            inlineContents = inlineContents,
+                            colorScheme = colorScheme,
+                            onClickCitation = onClickCitation,
+                            style = textStyle,
+                            density = density
+                        )
+                    }
                 }
             }
+            Text(
+                text = annotatedString,
+                modifier = Modifier,
+                style = LocalTextStyle.current,
+                inlineContent = inlineContents,
+                softWrap = true,
+                overflow = TextOverflow.Visible
+            )
         }
-        Text(
-            text = annotatedString,
-            modifier = modifier,
-            style = LocalTextStyle.current,
-            inlineContent = inlineContents,
-            softWrap = true,
-            overflow = TextOverflow.Visible
-        )
     }
 }
 
