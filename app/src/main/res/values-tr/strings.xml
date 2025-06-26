@@ -1,0 +1,392 @@
+<resources>
+  <string name="app_name">RikkaHub</string>
+  <string name="chat_input_placeholder">Yapay zeka ile sohbet etmek için bir mesaj yazın</string>
+  <string name="editing">Düzenleniyor</string>
+  <string name="cancel_edit">Düzenlemeyi İptal Et</string>
+  <string name="stop">Durdur</string>
+  <string name="send">Gönder</string>
+  <string name="more_options">Daha fazla seçenek</string>
+  <string name="use_web_search">Web Aramasını Kullan</string>
+  <string name="photo">Fotoğraf</string>
+  <string name="take_picture">Fotoğraf Çek</string>
+  <string name="copy">Kopyala</string>
+  <string name="regenerate">Yeniden Oluştur</string>
+  <string name="edit">Düzenle</string>
+  <string name="tts">TTS</string>
+  <string name="deep_thinking">Derin Düşünme</string>
+  <string name="citations_count">%1$d Alıntı</string>
+  <string name="back">Geri</string>
+  <string name="settings">Ayarlar</string>
+  <string name="confirm">Onayla</string>
+  <string name="cancel">İptal</string>
+  <string name="confirm_delete">Silmeyi Onayla</string>
+  <string name="delete">Sil</string>
+  <string name="tools_warning">Mevcut modelde araç çağırma özelliği etkin değil. Arama/MCP gibi özellikleri kullanmak için lütfen ayarlardan modelin araç yeteneklerini etkinleştirin.</string>
+
+  <!-- Chat Page -->
+  <string name="chat_page_no_conversations">Hiç konuşma yok</string>
+  <string name="chat_page_new_message">Yeni mesaj</string>
+  <string name="chat_page_today">Bugün</string>
+  <string name="chat_page_yesterday">Dün</string>
+  <string name="chat_page_date_format_same_year">%1$d/%2$d</string>
+  <string name="chat_page_date_format_different_year">%1$d/%2$d/%3$d</string>
+  <string name="chat_page_regenerate_title">Başlığı yeniden oluştur</string>
+  <string name="chat_page_delete">Sil</string>
+  <string name="chat_page_history">Sohbet Geçmişi</string>
+  <string name="chat_page_scroll_to_bottom">En alta kaydır</string>
+  <string name="chat_page_edit_title">Başlığı düzenle</string>
+  <string name="chat_page_save">Kaydet</string>
+  <string name="chat_page_cancel">İptal</string>
+  <string name="chat_page_new_chat">Yeni Sohbet</string>
+  <string name="chat_page_edit_title_warning">Lütfen başlığı düzenlemeden önce sohbet edin</string>
+  <string name="chat_page_search_placeholder">Konuşmalarda ara</string>
+  <string name="chat_page_clear_context">Bağlamı Temizle</string>
+
+  <!-- Export Chat -->
+  <string name="chat_page_export_format">Dışa Aktarma Biçimi</string>
+  <string name="chat_page_export_markdown">Markdown</string>
+  <string name="chat_page_export_markdown_desc">Konuşmayı bir markdown dosyası olarak dışa aktar</string>
+  <string name="chat_page_export_success">%1$s konumuna aktarıldı</string>
+  <string name="chat_page_export_share_via">Şununla paylaş</string>
+
+  <string name="setting_page_display_setting">Görünüm Ayarları</string>
+  <string name="setting_page_display_setting_desc">Görünüm ayarlarını yönetin</string>
+  <string name="setting_page_dynamic_color">Dinamik Renk</string>
+  <string name="setting_page_dynamic_color_desc">Dinamik renk kullan</string>
+  <string name="setting_page_general_settings">Genel Ayarlar</string>
+  <string name="setting_page_model_and_services">Modeller ve Servisler</string>
+  <string name="setting_page_default_model">Varsayılan Model</string>
+  <string name="setting_page_default_model_desc">Her özellik için varsayılan modelleri ayarlayın</string>
+  <string name="setting_page_providers">Sağlayıcılar</string>
+  <string name="setting_page_providers_desc">Yapay zeka sağlayıcılarını yapılandırın</string>
+  <string name="setting_page_search_service">Arama Servisi</string>
+  <string name="setting_page_search_service_desc">Arama servisini kurun</string>
+  <string name="setting_page_mcp">MCP</string>
+  <string name="setting_page_mcp_desc">MCP Sunucularını yapılandırın</string>
+  <string name="setting_page_assistant">Asistan</string>
+  <string name="setting_page_assistant_desc">Kişiselleştirilmiş asistanları (ajanları) kurun</string>
+  <string name="setting_page_about">Hakkında</string>
+  <string name="setting_page_about_desc">Bu uygulama hakkında</string>
+  <string name="setting_page_chat_storage">Sohbet Depolama</string>
+  <string name="setting_page_chat_storage_desc">%1$d dosya, %2$.2f MB</string>
+  <string name="calculating">Hesaplanıyor...</string>
+  <string name="setting_page_share">Paylaş</string>
+  <string name="setting_page_share_desc">Bu uygulamayı arkadaşlarınızla paylaşın</string>
+  <string name="setting_page_share_text">RikkaHub - Açık Kaynaklı Android Yapay Zeka Asistanı\n\nWeb sitesi: https://rikka-ai.com/</string>
+  <string name="setting_page_no_share_app">Paylaşım uygulaması bulunamadı</string>
+  <string name="setting_page_config_api_title">Lütfen API ve model yapılandırın</string>
+  <string name="setting_page_config_api_desc">Henüz API ve model yapılandırması yapmadınız, lütfen önce yapılandırın</string>
+  <string name="setting_page_config">Yapılandır</string>
+
+  <!-- Setting Model Page -->
+  <string name="setting_model_page_title">Model Ayarları</string>
+  <string name="setting_model_page_chat_model">Sohbet Modeli</string>
+  <string name="setting_model_page_title_model">Başlık Özetleme Modeli</string>
+  <string name="setting_model_page_suggestion_model">Sohbet Öneri Modeli</string>
+  <string name="setting_model_page_translate_model">Çeviri Modeli</string>
+  <string name="setting_model_page_translate_model_desc">Çeviri özellikleri için kullanılan model</string>
+  <string name="setting_model_page_prompt">Talimat</string>
+  <string name="setting_model_page_translate_prompt_vars">Değişkenler: Kaynak metin: {source_text}, Hedef dil: {target_lang}</string>
+  <string name="setting_model_page_reset_to_default">Varsayılana sıfırla</string>
+  <string name="setting_model_page_suggestion_model_desc">Konuşma önerileri oluşturmak için kullanılan model, hızlı ve ucuz modellerin kullanılması önerilir</string>
+  <string name="setting_model_page_suggestion_prompt_vars">Değişkenler: Konuşma içeriği: {content}, Dil: {locale}</string>
+  <string name="setting_model_page_title_model_desc">Konuşma başlıklarını özetlemek için kullanılan model, hızlı ve ucuz modellerin kullanılması önerilir</string>
+  <string name="setting_model_page_chat_model_desc">Genel varsayılan sohbet modeli</string>
+
+  <!-- Translator Page -->
+  <string name="translator_page_title">Çevirmen</string>
+  <string name="translator_page_input_text">Girdi Metni</string>
+  <string name="translator_page_input_placeholder">Çevirmek için metin girin...</string>
+  <string name="translator_page_result">Çeviri Sonucu</string>
+  <string name="translator_page_result_placeholder">Çeviri sonucu burada gösterilecek</string>
+  <string name="translator_page_target_language">Hedef Dil:</string>
+  <string name="translator_page_translate">Çevir</string>
+  <string name="translator_page_cancel">İptal</string>
+
+  <!-- Assistant Page -->
+  <string name="assistant_page_title">Asistan Ayarları</string>
+  <string name="assistant_page_add">Ekle</string>
+  <string name="assistant_page_name">Asistan Adı</string>
+  <string name="assistant_page_system_prompt">Sistem Talimatı</string>
+  <string name="assistant_page_available_variables">"Kullanılabilir değişkenler: "</string>
+  <string name="assistant_page_temperature">Sıcaklık</string>
+  <string name="assistant_page_strict">Katı</string>
+  <string name="assistant_page_balanced">Dengeli</string>
+  <string name="assistant_page_creative">Yaratıcı</string>
+  <string name="assistant_page_chaotic">Kaotik (Tehlikeli)</string>
+  <string name="assistant_page_top_p">Top P</string>
+  <string name="assistant_page_top_p_warning">Ne yaptığınızı bilmiyorsanız lütfen bu değeri değiştirmeyin</string>
+  <string name="assistant_page_context_message_size">Bağlam Mesaj Sayısı</string>
+  <string name="assistant_page_context_message_desc">Modele bağlam olarak kaç geçmiş mesajın gönderileceğini kontrol eder. Bu sayıyı aşan mesajlar yoksayılır, yalnızca en son N mesaj korunur, bu da jetonlardan tasarruf sağlayabilir</string>
+  <string name="assistant_page_context_message_count">Bağlam Mesaj Sayısı: %d</string>
+  <string name="assistant_page_memory">Hafıza</string>
+  <string name="assistant_page_memory_desc">Hafıza etkinleştirildiğinde, model konuşmalar sırasında bilgilerinizi aktif olarak kaydetmeye ve sonraki konuşmalarda kullanmaya çalışacaktır. Bu özelliğin düzgün çalışması için modelin araç çağırmayı desteklemesi gerekir</string>
+  <string name="assistant_page_manage_memory">Hafızayı Yönet (%d öge)</string>
+  <string name="assistant_page_cancel">İptal</string>
+  <string name="assistant_page_save">Kaydet</string>
+  <string name="assistant_page_manage_memory_title">Hafızayı Yönet</string>
+  <string name="assistant_page_delete">Sil</string>
+  <string name="assistant_page_delete_dialog_text">Bu asistanı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</string>
+  <string name="assistant_page_default_assistant">Varsayılan Asistan</string>
+  <string name="assistant_page_temperature_value">Sıcaklık: %s</string>
+  <string name="assistant_page_memory_count">Hafıza: %d</string>
+  <string name="assistant_page_no_system_prompt">Sistem talimatı yok</string>
+  <string name="assistant_page_top_p_value">Top P: %s</string>
+  <string name="assistant_page_thinking_budget">Düşünme Bütçesi</string>
+  <string name="assistant_page_thinking_budget_default">Varsayılan</string>
+  <string name="assistant_page_message_template">Mesaj İçerik Şablonu</string>
+  <string name="assistant_page_message_template_desc">Sohbet mesajlarının LLM\'e gönderilmeden önceki içerik formatını kontrol eder, genellikle değiştirilmesi gerekmez</string>
+  <string name="assistant_page_template_preview">Önizleme:</string>
+  <string name="assistant_page_template_variable_role">Rol</string>
+  <string name="assistant_page_template_variable_message">İçerik</string>
+  <string name="assistant_page_template_variable_time">Saat</string>
+  <string name="assistant_page_template_variable_date">Tarih</string>
+  <string name="assistant_page_template_variables_label">Değişkenler:</string>
+
+  <!-- Custom Headers and Bodies -->
+  <string name="assistant_page_custom_headers">Özel Başlıklar</string>
+  <string name="assistant_page_header_name">Başlık Adı</string>
+  <string name="assistant_page_header_value">Başlık Değeri</string>
+  <string name="assistant_page_delete_header">Başlığı Sil</string>
+  <string name="assistant_page_add_header">Başlık Ekle</string>
+  <string name="assistant_page_custom_bodies">Özel Gövde</string>
+  <string name="assistant_page_body_key">Gövde Anahtarı</string>
+  <string name="assistant_page_body_value">Gövde Değeri (JSON)</string>
+  <string name="assistant_page_invalid_json">Geçersiz JSON: %s</string>
+  <string name="assistant_page_delete_body">Gövdeyi Sil</string>
+  <string name="assistant_page_add_body">Gövde Ekle</string>
+
+  <!-- Notification -->
+  <string name="notification_channel_chat_completed">Sohbet Tamamlandı</string>
+
+  <!-- Theme Types -->
+  <string name="setting_page_theme_type_standard">Standart</string>
+  <string name="setting_page_theme_type_medium_contrast">Orta Kontrast</string>
+  <string name="setting_page_theme_type_high_contrast">Yüksek Kontrast</string>
+
+  <!-- Theme Names -->
+  <string name="theme_name_black">Nötr Siyah</string>
+  <string name="theme_name_sakura">Sakura Pembesi</string>
+  <string name="theme_name_ocean">Okyanus Mavisi</string>
+  <string name="theme_name_spring">Çayır Yeşili</string>
+
+  <!-- Menu Page -->
+  <string name="menu_page_morning_greeting">Günaydın\uD83D\uDC4B</string>
+  <string name="menu_page_afternoon_greeting">Tünaydın\uD83D\uDC4B</string>
+  <string name="menu_page_evening_greeting">İyi akşamlar\uD83D\uDC4B</string>
+  <string name="menu_page_night_greeting">Geç oldu, kendine iyi bak\uD83D\uDC4B</string>
+  <string name="menu_page_ai_translator">Yapay Zeka Çevirmen</string>
+  <string name="menu_page_knowledge_base">Bilgi Tabanı (Yapım Aşamasında)</string>
+  <string name="menu_page_llm_leaderboard">LLM Lider Tablosu</string>
+
+  <!-- ModelList Page -->
+  <string name="model_list_select_model">Model Seç</string>
+  <string name="model_list_no_providers">Kullanılabilir yapay zeka sağlayıcısı yok, lütfen ayarlardan ekleyin</string>
+  <string name="model_list_favorite">Favoriler</string>
+  <string name="model_list_chat">Sohbet</string>
+  <string name="model_list_embedding">Gömme (Embedding)</string>
+  <string name="model_list_search_placeholder">Aramak için model adını girin</string>
+
+  <!-- Code Block -->
+  <string name="code_block_copy">Kodu Kopyala</string>
+  <string name="code_block_preview">Önizle</string>
+
+  <!-- Mermaid Diagram -->
+  <string name="mermaid_export">Dışa Aktar</string>
+  <string name="mermaid_export_success">Dışa aktarma başarılı</string>
+  <string name="mermaid_export_failed">Dışa aktarma başarısız</string>
+
+  <!-- Reasoning -->
+  <string name="reasoning_set_budget">Akıl yürütme bütçesini ayarla (%1$d jeton)</string>
+
+  <!-- Data Settings -->
+  <string name="setting_page_data_settings">Veri Ayarları</string>
+  <string name="setting_page_data_backup">Veri Yedekleme</string>
+  <string name="setting_page_data_backup_desc">Uygulama verilerini yedekle ve geri yükle</string>
+  <string name="reasoning_off">Kapalı</string>
+  <string name="reasoning_off_desc">Akıl yürütme işlevini kapatır, model soruları doğrudan yanıtlar.</string>
+  <string name="reasoning_light">Hafif akıl yürütme</string>
+  <string name="reasoning_light_desc">Model, soruları yanıtlamak için az miktarda akıl yürütme kullanır.</string>
+  <string name="reasoning_medium">Orta düzeyde akıl yürütme</string>
+  <string name="reasoning_medium_desc">Model, soruları yanıtlamak için daha fazla akıl yürütme kullanır.</string>
+  <string name="reasoning_heavy">Yoğun akıl yürütme</string>
+  <string name="reasoning_heavy_desc">Model, soruları yanıtlamak için büyük miktarda akıl yürütme kullanır.</string>
+  <string name="reasoning_custom">Özel akıl yürütme bütçesi</string>
+
+  <!-- Setting Display Page -->
+  <string name="setting_display_page_chat_list_model_icon_title">Sohbet Listesi Model Simgesi</string>
+  <string name="setting_display_page_chat_list_model_icon_desc">Sohbet listesi mesajlarında model simgelerinin gösterilip gösterilmeyeceği</string>
+  <string name="setting_display_page_show_token_usage_title">Jeton ve Bağlam İstatistiklerini Göster</string>
+  <string name="setting_display_page_show_token_usage_desc">Konuşmanın altında jeton kullanımını ve bağlam sayısını göster</string>
+  <string name="setting_display_page_auto_collapse_thinking_title">Düşünmeyi Otomatik Daralt</string>
+  <string name="setting_display_page_auto_collapse_thinking_desc">Düşünme tamamlandıktan sonra düşünme içeriğini otomatik olarak daralt</string>
+  <string name="setting_display_page_show_updates_title">Güncellemeleri Göster</string>
+  <string name="setting_display_page_show_updates_desc">Uygulama güncelleme bildirimlerinin gösterilip gösterilmeyeceği</string>
+  <string name="setting_display_page_show_message_jumper_title">Mesaj Atlama Düğmesini Göster</string>
+  <string name="setting_display_page_show_message_jumper_desc">Sohbet listesini kaydırırken sağda hızlı atlama düğmelerini göster</string>
+  <string name="setting_display_page_title">Görünüm Ayarları</string>
+
+  <!-- Share Handler Page -->
+  <string name="share_handler_page_title">Bir Asistan Seçin</string>
+
+  <!-- Color Mode -->
+  <string name="setting_page_color_mode">Renk Modu</string>
+  <string name="setting_page_color_mode_system">Sistem</string>
+  <string name="setting_page_color_mode_light">Açık</string>
+  <string name="setting_page_color_mode_dark">Koyu</string>
+
+  <!-- Assistant Detail Page -->
+  <string name="assistant_page_tab_basic">Temel Ayarlar</string>
+  <string name="assistant_page_tab_prompt">Talimatlar</string>
+  <string name="assistant_page_tab_preset_messages">Hazır Mesajlar</string>
+  <string name="assistant_page_tab_memory">Hafıza</string>
+  <string name="assistant_page_tab_request">Özel İstek</string>
+  <string name="assistant_page_stream_output">Akışlı Çıktı</string>
+  <string name="assistant_page_stream_output_desc">Mesajlar için akışlı çıktının etkinleştirilip etkinleştirilmeyeceği</string>
+  <string name="assistant_page_chat_model">Sohbet Modeli</string>
+  <string name="assistant_page_chat_model_desc">Asistan için varsayılan sohbet modelini ayarlayın. Ayarlanmazsa, genel varsayılan sohbet modeli kullanılır</string>
+  <string name="assistant_page_preset_messages">Hazır Sohbet Mesajları</string>
+  <string name="assistant_page_preset_messages_desc">Başlangıç konuşma mesajlarını ayarlayın</string>
+
+  <!-- MCP Setting Page -->
+  <string name="setting_mcp_page_title">MCP</string>
+  <string name="setting_mcp_page_basic_settings">Temel Ayarlar</string>
+  <string name="setting_mcp_page_tools">Araçlar</string>
+  <string name="setting_mcp_page_enable">Etkinleştir</string>
+  <string name="setting_mcp_page_enable_desc">Bu MCP sunucusunun etkinleştirilip etkinleştirilmeyeceği</string>
+  <string name="setting_mcp_page_name">Ad</string>
+  <string name="setting_mcp_page_name_desc">MCP sunucusu için görünen ad</string>
+  <string name="setting_mcp_page_name_placeholder">ör: MCP Sunucum</string>
+  <string name="setting_mcp_page_transport_type">Taşıma Türü</string>
+  <string name="setting_mcp_page_transport_type_desc">MCP sunucusu için taşıma protokolü türünü seçin</string>
+  <string name="setting_mcp_page_server_url">Sunucu URL\'si</string>
+  <string name="setting_mcp_page_sse_url_desc">SSE taşıma sunucusu için URL adresi</string>
+  <string name="setting_mcp_page_streamable_http_url_desc">Akışlı HTTP sunucusu için URL adresi</string>
+  <string name="setting_mcp_page_sse_url_placeholder">https://example.com/sse</string>
+  <string name="setting_mcp_page_streamable_http_url_placeholder">https://example.com/mcp</string>
+  <string name="setting_mcp_page_custom_headers">Özel Başlıklar</string>
+  <string name="setting_mcp_page_custom_headers_desc">MCP sunucu istekleri için özel HTTP başlıkları ekleyin</string>
+  <string name="setting_mcp_page_header_name">Başlık Adı</string>
+  <string name="setting_mcp_page_header_name_placeholder">ör: Authorization</string>
+  <string name="setting_mcp_page_header_value">Başlık Değeri</string>
+  <string name="setting_mcp_page_header_value_placeholder">ör: Bearer token123</string>
+  <string name="setting_mcp_page_delete_header">Başlığı Sil</string>
+  <string name="setting_mcp_page_add_header">Başlık Ekle</string>
+  <string name="setting_mcp_page_save">Kaydet</string>
+  <string name="setting_mcp_page_url_label">URL</string>
+  <string name="setting_mcp_page_tools_unavailable_message">MCP Sunucusu eklenirken araç listesi görüntülenemez, lütfen ekledikten sonra tekrar kontrol edin</string>
+
+  <!-- MCP Picker -->
+  <string name="mcp_picker_title">MCP Sunucuları</string>
+  <string name="mcp_picker_syncing">MCP sunucuları senkronize ediliyor...</string>
+
+  <!-- Setting Provider Page -->
+  <string name="setting_provider_page_title">Sağlayıcılar</string>
+  <string name="setting_provider_page_scan_error">Hata: %s</string>
+  <string name="setting_provider_page_no_permission">İzin yok</string>
+  <string name="setting_provider_page_import_success">İçe aktarma başarılı</string>
+  <string name="setting_provider_page_add_provider">Sağlayıcı Ekle</string>
+  <string name="setting_provider_page_add">Ekle</string>
+  <string name="setting_provider_page_enabled">Etkin</string>
+  <string name="setting_provider_page_disabled">Devre Dışı</string>
+  <string name="setting_provider_page_model_count">%d model</string>
+  <string name="setting_provider_page_share">Paylaş</string>
+  <string name="setting_provider_page_models">Modeller</string>
+  <string name="setting_provider_page_configuration">Yapılandırma</string>
+  <string name="setting_provider_page_save_success">Kaydetme başarılı</string>
+  <string name="setting_provider_page_save">Kaydet</string>
+  <string name="setting_provider_page_no_models">Model yok</string>
+  <string name="setting_provider_page_add_models_hint">Model eklemek için aşağıdaki düğmeye tıklayın</string>
+  <string name="setting_provider_page_add_new_model">Yeni Model Ekle</string>
+  <string name="setting_provider_page_add_model">Model Ekle</string>
+  <string name="setting_provider_page_model_id">Model ID</string>
+  <string name="setting_provider_page_model_id_placeholder">ör: gpt-3.5-turbo</string>
+  <string name="setting_provider_page_model_display_name">Model Görünen Adı</string>
+  <string name="setting_provider_page_model_display_name_placeholder">ör: GPT-3.5, arayüzde gösterim için</string>
+  <string name="setting_provider_page_model_type">Model Türü</string>
+  <string name="setting_provider_page_chat_model">Sohbet Modeli</string>
+  <string name="setting_provider_page_embedding_model">Gömme (Embedding) Modeli</string>
+  <string name="setting_provider_page_input_modality">Girdi Modalitesi</string>
+  <string name="setting_provider_page_output_modality">Çıktı Modalitesi</string>
+  <string name="setting_provider_page_text">Metin</string>
+  <string name="setting_provider_page_image">Görsel</string>
+  <string name="setting_provider_page_abilities">Yetenekler</string>
+  <string name="setting_provider_page_tool">Araç</string>
+  <string name="setting_provider_page_reasoning">Akıl Yürütme</string>
+  <string name="setting_provider_page_filter_placeholder">Filtrelemek için model adını girin</string>
+  <string name="setting_provider_page_filter_example">ör: GPT-3.5</string>
+  <string name="setting_provider_page_edit_model">Modeli Düzenle</string>
+  <string name="setting_provider_page_model_name">Model Adı</string>
+  <string name="setting_provider_page_test_connection">Bağlantıyı Test Et</string>
+  <string name="setting_provider_page_test_success">Test Başarılı</string>
+  <string name="setting_provider_page_test">Test Et</string>
+  <string name="setting_provider_page_import_dialog_title">Sağlayıcı Yapılandırmasını İçe Aktar</string>
+  <string name="setting_provider_page_import_dialog_message">Lütfen içe aktarma yöntemini seçin:</string>
+  <string name="setting_provider_page_scan_qr_code">QR Kodu Tara</string>
+  <string name="setting_provider_page_select_from_gallery">Galeriden Seç</string>
+  <string name="setting_provider_page_qr_decode_failed">QR kodu çözülemedi: %s</string>
+  <string name="setting_provider_page_image_read_failed">Görsel okunamıyor</string>
+  <string name="setting_provider_page_no_qr_found">Geçerli bir QR kodu bulunamadı</string>
+  <string name="setting_provider_page_image_qr_decode_failed">Görseldeki QR kodu çözülemedi: %s</string>
+  <string name="setting_provider_page_enable">Etkinleştir</string>
+  <string name="setting_provider_page_name">Ad</string>
+  <string name="setting_provider_page_api_key">API Anahtarı</string>
+  <string name="setting_provider_page_api_base_url">API Temel URL\'si</string>
+  <string name="setting_provider_page_response_api">Yanıt API\'si</string>
+  <string name="setting_provider_page_vertex_ai">Vertex AI</string>
+  <string name="setting_provider_page_location">Konum (ör. us-central1)</string>
+  <string name="setting_provider_page_project_id">Proje ID</string>
+
+  <!-- Chat Message Tool Calls -->
+  <string name="chat_message_tool_create_memory">Hafıza oluşturuldu</string>
+  <string name="chat_message_tool_edit_memory">Hafıza güncellendi</string>
+  <string name="chat_message_tool_delete_memory">Hafıza silindi</string>
+  <string name="chat_message_tool_search_web">Web\'de ara: %1$s</string>
+  <string name="chat_message_tool_call_generic">%1$s aracı çağrıldı</string>
+  <string name="chat_message_tool_search_prefix">Arama: %1$s</string>
+  <string name="chat_message_tool_call_title">Araç Çağrısı</string>
+  <string name="chat_message_tool_call_label">%1$s aracı çağrıldı</string>
+  <string name="chat_message_tool_call_result">Çağrı sonucu</string>
+
+  <!-- Backup and Restore Page -->
+  <string name="backup_page_title">Yedekleme ve Geri Yükleme</string>
+  <string name="backup_page_webdav_backup">WebDAV Yedeklemesi</string>
+  <string name="backup_page_import_export">İçe ve Dışa Aktar</string>
+  <string name="backup_page_webdav_server_address">WebDAV Sunucu Adresi</string>
+  <string name="backup_page_username">Kullanıcı Adı</string>
+  <string name="backup_page_password">Şifre</string>
+  <string name="backup_page_path">Yol</string>
+  <string name="backup_page_backup_items">Yedeklenecek Öğeler</string>
+  <string name="backup_page_chat_records">Sohbet Kayıtları</string>
+  <string name="backup_page_files">Dosyalar</string>
+  <string name="backup_page_test_connection">Bağlantıyı Test Et</string>
+  <string name="backup_page_restore">Geri Yükle</string>
+  <string name="backup_page_backup_now">Şimdi Yedekle</string>
+  <string name="backup_page_backing_up">Yedekleniyor...</string>
+  <string name="backup_page_webdav_backup_files">WebDAV Yedekleme Dosyaları</string>
+  <string name="backup_page_last_modified">Son Değiştirme</string>
+  <string name="backup_page_size">Boyut</string>
+  <string name="backup_page_delete">Sil</string>
+  <string name="backup_page_restore_now">Geri Yükle</string>
+  <string name="backup_page_restoring">Geri yükleniyor...</string>
+  <string name="backup_page_connection_success">Bağlantı başarılı</string>
+  <string name="backup_page_connection_failed">Bağlantı başarısız: %s</string>
+  <string name="backup_page_backup_success">Yedekleme başarılı</string>
+  <string name="backup_page_unknown_error">Bilinmeyen hata</string>
+  <string name="backup_page_loading_failed">Yedekleme dosyaları yüklenemedi: %s</string>
+  <string name="backup_page_delete_success">Silme başarılı</string>
+  <string name="backup_page_delete_failed">Silme başarısız: %s</string>
+  <string name="backup_page_restore_success">Geri yükleme başarılı</string>
+  <string name="backup_page_restore_failed">Geri yükleme başarısız: %s</string>
+  <string name="backup_page_restart_app">Uygulamayı Yeniden Başlat</string>
+  <string name="backup_page_restart_desc">Değişikliklerin etkili olması için uygulamanın yeniden başlatılması gerekiyor.</string>
+  <string name="backup_page_local_backup_export">Dosyaya Aktar</string>
+  <string name="backup_page_local_backup_import">Dosyadan İçe Aktar</string>
+  <string name="backup_page_exporting">Dışa aktarılıyor...</string>
+  <string name="backup_page_export_desc">Uygulama verilerini bir dosyaya aktar</string>
+  <string name="backup_page_importing">İçe aktarılıyor...</string>
+  <string name="backup_page_import_desc">Yerel yedekleme dosyasını içe aktar</string>
+  <string name="backup_page_import_from_other_app">Başka uygulamadan içe aktar</string>
+  <string name="backup_page_import_from_chatbox">ChatBox\'tan İçe Aktar</string>
+  <string name="backup_page_import_chatbox_desc">ChatBox\'tan verileri içe aktar</string>
+</resources>
