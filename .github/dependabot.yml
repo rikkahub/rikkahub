@@ -1,0 +1,40 @@
+version: 2
+registries:
+  maven-google:
+    type: maven-repository
+    url: https://dl.google.com/dl/android/maven2/
+    password: dummy
+    username: dummy
+  maven-central:
+    type: maven-repository
+    url: https://repo1.maven.org/maven2/
+    password: dummy
+    username: dummy
+  maven-jitpack:
+    type: maven-repository
+    url: https://jitpack.io
+    password: dummy
+    username: dummy
+  gradle-plugins:
+    type: maven-repository
+    url: https://plugins.gradle.org/m2/
+    password: dummy
+    username: dummy
+
+updates:
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: "daily"
+    registries: "*"
+    open-pull-requests-limit: 20
+    groups:
+      kotlin_KSP:
+        patterns:
+          - "org.jetbrains.kotlin:*"
+          - "com.google.devtools.ksp"
+  # Maintain dependencies for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
