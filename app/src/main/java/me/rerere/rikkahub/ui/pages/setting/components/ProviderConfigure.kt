@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.setting.components
 
+package me.rerere.rikkahub.ui.pages.setting.components
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -7,67 +9,38 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.ProviderType
 import me.rerere.rikkahub.R
-import kotlin.reflect.full.primaryConstructor
+import me.rerere.rikkahub.ui.pages.setting.TempApiConfig
 
 @Composable
 fun ProviderConfigure(
-    provider: ProviderSetting,
+    providerType: ProviderType,
+    tempApiConfig: TempApiConfig,
     modifier: Modifier = Modifier,
-    onEdit: (provider: ProviderSetting) -> Unit
+    onEdit: (tempApiConfig: TempApiConfig) -> Unit
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
     ) {
-        // Type
-        if (!provider.builtIn) {
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                ProviderSetting.Types.forEachIndexed { index, type ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = ProviderSetting.Types.size
-                        ),
-                        label = {
-                            Text(type.simpleName ?: "")
-                        },
-                        selected = provider::class == type,
-                        onClick = {
-                            onEdit(type.primaryConstructor?.callBy(emptyMap())!!)
-                        }
-                    )
-                }
-            }
-        }
-
-        // [!] just for debugging
-        // Text(JsonInstant.encodeToString(provider), fontSize = 10.sp)
-
-        // Provider Configure
-        when (provider) {
-            is ProviderSetting.OpenAI -> {
-                ProviderConfigureOpenAI(provider, onEdit)
+        when (providerType) {
+            ProviderType.OpenAI -> {
+                ProviderConfigureOpenAI(tempApiConfig, onEdit)
             }
 
-            is ProviderSetting.Google -> {
-                ProviderConfigureGoogle(provider, onEdit)
+            ProviderType.Google -> {
+                ProviderConfigureGoogle(tempApiConfig, onEdit)
             }
 
-            is ProviderSetting.Claude -> {
-                ProviderConfigureClaude(provider, onEdit)
+            ProviderType.Claude -> {
+                ProviderConfigureClaude(tempApiConfig, onEdit)
             }
         }
     }
@@ -75,27 +48,25 @@ fun ProviderConfigure(
 
 @Composable
 private fun ColumnScope.ProviderConfigureOpenAI(
-    provider: ProviderSetting.OpenAI,
-    onEdit: (provider: ProviderSetting.OpenAI) -> Unit
+    config: TempApiConfig,
+    onEdit: (config: TempApiConfig) -> Unit
 ) {
-    provider.description()
-
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(stringResource(id = R.string.setting_provider_page_enable), modifier = Modifier.weight(1f))
         Checkbox(
-            checked = provider.enabled,
+            checked = config.enabled,
             onCheckedChange = {
-                onEdit(provider.copy(enabled = it))
+                onEdit(config.copy(enabled = it))
             }
         )
     }
 
     OutlinedTextField(
-        value = provider.name,
+        value = config.name,
         onValueChange = {
-            onEdit(provider.copy(name = it.trim()))
+            onEdit(config.copy(name = it.trim()))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_name))
@@ -104,9 +75,9 @@ private fun ColumnScope.ProviderConfigureOpenAI(
     )
 
     OutlinedTextField(
-        value = provider.apiKey,
+        value = config.apiKey,
         onValueChange = {
-            onEdit(provider.copy(apiKey = it.trim()))
+            onEdit(config.copy(apiKey = it.trim()))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_api_key))
@@ -116,9 +87,9 @@ private fun ColumnScope.ProviderConfigureOpenAI(
     )
 
     OutlinedTextField(
-        value = provider.baseUrl,
+        value = config.baseUrl,
         onValueChange = {
-            onEdit(provider.copy(baseUrl = it.trim()))
+            onEdit(config.copy(baseUrl = it.trim()))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_api_base_url))
@@ -131,9 +102,9 @@ private fun ColumnScope.ProviderConfigureOpenAI(
     ) {
         Text(stringResource(id = R.string.setting_provider_page_response_api), modifier = Modifier.weight(1f))
         Checkbox(
-            checked = provider.useResponseApi,
+            checked = config.useResponseApi,
             onCheckedChange = {
-                onEdit(provider.copy(useResponseApi = it))
+                onEdit(config.copy(useResponseApi = it))
             }
         )
     }
@@ -141,27 +112,25 @@ private fun ColumnScope.ProviderConfigureOpenAI(
 
 @Composable
 private fun ColumnScope.ProviderConfigureClaude(
-    provider: ProviderSetting.Claude,
-    onEdit: (provider: ProviderSetting.Claude) -> Unit
+    config: TempApiConfig,
+    onEdit: (config: TempApiConfig) -> Unit
 ) {
-    provider.description()
-
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(stringResource(id = R.string.setting_provider_page_enable), modifier = Modifier.weight(1f))
         Checkbox(
-            checked = provider.enabled,
+            checked = config.enabled,
             onCheckedChange = {
-                onEdit(provider.copy(enabled = it))
+                onEdit(config.copy(enabled = it))
             }
         )
     }
 
     OutlinedTextField(
-        value = provider.name,
+        value = config.name,
         onValueChange = {
-            onEdit(provider.copy(name = it.trim()))
+            onEdit(config.copy(name = it.trim()))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_name))
@@ -171,9 +140,9 @@ private fun ColumnScope.ProviderConfigureClaude(
     )
 
     OutlinedTextField(
-        value = provider.apiKey,
+        value = config.apiKey,
         onValueChange = {
-            onEdit(provider.copy(apiKey = it.trim()))
+            onEdit(config.copy(apiKey = it.trim()))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_api_key))
@@ -182,9 +151,9 @@ private fun ColumnScope.ProviderConfigureClaude(
     )
 
     OutlinedTextField(
-        value = provider.baseUrl,
+        value = config.baseUrl,
         onValueChange = {
-            onEdit(provider.copy(baseUrl = it.trim()))
+            onEdit(config.copy(baseUrl = it.trim()))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_api_base_url))
@@ -195,27 +164,25 @@ private fun ColumnScope.ProviderConfigureClaude(
 
 @Composable
 private fun ColumnScope.ProviderConfigureGoogle(
-    provider: ProviderSetting.Google,
-    onEdit: (provider: ProviderSetting.Google) -> Unit
+    config: TempApiConfig,
+    onEdit: (config: TempApiConfig) -> Unit
 ) {
-    provider.description()
-
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(stringResource(id = R.string.setting_provider_page_enable), modifier = Modifier.weight(1f))
         Checkbox(
-            checked = provider.enabled,
+            checked = config.enabled,
             onCheckedChange = {
-                onEdit(provider.copy(enabled = it))
+                onEdit(config.copy(enabled = it))
             }
         )
     }
 
     OutlinedTextField(
-        value = provider.name,
+        value = config.name,
         onValueChange = {
-            onEdit(provider.copy(name = it.trim()))
+            onEdit(config.copy(name = it.trim()))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_name))
@@ -224,9 +191,9 @@ private fun ColumnScope.ProviderConfigureGoogle(
     )
 
     OutlinedTextField(
-        value = provider.apiKey,
+        value = config.apiKey,
         onValueChange = {
-            onEdit(provider.copy(apiKey = it.trim()))
+            onEdit(config.copy(apiKey = it.trim()))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_api_key))
@@ -235,11 +202,11 @@ private fun ColumnScope.ProviderConfigureGoogle(
         maxLines = 3,
     )
 
-    if (!provider.vertexAI) {
+    if (!config.vertexAI) {
         OutlinedTextField(
-            value = provider.baseUrl,
+            value = config.baseUrl,
             onValueChange = {
-                onEdit(provider.copy(baseUrl = it.trim()))
+                onEdit(config.copy(baseUrl = it.trim()))
             },
             label = {
                 Text(stringResource(id = R.string.setting_provider_page_api_base_url))
@@ -253,18 +220,18 @@ private fun ColumnScope.ProviderConfigureGoogle(
     ) {
         Text(stringResource(id = R.string.setting_provider_page_vertex_ai), modifier = Modifier.weight(1f))
         Checkbox(
-            checked = provider.vertexAI,
+            checked = config.vertexAI,
             onCheckedChange = {
-                onEdit(provider.copy(vertexAI = it))
+                onEdit(config.copy(vertexAI = it))
             }
         )
     }
 
-    if (provider.vertexAI) {
+    if (config.vertexAI) {
         OutlinedTextField(
-            value = provider.location,
+            value = config.location,
             onValueChange = {
-                onEdit(provider.copy(location = it.trim()))
+                onEdit(config.copy(location = it.trim()))
             },
             label = {
                 // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#available-regions
@@ -273,9 +240,9 @@ private fun ColumnScope.ProviderConfigureGoogle(
             modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
-            value = provider.projectId,
+            value = config.projectId,
             onValueChange = {
-                onEdit(provider.copy(projectId = it.trim()))
+                onEdit(config.copy(projectId = it.trim()))
             },
             label = {
                 Text(stringResource(id = R.string.setting_provider_page_project_id))
