@@ -19,24 +19,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.surfaceColorAtElevation
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -46,16 +30,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Camera
-import com.composables.icons.lucide.GripHorizontal
-import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.*
 import com.dokar.sonner.ToastType
 import io.github.g00fy2.quickie.QRResult
 import io.github.g00fy2.quickie.ScanQRCode
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.ProviderType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -65,7 +45,6 @@ import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.plus
@@ -94,13 +73,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                             )
                         )
                     }
-                    AddButton {
-                        vm.updateSettings(
-                            settings.copy(
-                                providers = listOf(it) + settings.providers
-                            )
-                        )
-                    }
+                    AddButton(vm)
                 }
             )
         },
@@ -370,52 +343,95 @@ private fun handleImageQRCode(
 
 
 @Composable
-private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
-    val dialogState = useEditState<ProviderSetting> {
-        onAdd(it)
-    }
+private fun AddButton(vm: SettingVM) {
+    var showDialog by remember { mutableStateOf(false) }
+    val tempConfigs by vm.tempConfigs.collectAsStateWithLifecycle()
+    var currentProviderType by remember { mutableStateOf(ProviderType.OpenAI) }
 
     IconButton(
         onClick = {
-            dialogState.open(ProviderSetting.OpenAI())
+            vm.initTempConfigs(listOf(ProviderType.OpenAI, ProviderType.Google, ProviderType.Claude))
+            showDialog = true
         }
     ) {
         Icon(Lucide.Plus, "Add")
     }
 
-    if (dialogState.isEditing) {
+    if (showDialog) {
         AlertDialog(
-            onDismissRequest = {
-                dialogState.dismiss()
-            },
-            title = {
-                Text(stringResource(R.string.setting_provider_page_add_provider))
-            },
+            onDismissRequest = { showDialog = false },
+            title = { Text(stringResource(R.string.setting_provider_page_add_provider)) },
             text = {
-                dialogState.currentState?.let {
-                    ProviderConfigure(it) { newState ->
-                        dialogState.currentState = newState
+                Column {
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        ProviderSetting.Types.forEachIndexed { index, type ->
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = ProviderSetting.Types.size
+                                ),
+                                label = { Text(type.name) },
+                                selected = currentProviderType == type,
+                                onClick = { currentProviderType = type }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    tempConfigs[currentProviderType]?.let {
+                        ProviderConfigure(
+                            providerType = currentProviderType,
+                            tempApiConfig = it,
+                            onEdit = { newConfig ->
+                                vm.updateTempConfig(currentProviderType, newConfig)
+                            }
+                        )
                     }
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        dialogState.confirm()
+                        val newProviders = tempConfigs.mapNotNull { (type, config) ->
+                            when (type) {
+                                ProviderType.OpenAI -> ProviderSetting.OpenAI(
+                                    name = config.name,
+                                    apiKey = config.apiKey,
+                                    baseUrl = config.baseUrl,
+                                    enabled = config.enabled,
+                                    useResponseApi = config.useResponseApi
+                                )
+                                ProviderType.Google -> ProviderSetting.Google(
+                                    name = config.name,
+                                    apiKey = config.apiKey,
+                                    baseUrl = config.baseUrl,
+                                    enabled = config.enabled,
+                                    vertexAI = config.vertexAI,
+                                    location = config.location,
+                                    projectId = config.projectId
+                                )
+                                ProviderType.Claude -> ProviderSetting.Claude(
+                                    name = config.name,
+                                    apiKey = config.apiKey,
+                                    baseUrl = config.baseUrl,
+                                    enabled = config.enabled
+                                )
+                            }
+                        }
+                        val currentSettings = vm.settings.value
+                        vm.updateSettings(currentSettings.copy(providers = newProviders + currentSettings.providers))
+                        showDialog = false
                     }
                 ) {
                     Text(stringResource(R.string.setting_provider_page_add))
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        dialogState.dismiss()
-                    }
-                ) {
+                TextButton(onClick = { showDialog = false }) {
                     Text(stringResource(R.string.cancel))
                 }
-            },
+            }
         )
     }
 }

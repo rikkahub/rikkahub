@@ -603,7 +603,12 @@ private fun ModelItem(
                     val iconHeight = with(LocalDensity.current) {
                         LocalTextStyle.current.fontSize.toDp() * 0.9f
                     }
-                    model.abilities.fastForEach { ability ->
+                    model.abilities.sortedBy {
+                        when(it) {
+                            ModelAbility.TOOL -> 0
+                            ModelAbility.REASONING -> 1
+                        }
+                    }.fastForEach { ability ->
                         when (ability) {
                             ModelAbility.TOOL -> {
                                 Tag(
