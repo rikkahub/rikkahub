@@ -524,22 +524,7 @@ private fun ModelItem(
     val navController = LocalNavController.current
     val interactionSource = remember { MutableInteractionSource() }
     Card(
-        modifier = modifier.combinedClickable(
-            enabled = true,
-            onLongClick = if (dragHandle == null) {
-                {
-                    onDismiss()
-                    navController.navigate(
-                        Screen.SettingProviderDetail(
-                            providerSetting.id.toString()
-                        )
-                    )
-                }
-            } else null,
-            onClick = { onSelect(model) },
-            interactionSource = interactionSource,
-            indication = LocalIndication.current
-        ),
+        modifier = modifier,
         colors = CardDefaults.cardColors(
             containerColor = if (select) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
             contentColor = if (select) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
@@ -552,86 +537,107 @@ private fun ModelItem(
                 .fillMaxWidth()
                 .padding(vertical = 12.dp, horizontal = 16.dp)
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = MaterialTheme.shapes.small,
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .combinedClickable(
+                        enabled = true,
+                        onLongClick = {
+                            onDismiss()
+                            navController.navigate(
+                                Screen.SettingProviderDetail(
+                                    providerSetting.id.toString()
+                                )
+                            )
+                        },
+                        onClick = { onSelect(model) },
+                        interactionSource = interactionSource,
+                        indication = LocalIndication.current
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                AutoAIIcon(
-                    name = model.modelId,
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .size(32.dp)
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = model.displayName,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.small,
                 ) {
-                    Tag(type = TagType.INFO) {
-                        Text(
-                            when (model.type) {
-                                ModelType.CHAT -> stringResource(R.string.model_list_chat)
-                                ModelType.EMBEDDING -> stringResource(R.string.model_list_embedding)
-                            }
-                        )
-                    }
+                    AutoAIIcon(
+                        name = model.modelId,
+                        modifier = Modifier
+                            .padding(4.dp)
+                            .size(32.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = model.displayName,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
 
-                    Tag(type = TagType.SUCCESS) {
-                        Text(
-                            text = buildString {
-                                append(model.inputModalities.joinToString(",") { it.name.lowercase() })
-                                append("->")
-                                append(model.outputModalities.joinToString(",") { it.name.lowercase() })
-                            },
-                            maxLines = 1,
-                        )
-                    }
-
-                    val iconHeight = with(LocalDensity.current) {
-                        LocalTextStyle.current.fontSize.toDp() * 0.9f
-                    }
-                    model.abilities.fastForEach { ability ->
-                        when (ability) {
-                            ModelAbility.TOOL -> {
-                                Tag(
-                                    type = TagType.WARNING,
-                                    modifier = Modifier.fillMaxHeight()
-                                ) {
-                                    Icon(
-                                        imageVector = Lucide.Hammer,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .height(iconHeight)
-                                            .aspectRatio(1f)
-                                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Tag(type = TagType.INFO) {
+                            Text(
+                                when (model.type) {
+                                    ModelType.CHAT -> stringResource(R.string.model_list_chat)
+                                    ModelType.EMBEDDING -> stringResource(R.string.model_list_embedding)
                                 }
-                            }
+                            )
+                        }
 
-                            ModelAbility.REASONING -> {
-                                Tag(
-                                    type = TagType.INFO,
-                                    modifier = Modifier.fillMaxHeight()
-                                ) {
-                                    Icon(
-                                        imageVector = Lucide.Lightbulb,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .height(iconHeight)
-                                            .aspectRatio(1f)
-                                    )
+                        Tag(type = TagType.SUCCESS) {
+                            Text(
+                                text = buildString {
+                                    append(model.inputModalities.joinToString(",") { it.name.lowercase() })
+                                    append("->")
+                                    append(model.outputModalities.joinToString(",") { it.name.lowercase() })
+                                },
+                                maxLines = 1,
+                            )
+                        }
+
+                        val iconHeight = with(LocalDensity.current) {
+                            LocalTextStyle.current.fontSize.toDp() * 0.9f
+                        }
+                        model.abilities.fastForEach { ability ->
+                            when (ability) {
+                                ModelAbility.TOOL -> {
+                                    Tag(
+                                        type = TagType.WARNING,
+                                        modifier = Modifier.fillMaxHeight()
+                                    ) {
+                                        Icon(
+                                            imageVector = Lucide.Hammer,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .height(iconHeight)
+                                                .aspectRatio(1f)
+                                        )
+                                    }
+                                }
+
+                                ModelAbility.REASONING -> {
+                                    Tag(
+                                        type = TagType.INFO,
+                                        modifier = Modifier.fillMaxHeight()
+                                    ) {
+                                        Icon(
+                                            imageVector = Lucide.Lightbulb,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .height(iconHeight)
+                                                .aspectRatio(1f)
+                                        )
+                                    }
                                 }
                             }
                         }

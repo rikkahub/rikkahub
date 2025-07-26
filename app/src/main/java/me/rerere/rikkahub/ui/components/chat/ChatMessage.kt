@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -860,7 +861,12 @@ private fun MessagePartsBlock(
     val settings = LocalSettings.current
     LaunchedEffect(parts) {
         if (parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
-            hapticFeedback.performHapticFeedback(HapticFeedbackType.KeyboardTap)
+            launch(Dispatchers.Default) {
+                repeat(3) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    delay(80)
+                }
+            }
         }
     }
 
