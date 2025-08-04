@@ -25,6 +25,9 @@ val LocalExtendColors = compositionLocalOf { ExtendLightColors }
 
 val LocalDarkMode = compositionLocalOf { false }
 
+// 新增: 定义纯黑模式的特殊主题ID
+const val PURE_BLACK_THEME_ID = "pure_black"
+
 @Serializable
 enum class ColorMode {
     SYSTEM,
@@ -46,6 +49,11 @@ fun RikkahubTheme(
     }
 
     val colorScheme = when {
+        // 修改: 检查themeId是否为我们的特殊ID
+        darkTheme && settings.themeId == PURE_BLACK_THEME_ID -> {
+            pureBlackColorScheme()
+        }
+
         settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

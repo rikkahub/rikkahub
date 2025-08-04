@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.theme
 
 import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color // 新增: 导入 Color 类
 import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.ui.theme.presets.BlackThemePreset
 import me.rerere.rikkahub.ui.theme.presets.OceanThemePreset
@@ -45,4 +46,23 @@ enum class PresetThemeType {
     STANDARD,
     MEDIUM_CONTRAST,
     HIGH_CONTRAST
+}
+
+// 为AMOLED屏幕创建纯黑颜色方案
+fun pureBlackColorScheme(): ColorScheme {
+    // 使用默认的暗色主题作为基础，以保留应用的主题色
+    val baseDarkScheme = SakuraThemePreset.standardDark
+    return baseDarkScheme.copy(
+        background = Color.Black,
+        onBackground = Color.White,
+        surface = Color.Black,
+        onSurface = Color.White,
+        surfaceVariant = Color.Black,
+        // 如果需要完全的黑白对比，也可以设置为 Color.White
+        surfaceContainerLowest = Color.Black,
+        surfaceContainerLow = Color.Black,
+        surfaceContainer = Color.Black,
+        surfaceContainerHigh = Color.Black,
+        surfaceContainerHighest = Color.Black
+    )
 }

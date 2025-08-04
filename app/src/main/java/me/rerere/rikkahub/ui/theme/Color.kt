@@ -160,3 +160,12 @@ fun darkExtendColors(): ExtendColors = ExtendColors(
     gray9 = Color(223, 223, 223),
     gray10 = Color(246, 246, 246),
 )
+
+fun amoledExtendColors(): ExtendColors {
+    // 以标准的暗色扩展色为基础，只修改需要变黑的颜色
+    val base = darkExtendColors()
+    return base.copy(
+        gray1 = Color.Black, // 将最深的灰色替换为纯黑
+        gray2 = Color.Black  // 将次深的灰色也替换为纯黑
+    )
+}
