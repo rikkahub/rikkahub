@@ -201,6 +201,7 @@
   <string name="setting_page_theme_type_standard">Standard</string>
   <string name="setting_page_theme_type_medium_contrast">Medium Contrast</string>
   <string name="setting_page_theme_type_high_contrast">High Contrast</string>
+  <string name="setting_theme_amoled_mode_title">Pure Black Mode</string>
 
   <!-- Theme Names -->
   <string name="theme_name_black">Neutral Black</string>
