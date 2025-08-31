@@ -29,6 +29,7 @@ data class Assistant(
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBodies: List<CustomBody> = emptyList(),
     val mcpServers: Set<Uuid> = emptySet(),
+    val scripts: List<AssistantScript> = emptyList(),
     val localTools: List<LocalToolOption> = emptyList(),
     val background: String? = null,
     val learningMode: Boolean = false,
@@ -38,4 +39,13 @@ data class Assistant(
 data class AssistantMemory(
     val id: Int,
     val content: String = "",
+)
+
+@Serializable
+data class AssistantScript(
+    val id: Uuid = Uuid.random(),
+    val name: String,
+    val enabled: Boolean = true,
+    val description: String,
+    val code: String,
 )

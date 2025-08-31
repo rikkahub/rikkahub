@@ -79,7 +79,8 @@ fun AssistantDetailPage(id: String) {
         stringResource(R.string.assistant_page_tab_memory),
         stringResource(R.string.assistant_page_tab_request),
         stringResource(R.string.assistant_page_tab_mcp),
-        stringResource(R.string.assistant_page_tab_local_tools)
+        stringResource(R.string.assistant_page_tab_local_tools),
+        "Scripts"
     )
     val pagerState = rememberPagerState { tabs.size }
     Scaffold(
@@ -177,6 +178,13 @@ fun AssistantDetailPage(id: String) {
                         AssistantLocalToolSubPage(
                             assistant = assistant,
                             onUpdate = { onUpdate(it) }
+                        )
+                    }
+
+                    6 -> {
+                        AssistantScriptsPage(
+                            assistant = assistant,
+                            onUpdateAssistant = { onUpdate(it) }
                         )
                     }
                 }
