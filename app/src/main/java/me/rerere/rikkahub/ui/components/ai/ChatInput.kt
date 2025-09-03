@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -90,7 +91,6 @@ import com.composables.icons.lucide.Files
 import com.composables.icons.lucide.Fullscreen
 import com.composables.icons.lucide.GraduationCap
 import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.ListCheck
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.X
@@ -717,12 +717,15 @@ private fun FullScreenEditor(
             onDone()
         },
         properties = DialogProperties(
-            usePlatformDefaultWidth = false
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
         ),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize(),
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .imePadding(),
             verticalArrangement = Arrangement.Bottom
         ) {
             Surface(
@@ -751,7 +754,7 @@ private fun FullScreenEditor(
                         value = text.text,
                         onValueChange = { state.setMessageText(it) },
                         modifier = Modifier
-                            .imePadding()
+                            .padding(bottom = 2.dp)
                             .fillMaxSize(),
                         shape = RoundedCornerShape(32.dp),
                         placeholder = {
