@@ -258,7 +258,7 @@ fun ChatList(
             visible = selecting,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .offset(-ScreenOffset),
+                .offset(y = -(48).dp),
             enter = slideInVertically(
                 initialOffsetY = { it * 2 },
             ),
