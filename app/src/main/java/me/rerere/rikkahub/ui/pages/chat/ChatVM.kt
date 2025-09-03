@@ -67,6 +67,7 @@ import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.UpdateChecker
 import me.rerere.rikkahub.utils.applyPlaceholders
+import me.rerere.rikkahub.utils.createChatFilesByContents
 import me.rerere.rikkahub.utils.deleteChatFiles
 import me.rerere.search.SearchService
 import me.rerere.search.SearchServiceOptions
@@ -561,9 +562,41 @@ class ChatVM(
         val node = conversation.value.getMessageNodeByMessage(message)
         val nodes = conversation.value.messageNodes.subList(
             0, conversation.value.messageNodes.indexOf(node) + 1
-        )
+        ).map { messageNode ->
+            messageNode.copy(
+                messages = messageNode.messages.map { msg ->
+                    msg.copy(
+                        parts = msg.parts.map { part ->
+                            when (part) {
+                                is UIMessagePart.Image -> {
+                                    val url = part.url
+                                    if (url.startsWith("file:")) {
+                                        val copied = context.createChatFilesByContents(
+                                            listOf(url.toUri())
+                                        ).firstOrNull()
+                                        if (copied != null) part.copy(url = copied.toString()) else part
+                                    } else part
+                                }
+                                is UIMessagePart.Document -> {
+                                    val url = part.url
+                                    if (url.startsWith("file:")) {
+                                        val copied = context.createChatFilesByContents(
+                                            listOf(url.toUri())
+                                        ).firstOrNull()
+                                        if (copied != null) part.copy(url = copied.toString()) else part
+                                    } else part
+                                }
+                                else -> part
+                            }
+                        }
+                    )
+                }
+            )
+        }
         val newConversation = Conversation(
-            id = Uuid.random(), assistantId = settings.value.assistantId, messageNodes = nodes
+            id = Uuid.random(),
+            assistantId = settings.value.assistantId,
+            messageNodes = nodes
         )
         saveConversation(newConversation)
         return newConversation
