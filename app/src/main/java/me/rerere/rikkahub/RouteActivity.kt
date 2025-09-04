@@ -169,7 +169,7 @@ class RouteActivity : ComponentActivity() {
                     enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
                     exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
                     popEnterTransition = {
-                        slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn() + scaleIn(initialScale = 1.1f)
+                        slideInHorizontally(initialOffsetX = { -it / 2 }) + scaleIn(initialScale = 1.3f) + fadeIn()
                     },
                     popExitTransition = {
                         slideOutHorizontally(targetOffsetX = { it }) + scaleOut(targetScale = 0.75f) + fadeOut()
