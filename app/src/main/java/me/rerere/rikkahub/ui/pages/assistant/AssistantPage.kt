@@ -385,19 +385,19 @@ private fun AssistantItem(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Tooltip(tooltip = { Text(stringResource(R.string.assistant_page_delete)) }) {
-                    Icon(
-                        imageVector = Lucide.Trash2,
-                        contentDescription = stringResource(R.string.assistant_page_delete),
-                        modifier = Modifier
-                            .onClick(
-                                enabled = assistant.id !in DEFAULT_ASSISTANTS_IDS
-                            ) {
-                                showDeleteDialog = true
-                            }
-                            .size(18.dp),
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.65f),
-                    )
+                if(assistant.id !in DEFAULT_ASSISTANTS_IDS) {
+                    Tooltip(tooltip = { Text(stringResource(R.string.assistant_page_delete)) }) {
+                        Icon(
+                            imageVector = Lucide.Trash2,
+                            contentDescription = stringResource(R.string.assistant_page_delete),
+                            modifier = Modifier
+                                .onClick {
+                                    showDeleteDialog = true
+                                }
+                                .size(18.dp),
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.65f),
+                        )
+                    }
                 }
                 Tooltip(tooltip = { Text(stringResource(R.string.assistant_page_clone)) }) {
                     Icon(
