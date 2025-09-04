@@ -69,11 +69,13 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
+import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.EditState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
 import me.rerere.rikkahub.ui.theme.extendColors
 import org.koin.androidx.compose.koinViewModel
@@ -317,6 +319,7 @@ private fun AssistantItem(
     var showDeleteDialog by remember { mutableStateOf(false) }
     Card(
         modifier = modifier.fillMaxWidth(),
+        onClick = onEdit
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -379,56 +382,34 @@ private fun AssistantItem(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Right
-                IconButton(
-                    onClick = {
-                        showDeleteDialog = true
-                    },
-                    enabled = assistant.id !in DEFAULT_ASSISTANTS_IDS
-                ) {
+                Tooltip(tooltip = { Text(stringResource(R.string.assistant_page_delete)) }) {
                     Icon(
                         imageVector = Lucide.Trash2,
                         contentDescription = stringResource(R.string.assistant_page_delete),
                         modifier = Modifier
-                            .padding(end = 4.dp)
+                            .onClick(
+                                enabled = assistant.id !in DEFAULT_ASSISTANTS_IDS
+                            ) {
+                                showDeleteDialog = true
+                            }
                             .size(18.dp),
                         tint = MaterialTheme.colorScheme.error.copy(alpha = 0.65f),
                     )
                 }
-
-                TextButton(
-                    onClick = {
-                        onCopy()
-                    }
-                ) {
+                Tooltip(tooltip = { Text(stringResource(R.string.assistant_page_clone)) }) {
                     Icon(
                         imageVector = Lucide.Copy,
                         contentDescription = stringResource(R.string.assistant_page_clone),
                         modifier = Modifier
-                            .padding(end = 4.dp)
-                            .size(18.dp)
+                            .onClick {
+                                onCopy()
+                            }
+                            .size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
                     )
-                    Text(stringResource(R.string.assistant_page_clone))
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Button(
-                    onClick = {
-                        onEdit()
-                    },
-                ) {
-                    Icon(
-                        Lucide.Pencil,
-                        stringResource(R.string.edit),
-                        modifier = Modifier
-                            .padding(end = 4.dp)
-                            .size(18.dp)
-                    )
-                    Text(stringResource(R.string.edit))
                 }
             }
         }
