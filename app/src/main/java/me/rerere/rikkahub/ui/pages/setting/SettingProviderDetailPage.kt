@@ -305,7 +305,6 @@ private fun SettingProviderConfigPage(
             verticalAlignment = Alignment.CenterVertically
         ) {
             ConnectionTester(
-                provider = provider,
                 internalProvider = internalProvider,
                 scope = scope
             )
@@ -490,7 +489,6 @@ private fun SettingProviderProxyPage(
 
 @Composable
 private fun ConnectionTester(
-    provider: ProviderSetting,
     internalProvider: ProviderSetting,
     scope: CoroutineScope
 ) {
@@ -504,7 +502,9 @@ private fun ConnectionTester(
         Icon(Lucide.Cable, null)
     }
     if (showTestDialog) {
-        var model by remember { mutableStateOf<Model?>(null) }
+        var model by remember(internalProvider) {
+            mutableStateOf(internalProvider.models.firstOrNull { it.type == ModelType.CHAT })
+        }
         var testState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
         AlertDialog(
             onDismissRequest = { showTestDialog = false },
@@ -518,7 +518,7 @@ private fun ConnectionTester(
                 ) {
                     ModelSelector(
                         modelId = model?.id,
-                        providers = listOf(provider),
+                        providers = listOf(internalProvider),
                         type = ModelType.CHAT,
                         modifier = Modifier.fillMaxWidth()
                     ) {
