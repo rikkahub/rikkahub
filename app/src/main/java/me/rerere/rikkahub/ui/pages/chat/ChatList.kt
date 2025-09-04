@@ -5,8 +5,10 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -60,9 +62,11 @@ import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.ChevronsDown
 import com.composables.icons.lucide.ChevronsUp
+import com.composables.icons.lucide.Flashlight
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MousePointer2
 import com.composables.icons.lucide.X
+import com.composables.icons.lucide.Zap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -344,30 +348,40 @@ fun ChatList(
 
         // Suggestion
         if (conversation.chatSuggestions.isNotEmpty() && !captureProgress) {
-            LazyRow(
+            ChatSuggestionsRow(
+                conversation = conversation,
+                onClickSuggestion = onClickSuggestion
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChatSuggestionsRow(
+    conversation: Conversation,
+    onClickSuggestion: (String) -> Unit
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items(conversation.chatSuggestions) { suggestion ->
+            Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                items(conversation.chatSuggestions) { suggestion ->
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .clickable {
-                                onClickSuggestion(suggestion)
-                            }
-                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-                            .padding(vertical = 4.dp, horizontal = 8.dp),
-                    ) {
-                        Text(
-                            text = suggestion,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                    .clip(RoundedCornerShape(50))
+                    .clickable {
+                        onClickSuggestion(suggestion)
                     }
-                }
+                    .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+                    .padding(vertical = 4.dp, horizontal = 8.dp),
+            ) {
+                Text(
+                    text = suggestion,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
