@@ -339,20 +339,16 @@ private fun AssistantItem(
                 dragHandle()
             }
 
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Text(
+                text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
 
-                if (assistant.enableMemory) {
-                    Tag(type = TagType.SUCCESS) {
-                        Text(stringResource(R.string.assistant_page_memory_count, memories.size))
-                    }
+            if (assistant.enableMemory) {
+                Tag(type = TagType.SUCCESS) {
+                    Text(stringResource(R.string.assistant_page_memory_count, memories.size))
                 }
             }
 
@@ -381,7 +377,7 @@ private fun AssistantItem(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
