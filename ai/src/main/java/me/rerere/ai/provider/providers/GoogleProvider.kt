@@ -369,7 +369,11 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     when (params.thinkingBudget) {
                         null, -1 -> {}
                         0 -> {
-                            if (!isGeminiPro) put("thinkingBudget", 0) // disable thinking if not gemini pro
+                            // disable thinking if not gemini pro
+                            if (!isGeminiPro) {
+                                put("thinkingBudget", 0)
+                                put("includeThoughts", false)
+                            }
                         }
 
                         else -> put("thinkingBudget", params.thinkingBudget)
