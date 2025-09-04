@@ -69,6 +69,10 @@
   <string name="assistant_page_no_system_prompt">無系統提示詞</string>
   <string name="assistant_page_preset_messages">預設聊天訊息</string>
   <string name="assistant_page_preset_messages_desc">設定對話初始訊息</string>
+  <string name="assistant_page_quick_message_content">內容</string>
+  <string name="assistant_page_quick_message_title">標題</string>
+  <string name="assistant_page_quick_messages">快速訊息</string>
+  <string name="assistant_page_quick_messages_desc">設定快速訊息捷徑</string>
   <string name="assistant_page_recent_chats">參考歷史聊天記錄</string>
   <string name="assistant_page_recent_chats_desc">啟用後，助手將參考最近的聊天歷史記錄來提供更有上下文的回應</string>
   <string name="assistant_page_remove">移除</string>

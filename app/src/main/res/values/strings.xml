@@ -702,4 +702,8 @@
     <string name="setting_provider_page_balance_api_path">Balance API Path</string>
   <string name="setting_provider_page_balance_json_key">Result Json Key</string>
   <string name="setting_provider_page_balance_info">"Get account balance "</string>
+    <string name="assistant_page_quick_messages">Quick Messages</string>
+  <string name="assistant_page_quick_messages_desc">Configure quick message shortcuts</string>
+  <string name="assistant_page_quick_message_title">Title</string>
+  <string name="assistant_page_quick_message_content">Content</string>
 </resources>

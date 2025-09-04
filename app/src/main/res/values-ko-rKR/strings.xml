@@ -69,6 +69,10 @@
   <string name="assistant_page_no_system_prompt">시스템 프롬프트 없음</string>
   <string name="assistant_page_preset_messages">사전 설정된 채팅 메시지</string>
   <string name="assistant_page_preset_messages_desc">초기 대화 메시지 설정</string>
+  <string name="assistant_page_quick_message_content">내용</string>
+  <string name="assistant_page_quick_message_title">제목</string>
+  <string name="assistant_page_quick_messages">빠른 메시지</string>
+  <string name="assistant_page_quick_messages_desc">빠른 메시지 단축어 구성</string>
   <string name="assistant_page_recent_chats">최근 채팅 참조</string>
   <string name="assistant_page_recent_chats_desc">활성화 시, 어시스턴트가 최근 채팅 기록을 참조하여 더 맥락에 맞는 응답을 제공합니다</string>
   <string name="assistant_page_remove">제거</string>

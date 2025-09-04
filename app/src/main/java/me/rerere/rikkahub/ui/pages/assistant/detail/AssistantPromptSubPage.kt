@@ -407,10 +407,10 @@ fun AssistantPromptSubPage(
             FormItem(
                 modifier = Modifier.padding(16.dp),
                 label = {
-                    Text("Quick Messages")
+                    Text(stringResource(R.string.assistant_page_quick_messages))
                 },
                 description = {
-                    Text("Configure quick message shortcuts")
+                    Text(stringResource(R.string.assistant_page_quick_messages_desc))
                 }
             )
             Column(
@@ -442,7 +442,7 @@ fun AssistantPromptSubPage(
                                     )
                                 },
                                 modifier = Modifier.weight(1f),
-                                label = { Text("Title") }
+                                label = { Text(stringResource(R.string.assistant_page_quick_message_title)) }
                             )
                             IconButton(
                                 onClick = {
@@ -475,7 +475,7 @@ fun AssistantPromptSubPage(
                             },
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 6,
-                            label = { Text("Content") }
+                            label = { Text(stringResource(R.string.assistant_page_quick_message_content)) }
                         )
                     }
                 }

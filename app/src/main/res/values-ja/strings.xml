@@ -69,6 +69,10 @@
   <string name="assistant_page_no_system_prompt">システムプロンプトなし</string>
   <string name="assistant_page_preset_messages">プリセットチャットメッセージ</string>
   <string name="assistant_page_preset_messages_desc">初期会話メッセージを設定</string>
+  <string name="assistant_page_quick_message_content">内容</string>
+  <string name="assistant_page_quick_message_title">タイトル</string>
+  <string name="assistant_page_quick_messages">クイックメッセージ</string>
+  <string name="assistant_page_quick_messages_desc">クイックメッセージのショートカットを設定</string>
   <string name="assistant_page_recent_chats">最近のチャット履歴を参照</string>
   <string name="assistant_page_recent_chats_desc">有効にすると、アシスタントは最近のチャット履歴を参照して、より文脈に沿った応答を提供します</string>
   <string name="assistant_page_remove">削除</string>
