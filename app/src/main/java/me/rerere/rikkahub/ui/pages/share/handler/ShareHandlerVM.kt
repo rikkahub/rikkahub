@@ -14,7 +14,7 @@ class ShareHandlerVM(
 ) : ViewModel() {
     val shareText = checkNotNull(text)
     val settings = settingsStore.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, Settings())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
     suspend fun updateAssistant(assistantId: Uuid) {
         settingsStore.updateAssistant(assistantId)

@@ -350,7 +350,8 @@ fun ChatList(
         if (conversation.chatSuggestions.isNotEmpty() && !captureProgress) {
             ChatSuggestionsRow(
                 conversation = conversation,
-                onClickSuggestion = onClickSuggestion
+                onClickSuggestion = onClickSuggestion,
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
     }
@@ -358,11 +359,12 @@ fun ChatList(
 
 @Composable
 private fun ChatSuggestionsRow(
+    modifier: Modifier = Modifier,
     conversation: Conversation,
     onClickSuggestion: (String) -> Unit
 ) {
     LazyRow(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),

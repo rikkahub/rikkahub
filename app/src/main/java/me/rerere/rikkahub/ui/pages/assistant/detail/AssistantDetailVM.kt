@@ -31,7 +31,7 @@ class AssistantDetailVM(
     private val assistantId = Uuid.parse(id)
 
     val settings: StateFlow<Settings> =
-        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings())
+        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
     val mcpServerConfigs = settingsStore
         .settingsFlow.map { settings ->
@@ -175,7 +175,7 @@ class AssistantDetailVM(
     fun checkBackgroundDelete(old: Assistant, new: Assistant) {
         val oldBackground = old.background
         val newBackground = new.background
-        
+
         if (oldBackground != null && oldBackground != newBackground) {
             try {
                 val oldUri = oldBackground.toUri()

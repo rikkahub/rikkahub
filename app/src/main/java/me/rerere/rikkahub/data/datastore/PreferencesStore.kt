@@ -248,9 +248,12 @@ class SettingsStore(
 
     val settingsFlow = settingsFlowRaw
         .distinctUntilChanged()
-        .toMutableStateFlow(scope, Settings())
+        .toMutableStateFlow(scope, Settings.dummy())
 
     suspend fun update(settings: Settings) {
+        require(settings.init.not()) {
+            "Cannot update dummy settings"
+        }
         settingsFlow.value = settings
         dataStore.edit { preferences ->
             preferences[DYNAMIC_COLOR] = settings.dynamicColor
@@ -304,6 +307,8 @@ class SettingsStore(
 
 @Serializable
 data class Settings(
+    @Transient
+    val init: Boolean = false,
     val dynamicColor: Boolean = true,
     val themeId: String = PresetThemes[0].id,
     val themeType: PresetThemeType = PresetThemeType.STANDARD,
@@ -332,7 +337,12 @@ data class Settings(
     val webDavConfig: WebDavConfig = WebDavConfig(),
     val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID
-)
+) {
+    companion object {
+        // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
+        fun dummy() = Settings(init = true)
+    }
+}
 
 @Serializable
 data class DisplaySetting(

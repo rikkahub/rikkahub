@@ -13,7 +13,7 @@ class DebugVM(
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.Lazily, Settings())
+        .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
 
     fun updateSettings(settings: Settings) {
         viewModelScope.launch {

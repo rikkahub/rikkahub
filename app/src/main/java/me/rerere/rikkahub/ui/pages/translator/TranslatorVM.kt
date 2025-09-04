@@ -21,7 +21,7 @@ class TranslatorVM(
     private val generationHandler: GenerationHandler,
 ) : ViewModel() {
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.Lazily, Settings())
+        .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
 
     // 翻译状态
     private val _translating = MutableStateFlow(false)

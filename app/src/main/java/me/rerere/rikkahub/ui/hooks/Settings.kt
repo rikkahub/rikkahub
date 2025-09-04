@@ -11,6 +11,6 @@ import org.koin.compose.koinInject
 fun rememberUserSettingsState(): State<Settings> {
     val store = koinInject<SettingsStore>()
     return store.settingsFlow.collectAsStateWithLifecycle(
-        initialValue = Settings(),
+        initialValue = Settings.dummy(),
     )
 }
