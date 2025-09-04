@@ -7,16 +7,6 @@
 - Tests: `ai/src/test` (unit), `ai/src/androidTest` (instrumented); `app/src/test` scaffolded.
 - Assets: `app/src/main/assets`, resources under `app/src/main/res`.
 
-## Build, Test, and Development
-- `./gradlew assembleDebug`: Build debug APK for all modules.
-- `./gradlew :app:installDebug`: Install to a connected device/emulator.
-- `./gradlew test`: Run JVM unit tests across modules.
-- `./gradlew connectedAndroidTest`: Run instrumented tests (device/emulator required).
-- `./gradlew lint`: Android Lint checks.
-- `./gradlew :app:buildAll`: Release APK + AAB (see signing below).
-
-Prereqs: place `google-services.json` in `app/`. For on‑device AI, set up MNN per `ai/README.md`. Release signing values are read from `local.properties`.
-
 ## Coding Style & Naming
 - Kotlin with 4‑space indent, 120 char line limit (`.editorconfig`).
 - Classes/objects: PascalCase; functions/properties: camelCase; resources: snake_case.
