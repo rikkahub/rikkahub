@@ -367,7 +367,8 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                         params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
 
                     when (params.thinkingBudget) {
-                        null, -1 -> {}
+                        null, -1 -> {} // 如果是自动，不设置thinkingBudget参数
+
                         0 -> {
                             // disable thinking if not gemini pro
                             if (!isGeminiPro) {
