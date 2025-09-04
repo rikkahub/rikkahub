@@ -706,4 +706,6 @@
   <string name="assistant_page_quick_messages_desc">Configure quick message shortcuts</string>
   <string name="assistant_page_quick_message_title">Title</string>
   <string name="assistant_page_quick_message_content">Content</string>
+    <string name="setting_mcp_page_no_mcp_servers_found">No MCP servers found</string>
+  <string name="setting_mcp_page_add_one_to_get_started">Add one to get started</string>
 </resources>

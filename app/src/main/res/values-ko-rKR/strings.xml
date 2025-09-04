@@ -351,6 +351,7 @@
   <string name="setting_display_page_skip_crop_image_title">이미지 편집 건너뛰기</string>
   <string name="setting_display_page_title">디스플레이 설정</string>
   <string name="setting_mcp_page_add_header">헤더 추가</string>
+  <string name="setting_mcp_page_add_one_to_get_started">시작하려면 하나를 추가하세요</string>
   <string name="setting_mcp_page_basic_settings">기본 설정</string>
   <string name="setting_mcp_page_custom_headers">사용자 정의 헤더</string>
   <string name="setting_mcp_page_custom_headers_desc">MCP 서버 요청에 대한 사용자 정의 HTTP 헤더 추가</string>
@@ -364,6 +365,7 @@
   <string name="setting_mcp_page_name">이름</string>
   <string name="setting_mcp_page_name_desc">MCP 서버의 표시 이름</string>
   <string name="setting_mcp_page_name_placeholder">예: 내 MCP 서버</string>
+  <string name="setting_mcp_page_no_mcp_servers_found">MCP 서버를 찾을 수 없습니다</string>
   <string name="setting_mcp_page_save">저장</string>
   <string name="setting_mcp_page_server_url">서버 URL</string>
   <string name="setting_mcp_page_sse_url_desc">SSE 전송 서버의 URL 주소</string>

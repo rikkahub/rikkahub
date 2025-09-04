@@ -351,6 +351,7 @@
   <string name="setting_display_page_skip_crop_image_title">画像編集をスキップ</string>
   <string name="setting_display_page_title">表示設定</string>
   <string name="setting_mcp_page_add_header">ヘッダーを追加</string>
+  <string name="setting_mcp_page_add_one_to_get_started">1つ追加して始める</string>
   <string name="setting_mcp_page_basic_settings">基本設定</string>
   <string name="setting_mcp_page_custom_headers">カスタムヘッダー</string>
   <string name="setting_mcp_page_custom_headers_desc">MCPサーバーリクエストにカスタムHTTPヘッダーを追加</string>
@@ -364,6 +365,7 @@
   <string name="setting_mcp_page_name">名前</string>
   <string name="setting_mcp_page_name_desc">MCPサーバーの表示名</string>
   <string name="setting_mcp_page_name_placeholder">例：My MCP Server</string>
+  <string name="setting_mcp_page_no_mcp_servers_found">MCPサーバーが見つかりません</string>
   <string name="setting_mcp_page_save">保存</string>
   <string name="setting_mcp_page_server_url">サーバーURL</string>
   <string name="setting_mcp_page_sse_url_desc">SSE転送サーバーのURLアドレス</string>

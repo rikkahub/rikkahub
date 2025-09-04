@@ -54,6 +54,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -165,6 +166,18 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                         modifier = Modifier.animateItem()
                     )
                 }
+            }
+
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(text = stringResource(R.string.setting_mcp_page_no_mcp_servers_found))
+                Text(
+                    text = stringResource(R.string.setting_mcp_page_add_one_to_get_started),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }

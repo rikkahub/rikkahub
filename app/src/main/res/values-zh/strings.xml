@@ -351,6 +351,7 @@
   <string name="setting_display_page_skip_crop_image_title">跳过图片编辑</string>
   <string name="setting_display_page_title">显示设置</string>
   <string name="setting_mcp_page_add_header">添加请求头</string>
+  <string name="setting_mcp_page_add_one_to_get_started">添加一个即可开始使用</string>
   <string name="setting_mcp_page_basic_settings">基础设置</string>
   <string name="setting_mcp_page_custom_headers">自定义请求头</string>
   <string name="setting_mcp_page_custom_headers_desc">为MCP服务器请求添加自定义HTTP头</string>
@@ -364,6 +365,7 @@
   <string name="setting_mcp_page_name">名称</string>
   <string name="setting_mcp_page_name_desc">MCP服务器的显示名称</string>
   <string name="setting_mcp_page_name_placeholder">例如：My MCP Server</string>
+  <string name="setting_mcp_page_no_mcp_servers_found">未找到 MCP 服务器</string>
   <string name="setting_mcp_page_save">保存</string>
   <string name="setting_mcp_page_server_url">服务器地址</string>
   <string name="setting_mcp_page_sse_url_desc">SSE传输服务器的URL地址</string>
