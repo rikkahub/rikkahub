@@ -110,7 +110,7 @@ class McpManager(
                 name = tool.name,
                 arguments = args,
             ),
-            options = RequestOptions(timeout = 30.seconds),
+            options = RequestOptions(timeout = 60.seconds),
             compatibility = true
         )
         require(result != null) {
