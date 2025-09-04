@@ -24,6 +24,7 @@ data class Assistant(
     val enableRecentChatsReference: Boolean = false,
     val messageTemplate: String = "{{ message }}",
     val presetMessages: List<UIMessage> = emptyList(),
+    val quickMessages: List<QuickMessage> = emptyList(),
     val thinkingBudget: Int? = 1024,
     val maxTokens: Int? = null,
     val customHeaders: List<CustomHeader> = emptyList(),
@@ -32,6 +33,12 @@ data class Assistant(
     val localTools: List<LocalToolOption> = emptyList(),
     val background: String? = null,
     val learningMode: Boolean = false,
+)
+
+@Serializable
+data class QuickMessage(
+    val title: String = "",
+    val content: String = "",
 )
 
 @Serializable

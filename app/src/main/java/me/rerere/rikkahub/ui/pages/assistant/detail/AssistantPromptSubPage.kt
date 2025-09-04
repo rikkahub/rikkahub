@@ -71,6 +71,7 @@ import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -392,6 +393,97 @@ fun AssistantPromptSubPage(
                                     role = nextRole,
                                     parts = listOf(UIMessagePart.Text(""))
                                 )
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Lucide.Plus, null)
+                }
+            }
+        }
+
+        Card {
+            FormItem(
+                modifier = Modifier.padding(16.dp),
+                label = {
+                    Text("Quick Messages")
+                },
+                description = {
+                    Text("Configure quick message shortcuts")
+                }
+            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(16.dp)
+            ) {
+                assistant.quickMessages.fastForEachIndexed { index, quickMessage ->
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = quickMessage.title,
+                                onValueChange = { title ->
+                                    onUpdate(
+                                        assistant.copy(
+                                            quickMessages = assistant.quickMessages.mapIndexed { i, msg ->
+                                                if (i == index) {
+                                                    msg.copy(title = title)
+                                                } else {
+                                                    msg
+                                                }
+                                            }
+                                        )
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Title") }
+                            )
+                            IconButton(
+                                onClick = {
+                                    onUpdate(
+                                        assistant.copy(
+                                            quickMessages = assistant.quickMessages.filterIndexed { i, _ ->
+                                                i != index
+                                            }
+                                        )
+                                    )
+                                }
+                            ) {
+                                Icon(Lucide.X, null)
+                            }
+                        }
+                        OutlinedTextField(
+                            value = quickMessage.content,
+                            onValueChange = { text ->
+                                onUpdate(
+                                    assistant.copy(
+                                        quickMessages = assistant.quickMessages.mapIndexed { i, msg ->
+                                            if (i == index) {
+                                                msg.copy(content = text)
+                                            } else {
+                                                msg
+                                            }
+                                        }
+                                    )
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 6,
+                            label = { Text("Content") }
+                        )
+                    }
+                }
+                Button(
+                    onClick = {
+                        onUpdate(
+                            assistant.copy(
+                                quickMessages = assistant.quickMessages + QuickMessage()
                             )
                         )
                     },
