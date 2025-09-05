@@ -412,7 +412,7 @@ export function TranslationTable({ module, config, onBack, onModuleUpdate }: Tra
   }
 
   // Table view
-  const stats = module.stats[selectedLocale];
+  const stats = module.stats[selectedLocale] ?? { total: 0, translated: 0, missing: 0, percentage: 0 };
   const maxVisibleRows = 15;
   const visibleRows = filteredData.slice(scrollOffset, scrollOffset + maxVisibleRows);
 

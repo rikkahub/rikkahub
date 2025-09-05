@@ -52,7 +52,7 @@ function getModel(config: I18nConfig) {
     baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     name: 'openai',
   })
-  
+
   switch (config.provider.type.toLowerCase()) {
     case 'google':
     case 'gemini':
@@ -98,6 +98,11 @@ Translation:`;
       model,
       prompt,
       temperature: 0.3,
+      providerOptions: {
+        provider: {
+            sort: 'throughput'
+        }
+      }
     });
 
     const translatedText = result.text.trim();
@@ -117,74 +122,98 @@ export async function batchTranslate(
   config: I18nConfig,
   onProgress?: ProgressCallback
 ): Promise<StringResource[]> {
-  logToFile(`Starting batch translation - Target: ${targetLocale}, Total strings: ${strings.length}`);
-
-  const results: StringResource[] = [];
   const total = strings.length;
+  const concurrency = Math.max(1, config.concurrency ?? 1);
+  logToFile(
+    `Starting batch translation - Target: ${targetLocale}, Total strings: ${total}, Concurrency: ${concurrency}`
+  );
+
+  const results: StringResource[] = new Array(total);
   let successCount = 0;
   let errorCount = 0;
+  let startedCount = 0;
+  let completedCount = 0;
 
-  for (let i = 0; i < strings.length; i++) {
-    const stringResource = strings[i];
+  // Shared index for workers
+  let index = 0;
 
-    try {
-      logToFile(`Processing string ${i + 1}/${total} - Key: ${stringResource.key}`);
+  async function worker(workerId: number) {
+    while (true) {
+      const currentIndex = index;
+      if (currentIndex >= total) break;
+      index++;
 
-      onProgress?.({
-        current: i + 1,
-        total,
-        key: stringResource.key,
-        status: 'translating'
-      });
+      const stringResource = strings[currentIndex]!;
 
-      const translatedValue = await translateString(
-        stringResource.value,
-        targetLocale,
-        config,
-        `Key: ${stringResource.key}`
-      );
+      try {
+        logToFile(
+          `Worker ${workerId} processing ${currentIndex + 1}/${total} - Key: ${stringResource.key}`
+        );
 
-      results.push({
-        key: stringResource.key,
-        value: translatedValue,
-        translatable: stringResource.translatable
-      });
+        startedCount++;
+        onProgress?.({
+          current: completedCount,
+          total,
+          key: stringResource.key,
+          status: 'translating'
+        });
 
-      successCount++;
-      logToFile(`Successfully translated key: ${stringResource.key}`);
+        const translatedValue = await translateString(
+          stringResource.value,
+          targetLocale,
+          config,
+          `Key: ${stringResource.key}`
+        );
 
-      onProgress?.({
-        current: i + 1,
-        total,
-        key: stringResource.key,
-        status: 'completed'
-      });
+        results[currentIndex] = {
+          key: stringResource.key,
+          value: translatedValue,
+          translatable: stringResource.translatable
+        };
 
-      // Small delay to avoid rate limits
-      await new Promise(resolve => setTimeout(resolve, 100));
+        successCount++;
+        completedCount++;
+        logToFile(`Successfully translated key: ${stringResource.key}`);
 
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      errorCount++;
-      logToFile(`Failed to translate key: ${stringResource.key} - Error: ${errorMessage}`);
+        onProgress?.({
+          current: completedCount,
+          total,
+          key: stringResource.key,
+          status: 'completed'
+        });
 
-      onProgress?.({
-        current: i + 1,
-        total,
-        key: stringResource.key,
-        status: 'error',
-        error: errorMessage
-      });
+        // Small delay to avoid hitting rate limits too fast across workers
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        errorCount++;
+        completedCount++;
+        logToFile(`Failed to translate key: ${stringResource.key} - Error: ${errorMessage}`);
 
-      // For errors, keep the original text as fallback
-      results.push({
-        key: stringResource.key,
-        value: stringResource.value,
-        translatable: stringResource.translatable
-      });
+        onProgress?.({
+          current: completedCount,
+          total,
+          key: stringResource.key,
+          status: 'error',
+          error: errorMessage
+        });
+
+        // For errors, keep the original text as fallback at the same index
+        results[currentIndex] = {
+          key: stringResource.key,
+          value: stringResource.value,
+          translatable: stringResource.translatable
+        };
+      }
     }
   }
 
-  logToFile(`Batch translation completed - Total: ${total}, Success: ${successCount}, Errors: ${errorCount}`);
+  const workerCount = Math.min(concurrency, total);
+  const workers = Array.from({ length: workerCount }, (_, i) => worker(i + 1));
+  await Promise.all(workers);
+
+  logToFile(
+    `Batch translation completed - Total: ${total}, Success: ${successCount}, Errors: ${errorCount}`
+  );
   return results;
 }

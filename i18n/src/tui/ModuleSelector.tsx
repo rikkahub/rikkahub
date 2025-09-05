@@ -14,7 +14,7 @@ export function ModuleSelector({ modules, config, onSelect }: ModuleSelectorProp
   const items = modules.map(module => {
     // Calculate overall completion percentage
     const totalStats = config.targets.reduce((acc, locale) => {
-      const stats = module.stats[locale];
+      const stats = module.stats[locale] ?? { total: 0, translated: 0, missing: 0, percentage: 0 };
       return {
         total: acc.total + stats.total,
         translated: acc.translated + stats.translated

@@ -6,6 +6,8 @@ export interface I18nConfig {
   targets: string[];
   workspaceRoot: string;
   modules: string[];
+  // Maximum number of concurrent translation requests
+  concurrency?: number;
   provider: {
     type: string;
     model: string;

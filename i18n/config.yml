@@ -5,6 +5,7 @@ targets:
   - ja
   - zh-rTW
   - ko-rKR
+  - ru
 
 # 项目根目录（用于扫描 Android 模块）
 workspaceRoot: ".."
@@ -17,7 +18,10 @@ modules:
   - search
   - rag
 
+# 并发翻译请求数（可选，默认 1）
+concurrency: 4
+
 # 翻译提供者
 provider:
   type: openai
-  model: moonshotai/kimi-k2
+  model: moonshotai/kimi-k2-0905
