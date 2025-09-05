@@ -38,6 +38,8 @@ data class TTSResponse(
 @Serializable
 data class AudioChunk(
     val data: ByteArray,
+    val format: AudioFormat,
+    val sampleRate: Int? = null,
     val isLast: Boolean = false,
     val metadata: Map<String, String> = emptyMap()
 ) {
@@ -48,6 +50,8 @@ data class AudioChunk(
         other as AudioChunk
 
         if (!data.contentEquals(other.data)) return false
+        if (format != other.format) return false
+        if (sampleRate != other.sampleRate) return false
         if (isLast != other.isLast) return false
         if (metadata != other.metadata) return false
 
@@ -56,8 +60,11 @@ data class AudioChunk(
 
     override fun hashCode(): Int {
         var result = data.contentHashCode()
+        result = 31 * result + format.hashCode()
+        result = 31 * result + (sampleRate ?: 0)
         result = 31 * result + isLast.hashCode()
         result = 31 * result + metadata.hashCode()
         return result
     }
 }
+

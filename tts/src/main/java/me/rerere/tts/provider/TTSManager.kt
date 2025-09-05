@@ -1,8 +1,9 @@
 package me.rerere.tts.provider
 
 import android.content.Context
+import kotlinx.coroutines.flow.Flow
+import me.rerere.tts.model.AudioChunk
 import me.rerere.tts.model.TTSRequest
-import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.providers.GeminiTTSProvider
 import me.rerere.tts.provider.providers.MiniMaxTTSProvider
 import me.rerere.tts.provider.providers.OpenAITTSProvider
@@ -14,10 +15,10 @@ class TTSManager(private val context: Context) {
     private val systemProvider = SystemTTSProvider()
     private val miniMaxProvider = MiniMaxTTSProvider()
 
-    suspend fun generateSpeech(
+    fun generateSpeech(
         providerSetting: TTSProviderSetting,
         request: TTSRequest
-    ): TTSResponse {
+    ): Flow<AudioChunk> {
         return when (providerSetting) {
             is TTSProviderSetting.OpenAI -> openAIProvider.generateSpeech(context, providerSetting, request)
             is TTSProviderSetting.Gemini -> geminiProvider.generateSpeech(context, providerSetting, request)

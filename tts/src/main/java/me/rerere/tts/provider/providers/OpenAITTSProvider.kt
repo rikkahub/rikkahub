@@ -2,10 +2,12 @@ package me.rerere.tts.provider.providers
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
+import me.rerere.tts.model.AudioChunk
 import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.TTSRequest
-import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSProvider
 import me.rerere.tts.provider.TTSProviderSetting
 import okhttp3.MediaType.Companion.toMediaType
@@ -22,11 +24,11 @@ class OpenAITTSProvider : TTSProvider<TTSProviderSetting.OpenAI> {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    override suspend fun generateSpeech(
+    override fun generateSpeech(
         context: Context,
         providerSetting: TTSProviderSetting.OpenAI,
         request: TTSRequest
-    ): TTSResponse {
+    ): Flow<AudioChunk> = flow {
         val requestBody = JSONObject().apply {
             put("model", providerSetting.model)
             put("input", request.text)
@@ -51,13 +53,16 @@ class OpenAITTSProvider : TTSProvider<TTSProviderSetting.OpenAI> {
 
         val audioData = response.body.bytes()
 
-        return TTSResponse(
-            audioData = audioData,
-            format = AudioFormat.MP3,
-            metadata = mapOf(
-                "provider" to "openai",
-                "model" to providerSetting.model,
-                "voice" to providerSetting.voice
+        emit(
+            AudioChunk(
+                data = audioData,
+                format = AudioFormat.MP3,
+                isLast = true,
+                metadata = mapOf(
+                    "provider" to "openai",
+                    "model" to providerSetting.model,
+                    "voice" to providerSetting.voice
+                )
             )
         )
     }

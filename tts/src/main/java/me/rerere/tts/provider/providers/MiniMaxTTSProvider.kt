@@ -2,13 +2,15 @@ package me.rerere.tts.provider.providers
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.rerere.common.http.await
+import me.rerere.tts.model.AudioChunk
 import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.TTSRequest
-import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSProvider
 import me.rerere.tts.provider.TTSProviderSetting
 import okhttp3.MediaType.Companion.toMediaType
@@ -68,11 +70,11 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
         encodeDefaults = true
     }
 
-    override suspend fun generateSpeech(
+    override fun generateSpeech(
         context: Context,
         providerSetting: TTSProviderSetting.MiniMax,
         request: TTSRequest
-    ): TTSResponse {
+    ): Flow<AudioChunk> = flow {
         val requestBody = MiniMaxRequestBody(
             model = providerSetting.model,
             text = request.text,
@@ -127,15 +129,18 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
 
         val audioData = audioResponse.body.bytes()
 
-        return TTSResponse(
-            audioData = audioData,
-            format = AudioFormat.MP3,
-            metadata = mapOf(
-                "provider" to "minimax",
-                "model" to providerSetting.model,
-                "voice_id" to providerSetting.voiceId,
-                "emotion" to providerSetting.emotion,
-                "speed" to providerSetting.speed.toString()
+        emit(
+            AudioChunk(
+                data = audioData,
+                format = AudioFormat.MP3,
+                isLast = true,
+                metadata = mapOf(
+                    "provider" to "minimax",
+                    "model" to providerSetting.model,
+                    "voice_id" to providerSetting.voiceId,
+                    "emotion" to providerSetting.emotion,
+                    "speed" to providerSetting.speed.toString()
+                )
             )
         )
     }

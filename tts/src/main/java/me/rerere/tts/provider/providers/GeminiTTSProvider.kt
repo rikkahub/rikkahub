@@ -3,11 +3,13 @@ package me.rerere.tts.provider.providers
 import android.content.Context
 import android.util.Base64
 import android.util.Log
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import me.rerere.tts.model.AudioChunk
 import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.TTSRequest
-import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSProvider
 import me.rerere.tts.provider.TTSProviderSetting
 import okhttp3.MediaType.Companion.toMediaType
@@ -52,11 +54,11 @@ class GeminiTTSProvider : TTSProvider<TTSProviderSetting.Gemini> {
         val mimeType: String
     )
 
-    override suspend fun generateSpeech(
+    override fun generateSpeech(
         context: Context,
         providerSetting: TTSProviderSetting.Gemini,
         request: TTSRequest
-    ): TTSResponse {
+    ): Flow<AudioChunk> = flow {
         val requestBody = JSONObject().apply {
             put("contents", JSONArray().apply {
                 put(JSONObject().apply {
@@ -109,17 +111,20 @@ class GeminiTTSProvider : TTSProvider<TTSProviderSetting.Gemini> {
         val audioBase64 = geminiResponse.candidates[0].content.parts[0].inlineData.data
         val audioData = Base64.decode(audioBase64, Base64.DEFAULT)
 
-        return TTSResponse(
-            audioData = audioData,
-            format = AudioFormat.PCM,
-            sampleRate = 24000, // Gemini TTS returns 24kHz 16-bit mono PCM
-            metadata = mapOf(
-                "provider" to "gemini",
-                "model" to providerSetting.model,
-                "voice" to providerSetting.voiceName,
-                "sampleRate" to "24000",
-                "channels" to "1",
-                "bitDepth" to "16"
+        emit(
+            AudioChunk(
+                data = audioData,
+                format = AudioFormat.PCM,
+                sampleRate = 24000, // Gemini TTS returns 24kHz 16-bit mono PCM
+                isLast = true,
+                metadata = mapOf(
+                    "provider" to "gemini",
+                    "model" to providerSetting.model,
+                    "voice" to providerSetting.voiceName,
+                    "sampleRate" to "24000",
+                    "channels" to "1",
+                    "bitDepth" to "16"
+                )
             )
         )
     }

@@ -98,6 +98,12 @@ interface CustomTtsState {
     /** Skips to the next chunk in the queue. */
     fun skipNext()
 
+    /** Fast forward current playback by [ms]. */
+    fun fastForward(ms: Long = 5_000)
+
+    /** Set playback [speed]. */
+    fun setSpeed(speed: Float)
+
     /** Cleanup resources. */
     fun cleanup()
 }
@@ -147,6 +153,14 @@ private class CustomTtsStateImpl(
 
     override fun skipNext() {
         controller.skipNext()
+    }
+
+    override fun fastForward(ms: Long) {
+        controller.fastForward(ms)
+    }
+
+    override fun setSpeed(speed: Float) {
+        controller.setSpeed(speed)
     }
 
     override fun cleanup() {
