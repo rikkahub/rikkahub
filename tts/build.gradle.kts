@@ -52,11 +52,19 @@ android {
 
 dependencies {
     implementation(project(":common"))
+
     implementation(libs.okhttp)
+
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
+
+    implementation("androidx.media3:media3-exoplayer:1.8.0")
+    implementation("androidx.media3:media3-ui:1.8.0")
+    implementation("androidx.media3:media3-common:1.8.0")
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.material3)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
