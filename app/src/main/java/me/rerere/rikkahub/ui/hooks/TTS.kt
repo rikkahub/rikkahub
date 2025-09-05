@@ -126,52 +126,10 @@ private class CustomTtsStateImpl(
         controller.setProvider(provider)
     }
 
-//    private fun chunkText(text: String): List<String> {
-//        if (text.isBlank()) {
-//            return emptyList()
-//        }
-//
-//        // 1. 按段落分割
-//        val paragraphs = text.split("\n\n")
-//
-//        // 正则表达式会在标点符号后分割，并保留标点
-//        val punctuationRegex = "(?<=[。！？，、：;.!?:,\n])".toRegex()
-//
-//        // 2. 对每个段落进行处理，然后将结果合并
-//        return paragraphs.flatMap { paragraph ->
-//            if (paragraph.isBlank()) {
-//                emptyList()
-//            } else {
-//                paragraph.stripMarkdown()
-//                    .split(punctuationRegex)
-//                    .asSequence()
-//                    .map { it.trim() }
-//                    .filter { it.isNotEmpty() }
-//                    .fold<String, MutableList<StringBuilder>>(mutableListOf()) { acc, chunk ->
-//                        if (acc.isEmpty() || acc.last().length + chunk.length > maxChunkLength) {
-//                            acc.add(StringBuilder(chunk))
-//                        } else {
-//                            acc.last().append(chunk)
-//                        }
-//                        acc
-//                    }
-//                    .map { it.toString() }
-//            }
-//        }
-//    }
-
     override fun speak(text: String, flushCalled: Boolean) {
         val processed = text.stripMarkdown()
         controller.speak(processed, flushCalled)
     }
-
-    // 预合成逻辑由 tts 模块接管
-
-    // 预合成触发由 tts 模块接管
-
-    // 队列处理由 tts 模块接管
-
-    // 队列处理由 tts 模块接管
 
     override fun stop() {
         controller.stop()
