@@ -400,12 +400,14 @@
   <string name="setting_page_about_desc">關於本APP</string>
   <string name="setting_page_assistant">助手</string>
   <string name="setting_page_assistant_desc">設定個性化助手 (智能體)</string>
+  <string name="setting_page_basic_settings">基本設定</string>
   <string name="setting_page_built_in_tools">內置工具</string>
   <string name="setting_page_built_in_tools_desc">選擇模型支援的內置工具，這些工具直接由API內置，無需APP提供，目前此功能僅支援Gemini官方API。</string>
   <string name="setting_page_built_in_tools_search">搜尋</string>
   <string name="setting_page_built_in_tools_search_desc">啟用 Google 搜尋整合</string>
   <string name="setting_page_built_in_tools_url_context">URL 上下文</string>
   <string name="setting_page_built_in_tools_url_context_desc">啟用 URL 內容處理</string>
+  <string name="setting_page_chat_settings">聊天設定</string>
   <string name="setting_page_chat_storage">聊天記錄儲存</string>
   <string name="setting_page_chat_storage_desc">%1$d 個檔案，%2$.2f MB</string>
   <string name="setting_page_color_mode">顏色模式</string>
@@ -447,6 +449,7 @@
   <string name="setting_page_share">分享</string>
   <string name="setting_page_share_desc">分享本APP給朋友</string>
   <string name="setting_page_share_text">RikkaHub - 開源安卓AI助手\n\n官網: https://rikka-ai.com/</string>
+  <string name="setting_page_theme_setting">主題設定</string>
   <string name="setting_page_theme_type_high_contrast">高對比</string>
   <string name="setting_page_theme_type_medium_contrast">中對比</string>
   <string name="setting_page_theme_type_standard">標準</string>

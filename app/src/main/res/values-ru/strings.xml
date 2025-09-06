@@ -400,12 +400,14 @@
   <string name="setting_page_about_desc">Об этом приложении</string>
   <string name="setting_page_assistant">Ассистент</string>
   <string name="setting_page_assistant_desc">Настроить персонализированных ассистентов (агентов)</string>
+  <string name="setting_page_basic_settings">Основные настройки</string>
   <string name="setting_page_built_in_tools">Встроенные инструменты</string>
   <string name="setting_page_built_in_tools_desc">Выберите встроенные инструменты, поддерживаемые моделью. Эти инструменты предоставляются напрямую API и не требуют поддержки со стороны приложения. В настоящее время эта функция поддерживается только официальным API Gemini.</string>
   <string name="setting_page_built_in_tools_search">Поиск</string>
   <string name="setting_page_built_in_tools_search_desc">Включить интеграцию с Google Поиском</string>
   <string name="setting_page_built_in_tools_url_context">Контекст URL</string>
   <string name="setting_page_built_in_tools_url_context_desc">Включить обработку содержимого по URL</string>
+  <string name="setting_page_chat_settings">Настройки чата</string>
   <string name="setting_page_chat_storage">Хранилище чатов</string>
   <string name="setting_page_chat_storage_desc">%1$d файлов, %2$.2f МБ</string>
   <string name="setting_page_color_mode">Цветовая схема</string>
@@ -447,6 +449,7 @@
   <string name="setting_page_share">Поделиться</string>
   <string name="setting_page_share_desc">Поделиться этим приложением с друзьями</string>
   <string name="setting_page_share_text">RikkaHub — открытый Android-ассистент с ИИ\n\nСайт: https://rikka-ai.com/</string>
+  <string name="setting_page_theme_setting">Настройки темы</string>
   <string name="setting_page_theme_type_high_contrast">Высокая контрастность</string>
   <string name="setting_page_theme_type_medium_contrast">Средний контраст</string>
   <string name="setting_page_theme_type_standard">Стандартная</string>

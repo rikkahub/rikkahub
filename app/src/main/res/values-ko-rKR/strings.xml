@@ -400,12 +400,14 @@
   <string name="setting_page_about_desc">앱 정보</string>
   <string name="setting_page_assistant">어시스턴트</string>
   <string name="setting_page_assistant_desc">개인화된 어시스턴트(에이전트) 설정</string>
+  <string name="setting_page_basic_settings">기본 설정</string>
   <string name="setting_page_built_in_tools">내장 도구</string>
   <string name="setting_page_built_in_tools_desc">모델이 지원하는 내장 도구 선택. 이러한 도구는 API에서 직접 제공되며 앱 지원이 필요하지 않습니다. 현재 이 기능은 공식 Gemini API에서만 지원됩니다.</string>
   <string name="setting_page_built_in_tools_search">검색</string>
   <string name="setting_page_built_in_tools_search_desc">Google 검색 통합 활성화</string>
   <string name="setting_page_built_in_tools_url_context">URL 컨텍스트</string>
   <string name="setting_page_built_in_tools_url_context_desc">URL 콘텐츠 처리 활성화</string>
+  <string name="setting_page_chat_settings">채팅 설정</string>
   <string name="setting_page_chat_storage">채팅 저장 공간</string>
   <string name="setting_page_chat_storage_desc">%1$d개 파일, %2$.2f MB</string>
   <string name="setting_page_color_mode">색상 모드</string>
@@ -447,6 +449,7 @@
   <string name="setting_page_share">공유</string>
   <string name="setting_page_share_desc">앱을 친구들과 공유하기</string>
   <string name="setting_page_share_text">RikkaHub - 오픈소스 Android AI 어시스턴트\n\n웹사이트: https://rikka-ai.com/</string>
+  <string name="setting_page_theme_setting">테마 설정</string>
   <string name="setting_page_theme_type_high_contrast">높은 대비</string>
   <string name="setting_page_theme_type_medium_contrast">중간 대비</string>
   <string name="setting_page_theme_type_standard">표준</string>

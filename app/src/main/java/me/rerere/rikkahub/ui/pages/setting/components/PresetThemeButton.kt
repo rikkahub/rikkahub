@@ -173,7 +173,7 @@ fun PresetThemeButtonGroup(
                     }
                     Text(
                         text = text,
-                        style = MaterialTheme.typography.labelMedium
+                        style = MaterialTheme.typography.labelSmall
                     )
                 }
             }

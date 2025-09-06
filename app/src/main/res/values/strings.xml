@@ -708,4 +708,7 @@
   <string name="assistant_page_quick_message_content">Content</string>
     <string name="setting_mcp_page_no_mcp_servers_found">No MCP servers found</string>
   <string name="setting_mcp_page_add_one_to_get_started">Add one to get started</string>
+    <string name="setting_page_theme_setting">Theme Settings</string>
+  <string name="setting_page_basic_settings">Basic Settings</string>
+  <string name="setting_page_chat_settings">Chat Settings</string>
 </resources>
