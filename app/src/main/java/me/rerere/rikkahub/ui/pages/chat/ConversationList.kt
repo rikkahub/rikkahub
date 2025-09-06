@@ -43,6 +43,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pin
 import com.composables.icons.lucide.PinOff
@@ -50,7 +51,10 @@ import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.ui.components.ui.Tooltip
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
@@ -71,36 +75,57 @@ fun ColumnScope.ConversationList(
     var searchInput by remember {
         mutableStateOf("")
     }
+    val navController = LocalNavController.current
 
-    TextField(
-        value = searchInput,
-        onValueChange = {
-            searchInput = it
-        },
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
-        shape = RoundedCornerShape(50),
-        trailingIcon = {
-            AnimatedVisibility(searchInput.isNotEmpty()) {
-                IconButton(
-                    onClick = {
-                        searchInput = ""
+            .padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        TextField(
+            value = searchInput,
+            onValueChange = {
+                searchInput = it
+            },
+            modifier = Modifier
+                .weight(1f),
+            shape = RoundedCornerShape(50),
+            trailingIcon = {
+                AnimatedVisibility(searchInput.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            searchInput = ""
+                        }
+                    ) {
+                        Icon(Lucide.X, null)
                     }
-                ) {
-                    Icon(Lucide.X, null)
                 }
+            },
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+            ),
+            placeholder = {
+                Text(stringResource(id = R.string.chat_page_search_placeholder))
             }
-        },
-        colors = TextFieldDefaults.colors(
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent,
-        ),
-        placeholder = {
-            Text(stringResource(id = R.string.chat_page_search_placeholder))
+        )
+
+        Tooltip(
+            tooltip = { Text(stringResource(id = R.string.chat_page_search_placeholder)) },
+        ) {
+            IconButton(
+                onClick = { navController.navigate(Screen.History) }
+            ) {
+                Icon(
+                    imageVector = Lucide.History,
+                    contentDescription = stringResource(R.string.chat_page_history),
+                )
+            }
         }
-    )
+    }
 
     // 分离置顶和普通对话
     val calculateConversations by remember(conversations) {

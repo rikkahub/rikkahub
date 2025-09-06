@@ -51,7 +51,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,6 +66,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Menu
 import com.composables.icons.lucide.MessageCirclePlus
 import com.composables.icons.lucide.Settings
+import com.composables.icons.lucide.Settings2
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -85,10 +85,11 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.components.ai.ChatInputState
-import me.rerere.rikkahub.ui.components.ui.Greeting
-import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ai.rememberChatInputState
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.components.ui.Greeting
+import me.rerere.rikkahub.ui.components.ui.Tooltip
+import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.EditStateContent
@@ -551,48 +552,6 @@ private fun DrawerContent(
             modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // 用户头像和昵称自定义区域
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                UIAvatar(
-                    name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
-                    value = settings.displaySetting.userAvatar,
-                    onUpdate = { newAvatar ->
-                        vm.updateSettings(
-                            settings.copy(
-                                displaySetting = settings.displaySetting.copy(
-                                    userAvatar = newAvatar
-                                )
-                            )
-                        )
-                    },
-                    modifier = Modifier.size(50.dp),
-                )
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable {
-                            nicknameEditState.open(settings.displaySetting.userNickname)
-                        }
-                    )
-                    Greeting(
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            }
-
             val isPlayStore = rememberIsPlayStoreVersion()
             if (settings.displaySetting.showUpdates && !isPlayStore) {
                 UpdateCard(vm)
@@ -643,32 +602,61 @@ private fun DrawerContent(
                     navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
                 }
             )
+
+            // 用户头像和昵称自定义区域
             Row(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                TextButton(
-                    onClick = {
-                        navController.navigate(Screen.History)
+                UIAvatar(
+                    name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+                    value = settings.displaySetting.userAvatar,
+                    onUpdate = { newAvatar ->
+                        vm.updateSettings(
+                            settings.copy(
+                                displaySetting = settings.displaySetting.copy(
+                                    userAvatar = newAvatar
+                                )
+                            )
+                        )
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.size(50.dp),
+                )
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Icon(Lucide.History, "Chat History")
                     Text(
-                        stringResource(R.string.chat_page_history),
-                        modifier = Modifier.padding(start = 4.dp)
+                        text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable {
+                            nicknameEditState.open(settings.displaySetting.userNickname)
+                        }
+                    )
+                    Greeting(
+                        style = MaterialTheme.typography.labelMedium,
                     )
                 }
-                TextButton(
-                    onClick = {
-                        navController.navigate(Screen.Setting)
-                    },
-                    modifier = Modifier.weight(1f)
+
+                Tooltip(
+                    tooltip = { Text(stringResource(id = R.string.settings)) },
                 ) {
-                    Icon(Lucide.Settings, stringResource(R.string.settings))
-                    Text(
-                        stringResource(R.string.settings),
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
+                    IconButton(
+                        onClick = {
+                            navController.navigate(Screen.Setting)
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Lucide.Settings,
+                            contentDescription = stringResource(R.string.settings),
+                        )
+                    }
                 }
             }
         }
