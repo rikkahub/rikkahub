@@ -13,9 +13,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import me.rerere.tts.model.PlaybackState
+import me.rerere.tts.model.PlaybackStatus
 import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSManager
 import me.rerere.tts.provider.TTSProviderSetting
@@ -71,6 +74,25 @@ class TtsController(
     private val _totalChunks = MutableStateFlow(0)
     val totalChunks: StateFlow<Int> = _totalChunks.asStateFlow()
 
+    // 统一播放状态（融合音频播放 + 分片进度）
+    private val _playbackState = MutableStateFlow(PlaybackState())
+    val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
+
+    init {
+        // 同步底层播放器状态到统一状态，并补充分片信息
+        scope.launch {
+            audio.playbackState.collectLatest { audioState ->
+                _playbackState.update {
+                    audioState.copy(
+                        currentChunkIndex = _currentChunk.value,
+                        totalChunks = _totalChunks.value,
+                        status = if (!_isAvailable.value) PlaybackStatus.Idle else audioState.status
+                    )
+                }
+            }
+        }
+    }
+
     /** 选择/取消选择 Provider */
     fun setProvider(provider: TTSProviderSetting?) {
         currentProvider = provider
@@ -109,6 +131,14 @@ class TtsController(
         _totalChunks.update { queue.size }
         _error.update { null }
 
+        _playbackState.update {
+            it.copy(
+                currentChunkIndex = _currentChunk.value,
+                totalChunks = _totalChunks.value,
+                status = PlaybackStatus.Buffering
+            )
+        }
+
         if (workerJob?.isActive != true) startWorker()
         prefetchFrom((_currentChunk.value).coerceAtLeast(0))
     }
@@ -128,18 +158,21 @@ class TtsController(
         _currentChunk.update { 0 }
         _totalChunks.update { 0 }
         _error.update { null }
+        _playbackState.update { PlaybackState(status = PlaybackStatus.Idle) }
     }
 
     /** 暂停播放（保留进度） */
     fun pause() {
         isPaused = true
         audio.pause()
+        _playbackState.update { it.copy(status = PlaybackStatus.Paused) }
     }
 
     /** 恢复播放 */
     fun resume() {
         isPaused = false
         audio.resume()
+        _playbackState.update { it.copy(status = PlaybackStatus.Playing) }
     }
 
     /** 快进当前音频 */
@@ -174,6 +207,7 @@ class TtsController(
         _isSpeaking.update { false }
         _currentChunk.update { 0 }
         _totalChunks.update { 0 }
+        _playbackState.update { PlaybackState(status = PlaybackStatus.Idle) }
     }
 
     /** 释放资源 */
@@ -206,6 +240,12 @@ class TtsController(
                     // 更新状态（1-based）
                     _currentChunk.update { processedCount + 1 }
                     _totalChunks.update { queue.size + 1 }
+                    _playbackState.update {
+                        it.copy(
+                            currentChunkIndex = _currentChunk.value,
+                            totalChunks = _totalChunks.value
+                        )
+                    }
 
                     // 预取下一窗口
                     prefetchFrom(chunk.index + 1)
@@ -235,6 +275,9 @@ class TtsController(
                 }
             } finally {
                 _isSpeaking.update { false }
+                if (queue.isEmpty()) {
+                    _playbackState.update { it.copy(status = PlaybackStatus.Ended) }
+                }
             }
         }
     }

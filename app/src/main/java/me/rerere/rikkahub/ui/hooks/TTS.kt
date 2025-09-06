@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import me.rerere.tts.model.PlaybackState
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
 import me.rerere.rikkahub.utils.stripMarkdown
@@ -80,6 +81,9 @@ interface CustomTtsState {
     /** Flow indicating total chunks in queue */
     val totalChunks: StateFlow<Int>
 
+    /** Unified playback state (status, position, duration, speed, etc.) */
+    val playbackState: StateFlow<PlaybackState>
+
     /**
      * Speaks the given text using the selected TTS provider.
      * Long texts will be automatically chunked and queued.
@@ -127,6 +131,7 @@ private class CustomTtsStateImpl(
     override val error: StateFlow<String?> get() = controller.error
     override val currentChunk: StateFlow<Int> get() = controller.currentChunk
     override val totalChunks: StateFlow<Int> get() = controller.totalChunks
+    override val playbackState: StateFlow<PlaybackState> get() = controller.playbackState
 
     fun updateProvider(provider: TTSProviderSetting?) {
         controller.setProvider(provider)
