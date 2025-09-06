@@ -2,6 +2,17 @@ package me.rerere.tts.controller
 
 import android.content.Context
 import android.util.Log
+import android.net.Uri
+import androidx.annotation.OptIn
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.ByteArrayDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,15 +24,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.ByteArrayOutputStream
+import me.rerere.tts.model.AudioChunk
 import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSManager
 import me.rerere.tts.provider.TTSProviderSetting
-import me.rerere.tts.player.AudioPlayer
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 private const val TAG = "TtsController"
 
@@ -36,7 +52,7 @@ class TtsController(
 ) {
     // 协程与播放
     private val scope = CoroutineScope(Dispatchers.Main)
-    private val audioPlayer = AudioPlayer(context)
+    private val player = ExoPlayer.Builder(context).build()
 
     // Provider & 作业
     private var currentProvider: TTSProviderSetting? = null
@@ -108,10 +124,26 @@ class TtsController(
     }
 
     /** 暂停播放（保留进度） */
-    fun pause() { isPaused = true }
+    fun pause() {
+        isPaused = true
+        player.pause()
+    }
 
     /** 恢复播放 */
-    fun resume() { isPaused = false }
+    fun resume() {
+        isPaused = false
+        player.play()
+    }
+
+    /** 快进当前音频 */
+    fun fastForward(ms: Long = 5_000) {
+        player.seekTo(player.currentPosition + ms)
+    }
+
+    /** 设置播放速度 */
+    fun setSpeed(speed: Float) {
+        player.playbackParameters = PlaybackParameters(speed)
+    }
 
     /** 跳过下一段（不打断当前正在播放） */
     fun skipNext() {
@@ -125,7 +157,8 @@ class TtsController(
     fun stop() {
         workerJob?.cancel()
         synthesizerJob?.cancel()
-        audioPlayer.stop()
+        player.stop()
+        player.clearMediaItems()
         isPaused = false
         chunkQueue.clear()
         preSynthesisCache.clear()
@@ -140,7 +173,7 @@ class TtsController(
     /** 释放资源 */
     fun dispose() {
         stop()
-        audioPlayer.dispose()
+        player.release()
     }
 
     // region 内部：播放调度
@@ -177,13 +210,7 @@ class TtsController(
 
                     // 播放
                     try {
-                        when (response.format) {
-                            AudioFormat.PCM -> audioPlayer.playPcmSound(
-                                response.audioData,
-                                response.sampleRate ?: 24000
-                            )
-                            else -> audioPlayer.playSound(response.audioData, response.format)
-                        }
+                        playAudio(response.audioData, response.format, response.sampleRate)
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
                         Log.e(TAG, "Playback error", e)
@@ -224,7 +251,7 @@ class TtsController(
                         // 我来合成
                         try {
                             val resp = withContext(Dispatchers.IO) {
-                                ttsManager.generateSpeech(provider, TTSRequest(text = text))
+                                collectToResponse(ttsManager.generateSpeech(provider, TTSRequest(text = text)))
                             }
                             // 播放路径直接返回，但也让他人可见
                             preSynthesisCache.putIfAbsent(index, resp)
@@ -268,7 +295,7 @@ class TtsController(
                         continue
                     }
                     try {
-                        val resp = ttsManager.generateSpeech(provider, TTSRequest(text = text))
+                        val resp = collectToResponse(ttsManager.generateSpeech(provider, TTSRequest(text = text)))
                         preSynthesisCache[i] = resp
                         nextChunkToSynthesize = i + 1
                         myPromise.complete(resp)
@@ -333,4 +360,94 @@ class TtsController(
         }
     }
     // endregion
+
+    private suspend fun collectToResponse(flow: Flow<AudioChunk>): TTSResponse {
+        var format: AudioFormat? = null
+        var sampleRate: Int? = null
+        val output = ByteArrayOutputStream()
+        flow.collect { chunk ->
+            if (format == null) format = chunk.format
+            if (sampleRate == null) sampleRate = chunk.sampleRate
+            output.write(chunk.data)
+        }
+        return TTSResponse(
+            audioData = output.toByteArray(),
+            format = format ?: AudioFormat.MP3,
+            sampleRate = sampleRate
+        )
+    }
+
+    @OptIn(UnstableApi::class)
+    private suspend fun playAudio(
+        data: ByteArray,
+        format: AudioFormat,
+        sampleRate: Int? = null
+    ) = suspendCancellableCoroutine<Unit> { cont ->
+        val bytes = if (format == AudioFormat.PCM) {
+            pcmToWav(data, sampleRate ?: 24000)
+        } else data
+        val dataSourceFactory = DataSource.Factory { ByteArrayDataSource(bytes) }
+        val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(MediaItem.fromUri(Uri.EMPTY))
+        player.setMediaSource(mediaSource)
+        player.prepare()
+        player.play()
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_ENDED) {
+                    player.removeListener(this)
+                    if (cont.isActive) cont.resume(Unit)
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                player.removeListener(this)
+                if (cont.isActive) cont.resumeWithException(error)
+            }
+        }
+        player.addListener(listener)
+        cont.invokeOnCancellation {
+            player.removeListener(listener)
+            player.stop()
+        }
+    }
+
+    private fun pcmToWav(
+        pcm: ByteArray,
+        sampleRate: Int,
+        channels: Int = 1,
+        bitsPerSample: Int = 16
+    ): ByteArray {
+        val byteRate = sampleRate * channels * bitsPerSample / 8
+        val out = ByteArrayOutputStream()
+        with(out) {
+            write("RIFF".toByteArray())
+            write(intToBytes(36 + pcm.size))
+            write("WAVE".toByteArray())
+            write("fmt ".toByteArray())
+            write(intToBytes(16))
+            write(shortToBytes(1))
+            write(shortToBytes(channels.toShort()))
+            write(intToBytes(sampleRate))
+            write(intToBytes(byteRate))
+            write(shortToBytes((channels * bitsPerSample / 8).toShort()))
+            write(shortToBytes(bitsPerSample.toShort()))
+            write("data".toByteArray())
+            write(intToBytes(pcm.size))
+            write(pcm)
+        }
+        return out.toByteArray()
+    }
+
+    private fun intToBytes(value: Int) = byteArrayOf(
+        (value and 0xFF).toByte(),
+        ((value shr 8) and 0xFF).toByte(),
+        ((value shr 16) and 0xFF).toByte(),
+        ((value shr 24) and 0xFF).toByte()
+    )
+
+    private fun shortToBytes(value: Short) = byteArrayOf(
+        (value.toInt() and 0xFF).toByte(),
+        ((value.toInt() shr 8) and 0xFF).toByte()
+    )
 }

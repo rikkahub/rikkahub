@@ -4,10 +4,12 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import me.rerere.common.android.appTempFolder
+import me.rerere.tts.model.AudioChunk
 import me.rerere.tts.model.TTSRequest
-import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSProvider
 import me.rerere.tts.provider.TTSProviderSetting
 import java.io.File
@@ -19,15 +21,16 @@ import kotlin.coroutines.resumeWithException
 private const val TAG = "SystemTTSProvider"
 
 class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
-    override suspend fun generateSpeech(
+    override fun generateSpeech(
         context: Context,
         providerSetting: TTSProviderSetting.SystemTTS,
         request: TTSRequest
-    ): TTSResponse = suspendCancellableCoroutine { continuation ->
-        var tts: TextToSpeech? = null
-        val listener = TextToSpeech.OnInitListener { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val ttsInstance = tts ?: error("TextToSpeech instance is null")
+    ): Flow<AudioChunk> = flow {
+        val audioData = suspendCancellableCoroutine<ByteArray> { continuation ->
+            var tts: TextToSpeech? = null
+            val listener = TextToSpeech.OnInitListener { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    val ttsInstance = tts ?: error("TextToSpeech instance is null")
 
                 // Set language
                 val locale = Locale.getDefault()
@@ -60,16 +63,7 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
                                 val audioData = audioFile.readBytes()
                                 audioFile.delete()
 
-                                val response = TTSResponse(
-                                    audioData = audioData,
-                                    format = me.rerere.tts.model.AudioFormat.WAV,
-                                    metadata = mapOf(
-                                        "provider" to "system",
-                                        "speechRate" to providerSetting.speechRate.toString(),
-                                        "pitch" to providerSetting.pitch.toString()
-                                    )
-                                )
-                                if (continuation.isActive) continuation.resume(response)
+                                if (continuation.isActive) continuation.resume(audioData)
                             } else {
                                 if (continuation.isActive) continuation.resumeWithException(
                                     Exception("Failed to generate audio file")
@@ -117,5 +111,19 @@ class SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
         continuation.invokeOnCancellation {
             tts?.shutdown()
         }
+    }
+
+        emit(
+            AudioChunk(
+                data = audioData,
+                format = me.rerere.tts.model.AudioFormat.WAV,
+                isLast = true,
+                metadata = mapOf(
+                    "provider" to "system",
+                    "speechRate" to providerSetting.speechRate.toString(),
+                    "pitch" to providerSetting.pitch.toString()
+                )
+            )
+        )
     }
 }
