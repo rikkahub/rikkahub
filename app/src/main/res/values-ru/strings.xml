@@ -292,6 +292,14 @@
   <string name="more_options">Дополнительные параметры</string>
   <string name="no_text_content_to_copy">Нет доступного текста для копирования</string>
   <string name="notification_channel_chat_completed">Чат завершён</string>
+  <string name="permission_camera">Камера</string>
+  <string name="permission_camera_desc">Для создания фотографий требуется разрешение на использование камеры</string>
+  <string name="permission_desc_goto_setting">Некоторые разрешения были навсегда отклонены; перейдите в настройки приложения и включите их вручную:</string>
+  <string name="permission_desc_require_permission">Чтобы обеспечить лучший пользовательский опыт, приложению требуются следующие разрешения:</string>
+  <string name="permission_diaog_title">Запрос разрешения</string>
+  <string name="permission_go_to_settings">Перейти в настройки приложения</string>
+  <string name="permission_permanently_denied">Запрещено навсегда</string>
+  <string name="permission_required">Требуется</string>
   <string name="photo">Фото</string>
   <string name="pin_chat">Закрепить чат</string>
   <string name="pinned_chats">Закреплённые чаты</string>

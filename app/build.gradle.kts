@@ -238,9 +238,6 @@ dependencies {
     // Reorderable (https://github.com/Calvin-LL/Reorderable/)
     implementation(libs.reorderable)
 
-    // Permission
-    implementation(libs.permissions.compose)
-
     // lucide icons
     implementation(libs.lucide.icons)
 

@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.components.ai
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -49,7 +48,6 @@ import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,7 +78,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -107,8 +104,6 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.X
 import com.composables.icons.lucide.Zap
 import com.dokar.sonner.ToastType
-import com.meticha.permissions_compose.AppPermission
-import com.meticha.permissions_compose.rememberAppPermissionState
 import com.yalantis.ucrop.UCrop
 import com.yalantis.ucrop.UCropActivity
 import kotlinx.serialization.Serializable
@@ -131,8 +126,10 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.mcp.McpManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
+import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.utils.GetContentWithMultiMime
@@ -574,7 +571,9 @@ private fun QuickMessageButton(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.widthIn(min = 200.dp).width(IntrinsicSize.Min)
+            modifier = Modifier
+                .widthIn(min = 200.dp)
+                .width(IntrinsicSize.Min)
         ) {
             assistant.quickMessages.forEach { quickMessage ->
                 Surface(
@@ -959,15 +958,8 @@ private fun ImagePickButton(onAddImages: (List<Uri>) -> Unit = {}) {
 
 @Composable
 fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
-    val permissionState = rememberAppPermissionState(
-        permissions = listOf(
-            AppPermission(
-                permission = Manifest.permission.CAMERA,
-                description = "需要权限才能使用相机功能",
-                isRequired = true
-            )
-        )
-    )
+    val cameraPermission = rememberPermissionState(PermissionCamera)
+
     val context = LocalContext.current
     val settings = LocalSettings.current
     var cameraOutputUri by remember { mutableStateOf<Uri?>(null) }
@@ -1009,23 +1001,31 @@ fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
         }
     }
 
-    BigIconTextButton(
-        icon = {
-            Icon(Lucide.Camera, null)
-        },
-        text = {
-            Text(stringResource(R.string.take_picture))
-        }
+    // 使用权限管理器包装
+    PermissionManager(
+        permissionState = cameraPermission
     ) {
-        permissionState.requestPermission()
-        if (permissionState.allRequiredGranted()) {
-            cameraOutputFile = context.cacheDir.resolve("camera_${Uuid.random()}.jpg")
-            cameraOutputUri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                cameraOutputFile!!
-            )
-            cameraLauncher.launch(cameraOutputUri!!)
+        BigIconTextButton(
+            icon = {
+                Icon(Lucide.Camera, null)
+            },
+            text = {
+                Text(stringResource(R.string.take_picture))
+            }
+        ) {
+            if (cameraPermission.allRequiredPermissionsGranted) {
+                // 权限已授权，直接启动相机
+                cameraOutputFile = context.cacheDir.resolve("camera_${Uuid.random()}.jpg")
+                cameraOutputUri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    cameraOutputFile!!
+                )
+                cameraLauncher.launch(cameraOutputUri!!)
+            } else {
+                // 请求权限
+                cameraPermission.requestPermissions()
+            }
         }
     }
 }

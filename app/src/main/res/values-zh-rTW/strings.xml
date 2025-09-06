@@ -292,6 +292,14 @@
   <string name="more_options">更多選項</string>
   <string name="no_text_content_to_copy">暫無可複製的文字內容</string>
   <string name="notification_channel_chat_completed">聊天完成</string>
+  <string name="permission_camera">相機</string>
+  <string name="permission_camera_desc">需要相機權限才能拍照</string>
+  <string name="permission_desc_goto_setting">部分權限已被永久拒絕，請前往應用程式設定手動啟用：</string>
+  <string name="permission_desc_require_permission">為了提供更優質的使用體驗，應用程式需要下列權限：</string>
+  <string name="permission_diaog_title">權限請求</string>
+  <string name="permission_go_to_settings">前往應用程式設定</string>
+  <string name="permission_permanently_denied">永久拒絕</string>
+  <string name="permission_required">必要</string>
   <string name="photo">照片</string>
   <string name="pin_chat">置頂聊天</string>
   <string name="pinned_chats">置頂對話</string>
