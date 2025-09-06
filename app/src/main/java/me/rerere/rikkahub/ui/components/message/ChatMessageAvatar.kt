@@ -50,13 +50,14 @@ fun ChatMessageUserAvatar(
             ) {
                 Text(
                     text = nickname.ifEmpty { stringResource(R.string.user_default_name) },
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
+                    color = LocalContentColor.current.copy(alpha = 0.85f),
                 )
                 Text(
                     text = message.createdAt.toJavaLocalDateTime().toLocalString(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = LocalContentColor.current.copy(alpha = 0.8f),
+                    color = LocalContentColor.current.copy(alpha = 0.6f),
                     maxLines = 1,
                 )
             }
