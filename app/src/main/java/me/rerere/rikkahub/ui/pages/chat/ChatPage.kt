@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
@@ -60,13 +61,12 @@ import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.composables.icons.lucide.Download
-import com.composables.icons.lucide.History
 import com.composables.icons.lucide.ListTree
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Menu
 import com.composables.icons.lucide.MessageCirclePlus
+import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Settings
-import com.composables.icons.lucide.Settings2
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -97,6 +97,7 @@ import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.hooks.useThrottle
+import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.utils.UpdateDownload
 import me.rerere.rikkahub.utils.Version
 import me.rerere.rikkahub.utils.base64Decode
@@ -105,6 +106,7 @@ import me.rerere.rikkahub.utils.getFileMimeType
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.onError
 import me.rerere.rikkahub.utils.onSuccess
+import me.rerere.rikkahub.utils.toDp
 import me.rerere.rikkahub.utils.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -550,7 +552,7 @@ private fun DrawerContent(
     ) {
         Column(
             modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val isPlayStore = rememberIsPlayStoreVersion()
             if (settings.displaySetting.showUpdates && !isPlayStore) {
@@ -630,15 +632,30 @@ private fun DrawerContent(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Text(
-                        text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable {
-                            nicknameEditState.open(settings.displaySetting.userNickname)
-                        }
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable {
+                                nicknameEditState.open(settings.displaySetting.userNickname)
+                            }
+                        )
+
+                        Icon(
+                            imageVector = Lucide.Pencil,
+                            contentDescription = "Edit",
+                            modifier = Modifier
+                                .onClick {
+                                    nicknameEditState.open(settings.displaySetting.userNickname)
+                                }
+                                .size(LocalTextStyle.current.fontSize.toDp())
+                        )
+                    }
                     Greeting(
                         style = MaterialTheme.typography.labelMedium,
                     )
