@@ -308,11 +308,11 @@ private fun ChatPageContent(
                         }
                         if (inputState.isEditing()) {
                             vm.handleMessageEdit(
-                                parts = inputState.messageContent,
+                                parts = inputState.getContents(),
                                 messageId = inputState.editingMessage!!,
                             )
                         } else {
-                            vm.handleMessageSend(inputState.messageContent)
+                            vm.handleMessageSend(inputState.getContents())
                             scope.launch {
                                 chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                             }
@@ -360,7 +360,7 @@ private fun ChatPageContent(
                 },
                 onEdit = {
                     inputState.editingMessage = it.id
-                    inputState.messageContent = it.parts
+                    inputState.setContents(it.parts)
                 },
                 onForkMessage = {
                     scope.launch {
@@ -386,11 +386,7 @@ private fun ChatPageContent(
                 },
                 onClickSuggestion = { suggestion ->
                     inputState.editingMessage = null
-                    inputState.messageContent = listOf(
-                        UIMessagePart.Text(
-                            text = suggestion
-                        )
-                    )
+                    inputState.setMessageText(suggestion)
                 },
                 onTranslate = { message, locale ->
                     vm.translateMessage(message, locale)

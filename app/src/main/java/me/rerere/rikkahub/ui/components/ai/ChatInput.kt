@@ -45,7 +45,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldLineLimits
-import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
@@ -106,18 +107,17 @@ import com.composables.icons.lucide.Zap
 import com.dokar.sonner.ToastType
 import com.yalantis.ucrop.UCrop
 import com.yalantis.ucrop.UCropActivity
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -142,13 +142,14 @@ import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
-@Serializable
 class ChatInputState {
+    val textContent = TextFieldState()
     var messageContent by mutableStateOf(listOf<UIMessagePart>())
     var editingMessage by mutableStateOf<Uuid?>(null)
     var loading by mutableStateOf(false)
 
     fun clearInput() {
+        textContent.setTextAndPlaceCursorAtEnd("")
         messageContent = emptyList()
         editingMessage = null
     }
@@ -156,22 +157,21 @@ class ChatInputState {
     fun isEditing() = editingMessage != null
 
     fun setMessageText(text: String) {
-        val newMessage = messageContent.toMutableList()
-        if (newMessage.isEmpty()) {
-            newMessage.add(UIMessagePart.Text(text))
-            messageContent = newMessage
-        } else {
-            if (messageContent.filterIsInstance<UIMessagePart.Text>().isEmpty()) {
-                newMessage.add(UIMessagePart.Text(text))
-            }
-            messageContent = newMessage.map {
-                if (it is UIMessagePart.Text) {
-                    it.copy(text)
-                } else {
-                    it
-                }
-            }
-        }
+        textContent.setTextAndPlaceCursorAtEnd(text)
+    }
+
+    fun setContents(contents: List<UIMessagePart>) {
+        val text = contents.filterIsInstance<UIMessagePart.Text>().joinToString { it.text }
+        textContent.setTextAndPlaceCursorAtEnd(text)
+        messageContent = contents.filter { it !is UIMessagePart.Text }
+    }
+
+    fun getContents(): List<UIMessagePart> {
+        return listOf(UIMessagePart.Text(textContent.text.toString())) + messageContent
+    }
+
+    fun isEmpty(): Boolean {
+        return textContent.text.isEmpty() && messageContent.isEmpty()
     }
 
     fun addImages(uris: List<Uri>) {
@@ -200,14 +200,17 @@ object ChatInputStateSaver : Saver<ChatInputState, String> {
         val editingMessage = jsonObject["editingMessage"]?.jsonPrimitive?.contentOrNull?.let {
             Uuid.parse(it)
         }
+        val textContent = jsonObject["textContent"]?.jsonPrimitive?.contentOrNull ?: ""
         val state = ChatInputState()
         state.messageContent = messageContent ?: emptyList()
         state.editingMessage = editingMessage
+        state.setMessageText(textContent)
         return state
     }
 
     override fun SaverScope.save(value: ChatInputState): String? {
         return JsonInstant.encodeToString(buildJsonObject {
+            put("textContent", value.textContent.text.toString())
             put("messageContent", JsonInstant.encodeToJsonElement(value.messageContent))
             put("editingMessage", JsonInstant.encodeToJsonElement(value.editingMessage))
         })
@@ -249,10 +252,6 @@ fun ChatInput(
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
 ) {
-    val text =
-        state.messageContent.filterIsInstance<UIMessagePart.Text>().firstOrNull()
-            ?: UIMessagePart.Text("")
-
     val context = LocalContext.current
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
@@ -298,7 +297,7 @@ fun ChatInput(
             MediaFileInputRow(state = state, context = context)
 
             // Text Input Row
-            TextInputRow(state = state, context = context, text = text)
+            TextInputRow(state = state, context = context)
 
             // Actions Row
             Row(
@@ -395,7 +394,7 @@ fun ChatInput(
                         containerColor = if (state.loading) MaterialTheme.colorScheme.errorContainer else Color.Unspecified,
                         contentColor = if (state.loading) MaterialTheme.colorScheme.onErrorContainer else Color.Unspecified,
                     ),
-                    enabled = state.loading || !state.messageContent.isEmptyInputMessage(),
+                    enabled = state.loading || !state.isEmpty(),
                 ) {
                     if (state.loading) {
                         KeepScreenOn()
@@ -441,7 +440,6 @@ fun ChatInput(
 private fun TextInputRow(
     state: ChatInputState,
     context: Context,
-    text: UIMessagePart.Text,
 ) {
     val assistant = LocalSettings.current.getCurrentAssistant()
     Row(
@@ -483,10 +481,6 @@ private fun TextInputRow(
                 }
                 var isFocused by remember { mutableStateOf(false) }
                 var isFullScreen by remember { mutableStateOf(false) }
-                val textState= rememberTextFieldState(text.text)
-                LaunchedEffect(textState.text) {
-                    state.setMessageText(textState.text.toString())
-                }
                 val receiveContentListener = remember {
                     ReceiveContentListener { transferableContent ->
                         when {
@@ -511,7 +505,7 @@ private fun TextInputRow(
                     }
                 }
                 TextField(
-                    state = textState,
+                    state = state.textContent,
                     modifier = Modifier
                         .fillMaxWidth()
                         .contentReceiver(receiveContentListener)
@@ -540,14 +534,14 @@ private fun TextInputRow(
                             }
                         }
                     },
-                    leadingIcon = if(assistant.quickMessages.isNotEmpty() && text.text.isEmpty()) {
+                    leadingIcon = if (assistant.quickMessages.isNotEmpty() && state.textContent.text.isEmpty()) {
                         {
                             QuickMessageButton(assistant = assistant, state = state)
                         }
                     } else null,
                 )
                 if (isFullScreen) {
-                    FullScreenEditor(text, state) {
+                    FullScreenEditor(state = state) {
                         isFullScreen = false
                     }
                 }
@@ -799,7 +793,6 @@ private fun FilesPicker(
 
 @Composable
 private fun FullScreenEditor(
-    text: UIMessagePart.Text,
     state: ChatInputState,
     onDone: () -> Unit
 ) {
@@ -842,8 +835,7 @@ private fun FullScreenEditor(
                         }
                     }
                     TextField(
-                        value = text.text,
-                        onValueChange = { state.setMessageText(it) },
+                        state = state.textContent,
                         modifier = Modifier
                             .padding(bottom = 2.dp)
                             .fillMaxSize(),
