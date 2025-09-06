@@ -4,7 +4,7 @@ package me.rerere.tts.controller
  * Split long text into speakable chunks with basic punctuation-aware grouping.
  */
 class TextChunker(
-    private val maxChunkLength: Int = 50
+    private val maxChunkLength: Int = 150
 ) {
     fun split(text: String): List<TtsChunk> {
         if (text.isBlank()) return emptyList()
