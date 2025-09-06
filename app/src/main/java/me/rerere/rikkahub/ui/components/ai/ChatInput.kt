@@ -45,6 +45,8 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -484,6 +486,10 @@ private fun TextInputRow(
                 }
                 var isFocused by remember { mutableStateOf(false) }
                 var isFullScreen by remember { mutableStateOf(false) }
+                val textState= rememberTextFieldState(text.text)
+                LaunchedEffect(textState.text) {
+                    state.setMessageText(textState.text.toString())
+                }
                 val receiveContentListener = remember {
                     ReceiveContentListener { transferableContent ->
                         when {
@@ -508,8 +514,7 @@ private fun TextInputRow(
                     }
                 }
                 TextField(
-                    value = text.text,
-                    onValueChange = { state.setMessageText(it) },
+                    state = textState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .contentReceiver(receiveContentListener)
@@ -520,7 +525,7 @@ private fun TextInputRow(
                     placeholder = {
                         Text(stringResource(R.string.chat_input_placeholder))
                     },
-                    maxLines = 5,
+                    lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
                     colors = TextFieldDefaults.colors().copy(
                         unfocusedIndicatorColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
