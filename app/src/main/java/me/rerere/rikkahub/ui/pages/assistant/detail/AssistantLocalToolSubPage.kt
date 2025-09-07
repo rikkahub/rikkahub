@@ -59,7 +59,7 @@ private fun LocalToolCard(
 ) {
     Card {
         FormItem(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(8.dp),
             label = {
                 Text(title)
             },

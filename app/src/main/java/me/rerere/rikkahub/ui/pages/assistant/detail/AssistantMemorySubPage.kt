@@ -108,7 +108,7 @@ fun AssistantMemorySettings(
     ) {
         Card {
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_memory))
                 },
@@ -134,7 +134,7 @@ fun AssistantMemorySettings(
 
         Card {
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_recent_chats))
                 },

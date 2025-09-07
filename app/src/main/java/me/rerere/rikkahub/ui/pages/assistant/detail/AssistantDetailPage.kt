@@ -202,7 +202,13 @@ private fun AssistantBasicSettings(
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             UIAvatar(
                 value = assistant.avatar,
                 name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
@@ -213,7 +219,7 @@ private fun AssistantBasicSettings(
                         )
                     )
                 },
-                modifier = Modifier.size(64.dp)
+                modifier = Modifier.size(80.dp)
             )
         }
 
@@ -222,7 +228,7 @@ private fun AssistantBasicSettings(
                 label = {
                     Text(stringResource(R.string.assistant_page_name))
                 },
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
             ) {
                 OutlinedTextField(
                     value = assistant.name,
@@ -236,14 +242,14 @@ private fun AssistantBasicSettings(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-        }
 
-        Card {
+            HorizontalDivider()
+
             FormItem(
                 label = {
                     Text(stringResource(R.string.assistant_page_tags))
                 },
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
             ) {
                 TagsInput(
                     value = assistant.tags,
@@ -253,11 +259,11 @@ private fun AssistantBasicSettings(
                     },
                 )
             }
-        }
 
-        Card {
+            HorizontalDivider()
+
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_use_assistant_avatar))
                 },
@@ -281,7 +287,7 @@ private fun AssistantBasicSettings(
 
         Card {
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_chat_model))
                 },
@@ -303,11 +309,9 @@ private fun AssistantBasicSettings(
                     )
                 }
             )
-        }
-
-        Card {
+            HorizontalDivider()
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_temperature))
                 },
@@ -375,11 +379,9 @@ private fun AssistantBasicSettings(
                     }
                 }
             }
-        }
-
-        Card {
+            HorizontalDivider()
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_top_p))
                 },
@@ -427,11 +429,9 @@ private fun AssistantBasicSettings(
                     )
                 }
             }
-        }
-
-        Card {
+            HorizontalDivider()
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_context_message_size))
                 },
@@ -463,11 +463,9 @@ private fun AssistantBasicSettings(
                     color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
                 )
             }
-        }
-
-        Card {
+            HorizontalDivider()
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_stream_output))
                 },
@@ -487,11 +485,9 @@ private fun AssistantBasicSettings(
                     )
                 }
             )
-        }
-
-        Card {
+            HorizontalDivider()
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_thinking_budget))
                 },
@@ -507,11 +503,9 @@ private fun AssistantBasicSettings(
                     }
                 )
             }
-        }
-
-        Card {
+            HorizontalDivider()
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_max_tokens))
                 },

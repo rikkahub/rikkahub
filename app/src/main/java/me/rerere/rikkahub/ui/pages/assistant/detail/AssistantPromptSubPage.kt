@@ -109,7 +109,7 @@ fun AssistantPromptSubPage(
     ) {
         Card {
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_system_prompt))
                 },
@@ -192,7 +192,7 @@ fun AssistantPromptSubPage(
 
         Card {
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_message_template))
                 },
@@ -249,7 +249,7 @@ fun AssistantPromptSubPage(
             )
             Column(
                 modifier = Modifier
-                    .padding(16.dp)
+                    .padding(8.dp)
                     .clip(MaterialTheme.shapes.small)
                     .background(MaterialTheme.colorScheme.background)
                     .padding(8.dp)
@@ -304,7 +304,7 @@ fun AssistantPromptSubPage(
 
         Card {
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_preset_messages))
                 },
@@ -404,7 +404,7 @@ fun AssistantPromptSubPage(
 
         Card {
             FormItem(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 label = {
                     Text(stringResource(R.string.assistant_page_quick_messages))
                 },
