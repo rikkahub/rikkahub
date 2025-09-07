@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.io.FileInputStream
 import java.util.Properties
+import kotlin.math.sign
 
 plugins {
     alias(libs.plugins.android.application)
@@ -13,6 +14,7 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.chaquo.python)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -76,6 +78,16 @@ android {
             applicationIdSuffix = ".debug"
             buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
+        }
+        create("baseline") {
+            initWith(getByName("release"))
+            matchingFallbacks.add("release")
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".debug"
+            isDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
+            isProfileable = true
         }
     }
     compileOptions {
@@ -144,6 +156,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.browser)
+
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":app:baselineprofile"))
 
     // Compose
     implementation(libs.androidx.activity.compose)
