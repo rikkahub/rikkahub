@@ -84,7 +84,7 @@ fun ChatMessageAssistantAvatar(
     val settings = LocalSettings.current
     val showIcon = settings.displaySetting.showModelIcon
     val prevRole = if (messageIndex > 0) messages[messageIndex - 1].role else null
-    if (message.role == MessageRole.ASSISTANT && prevRole == MessageRole.USER && !message.parts.isEmptyUIMessage() && model != null) {
+    if (message.role == MessageRole.ASSISTANT && prevRole != message.role && model != null) {
         Row(
             modifier = modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

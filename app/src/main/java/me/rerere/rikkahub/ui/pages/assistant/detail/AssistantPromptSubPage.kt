@@ -289,7 +289,6 @@ fun AssistantPromptSubPage(
                     it.fastForEach { message ->
                         ChatMessage(
                             node = message.toMessageNode(),
-                            showActions = true,
                             onFork = {},
                             onRegenerate = {},
                             onEdit = {},

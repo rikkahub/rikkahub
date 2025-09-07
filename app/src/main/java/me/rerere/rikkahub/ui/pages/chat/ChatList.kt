@@ -5,10 +5,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -30,7 +28,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
@@ -62,15 +59,12 @@ import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.ChevronsDown
 import com.composables.icons.lucide.ChevronsUp
-import com.composables.icons.lucide.Flashlight
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MousePointer2
 import com.composables.icons.lucide.X
-import com.composables.icons.lucide.Zap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -178,24 +172,13 @@ fun ChatList(
                             }
                         },
                         selectedKeys = selectedItems,
-                        enabled = selecting && node.currentMessage.isValidToShowActions(),
+                        enabled = selecting,
                     ) {
-                        val isLastMessage = index == conversation.messageNodes.lastIndex
-                        val isAssistantMessage = node.role == MessageRole.ASSISTANT
-
-                        // 计算是否显示操作菜单的最终标志
-                        val showActionsForThisMessage = if (isLastMessage && isAssistantMessage) {
-                            !loading
-                        } else {
-                            node.currentMessage.isValidToShowActions()
-                        }
-
                         ChatMessage(
                             node = node,
                             conversation = conversation,
                             model = node.currentMessage.modelId?.let { settings.findModelById(it) },
                             assistant = settings.getAssistantById(conversation.assistantId),
-                            showActions = showActionsForThisMessage,
                             loading = loading && index == conversation.messageNodes.lastIndex,
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)
@@ -312,8 +295,7 @@ fun ChatList(
                     FilledIconButton(
                         onClick = {
                             selecting = false
-                            val messages =
-                                conversation.messageNodes.filter { it.id in selectedItems && it.currentMessage.isValidToShowActions() }
+                            val messages = conversation.messageNodes.filter { it.id in selectedItems }
                             if (messages.isNotEmpty()) {
                                 showExportSheet = true
                             }

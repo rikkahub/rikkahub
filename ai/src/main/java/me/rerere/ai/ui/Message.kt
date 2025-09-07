@@ -11,7 +11,6 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
 import me.rerere.ai.util.json
-import java.util.Locale
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
@@ -175,14 +174,11 @@ data class UIMessage(
     }
 
     fun getToolCalls() = parts.filterIsInstance<UIMessagePart.ToolCall>()
+
     fun getToolResults() = parts.filterIsInstance<UIMessagePart.ToolResult>()
 
     fun isValidToUpload() = parts.any {
         it !is UIMessagePart.Reasoning
-    }
-
-    fun isValidToShowActions() = parts.any {
-        (it is UIMessagePart.Text && it.text.isNotBlank()) || it is UIMessagePart.Image || it is UIMessagePart.Document
     }
 
     inline fun <reified P : UIMessagePart> hasPart(): Boolean {
@@ -236,8 +232,9 @@ fun List<UIMessage>.handleMessageChunk(chunk: MessageChunk, model: Model? = null
 }
 
 /**
- * 判断这个消息是否有有任何内容
- * 例如，文本，图片...
+ * 判断这个消息是否有有任何用户**可输入内容**
+ *
+ * 例如: 文本，图片, 文档
  */
 fun List<UIMessagePart>.isEmptyInputMessage(): Boolean {
     if (this.isEmpty()) return true

@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -41,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -61,7 +59,6 @@ import com.composables.icons.lucide.File
 import com.composables.icons.lucide.Lucide
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.time.debounce
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -101,7 +98,6 @@ fun ChatMessage(
     loading: Boolean = false,
     model: Model? = null,
     assistant: Assistant? = null,
-    showActions: Boolean,
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
@@ -114,6 +110,7 @@ fun ChatMessage(
     val message = node.messages[node.selectIndex]
     val chatMessages = conversation.currentMessages
     val messageIndex = chatMessages.indexOf(message)
+    val lastMessage = messageIndex == chatMessages.lastIndex
     val settings = LocalSettings.current.displaySetting
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
@@ -173,6 +170,13 @@ fun ChatMessage(
                 )
             }
         }
+
+        val showActions = if (lastMessage) {
+            !loading
+        } else {
+            message.parts.isEmptyUIMessage().not()
+        }
+
         AnimatedVisibility(
             visible = showActions,
             enter = slideInVertically { it / 2 } + fadeIn(),
@@ -276,7 +280,7 @@ private fun MessagePartsBlock(
         snapshotFlow { partsState }
             .debounce(50.milliseconds)
             .collect { parts ->
-                if(parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
+                if (parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.KeyboardTap)
                 }
             }
@@ -403,7 +407,7 @@ private fun MessagePartsBlock(
 
     // Images
     val images = parts.filterIsInstance<UIMessagePart.Image>()
-    if(images.isNotEmpty()) {
+    if (images.isNotEmpty()) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -422,7 +426,7 @@ private fun MessagePartsBlock(
 
     // Documents
     val documents = parts.filterIsInstance<UIMessagePart.Document>()
-    if(documents.isNotEmpty()) {
+    if (documents.isNotEmpty()) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {

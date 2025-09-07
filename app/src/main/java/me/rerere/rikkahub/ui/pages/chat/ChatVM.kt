@@ -577,6 +577,7 @@ class ChatVM(
                                         if (copied != null) part.copy(url = copied.toString()) else part
                                     } else part
                                 }
+
                                 is UIMessagePart.Document -> {
                                     val url = part.url
                                     if (url.startsWith("file:")) {
@@ -586,6 +587,7 @@ class ChatVM(
                                         if (copied != null) part.copy(url = copied.toString()) else part
                                     } else part
                                 }
+
                                 else -> part
                             }
                         }
@@ -605,6 +607,13 @@ class ChatVM(
     fun deleteMessage(
         message: UIMessage
     ) {
+        val relatedMessages = collectRelatedMessages(message)
+        deleteMessageInternal(message)
+        relatedMessages.forEach { deleteMessageInternal(it) }
+        saveConversationAsync()
+    }
+
+    private fun deleteMessageInternal(message: UIMessage) {
         val conversation = conversation.value
         val node = conversation.getMessageNodeByMessage(message) ?: return // 找到这个消息所在的node
         val nodeIndex = conversation.messageNodes.indexOf(node)
@@ -636,9 +645,29 @@ class ChatVM(
             conversation.copy(messageNodes = updatedNodes)
         }
         updateConversation(newConversation)
-        viewModelScope.launch {
-            saveConversation(newConversation)
+    }
+
+    private fun collectRelatedMessages(message: UIMessage): List<UIMessage> {
+        val currentMessages = conversation.value.currentMessages
+        val index = currentMessages.indexOf(message)
+        if (index == -1) return emptyList()
+        // 搜索邻近的工具调用
+        val relatedMessages = hashSetOf<UIMessage>()
+        for (i in index - 1 downTo 0) {
+            if (currentMessages[i].hasPart<UIMessagePart.ToolCall>() || currentMessages[i].hasPart<UIMessagePart.ToolResult>()) {
+                relatedMessages.add(currentMessages[i])
+            } else {
+                break
+            }
         }
+        for(i in index + 1 until currentMessages.size) {
+            if (currentMessages[i].hasPart<UIMessagePart.ToolCall>() || currentMessages[i].hasPart<UIMessagePart.ToolResult>()) {
+                relatedMessages.add(currentMessages[i])
+            } else {
+                break
+            }
+        }
+        return relatedMessages.toList()
     }
 
     fun regenerateAtMessage(
