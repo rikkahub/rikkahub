@@ -75,7 +75,6 @@ import kotlinx.coroutines.flow.mapLatest
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.toDp
-import me.rerere.rikkahub.utils.unescapeHtml
 import org.intellij.markdown.IElementType
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
@@ -950,8 +949,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                     ?: ""
             val linkText =
                 node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_TEXT)
-                    ?.findChildOfTypeRecursive(GFMTokenTypes.GFM_AUTOLINK, MarkdownTokenTypes.TEXT)
                     ?.getTextInNode(content)
+                    ?.trim { it == '[' || it == ']' }
                     ?: linkDest
             if (linkText.startsWith("citation,")) {
                 // 如果是引用，则特殊处理
