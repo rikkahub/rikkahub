@@ -492,6 +492,7 @@ class ChatVM(
                         .setContentTitle(/* title = */ context.getString(R.string.notification_chat_done_title))
                         .setContentText(conversation.value.currentMessages.lastOrNull()?.toText()?.take(50) ?: "")
                         .setSmallIcon(R.drawable.small_icon)
+                        .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                         .setAutoCancel(true)
                         .setDefaults(NotificationCompat.DEFAULT_ALL)
                         .setCategory(NotificationCompat.CATEGORY_MESSAGE)
