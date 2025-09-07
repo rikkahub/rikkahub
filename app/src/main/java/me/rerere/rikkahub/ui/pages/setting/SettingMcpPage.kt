@@ -168,16 +168,18 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            Column(
-                modifier = Modifier.align(Alignment.Center),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(text = stringResource(R.string.setting_mcp_page_no_mcp_servers_found))
-                Text(
-                    text = stringResource(R.string.setting_mcp_page_add_one_to_get_started),
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            if (mcpConfigs.isEmpty()) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(text = stringResource(R.string.setting_mcp_page_no_mcp_servers_found))
+                    Text(
+                        text = stringResource(R.string.setting_mcp_page_add_one_to_get_started),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         }
     }
