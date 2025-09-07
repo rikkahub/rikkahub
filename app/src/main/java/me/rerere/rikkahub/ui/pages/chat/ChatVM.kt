@@ -1,9 +1,17 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import android.app.Application
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.analytics.FirebaseAnalytics
@@ -13,6 +21,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -39,7 +48,9 @@ import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.ai.ui.truncate
 import me.rerere.common.android.Logging
+import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.LocalTools
@@ -114,6 +125,16 @@ class ChatVM(
     // 异步任务
     val conversationJob = MutableStateFlow<Job?>(null)
 
+    private val _isForeground = MutableStateFlow(false)
+    val isForeground: StateFlow<Boolean> = _isForeground.asStateFlow()
+    private val lifecycleObserver = LifecycleEventObserver { _, event ->
+        when (event) {
+            Lifecycle.Event.ON_START -> _isForeground.value = true
+            Lifecycle.Event.ON_STOP -> _isForeground.value = false
+            else -> {}
+        }
+    }
+
     init {
         // Load the conversation from the repository (database)
         viewModelScope.launch {
@@ -135,6 +156,15 @@ class ChatVM(
 
         // 记住对话ID, 方便下次启动恢复
         context.writeStringPreference("lastConversationId", _conversationId.toString())
+
+        // 添加生命周期观察者
+        ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
     }
 
     // 用户设置
@@ -447,6 +477,7 @@ class ChatVM(
                     )
                 )
 
+                // Log analytics event
                 val usage = conversation.value.currentMessages.lastOrNull()?.usage
                 analytics.logEvent("ai_generated_done", Bundle().apply {
                     putInt("inputTokens", usage?.promptTokens ?: 0)
@@ -454,6 +485,19 @@ class ChatVM(
                     putInt("cachedTokens", usage?.cachedTokens ?: 0)
                     putInt("totalTokens", usage?.totalTokens ?: 0)
                 })
+
+                // Show notification if app is not in foreground
+                if (!isForeground.value) {
+                    val notification = NotificationCompat.Builder(context, CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID)
+                        .setContentTitle(/* title = */ context.getString(R.string.notification_chat_done_title))
+                        .setContentText(conversation.value.currentMessages.lastOrNull()?.toText()?.take(50) ?: "")
+                        .setSmallIcon(R.drawable.small_icon)
+                        .setAutoCancel(true)
+                        .setDefaults(NotificationCompat.DEFAULT_ALL)
+                        .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                        .setContentIntent(getPendingIntent(context))
+                    NotificationManagerCompat.from(context).notify(1, notification.build())
+                }
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
@@ -471,6 +515,13 @@ class ChatVM(
             generateTitle(conversation.value)
             generateSuggestion(conversation.value)
         }
+    }
+
+    private fun getPendingIntent(context: Context): PendingIntent {
+        val intent = Intent(context, RouteActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
     }
 
     fun generateTitle(conversation: Conversation, force: Boolean = false) {
@@ -660,7 +711,7 @@ class ChatVM(
                 break
             }
         }
-        for(i in index + 1 until currentMessages.size) {
+        for (i in index + 1 until currentMessages.size) {
             if (currentMessages[i].hasPart<UIMessagePart.ToolCall>() || currentMessages[i].hasPart<UIMessagePart.ToolResult>()) {
                 relatedMessages.add(currentMessages[i])
             } else {

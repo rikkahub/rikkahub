@@ -713,10 +713,15 @@
   <string name="setting_page_chat_settings">Chat Settings</string>
   <string name="permission_required">Required</string>
   <string name="permission_permanently_denied">Permanently Denied</string>
-  <string name="permission_go_to_settings">Go to App Setting</string>
+  <string name="permission_go_to_settings">Go to Setting</string>
   <string name="permission_diaog_title">Permission Request</string>
   <string name="permission_desc_require_permission">In order to provide a better user experience, the app requires the following permissions:</string>
   <string name="permission_desc_goto_setting">Some permissions have been permanently denied, please go to the app settings to manually enable them:</string>
   <string name="permission_camera">Camera</string>
   <string name="permission_camera_desc">Camera permission is required to take photos</string>
+  <string name="notification_chat_done_title">Chat Message Generated</string>
+  <string name="setting_display_page_notification_message_generated">Enable notification after message generated</string>
+  <string name="setting_display_page_notification_message_generated_desc">Show a notification when a message is generated if the app is not in the foreground</string>
+  <string name="permission_notification">Notification</string>
+  <string name="permission_notification_desc">Send notifications</string>
 </resources>

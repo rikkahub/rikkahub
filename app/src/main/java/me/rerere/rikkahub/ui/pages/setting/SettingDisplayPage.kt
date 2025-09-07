@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +36,9 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
+import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
@@ -56,6 +61,13 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    val permissionState = rememberPermissionState(
+        permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setOf(
+            PermissionNotification
+        ) else emptySet(),
+    )
+    PermissionManager(permissionState = permissionState)
 
     Scaffold(
         topBar = {
@@ -190,6 +202,30 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             checked = displaySetting.showUpdates,
                             onCheckedChange = {
                                 updateDisplaySetting(displaySetting.copy(showUpdates = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_notification_message_generated))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_notification_message_generated_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.enableNotificationOnMessageGeneration,
+                            onCheckedChange = {
+                                if(it && !permissionState.allPermissionsGranted) {
+                                    // 请求权限
+                                    permissionState.requestPermissions()
+                                }
+                                updateDisplaySetting(displaySetting.copy(enableNotificationOnMessageGeneration = it))
                             }
                         )
                     },

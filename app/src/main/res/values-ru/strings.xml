@@ -292,12 +292,15 @@
   <string name="more_options">Дополнительные параметры</string>
   <string name="no_text_content_to_copy">Нет доступного текста для копирования</string>
   <string name="notification_channel_chat_completed">Чат завершён</string>
+  <string name="notification_chat_done_title">Сообщение чата сгенерировано</string>
   <string name="permission_camera">Камера</string>
   <string name="permission_camera_desc">Для создания фотографий требуется разрешение на использование камеры</string>
   <string name="permission_desc_goto_setting">Некоторые разрешения были навсегда отклонены; перейдите в настройки приложения и включите их вручную:</string>
   <string name="permission_desc_require_permission">Чтобы обеспечить лучший пользовательский опыт, приложению требуются следующие разрешения:</string>
   <string name="permission_diaog_title">Запрос разрешения</string>
   <string name="permission_go_to_settings">Перейти в настройки приложения</string>
+  <string name="permission_notification">Уведомление</string>
+  <string name="permission_notification_desc">Отправлять уведомления</string>
   <string name="permission_permanently_denied">Запрещено навсегда</string>
   <string name="permission_required">Требуется</string>
   <string name="photo">Фото</string>
@@ -345,6 +348,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">Тактильный эффект при генерации сообщения</string>
   <string name="setting_display_page_font_size_preview">Это **пример** текста чата</string>
   <string name="setting_display_page_font_size_title">Размер шрифта чата</string>
+  <string name="setting_display_page_notification_message_generated">Включить уведомление после генерации сообщения</string>
+  <string name="setting_display_page_notification_message_generated_desc">Показывать уведомление при генерации сообщения, если приложение не активно</string>
   <string name="setting_display_page_show_message_jumper_desc">Отображать кнопки быстрого перехода справа при прокрутке списка чатов</string>
   <string name="setting_display_page_show_message_jumper_title">Показывать переходчик к сообщению</string>
   <string name="setting_display_page_show_model_name_desc">Отображать ли названия моделей в сообщениях чата</string>

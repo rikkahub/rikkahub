@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.ui.components.ui.permission
 
 import android.Manifest
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
@@ -55,5 +57,13 @@ val PermissionCamera = PermissionInfo(
     permission = Manifest.permission.CAMERA,
     displayName = { Text(stringResource(R.string.permission_camera)) },
     usage = { Text(stringResource(R.string.permission_camera_desc)) },
+    required = true
+)
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+val PermissionNotification = PermissionInfo(
+    permission = Manifest.permission.POST_NOTIFICATIONS,
+    displayName = { Text(stringResource(R.string.permission_notification)) },
+    usage = { Text(stringResource(R.string.permission_notification_desc)) },
     required = true
 )

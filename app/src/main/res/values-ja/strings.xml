@@ -292,12 +292,15 @@
   <string name="more_options">その他のオプション</string>
   <string name="no_text_content_to_copy">コピーできるテキストコンテンツがありません</string>
   <string name="notification_channel_chat_completed">チャット完了</string>
+  <string name="notification_chat_done_title">チャットメッセージが生成されました</string>
   <string name="permission_camera">カメラ</string>
   <string name="permission_camera_desc">写真を撮影するにはカメラの権限が必要です</string>
   <string name="permission_desc_goto_setting">一部の権限が恒久的に拒否されています。アプリの設定から手動で有効にしてください：</string>
   <string name="permission_desc_require_permission">より良いユーザー体験を提供するため、アプリは以下の権限を必要とします:</string>
   <string name="permission_diaog_title">権限リクエスト</string>
   <string name="permission_go_to_settings">アプリ設定へ移動</string>
+  <string name="permission_notification">通知</string>
+  <string name="permission_notification_desc">通知を送信する</string>
   <string name="permission_permanently_denied">永久に拒否されました</string>
   <string name="permission_required">必須</string>
   <string name="photo">写真</string>
@@ -345,6 +348,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">メッセージ生成時の触覚効果</string>
   <string name="setting_display_page_font_size_preview">これは**サンプル**のチャットテキストです</string>
   <string name="setting_display_page_font_size_title">チャットフォントサイズ</string>
+  <string name="setting_display_page_notification_message_generated">メッセージ生成後に通知を有効にする</string>
+  <string name="setting_display_page_notification_message_generated_desc">アプリがフォアグラウンドにないときにメッセージが生成されたら通知を表示する</string>
   <string name="setting_display_page_show_message_jumper_desc">チャットリストをスクロールすると、右側にクイックジャンプボタンが表示されます。</string>
   <string name="setting_display_page_show_message_jumper_title">メッセージナビゲーションボタン</string>
   <string name="setting_display_page_show_model_name_desc">チャットメッセージにモデル名を表示するかどうか</string>

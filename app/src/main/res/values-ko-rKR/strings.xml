@@ -292,12 +292,15 @@
   <string name="more_options">추가 옵션</string>
   <string name="no_text_content_to_copy">복사할 텍스트 콘텐츠가 없습니다</string>
   <string name="notification_channel_chat_completed">채팅 완료</string>
+  <string name="notification_chat_done_title">채팅 메시지 생성 완료</string>
   <string name="permission_camera">카메라</string>
   <string name="permission_camera_desc">사진을 찍기 위해 카메라 권한이 필요합니다</string>
   <string name="permission_desc_goto_setting">일부 권한이 영구적으로 거부되었습니다. 앱 설정에서 직접 활성화해 주세요:</string>
   <string name="permission_desc_require_permission">더 나은 사용자 경험을 제공하기 위해 앱에서 다음 권한이 필요합니다:</string>
   <string name="permission_diaog_title">권한 요청</string>
   <string name="permission_go_to_settings">앱 설정으로 이동</string>
+  <string name="permission_notification">알림</string>
+  <string name="permission_notification_desc">알림 보내기</string>
   <string name="permission_permanently_denied">영구적으로 거부됨</string>
   <string name="permission_required">필요함</string>
   <string name="photo">사진</string>
@@ -345,6 +348,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">메시지 생성 진동 효과 활성화</string>
   <string name="setting_display_page_font_size_preview">이것은 **예제** 채팅 텍스트입니다</string>
   <string name="setting_display_page_font_size_title">채팅 글꼴 크기</string>
+  <string name="setting_display_page_notification_message_generated">메시지 생성 완료 알림 활성화</string>
+  <string name="setting_display_page_notification_message_generated_desc">앱이 전경에 있지 않을 때 메시지가 생성되면 알림 표시</string>
   <string name="setting_display_page_show_message_jumper_desc">채팅 목록을 스크롤할 때 오른쪽에 빠른 점프 버튼 표시</string>
   <string name="setting_display_page_show_message_jumper_title">메시지 점프 버튼 표시</string>
   <string name="setting_display_page_show_model_name_desc">채팅 메시지에 모델 이름을 표시할지 여부</string>

@@ -71,14 +71,15 @@ class RikkaHubApp : Application() {
 
     private fun createNotificationChannel() {
         val notificationManager = NotificationManagerCompat.from(this)
-        val channel = NotificationChannelCompat
+        val chatCompletedChannel = NotificationChannelCompat
             .Builder(
                 CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID,
-                NotificationManagerCompat.IMPORTANCE_DEFAULT
+                NotificationManagerCompat.IMPORTANCE_HIGH
             )
             .setName(getString(R.string.notification_channel_chat_completed))
+            .setVibrationEnabled(true)
             .build()
-        notificationManager.createNotificationChannel(channel)
+        notificationManager.createNotificationChannel(chatCompletedChannel)
     }
 
     override fun onTerminate() {

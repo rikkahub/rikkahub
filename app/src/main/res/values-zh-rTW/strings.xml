@@ -292,12 +292,15 @@
   <string name="more_options">更多選項</string>
   <string name="no_text_content_to_copy">暫無可複製的文字內容</string>
   <string name="notification_channel_chat_completed">聊天完成</string>
+  <string name="notification_chat_done_title">聊天訊息已生成</string>
   <string name="permission_camera">相機</string>
   <string name="permission_camera_desc">需要相機權限才能拍照</string>
   <string name="permission_desc_goto_setting">部分權限已被永久拒絕，請前往應用程式設定手動啟用：</string>
   <string name="permission_desc_require_permission">為了提供更優質的使用體驗，應用程式需要下列權限：</string>
   <string name="permission_diaog_title">權限請求</string>
-  <string name="permission_go_to_settings">前往應用程式設定</string>
+  <string name="permission_go_to_settings">前往設定</string>
+  <string name="permission_notification">通知</string>
+  <string name="permission_notification_desc">傳送通知</string>
   <string name="permission_permanently_denied">永久拒絕</string>
   <string name="permission_required">必要</string>
   <string name="photo">照片</string>
@@ -345,6 +348,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">訊息生成觸覺回饋</string>
   <string name="setting_display_page_font_size_preview">這是一個**示例**的聊天文本</string>
   <string name="setting_display_page_font_size_title">聊天字體大小</string>
+  <string name="setting_display_page_notification_message_generated">在訊息產生後啟用通知</string>
+  <string name="setting_display_page_notification_message_generated_desc">當應用程式不在前景時，若產生新訊息則顯示通知</string>
   <string name="setting_display_page_show_message_jumper_desc">在捲動聊天列表時，在右側顯示快速跳轉按鈕</string>
   <string name="setting_display_page_show_message_jumper_title">消息導航按鈕</string>
   <string name="setting_display_page_show_model_name_desc">是否在聊天消息中顯示模型名稱</string>

@@ -19,7 +19,7 @@ import androidx.compose.runtime.Composable
 @Composable
 fun PermissionManager(
     permissionState: PermissionState,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit = {},
 ) {
     // 显示权限请求说明对话框
     if (permissionState.showRationaleDialog && permissionState.currentRationalePermissions.isNotEmpty()) {
