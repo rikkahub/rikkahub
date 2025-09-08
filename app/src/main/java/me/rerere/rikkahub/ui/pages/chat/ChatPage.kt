@@ -165,11 +165,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
         windowAdaptiveInfo.width > windowAdaptiveInfo.height && windowAdaptiveInfo.width >= 1100.dp
 
     val inputState = rememberChatInputState(
-        message = remember(text, files) {
+        message = remember(files) {
             buildList {
-                text?.let {
-                    add(UIMessagePart.Text(it.base64Decode()))
-                }
                 val localFiles = context.createChatFilesByContents(files)
                 val contentTypes = files.mapNotNull { file ->
                     context.getFileMimeType(file)
@@ -181,6 +178,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
                     }
                 }
             }
+        },
+        textContent = remember(text) {
+            text?.base64Decode() ?: ""
         }
     )
 

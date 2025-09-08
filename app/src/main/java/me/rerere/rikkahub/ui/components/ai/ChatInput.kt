@@ -220,11 +220,13 @@ object ChatInputStateSaver : Saver<ChatInputState, String> {
 
 @Composable
 fun rememberChatInputState(
+    textContent: String = "",
     message: List<UIMessagePart> = emptyList(),
     loading: Boolean = false,
 ): ChatInputState {
-    return rememberSaveable(message, loading, saver = ChatInputStateSaver) {
+    return rememberSaveable(textContent, message, loading, saver = ChatInputStateSaver) {
         ChatInputState().apply {
+            this.textContent.setTextAndPlaceCursorAtEnd(textContent)
             this.messageContent = message
             this.loading = loading
         }
