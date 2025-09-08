@@ -3,7 +3,7 @@
 ## Project Structure & Modules
 - `app/`: Android app (Jetpack Compose UI, DI, data, Room, navigation).
 - `ai/`: AI SDK and provider integrations (OpenAI, Google, Anthropic) with optional native/NN deps.
-- `highlight/`, `search/`, `rag/`, `tts/`, `common/`: Feature and utility modules.
+- `highlight/`, `search/`, `tts/`, `common/`: Feature and utility modules.
 - Tests: `ai/src/test` (unit), `ai/src/androidTest` (instrumented); `app/src/test` scaffolded.
 - Assets: `app/src/main/assets`, resources under `app/src/main/res`.
 

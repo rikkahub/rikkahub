@@ -15,7 +15,6 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 - **ai**: AI SDK abstraction layer for different providers (OpenAI, Google, Anthropic)
 - **highlight**: Code syntax highlighting implementation
 - **search**: Search functionality SDK (Exa, Tavily, Zhipu)
-- **rag**: RAG (Retrieval Augmented Generation) implementation
 - **tts**: Text-to-speech implementation for different providers
 - **common**: Common utilities and extensions
 
