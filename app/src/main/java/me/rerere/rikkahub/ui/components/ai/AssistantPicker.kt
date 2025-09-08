@@ -15,9 +15,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,11 +44,16 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Pen
+import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberAssistantState
 import kotlin.uuid.Uuid
 
@@ -64,14 +73,8 @@ fun AssistantPicker(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FilledTonalIconButton(
-            onClick = onClickSetting,
-        ) {
-            Icon(Lucide.Bot, null)
-        }
-
         Surface(
-            tonalElevation = 4.dp,
+            color = Color.Transparent,
             shape = RoundedCornerShape(50),
             modifier = Modifier.weight(1f)
         ) {
@@ -95,7 +98,7 @@ fun AssistantPicker(
                     overflow = TextOverflow.Ellipsis
                 )
                 Icon(
-                    imageVector = Lucide.ChevronDown,
+                    imageVector = Lucide.ChevronUp,
                     contentDescription = stringResource(R.string.assistant_picker_expand)
                 )
             }
@@ -110,7 +113,10 @@ fun AssistantPicker(
                 showPicker = false
                 state.setSelectAssistant(assistant)
             },
-            onDismiss = { showPicker = false })
+            onDismiss = {
+                showPicker = false
+            }
+        )
     }
 }
 
@@ -121,6 +127,8 @@ private fun AssistantPickerSheet(
     onAssistantSelected: (Assistant) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
     val defaultAssistantName = stringResource(R.string.assistant_page_default_assistant)
 
     // 标签过滤状态
@@ -139,7 +147,7 @@ private fun AssistantPickerSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = sheetState,
     ) {
         Column(
             modifier = Modifier
@@ -179,55 +187,82 @@ private fun AssistantPickerSheet(
             }
 
             // 助手列表
+            val navController = LocalNavController.current
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(filteredAssistants, key = { it.id }) { assistant ->
-                    Surface(
+                    val checked = assistant.id == currentAssistant.id
+                    Card(
                         onClick = { onAssistantSelected(assistant) },
                         modifier = Modifier.animateItem(),
                         shape = MaterialTheme.shapes.large,
-                        tonalElevation = 4.dp
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (checked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                            contentColor = if (checked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                        ),
                     ) {
-                        ListItem(
-                            headlineContent = {
-                                Text(
-                                    text = assistant.name.ifEmpty { defaultAssistantName },
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            supportingContent = {
-                                Text(
-                                    text = assistant.systemPrompt.ifBlank { stringResource(R.string.assistant_page_no_system_prompt) },
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
-                            },
-                            leadingContent = {
-                                UIAvatar(
-                                    name = assistant.name.ifEmpty { defaultAssistantName },
-                                    value = assistant.avatar,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            },
-                            trailingContent = if (assistant.id == currentAssistant.id) {
-                                {
-                                    Icon(
-                                        imageVector = Lucide.Check,
-                                        contentDescription = stringResource(R.string.assistant_picker_selected),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
+                        AssistantItem(
+                            assistant = assistant,
+                            defaultAssistantName = defaultAssistantName,
+                            onEdit = {
+                                scope.launch {
+                                    sheetState.hide()
+                                    onDismiss()
+                                    navController.navigate(Screen.AssistantDetail(assistant.id.toString()))
                                 }
-                            } else null,
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            }
                         )
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun AssistantItem(
+    assistant: Assistant,
+    defaultAssistantName: String,
+    onEdit: () -> Unit
+) {
+    ListItem(
+        headlineContent = {
+            Text(
+                text = assistant.name.ifEmpty { defaultAssistantName },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        supportingContent = {
+            Text(
+                text = assistant.systemPrompt.ifBlank { stringResource(R.string.assistant_page_no_system_prompt) },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        },
+        leadingContent = {
+            UIAvatar(
+                name = assistant.name.ifEmpty { defaultAssistantName },
+                value = assistant.avatar,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        trailingContent = {
+            IconButton(
+                onClick = {
+                    onEdit()
+                }
+            ) {
+                Icon(
+                    imageVector = Lucide.Pen,
+                    contentDescription = null
+                )
+            }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
 }

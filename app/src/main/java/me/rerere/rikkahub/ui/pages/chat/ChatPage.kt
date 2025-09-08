@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PermanentNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SplitButtonLayout
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -531,6 +532,8 @@ private fun DrawerContent(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val isPlayStore = rememberIsPlayStoreVersion()
+    val repo = koinInject<ConversationRepository>()
 
     // 昵称编辑状态
     val nicknameEditState = useEditState<String> { newNickname ->
@@ -550,10 +553,10 @@ private fun DrawerContent(
             modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            val isPlayStore = rememberIsPlayStoreVersion()
             if (settings.displaySetting.showUpdates && !isPlayStore) {
                 UpdateCard(vm)
             }
+
             ConversationList(
                 current = current,
                 conversations = conversations,
@@ -577,7 +580,8 @@ private fun DrawerContent(
                     vm.updatePinnedStatus(it)
                 }
             )
-            val repo = koinInject<ConversationRepository>()
+
+            // 助手选择器
             AssistantPicker(
                 settings = settings,
                 onUpdateSettings = {
