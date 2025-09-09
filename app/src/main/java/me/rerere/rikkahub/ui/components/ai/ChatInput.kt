@@ -160,6 +160,10 @@ class ChatInputState {
         textContent.setTextAndPlaceCursorAtEnd(text)
     }
 
+    fun appendText(content: String) {
+        textContent.setTextAndPlaceCursorAtEnd(textContent.text.toString() + content)
+    }
+
     fun setContents(contents: List<UIMessagePart>) {
         val text = contents.filterIsInstance<UIMessagePart.Text>().joinToString { it.text }
         textContent.setTextAndPlaceCursorAtEnd(text)
@@ -536,7 +540,7 @@ private fun TextInputRow(
                             }
                         }
                     },
-                    leadingIcon = if (assistant.quickMessages.isNotEmpty() && state.textContent.text.isEmpty()) {
+                    leadingIcon = if (assistant.quickMessages.isNotEmpty()) {
                         {
                             QuickMessageButton(assistant = assistant, state = state)
                         }
@@ -574,7 +578,7 @@ private fun QuickMessageButton(
             assistant.quickMessages.forEach { quickMessage ->
                 Surface(
                     onClick = {
-                        state.setMessageText(quickMessage.content)
+                        state.appendText(quickMessage.content)
                     },
                     color = Color.Transparent,
                     modifier = Modifier.fillMaxWidth(),
