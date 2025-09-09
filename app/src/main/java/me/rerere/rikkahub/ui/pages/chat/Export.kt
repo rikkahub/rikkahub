@@ -9,9 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -56,6 +54,7 @@ import androidx.navigation.compose.rememberNavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
+import coil3.request.crossfade
 import com.composables.icons.lucide.BookDashed
 import com.composables.icons.lucide.BookHeart
 import com.composables.icons.lucide.Earth
@@ -478,6 +477,7 @@ private fun ExportedChatMessage(
                             model = ImageRequest.Builder(context)
                                 .data(part.url)
                                 .allowHardware(false)
+                                .crossfade(false)
                                 .build(),
                             contentDescription = "Image",
                             modifier = Modifier
