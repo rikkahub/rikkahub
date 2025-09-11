@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.service
+package me.rerere.rikkahub.service
 
 import android.Manifest
 import android.app.Application
