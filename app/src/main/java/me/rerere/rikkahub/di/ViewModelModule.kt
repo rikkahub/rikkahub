@@ -21,13 +21,8 @@ val viewModelModule = module {
             context = get(),
             settingsStore = get(),
             conversationRepo = get(),
-            memoryRepository = get(),
-            generationHandler = get(),
-            templateTransformer = get(),
-            mcpManager = get(),
+            chatService = get(),
             updateChecker = get(),
-            providerManager = get(),
-            localTools = get(),
             analytics = get()
         )
     }
