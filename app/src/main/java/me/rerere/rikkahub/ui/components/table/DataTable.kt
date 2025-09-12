@@ -110,12 +110,16 @@ fun DataTable(
             val headerHeight = headerP1.maxOf { it?.height ?: 0 }
 
             // ---------- 第二阶段：固定列宽 + 统一行高重新测量 ----------
-            fun constraintsFor(colWidth: Int, minH: Int) = Constraints(
-                minWidth = colWidth,
-                maxWidth = colWidth,
-                minHeight = minH,
-                maxHeight = infinity,
-            )
+            fun constraintsFor(colWidth: Int, minH: Int): Constraints {
+                val safeColWidth = colWidth.coerceAtLeast(0)
+                val safeMinH = minH.coerceAtLeast(0)
+                return Constraints(
+                    minWidth = safeColWidth,
+                    maxWidth = safeColWidth,
+                    minHeight = safeMinH,
+                    maxHeight = infinity,
+                )
+            }
 
             val headerPlaceables = Array(columnCount) { c ->
                 val measurables = subcompose("h2_$c") {
