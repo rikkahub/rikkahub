@@ -855,7 +855,8 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
         rows = rowComposables,
         modifier = modifier
             .padding(vertical = 8.dp),
-        columnMinWidths = List(columnCount) { 80.dp }
+        columnMinWidths = List(columnCount) { 80.dp },
+        columnMaxWidths = List(columnCount) { 200.dp }
     )
 }
 

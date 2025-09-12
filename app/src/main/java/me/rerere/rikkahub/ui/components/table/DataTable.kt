@@ -8,7 +8,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,6 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import kotlin.math.max
 
 /**
@@ -43,6 +43,7 @@ fun DataTable(
     headerBackground: Color = MaterialTheme.colorScheme.surfaceVariant,
     zebraStriping: Boolean = false,
     columnMinWidths: List<Dp> = emptyList(),
+    columnMaxWidths: List<Dp> = emptyList(),
     cellAlignment: Alignment = Alignment.CenterStart,
 ) {
     val hScroll = rememberScrollState()
@@ -63,6 +64,7 @@ fun DataTable(
             val infinity = Constraints.Infinity
             val unbounded = Constraints(0, infinity, 0, infinity)
             val minWidthsPx = IntArray(columnCount) { i -> columnMinWidths.getOrNull(i)?.roundToPx() ?: 0 }
+            val maxWidthsPx = IntArray(columnCount) { i -> columnMaxWidths.getOrNull(i)?.roundToPx() ?: Int.MAX_VALUE }
             val colWidths = IntArray(columnCount) { 0 }
             val headerP1 = arrayOfNulls<Placeable>(columnCount)
             val bodyP1 = arrayOfNulls<Placeable>(rowCount * columnCount)
@@ -79,8 +81,13 @@ fun DataTable(
                         headers.getOrNull(c)?.invoke()
                     }
                 }
-                val p = measurables.first().measure(unbounded)
-                colWidths[c] = max(colWidths[c], max(p.width, minWidthsPx[c]))
+                val constraints = if (maxWidthsPx[c] != Int.MAX_VALUE) {
+                    Constraints(0, maxWidthsPx[c], 0, infinity)
+                } else {
+                    unbounded
+                }
+                val p = measurables.first().measure(constraints)
+                colWidths[c] = max(colWidths[c], max(p.width, minWidthsPx[c])).coerceAtMost(maxWidthsPx[c])
                 return p
             }
 
@@ -91,8 +98,13 @@ fun DataTable(
                         rows[r].getOrNull(c)?.invoke()
                     }
                 }
-                val p = measurables.first().measure(unbounded)
-                colWidths[c] = max(colWidths[c], max(p.width, minWidthsPx[c]))
+                val constraints = if (maxWidthsPx[c] != Int.MAX_VALUE) {
+                    Constraints(0, maxWidthsPx[c], 0, infinity)
+                } else {
+                    unbounded
+                }
+                val p = measurables.first().measure(constraints)
+                colWidths[c] = max(colWidths[c], max(p.width, minWidthsPx[c])).coerceAtMost(maxWidthsPx[c])
                 return p
             }
 
@@ -194,7 +206,7 @@ private fun CellBox(
 }
 
 // -------------------- 示例 --------------------
-@Preview(showBackground = true, widthDp = 360)
+@Preview(showBackground = true)
 @Composable
 private fun DataTablePreview() {
     Surface {
@@ -218,15 +230,16 @@ private fun DataTablePreview() {
             listOf(
                 { Text("Fall 2024") },
                 { Text("Fair", style = MaterialTheme.typography.bodyMedium) },
-                { Text("∫₀¹ x² dx = 1/3\n这行更高会把整行拉齐") },
+                { MarkdownBlock("这行更高会把整行拉齐! 这是一个很长的文本用来测试换行功能!  \n>haha") },
             ),
         )
 
         DataTable(
             headers = headers,
             rows = rows,
-            columnMinWidths = listOf(96.dp, 120.dp, 240.dp),
-            cellAlignment = Alignment.CenterStart,
+            columnMinWidths = listOf(60.dp, 100.dp, 80.dp),
+            columnMaxWidths = listOf(120.dp, 100.dp, 200.dp),
+            zebraStriping = false,
         )
     }
 }
