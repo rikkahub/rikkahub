@@ -14,7 +14,6 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.chaquo.python)
-    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -157,9 +156,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.browser)
-
     implementation(libs.androidx.profileinstaller)
-    baselineProfile(project(":app:baselineprofile"))
 
     // Compose
     implementation(libs.androidx.activity.compose)
@@ -279,7 +276,7 @@ dependencies {
     implementation(kotlin("reflect"))
 
     // Leak Canary
-    debugImplementation(libs.leakcanary.android)
+    // debugImplementation(libs.leakcanary.android)
 
     // tests
     testImplementation(libs.junit)
