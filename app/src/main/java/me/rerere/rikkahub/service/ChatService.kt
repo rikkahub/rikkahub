@@ -138,8 +138,9 @@ class ChatService(
         ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
     }
 
-    fun cleanup() {
+    fun cleanup() = runCatching {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
+        _generationJobs.value.values.forEach { it?.cancel() }
     }
 
     // 获取对话的StateFlow
