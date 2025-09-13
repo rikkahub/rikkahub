@@ -20,7 +20,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -123,11 +122,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 item {
                     PresetThemeButtonGroup(
                         themeId = settings.themeId,
-                        type = settings.themeType,
                         modifier = Modifier.fillMaxWidth(),
-                        onChangeType = {
-                            vm.updateSettings(settings.copy(themeType = it))
-                        },
                         onChangeTheme = {
                             vm.updateSettings(settings.copy(themeId = it))
                         }
@@ -221,7 +216,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                         Switch(
                             checked = displaySetting.enableNotificationOnMessageGeneration,
                             onCheckedChange = {
-                                if(it && !permissionState.allPermissionsGranted) {
+                                if (it && !permissionState.allPermissionsGranted) {
                                     // 请求权限
                                     permissionState.requestPermissions()
                                 }

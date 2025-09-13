@@ -56,16 +56,8 @@ fun RikkahubTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
-        darkTheme -> findPresetTheme(settings.themeId).getColorScheme(
-            type = settings.themeType,
-            dark = true
-        )
-
-        else -> findPresetTheme(settings.themeId).getColorScheme(
-            type = settings.themeType,
-            dark = false
-        )
+        darkTheme -> findPresetTheme(settings.themeId).getColorScheme(dark = true)
+        else -> findPresetTheme(settings.themeId).getColorScheme(dark = false)
     }
     val colorSchemeConverted = remember(darkTheme, amoledDarkMode, colorScheme) {
         if (darkTheme && amoledDarkMode) {
