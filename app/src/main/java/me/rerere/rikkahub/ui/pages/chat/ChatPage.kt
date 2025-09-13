@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PermanentNavigationDrawer
@@ -68,6 +69,7 @@ import com.composables.icons.lucide.Menu
 import com.composables.icons.lucide.MessageCirclePlus
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Settings
+import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Sparkles
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Job
@@ -553,59 +555,11 @@ private fun DrawerContent(
     ) {
         Column(
             modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (settings.displaySetting.showUpdates && !isPlayStore) {
                 UpdateCard(vm)
             }
-
-            ConversationList(
-                current = current,
-                conversations = conversations,
-                conversationJobs = conversationJobs.keys,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                onClick = {
-                    navigateToChatPage(navController, it.id)
-                },
-                onRegenerateTitle = {
-                    vm.generateTitle(it, true)
-                },
-                onDelete = {
-                    vm.deleteConversation(it)
-                    if (it.id == current.id) {
-                        navigateToChatPage(navController)
-                    }
-                },
-                onPin = {
-                    vm.updatePinnedStatus(it)
-                }
-            )
-
-            // 助手选择器
-            AssistantPicker(
-                settings = settings,
-                onUpdateSettings = {
-                    vm.updateSettings(it)
-                    scope.launch {
-                        val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
-                            Uuid.random()
-                        } else {
-                            repo.getConversationsOfAssistant(it.assistantId)
-                                .first()
-                                .firstOrNull()
-                                ?.id ?: Uuid.random()
-                        }
-                        navigateToChatPage(navController = navController, chatId = id)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                onClickSetting = {
-                    val currentAssistantId = settings.assistantId
-                    navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
-                }
-            )
 
             // 用户头像和昵称自定义区域
             Row(
@@ -678,6 +632,65 @@ private fun DrawerContent(
                     }
                 }
             }
+
+            ConversationList(
+                current = current,
+                conversations = conversations,
+                conversationJobs = conversationJobs.keys,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                onClick = {
+                    navigateToChatPage(navController, it.id)
+                },
+                onRegenerateTitle = {
+                    vm.generateTitle(it, true)
+                },
+                onDelete = {
+                    vm.deleteConversation(it)
+                    if (it.id == current.id) {
+                        navigateToChatPage(navController)
+                    }
+                },
+                onPin = {
+                    vm.updatePinnedStatus(it)
+                }
+            )
+
+            // 助手选择器
+            AssistantPicker(
+                settings = settings,
+                onUpdateSettings = {
+                    vm.updateSettings(it)
+                    scope.launch {
+                        val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
+                            Uuid.random()
+                        } else {
+                            repo.getConversationsOfAssistant(it.assistantId)
+                                .first()
+                                .firstOrNull()
+                                ?.id ?: Uuid.random()
+                        }
+                        navigateToChatPage(navController = navController, chatId = id)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                onClickSetting = {
+                    val currentAssistantId = settings.assistantId
+                    navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
+                }
+            )
+
+            NavigationDrawerItem(
+                icon = {
+                    Icon(Lucide.Settings2, null)
+                },
+                label = { Text(stringResource(R.string.settings)) },
+                onClick = {
+                    navController.navigate(Screen.Setting)
+                },
+                selected = false
+            )
         }
     }
 

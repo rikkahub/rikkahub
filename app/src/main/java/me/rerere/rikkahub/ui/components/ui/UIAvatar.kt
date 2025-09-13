@@ -79,6 +79,7 @@ fun UIAvatar(
     modifier: Modifier = Modifier,
     loading: Boolean = false,
     onUpdate: ((Avatar) -> Unit)? = null,
+    onClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var showPickOption by remember { mutableStateOf(false) }
@@ -101,6 +102,7 @@ fun UIAvatar(
         shape = rememberAvatarShape(loading),
         modifier = modifier.size(32.dp),
         onClick = {
+            onClick?.invoke()
             if (onUpdate != null) showPickOption = true
         },
         tonalElevation = 4.dp,
