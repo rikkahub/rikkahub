@@ -68,6 +68,7 @@ import com.composables.icons.lucide.Menu
 import com.composables.icons.lucide.MessageCirclePlus
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Settings
+import com.composables.icons.lucide.Sparkles
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -469,7 +470,7 @@ private fun TopBar(
                     onClickMenu()
                 }
             ) {
-                Icon(Lucide.Menu, "Menu")
+                Icon(Lucide.Sparkles, "Menu")
             }
 
             IconButton(

@@ -140,21 +140,21 @@ private fun FeaturesSection() {
         ) {
             navController.navigate(Screen.ImageGen)
         }
-        FeatureCard(
-            title = {
-                Text(stringResource(id = R.string.menu_page_knowledge_base))
-            },
-            image = {
-                AsyncImage(
-                    model = "file:///android_asset/banner/banner-2.png",
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            },
-        ) {
-            // navController.push(Screen.Library)
-        }
+//        FeatureCard(
+//            title = {
+//                Text(stringResource(id = R.string.menu_page_knowledge_base))
+//            },
+//            image = {
+//                AsyncImage(
+//                    model = "file:///android_asset/banner/banner-2.png",
+//                    contentDescription = null,
+//                    modifier = Modifier.fillMaxSize(),
+//                    contentScale = ContentScale.Crop
+//                )
+//            },
+//        ) {
+//            // navController.push(Screen.Library)
+//        }
     }
 }
 

@@ -123,6 +123,7 @@ fun ChatList(
     ) {
         // 自动滚动到底部
         LaunchedEffect(state) {
+            state.scrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
             snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
                 // println("is bottom = ${visibleItemsInfo.isAtBottom()}, scroll = ${state.isScrollInProgress}, can_scroll = ${state.canScrollForward}, loading = $loading")
                 if (!state.isScrollInProgress && loadingState) {
