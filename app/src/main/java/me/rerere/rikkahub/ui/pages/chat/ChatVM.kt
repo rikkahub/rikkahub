@@ -60,6 +60,9 @@ class ChatVM(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     init {
+        // 添加对话引用
+        chatService.addConversationReference(_conversationId)
+
         // 初始化对话
         viewModelScope.launch {
             chatService.initializeConversation(_conversationId)
@@ -71,7 +74,8 @@ class ChatVM(
 
     override fun onCleared() {
         super.onCleared()
-        // chatService.cleanupConversation(_conversationId)
+        // 移除对话引用
+        chatService.removeConversationReference(_conversationId)
     }
 
     // 用户设置
@@ -332,11 +336,15 @@ class ChatVM(
     }
 
     fun generateTitle(conversation: Conversation, force: Boolean = false) {
-        chatService.generateTitle(_conversationId, conversation, force)
+        viewModelScope.launch {
+            chatService.generateTitle(_conversationId, conversation, force)
+        }
     }
 
     fun generateSuggestion(conversation: Conversation) {
-        chatService.generateSuggestion(_conversationId, conversation)
+        viewModelScope.launch {
+            chatService.generateSuggestion(_conversationId, conversation)
+        }
     }
 
     fun clearTranslationField(messageId: Uuid) {

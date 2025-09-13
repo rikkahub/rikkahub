@@ -15,6 +15,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -108,6 +110,9 @@ class ChatService(
     // 存储每个对话的状态
     private val conversations = ConcurrentHashMap<Uuid, MutableStateFlow<Conversation>>()
 
+    // 记录哪些conversation有VM引用
+    private val conversationReferences = ConcurrentHashMap<Uuid, Boolean>()
+
     // 存储每个对话的生成任务状态
     private val _generationJobs = MutableStateFlow<Map<Uuid, Job?>>(emptyMap())
     private val generationJobs: StateFlow<Map<Uuid, Job?>> = _generationJobs
@@ -141,6 +146,37 @@ class ChatService(
     fun cleanup() = runCatching {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
         _generationJobs.value.values.forEach { it?.cancel() }
+    }
+
+    // 添加引用
+    fun addConversationReference(conversationId: Uuid) {
+        conversationReferences[conversationId] = true
+        Log.d(TAG, "Added reference for $conversationId")
+    }
+
+    // 移除引用
+    fun removeConversationReference(conversationId: Uuid) {
+        conversationReferences.remove(conversationId)
+        Log.d(TAG, "Removed reference for $conversationId")
+        appScope.launch {
+            checkAllConversationsReferences()
+        }
+    }
+
+    // 检查是否有引用
+    private fun hasReference(conversationId: Uuid): Boolean {
+        return conversationReferences.containsKey(conversationId) || _generationJobs.value.containsKey(
+            conversationId
+        )
+    }
+
+    // 检查所有conversation的引用情况（生成结束后调用）
+    fun checkAllConversationsReferences() {
+        conversations.keys.forEach { conversationId ->
+            if (!hasReference(conversationId)) {
+                cleanupConversation(conversationId)
+            }
+        }
     }
 
     // 获取对话的StateFlow
@@ -225,6 +261,7 @@ class ChatService(
         setGenerationJob(conversationId, job)
         job.invokeOnCompletion {
             setGenerationJob(conversationId, null)
+            checkAllConversationsReferences()
         }
     }
 
@@ -268,6 +305,7 @@ class ChatService(
         setGenerationJob(conversationId, job)
         job.invokeOnCompletion {
             setGenerationJob(conversationId, null)
+            checkAllConversationsReferences()
         }
     }
 
@@ -363,8 +401,10 @@ class ChatService(
         }.onSuccess {
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
-            generateTitle(conversationId, finalConversation)
-            generateSuggestion(conversationId, finalConversation)
+            coroutineScope {
+                launch { generateTitle(conversationId, finalConversation) }
+                launch { generateSuggestion(conversationId, finalConversation) }
+            }
         }
     }
 
@@ -480,7 +520,11 @@ class ChatService(
     }
 
     // 生成标题
-    fun generateTitle(conversationId: Uuid, conversation: Conversation, force: Boolean = false) {
+    suspend fun generateTitle(
+        conversationId: Uuid,
+        conversation: Conversation,
+        force: Boolean = false
+    ) {
         val shouldGenerate = when {
             force -> true
             conversation.title.isBlank() -> true
@@ -488,88 +532,84 @@ class ChatService(
         }
         if (!shouldGenerate) return
 
-        appScope.launch {
-            runCatching {
-                val settings = settingsStore.settingsFlow.first()
-                val model =
-                    settings.findModelById(settings.titleModelId) ?: settings.getCurrentChatModel()
-                    ?: return@launch
-                val provider = model.findProvider(settings.providers) ?: return@launch
+        runCatching {
+            val settings = settingsStore.settingsFlow.first()
+            val model =
+                settings.findModelById(settings.titleModelId) ?: settings.getCurrentChatModel()
+                ?: return
+            val provider = model.findProvider(settings.providers) ?: return
 
-                val providerHandler = providerManager.getProviderByType(provider)
-                val result = providerHandler.generateText(
-                    providerSetting = provider,
-                    messages = listOf(
-                        UIMessage.user(
-                            prompt = settings.titlePrompt.applyPlaceholders(
-                                "locale" to Locale.getDefault().displayName,
-                                "content" to conversation.currentMessages.truncate(conversation.truncateIndex)
-                                    .joinToString("\n\n") { it.summaryAsText() })
-                        ),
+            val providerHandler = providerManager.getProviderByType(provider)
+            val result = providerHandler.generateText(
+                providerSetting = provider,
+                messages = listOf(
+                    UIMessage.user(
+                        prompt = settings.titlePrompt.applyPlaceholders(
+                            "locale" to Locale.getDefault().displayName,
+                            "content" to conversation.currentMessages.truncate(conversation.truncateIndex)
+                                .joinToString("\n\n") { it.summaryAsText() })
                     ),
-                    params = TextGenerationParams(
-                        model = model, temperature = 0.3f, thinkingBudget = 0
-                    ),
+                ),
+                params = TextGenerationParams(
+                    model = model, temperature = 0.3f, thinkingBudget = 0
+                ),
+            )
+
+            // 生成完，conversation可能不是最新了，因此需要重新获取
+            conversationRepo.getConversationById(conversation.id)?.let {
+                saveConversation(
+                    conversationId,
+                    it.copy(title = result.choices[0].message?.toText()?.trim() ?: "")
                 )
-
-                // 生成完，conversation可能不是最新了，因此需要重新获取
-                conversationRepo.getConversationById(conversation.id)?.let {
-                    saveConversation(
-                        conversationId,
-                        it.copy(title = result.choices[0].message?.toText()?.trim() ?: "")
-                    )
-                }
-            }.onFailure {
-                it.printStackTrace()
             }
+        }.onFailure {
+            it.printStackTrace()
         }
     }
 
     // 生成建议
-    fun generateSuggestion(conversationId: Uuid, conversation: Conversation) {
-        appScope.launch {
-            runCatching {
-                val settings = settingsStore.settingsFlow.first()
-                val model = settings.findModelById(settings.suggestionModelId) ?: return@launch
-                val provider = model.findProvider(settings.providers) ?: return@launch
+    suspend fun generateSuggestion(conversationId: Uuid, conversation: Conversation) {
+        runCatching {
+            val settings = settingsStore.settingsFlow.first()
+            val model = settings.findModelById(settings.suggestionModelId) ?: return
+            val provider = model.findProvider(settings.providers) ?: return
 
-                updateConversation(
-                    conversationId,
-                    getConversationFlow(conversationId).value.copy(chatSuggestions = emptyList())
-                )
+            updateConversation(
+                conversationId,
+                getConversationFlow(conversationId).value.copy(chatSuggestions = emptyList())
+            )
 
-                val providerHandler = providerManager.getProviderByType(provider)
-                val result = providerHandler.generateText(
-                    providerSetting = provider,
-                    messages = listOf(
-                        UIMessage.user(
-                            settings.suggestionPrompt.applyPlaceholders(
-                                "locale" to Locale.getDefault().displayName,
-                                "content" to conversation.currentMessages.truncate(conversation.truncateIndex)
-                                    .takeLast(8).joinToString("\n\n") { it.summaryAsText() }),
-                        )
-                    ),
-                    params = TextGenerationParams(
-                        model = model,
-                        temperature = 1.0f,
-                        thinkingBudget = 0,
-                    ),
-                )
-                val suggestions =
-                    result.choices[0].message?.toText()?.split("\n")?.map { it.trim() }
-                        ?.filter { it.isNotBlank() } ?: emptyList()
+            val providerHandler = providerManager.getProviderByType(provider)
+            val result = providerHandler.generateText(
+                providerSetting = provider,
+                messages = listOf(
+                    UIMessage.user(
+                        settings.suggestionPrompt.applyPlaceholders(
+                            "locale" to Locale.getDefault().displayName,
+                            "content" to conversation.currentMessages.truncate(conversation.truncateIndex)
+                                .takeLast(8).joinToString("\n\n") { it.summaryAsText() }),
+                    )
+                ),
+                params = TextGenerationParams(
+                    model = model,
+                    temperature = 1.0f,
+                    thinkingBudget = 0,
+                ),
+            )
+            val suggestions =
+                result.choices[0].message?.toText()?.split("\n")?.map { it.trim() }
+                    ?.filter { it.isNotBlank() } ?: emptyList()
 
-                saveConversation(
-                    conversationId,
-                    getConversationFlow(conversationId).value.copy(
-                        chatSuggestions = suggestions.take(
-                            10
-                        )
+            saveConversation(
+                conversationId,
+                getConversationFlow(conversationId).value.copy(
+                    chatSuggestions = suggestions.take(
+                        10
                     )
                 )
-            }.onFailure {
-                it.printStackTrace()
-            }
+            )
+        }.onFailure {
+            it.printStackTrace()
         }
     }
 
@@ -736,5 +776,10 @@ class ChatService(
         getGenerationJob(conversationId)?.cancel()
         removeGenerationJob(conversationId)
         conversations.remove(conversationId)
+
+        Log.i(
+            TAG,
+            "cleanupConversation: removed $conversationId (current references: ${conversationReferences.size}, generation jobs: ${_generationJobs.value.size})"
+        )
     }
 }
