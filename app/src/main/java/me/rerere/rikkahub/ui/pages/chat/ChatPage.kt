@@ -192,7 +192,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
                         navController = navController,
                         current = conversation,
                         conversations = conversations,
-                        loading = loadingJob != null,
                         vm = vm,
                         settings = setting
                     )
@@ -221,7 +220,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
                         navController = navController,
                         current = conversation,
                         conversations = conversations,
-                        loading = loadingJob != null,
                         vm = vm,
                         settings = setting
                     )
@@ -528,12 +526,15 @@ private fun DrawerContent(
     settings: Settings,
     current: Conversation,
     conversations: List<Conversation>,
-    loading: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
+
+    val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
+        initialValue = emptyMap(),
+    )
 
     // 昵称编辑状态
     val nicknameEditState = useEditState<String> { newNickname ->
@@ -560,7 +561,7 @@ private fun DrawerContent(
             ConversationList(
                 current = current,
                 conversations = conversations,
-                loadings = if (loading) listOf(current.id) else emptyList(),
+                conversationJobs = conversationJobs.keys,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),

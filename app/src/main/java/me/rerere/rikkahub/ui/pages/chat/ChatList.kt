@@ -119,7 +119,6 @@ fun ChatList(
 
     Box(
         modifier = Modifier
-            .padding(innerPadding)
             .fillMaxSize(),
     ) {
         // 自动滚动到底部
@@ -152,7 +151,7 @@ fun ChatList(
 
         LazyColumn(
             state = state,
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp),
+            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp) + innerPadding,
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.fillMaxSize(),
@@ -240,101 +239,107 @@ fun ChatList(
             }
         }
 
-        // 完成选择
-        AnimatedVisibility(
-            visible = selecting,
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .offset(y = -(48).dp),
-            enter = slideInVertically(
-                initialOffsetY = { it * 2 },
-            ),
-            exit = slideOutVertically(
-                targetOffsetY = { it * 2 },
-            ),
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
-            HorizontalFloatingToolbar(
-                expanded = true,
+            // 完成选择
+            AnimatedVisibility(
+                visible = selecting,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(y = -(48).dp),
+                enter = slideInVertically(
+                    initialOffsetY = { it * 2 },
+                ),
+                exit = slideOutVertically(
+                    targetOffsetY = { it * 2 },
+                ),
             ) {
-                Tooltip(
-                    tooltip = {
-                        Text("Clear selection")
-                    }
+                HorizontalFloatingToolbar(
+                    expanded = true,
                 ) {
-                    IconButton(
-                        onClick = {
-                            selecting = false
-                            selectedItems.clear()
+                    Tooltip(
+                        tooltip = {
+                            Text("Clear selection")
                         }
                     ) {
-                        Icon(Lucide.X, null)
-                    }
-                }
-                Tooltip(
-                    tooltip = {
-                        Text("Select all")
-                    }
-                ) {
-                    IconButton(
-                        onClick = {
-                            if (selectedItems.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                selecting = false
                                 selectedItems.clear()
-                            } else {
-                                selectedItems.addAll(conversation.messageNodes.map { it.id })
                             }
+                        ) {
+                            Icon(Lucide.X, null)
+                        }
+                    }
+                    Tooltip(
+                        tooltip = {
+                            Text("Select all")
                         }
                     ) {
-                        Icon(Lucide.MousePointer2, null)
-                    }
-                }
-                Tooltip(
-                    tooltip = {
-                        Text("Confirm")
-                    }
-                ) {
-                    FilledIconButton(
-                        onClick = {
-                            selecting = false
-                            val messages = conversation.messageNodes.filter { it.id in selectedItems }
-                            if (messages.isNotEmpty()) {
-                                showExportSheet = true
+                        IconButton(
+                            onClick = {
+                                if (selectedItems.isNotEmpty()) {
+                                    selectedItems.clear()
+                                } else {
+                                    selectedItems.addAll(conversation.messageNodes.map { it.id })
+                                }
                             }
+                        ) {
+                            Icon(Lucide.MousePointer2, null)
+                        }
+                    }
+                    Tooltip(
+                        tooltip = {
+                            Text("Confirm")
                         }
                     ) {
-                        Icon(Lucide.Check, null)
+                        FilledIconButton(
+                            onClick = {
+                                selecting = false
+                                val messages = conversation.messageNodes.filter { it.id in selectedItems }
+                                if (messages.isNotEmpty()) {
+                                    showExportSheet = true
+                                }
+                            }
+                        ) {
+                            Icon(Lucide.Check, null)
+                        }
                     }
                 }
             }
-        }
 
-        // 导出对话框
-        ChatExportSheet(
-            visible = showExportSheet,
-            onDismissRequest = {
-                showExportSheet = false
-                selectedItems.clear()
-            },
-            conversation = conversation,
-            selectedMessages = conversation.messageNodes.filter { it.id in selectedItems }
-                .map { it.currentMessage }
-        )
-
-        val captureProgress = LocalScrollCaptureInProgress.current
-
-        // 消息快速跳转
-        MessageJumper(
-            isRecentScroll = isRecentScroll && settings.displaySetting.showMessageJumper && !captureProgress,
-            scope = scope,
-            state = state
-        )
-
-        // Suggestion
-        if (conversation.chatSuggestions.isNotEmpty() && !captureProgress) {
-            ChatSuggestionsRow(
+            // 导出对话框
+            ChatExportSheet(
+                visible = showExportSheet,
+                onDismissRequest = {
+                    showExportSheet = false
+                    selectedItems.clear()
+                },
                 conversation = conversation,
-                onClickSuggestion = onClickSuggestion,
-                modifier = Modifier.align(Alignment.BottomCenter)
+                selectedMessages = conversation.messageNodes.filter { it.id in selectedItems }
+                    .map { it.currentMessage }
             )
+
+            val captureProgress = LocalScrollCaptureInProgress.current
+
+            // 消息快速跳转
+            MessageJumper(
+                show = isRecentScroll && !state.isScrollInProgress && settings.displaySetting.showMessageJumper && !captureProgress,
+                scope = scope,
+                state = state
+            )
+
+            // Suggestion
+            if (conversation.chatSuggestions.isNotEmpty() && !captureProgress) {
+                ChatSuggestionsRow(
+                    conversation = conversation,
+                    onClickSuggestion = onClickSuggestion,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
         }
     }
 }
@@ -373,12 +378,12 @@ private fun ChatSuggestionsRow(
 
 @Composable
 private fun BoxScope.MessageJumper(
-    isRecentScroll: Boolean,
+    show: Boolean,
     scope: CoroutineScope,
     state: LazyListState
 ) {
     AnimatedVisibility(
-        isRecentScroll,
+        visible = show,
         modifier = Modifier.align(Alignment.CenterEnd),
         enter = slideInHorizontally(
             initialOffsetX = { it * 2 },

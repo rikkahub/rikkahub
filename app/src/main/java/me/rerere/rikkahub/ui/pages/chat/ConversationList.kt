@@ -65,7 +65,7 @@ import kotlin.uuid.Uuid
 fun ColumnScope.ConversationList(
     current: Conversation,
     conversations: List<Conversation>,
-    loadings: Collection<Uuid>,
+    conversationJobs: Collection<Uuid>,
     modifier: Modifier = Modifier,
     onClick: (Conversation) -> Unit = {},
     onDelete: (Conversation) -> Unit = {},
@@ -190,7 +190,7 @@ fun ColumnScope.ConversationList(
                 ConversationItem(
                     conversation = conversation,
                     selected = conversation.id == current.id,
-                    loading = conversation.id in loadings,
+                    loading = conversation.id in conversationJobs,
                     onClick = onClick,
                     onDelete = onDelete,
                     onRegenerateTitle = onRegenerateTitle,
@@ -212,7 +212,7 @@ fun ColumnScope.ConversationList(
                 ConversationItem(
                     conversation = conversation,
                     selected = conversation.id == current.id,
-                    loading = conversation.id in loadings,
+                    loading = conversation.id in conversationJobs,
                     onClick = onClick,
                     onDelete = onDelete,
                     onRegenerateTitle = onRegenerateTitle,
