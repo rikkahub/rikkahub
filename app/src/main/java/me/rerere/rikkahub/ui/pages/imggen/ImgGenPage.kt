@@ -60,8 +60,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -70,6 +72,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
 import coil3.compose.AsyncImage
+import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Images
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Palette
@@ -347,6 +350,7 @@ private fun ImageGalleryScreen(
 ) {
     val generatedImages = vm.generatedImages.collectAsLazyPagingItems()
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val pullToRefreshState = rememberPullToRefreshState()
@@ -431,6 +435,23 @@ private fun ImageGalleryScreen(
                                     }
 
                                     Row {
+                                        IconButton(
+                                            onClick = {
+                                                clipboardManager.setText(AnnotatedString(it.prompt))
+                                                toaster.show(
+                                                    message = "Prompt copied to clipboard",
+                                                    type = ToastType.Success
+                                                )
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Lucide.Copy,
+                                                contentDescription = "Copy prompt",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+
                                         IconButton(
                                             onClick = {
                                                 scope.launch {
