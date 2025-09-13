@@ -117,6 +117,9 @@ fun ChatList(
     var selecting by remember { mutableStateOf(false) }
     var showExportSheet by remember { mutableStateOf(false) }
 
+    // 自动跟随键盘滚动
+    ImeLazyListAutoScroller(lazyListState = state)
+
     Box(
         modifier = Modifier
             .fillMaxSize(),
@@ -147,15 +150,14 @@ fun ChatList(
             }
         }
 
-        // 自动跟随键盘滚动
-        ImeLazyListAutoScroller(lazyListState = state)
-
         LazyColumn(
             state = state,
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp) + innerPadding,
+            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
             itemsIndexed(
                 items = conversation.messageNodes,
