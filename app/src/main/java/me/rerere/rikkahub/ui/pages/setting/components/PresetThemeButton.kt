@@ -21,6 +21,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,7 +68,7 @@ fun PresetThemeButton(
             Canvas(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .size(64.dp)
+                    .size(48.dp)
             ) {
                 drawRect(
                     color = scheme.primaryContainer,
@@ -91,7 +92,7 @@ fun PresetThemeButton(
                 )
                 drawCircle(
                     color = scheme.primary,
-                    radius = if (selected) 15.dp.toPx() else 10.dp.toPx(),
+                    radius = if (selected) 12.dp.toPx() else 8.dp.toPx(),
                     center = Offset(
                         x = size.width / 2,
                         y = size.height / 2
@@ -107,7 +108,7 @@ fun PresetThemeButton(
             }
         }
         ProvideTextStyle(
-            MaterialTheme.typography.labelMedium.copy(color = scheme.primary)
+            value = MaterialTheme.typography.labelMedium.copy(color = scheme.primary)
         ) {
             theme.name()
         }
@@ -132,13 +133,15 @@ fun PresetThemeButtonGroup(
             horizontalArrangement = Arrangement.SpaceAround,
         ) {
             PresetThemes.fastForEach { theme ->
-                PresetThemeButton(
-                    theme = theme,
-                    selected = theme.id == themeId,
-                    onClick = {
-                        onChangeTheme(theme.id)
-                    },
-                )
+                key(theme.id) {
+                    PresetThemeButton(
+                        theme = theme,
+                        selected = theme.id == themeId,
+                        onClick = {
+                            onChangeTheme(theme.id)
+                        },
+                    )
+                }
             }
         }
     }
