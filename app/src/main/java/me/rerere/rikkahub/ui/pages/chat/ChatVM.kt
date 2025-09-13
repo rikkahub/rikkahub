@@ -149,7 +149,6 @@ class ChatVM(
 
     fun handleMessageSend(content: List<UIMessagePart>) {
         if (content.isEmptyInputMessage()) return
-
         analytics.logEvent("ai_send_message", null)
         chatService.sendMessage(_conversationId, content)
     }
@@ -183,7 +182,7 @@ class ChatVM(
                 title = "",
                 chatSuggestions = emptyList(), // 清空建议
             )
-            chatService.saveConversation(_conversationId, newConversation)
+            chatService.saveConversation(conversationId = _conversationId, conversation = newConversation)
         }
     }
 

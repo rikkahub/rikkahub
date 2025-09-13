@@ -20,7 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.net.toUri
@@ -83,6 +85,7 @@ class RouteActivity : ComponentActivity() {
     private val highlighter by inject<Highlighter>()
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
+    private var navStack by mutableStateOf<NavHostController?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -90,6 +93,7 @@ class RouteActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val navStack = rememberNavController()
+            this.navStack = navStack
             ShareHandler(navStack)
             RikkahubTheme {
                 setSingletonImageLoaderFactory { context ->
@@ -128,6 +132,14 @@ class RouteActivity : ComponentActivity() {
                 val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
                 navBackStack.navigate(Screen.ShareHandler(text, imageUri))
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Navigate to the chat screen if a conversation ID is provided
+        intent.getStringExtra("conversationId")?.let { text ->
+            navStack?.navigate(Screen.Chat(text))
         }
     }
 

@@ -574,7 +574,7 @@ class ChatService(
     }
 
     // 发送生成完成通知
-    private suspend fun sendGenerationDoneNotification(conversationId: Uuid) {
+    private fun sendGenerationDoneNotification(conversationId: Uuid) {
         val conversation = getConversationFlow(conversationId).value
         val notification =
             NotificationCompat.Builder(context, CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID)
@@ -585,7 +585,7 @@ class ChatService(
                 .setAutoCancel(true)
                 .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-                .setContentIntent(getPendingIntent(context))
+                .setContentIntent(getPendingIntent(context, conversationId))
 
         if (ActivityCompat.checkSelfPermission(
                 context,
@@ -597,9 +597,10 @@ class ChatService(
         NotificationManagerCompat.from(context).notify(1, notification.build())
     }
 
-    private fun getPendingIntent(context: Context): PendingIntent {
+    private fun getPendingIntent(context: Context, conversationId: Uuid): PendingIntent {
         val intent = Intent(context, RouteActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("conversationId", conversationId.toString())
         }
         return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
     }
