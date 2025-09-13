@@ -323,7 +323,7 @@ fun ChatList(
 
         // 消息快速跳转
         MessageJumper(
-            isRecentScroll = isRecentScroll && settings.displaySetting.showMessageJumper && !captureProgress,
+            show = isRecentScroll && !state.isScrollInProgress && settings.displaySetting.showMessageJumper && !captureProgress,
             scope = scope,
             state = state
         )
@@ -373,12 +373,12 @@ private fun ChatSuggestionsRow(
 
 @Composable
 private fun BoxScope.MessageJumper(
-    isRecentScroll: Boolean,
+    show: Boolean,
     scope: CoroutineScope,
     state: LazyListState
 ) {
     AnimatedVisibility(
-        isRecentScroll,
+        visible = show,
         modifier = Modifier.align(Alignment.CenterEnd),
         enter = slideInHorizontally(
             initialOffsetX = { it * 2 },
