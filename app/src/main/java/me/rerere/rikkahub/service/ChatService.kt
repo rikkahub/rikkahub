@@ -15,7 +15,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -112,7 +112,7 @@ class ChatService(
     private val conversations = ConcurrentHashMap<Uuid, MutableStateFlow<Conversation>>()
 
     // 记录哪些conversation有VM引用
-    private val conversationReferences = ConcurrentHashMap<Uuid, Boolean>()
+    private val conversationReferences = ConcurrentHashMap<Uuid, Int>()
 
     // 存储每个对话的生成任务状态
     private val _generationJobs = MutableStateFlow<Map<Uuid, Job?>>(emptyMap())
@@ -151,16 +151,38 @@ class ChatService(
 
     // 添加引用
     fun addConversationReference(conversationId: Uuid) {
-        conversationReferences[conversationId] = true
-        Log.d(TAG, "Added reference for $conversationId")
+        conversationReferences[conversationId] = conversationReferences.getOrDefault(conversationId, 0) + 1
+        Log.d(
+            TAG,
+            "Added reference for $conversationId (current references: ${conversationReferences[conversationId] ?: 0})"
+        )
     }
 
     // 移除引用
     fun removeConversationReference(conversationId: Uuid) {
-        conversationReferences.remove(conversationId)
-        Log.d(TAG, "Removed reference for $conversationId")
+        conversationReferences[conversationId]?.let { count ->
+            if (count > 1) {
+                conversationReferences[conversationId] = count - 1
+            } else {
+                conversationReferences.remove(conversationId)
+            }
+        }
+        Log.d(
+            TAG,
+            "Removed reference for $conversationId (current references: ${conversationReferences[conversationId] ?: 0})"
+        )
         appScope.launch {
+            delay(500)
             checkAllConversationsReferences()
+        }
+    }
+
+    private inline fun withConversationReferences(conversationId: Uuid, action: () -> Unit) {
+        try {
+            this.addConversationReference(conversationId)
+            action()
+        } finally {
+            this.removeConversationReference(conversationId)
         }
     }
 
@@ -262,7 +284,11 @@ class ChatService(
         setGenerationJob(conversationId, job)
         job.invokeOnCompletion {
             setGenerationJob(conversationId, null)
-            checkAllConversationsReferences()
+            // 取消生成任务后，检查是否有其他任务在进行
+            appScope.launch {
+                delay(500)
+                checkAllConversationsReferences()
+            }
         }
     }
 
@@ -306,7 +332,11 @@ class ChatService(
         setGenerationJob(conversationId, job)
         job.invokeOnCompletion {
             setGenerationJob(conversationId, null)
-            checkAllConversationsReferences()
+            // 取消生成任务后，检查是否有其他任务在进行
+            appScope.launch {
+                delay(500)
+                checkAllConversationsReferences()
+            }
         }
     }
 
@@ -402,9 +432,15 @@ class ChatService(
         }.onSuccess {
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
-            coroutineScope {
-                launch { generateTitle(conversationId, finalConversation) }
-                launch { generateSuggestion(conversationId, finalConversation) }
+            appScope.launch {
+                withConversationReferences(conversationId) {
+                    generateTitle(conversationId, finalConversation)
+                }
+            }
+            appScope.launch {
+                withConversationReferences(conversationId) {
+                    generateSuggestion(conversationId, finalConversation)
+                }
             }
         }
     }
