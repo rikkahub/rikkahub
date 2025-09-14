@@ -75,6 +75,13 @@
   <string name="assistant_page_quick_messages_desc">クイックメッセージのショートカットを設定</string>
   <string name="assistant_page_recent_chats">最近のチャット履歴を参照</string>
   <string name="assistant_page_recent_chats_desc">有効にすると、アシスタントは最近のチャット履歴を参照して、より文脈に沿った応答を提供します</string>
+  <string name="assistant_page_regex_affecting_scopes">影響範囲：</string>
+  <string name="assistant_page_regex_desc">メッセージの送受信前に変換する正規表現パターンを定義</string>
+  <string name="assistant_page_regex_find_regex">正規表現を検索</string>
+  <string name="assistant_page_regex_name">名前</string>
+  <string name="assistant_page_regex_replace_string">文字列を置換</string>
+  <string name="assistant_page_regex_title">メッセージ正規表現</string>
+  <string name="assistant_page_regex_visual_only">表示のみ（実際のメッセージには影響しません）</string>
   <string name="assistant_page_remove">削除</string>
   <string name="assistant_page_remove_background">背景を削除</string>
   <string name="assistant_page_save">保存</string>

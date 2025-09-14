@@ -75,6 +75,13 @@
   <string name="assistant_page_quick_messages_desc">設定快速訊息捷徑</string>
   <string name="assistant_page_recent_chats">參考歷史聊天記錄</string>
   <string name="assistant_page_recent_chats_desc">啟用後，助手將參考最近的聊天歷史記錄來提供更有上下文的回應</string>
+  <string name="assistant_page_regex_affecting_scopes">影響範圍：</string>
+  <string name="assistant_page_regex_desc">定義正規表示式模式，在傳送或接收前轉換訊息</string>
+  <string name="assistant_page_regex_find_regex">尋找正規表示式</string>
+  <string name="assistant_page_regex_name">名稱</string>
+  <string name="assistant_page_regex_replace_string">取代字串</string>
+  <string name="assistant_page_regex_title">訊息正規表示式</string>
+  <string name="assistant_page_regex_visual_only">僅視覺效果（僅影響顯示，不影響實際訊息）</string>
   <string name="assistant_page_remove">移除</string>
   <string name="assistant_page_remove_background">移除背景</string>
   <string name="assistant_page_save">保存</string>

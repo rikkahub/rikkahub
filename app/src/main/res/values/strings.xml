@@ -724,5 +724,12 @@
   <string name="setting_display_page_notification_message_generated_desc">Show a notification when a message is generated if the app is not in the foreground</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
-    <string name="theme_name_autumn">Autumn Yellow</string>
+  <string name="theme_name_autumn">Autumn Yellow</string>
+  <string name="assistant_page_regex_name">Name</string>
+  <string name="assistant_page_regex_find_regex">Find Regex</string>
+  <string name="assistant_page_regex_replace_string">Replace String</string>
+  <string name="assistant_page_regex_affecting_scopes">Affecting Scopes:</string>
+  <string name="assistant_page_regex_visual_only">Visual Only (affects display only, not actual message)</string>
+  <string name="assistant_page_regex_title">Message Regexes</string>
+  <string name="assistant_page_regex_desc">Define regex patterns to transform messages before sending/receiving</string>
 </resources>

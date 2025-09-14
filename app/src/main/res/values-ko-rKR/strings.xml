@@ -75,6 +75,13 @@
   <string name="assistant_page_quick_messages_desc">빠른 메시지 단축어 구성</string>
   <string name="assistant_page_recent_chats">최근 채팅 참조</string>
   <string name="assistant_page_recent_chats_desc">활성화 시, 어시스턴트가 최근 채팅 기록을 참조하여 더 맥락에 맞는 응답을 제공합니다</string>
+  <string name="assistant_page_regex_affecting_scopes">영향 범위:</string>
+  <string name="assistant_page_regex_desc">메시지를 보내거나 받기 전에 변환할 정규식 패턴을 정의하세요</string>
+  <string name="assistant_page_regex_find_regex">정규식 찾기</string>
+  <string name="assistant_page_regex_name">이름</string>
+  <string name="assistant_page_regex_replace_string">문자열 바꾸기</string>
+  <string name="assistant_page_regex_title">메시지 정규식</string>
+  <string name="assistant_page_regex_visual_only">시각적 표시만 (실제 메시지에는 영향을 주지 않고 표시만 변경)</string>
   <string name="assistant_page_remove">제거</string>
   <string name="assistant_page_remove_background">배경 제거</string>
   <string name="assistant_page_save">저장</string>

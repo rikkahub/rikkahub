@@ -75,6 +75,13 @@
   <string name="assistant_page_quick_messages_desc">Настроить ярлыки быстрых сообщений</string>
   <string name="assistant_page_recent_chats">Справка: недавние чаты</string>
   <string name="assistant_page_recent_chats_desc">При включении ассистент будет использовать недавнюю историю чатов для более контекстуальных ответов</string>
+  <string name="assistant_page_regex_affecting_scopes">Области действия:</string>
+  <string name="assistant_page_regex_desc">Задайте шаблоны регулярных выражений для преобразования сообщений перед отправкой/получением</string>
+  <string name="assistant_page_regex_find_regex">Найти регулярное выражение</string>
+  <string name="assistant_page_regex_name">Имя</string>
+  <string name="assistant_page_regex_replace_string">Заменить строку</string>
+  <string name="assistant_page_regex_title">Регулярные выражения для сообщений</string>
+  <string name="assistant_page_regex_visual_only">Только визуально (влияет только на отображение, не на само сообщение)</string>
   <string name="assistant_page_remove">Удалить</string>
   <string name="assistant_page_remove_background">Убрать фон</string>
   <string name="assistant_page_save">Сохранить</string>

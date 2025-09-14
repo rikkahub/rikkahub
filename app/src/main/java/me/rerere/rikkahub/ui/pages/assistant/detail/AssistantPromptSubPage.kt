@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,12 +53,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
 import androidx.compose.ui.window.DialogProperties
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Fullscreen
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
@@ -77,7 +81,6 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.ui.components.message.ChatMessage
-import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -498,10 +501,10 @@ fun AssistantPromptSubPage(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
-                    Text("Message Regexes")
+                    Text(stringResource(R.string.assistant_page_regex_title))
                 },
                 description = {
-                    Text("Define regex patterns to transform messages before sending/receiving")
+                    Text(stringResource(R.string.assistant_page_regex_desc))
                 }
             )
             Column(
@@ -542,17 +545,29 @@ private fun AssistantRegexCard(
     assistant: Assistant,
     index: Int
 ) {
+    var expanded by remember {
+        mutableStateOf(false)
+    }
     ElevatedCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier
+                .padding(12.dp)
+                .animateContentSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Enabled")
+                Text(
+                    text = regex.name,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .widthIn(max = 200.dp)
+                )
                 Switch(
                     checked = regex.enabled,
                     onCheckedChange = { enabled ->
@@ -570,8 +585,149 @@ private fun AssistantRegexCard(
                     },
                     modifier = Modifier.padding(start = 8.dp)
                 )
-                Spacer(modifier = Modifier.weight(1f))
                 IconButton(
+                    onClick = {
+                        expanded = !expanded
+                    }
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                        contentDescription = null
+                    )
+                }
+            }
+
+            if (expanded) {
+
+                OutlinedTextField(
+                    value = regex.name,
+                    onValueChange = { name ->
+                        onUpdate(
+                            assistant.copy(
+                                regexes = assistant.regexes.mapIndexed { i, reg ->
+                                    if (i == index) {
+                                        reg.copy(name = name)
+                                    } else {
+                                        reg
+                                    }
+                                }
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.assistant_page_regex_name)) }
+                )
+
+                OutlinedTextField(
+                    value = regex.findRegex,
+                    onValueChange = { findRegex ->
+                        onUpdate(
+                            assistant.copy(
+                                regexes = assistant.regexes.mapIndexed { i, reg ->
+                                    if (i == index) {
+                                        reg.copy(findRegex = findRegex.trim())
+                                    } else {
+                                        reg
+                                    }
+                                }
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.assistant_page_regex_find_regex)) },
+                    placeholder = { Text("e.g., \\b\\w+@\\w+\\.\\w+\\b") },
+                )
+
+                OutlinedTextField(
+                    value = regex.replaceString,
+                    onValueChange = { replaceString ->
+                        onUpdate(
+                            assistant.copy(
+                                regexes = assistant.regexes.mapIndexed { i, reg ->
+                                    if (i == index) {
+                                        reg.copy(replaceString = replaceString)
+                                    } else {
+                                        reg
+                                    }
+                                }
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.assistant_page_regex_replace_string)) },
+                    placeholder = { Text("e.g., [EMAIL]") }
+                )
+
+                Column {
+                    Text(
+                        text = stringResource(R.string.assistant_page_regex_affecting_scopes),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        AssistantAffectScope.entries.forEach { scope ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Checkbox(
+                                    checked = scope in regex.affectingScope,
+                                    onCheckedChange = { checked ->
+                                        val newScopes = if (checked) {
+                                            regex.affectingScope + scope
+                                        } else {
+                                            regex.affectingScope - scope
+                                        }
+                                        onUpdate(
+                                            assistant.copy(
+                                                regexes = assistant.regexes.mapIndexed { i, reg ->
+                                                    if (i == index) {
+                                                        reg.copy(affectingScope = newScopes)
+                                                    } else {
+                                                        reg
+                                                    }
+                                                }
+                                            )
+                                        )
+                                    }
+                                )
+                                Text(
+                                    text = scope.name.lowercase().replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(
+                        checked = regex.visualOnly,
+                        onCheckedChange = { visualOnly ->
+                            onUpdate(
+                                assistant.copy(
+                                    regexes = assistant.regexes.mapIndexed { i, reg ->
+                                        if (i == index) {
+                                            reg.copy(visualOnly = visualOnly)
+                                        } else {
+                                            reg
+                                        }
+                                    }
+                                )
+                            )
+                        }
+                    )
+                    Text(
+                        text = stringResource(R.string.assistant_page_regex_visual_only),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+
+                TextButton(
                     onClick = {
                         onUpdate(
                             assistant.copy(
@@ -582,133 +738,14 @@ private fun AssistantRegexCard(
                         )
                     }
                 ) {
-                    Icon(Lucide.Trash2, null)
-                }
-            }
-
-            OutlinedTextField(
-                value = regex.name,
-                onValueChange = { name ->
-                    onUpdate(
-                        assistant.copy(
-                            regexes = assistant.regexes.mapIndexed { i, reg ->
-                                if (i == index) {
-                                    reg.copy(name = name)
-                                } else {
-                                    reg
-                                }
-                            }
-                        )
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Name") }
-            )
-
-            OutlinedTextField(
-                value = regex.findRegex,
-                onValueChange = { findRegex ->
-                    onUpdate(
-                        assistant.copy(
-                            regexes = assistant.regexes.mapIndexed { i, reg ->
-                                if (i == index) {
-                                    reg.copy(findRegex = findRegex)
-                                } else {
-                                    reg
-                                }
-                            }
-                        )
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Find Regex") },
-                placeholder = { Text("e.g., \\b\\w+@\\w+\\.\\w+\\b") },
-            )
-
-            OutlinedTextField(
-                value = regex.replaceString,
-                onValueChange = { replaceString ->
-                    onUpdate(
-                        assistant.copy(
-                            regexes = assistant.regexes.mapIndexed { i, reg ->
-                                if (i == index) {
-                                    reg.copy(replaceString = replaceString)
-                                } else {
-                                    reg
-                                }
-                            }
-                        )
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Replace String") },
-                placeholder = { Text("e.g., [EMAIL]") }
-            )
-
-            Column {
-                Text(
-                    text = "Affecting Scopes:",
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    AssistantAffectScope.entries.forEach { scope ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Checkbox(
-                                checked = scope in regex.affectingScope,
-                                onCheckedChange = { checked ->
-                                    val newScopes = if (checked) {
-                                        regex.affectingScope + scope
-                                    } else {
-                                        regex.affectingScope - scope
-                                    }
-                                    onUpdate(
-                                        assistant.copy(
-                                            regexes = assistant.regexes.mapIndexed { i, reg ->
-                                                if (i == index) {
-                                                    reg.copy(affectingScope = newScopes)
-                                                } else {
-                                                    reg
-                                                }
-                                            }
-                                        )
-                                    )
-                                }
-                            )
-                            Text(
-                                text = scope.name.lowercase().replaceFirstChar { it.uppercase() },
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(Lucide.Trash2, null)
+                        Text(stringResource(R.string.delete))
                     }
                 }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Checkbox(
-                    checked = regex.visualOnly,
-                    onCheckedChange = { visualOnly ->
-                        onUpdate(
-                            assistant.copy(
-                                regexes = assistant.regexes.mapIndexed { i, reg ->
-                                    if (i == index) {
-                                        reg.copy(visualOnly = visualOnly)
-                                    } else {
-                                        reg
-                                    }
-                                }
-                            )
-                        )
-                    }
-                )
-                Text("Visual Only (affects display only, not actual message)")
             }
         }
     }
