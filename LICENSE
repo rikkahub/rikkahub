@@ -1,53 +1,75 @@
 # LICENSE
 
-## 开源许可证（AGPL v3）
+本项目采用 **用户分段双重许可 (Segmented Dual Licensing)** 模式：
 
-本项目采用 GNU Affero General Public License v3.0（AGPL v3）开源协议，适用于**非商业用途**，并且**用户总数不超过10人**的个人或组织。
-如需查看AGPL v3的全文，请访问：https://www.gnu.org/licenses/agpl-3.0.html
+---
 
-**非商业用途定义**：
-指不以盈利为目的，且不直接或间接为商业利益服务的使用场景。
+## 1. 开源许可证（GNU AGPL v3）
 
-**用户规模限制**：
-本项目开源许可仅适用于用户总数（包括员工、成员、贡献者等）不超过10人的个人或组织。
+本项目在以下条件下，可以免费使用，并遵循 **GNU Affero General Public License v3.0 (AGPL v3)**：
+- 使用场景为 **非商业用途**；
+- 或者用于 **个人/教育/研究** 目的；
+- 或者由 **用户总数不超过 10 人** 的个人或组织使用。
 
-如您的使用不符合上述条件（即用于商业用途或用户总数超过10人），请联系项目维护者申请商业许可证。
+AGPL v3 的全文请见：https://www.gnu.org/licenses/agpl-3.0.html
 
-## 商业许可证
+> 注意：即便在 AGPL v3 下，您仍然需要遵守协议条款，例如公开源代码等义务。
 
-如需将本项目用于商业用途，或用户总数超过10人，必须事先获得项目维护者的书面授权并签署商业许可证。
-请通过以下联系方式申请商业授权：
+---
 
+## 2. 商业许可证（Commercial License）
+
+如果您的使用场景不符合上述条件，例如：
+- 用于 **商业用途**（直接或间接产生商业利益的服务或产品）；
+- 或者 **用户总数超过 10 人**；
+- 或者您希望避免 AGPL v3 的源代码开源义务；
+
+那么您必须事先与项目维护者签署 **商业许可证 (Commercial License)**。
+
+申请商业授权请联系：
 - 邮箱：re_dev@qq.com
 
-## 许可政策更新
+---
 
-项目维护者保留根据需要更新本许可政策（包括用户规模定义和阈值）的权利。相关更新将通过项目官方渠道（如代码仓库、官方网站）进行通知。
+## 3. 许可政策更新
+
+项目维护者保留更新许可政策的权利。更新将通过官方渠道（如代码仓库、官方网站）进行通知。
 
 ---
 
 # LICENSE (English)
 
-## Open Source License (AGPL v3)
+This project adopts a **Segmented Dual Licensing** model:
 
-This project is licensed under the GNU Affero General Public License v3.0 (AGPL v3) **for non-commercial use only**, and **for individuals or organizations with no more than 10 users**.
-For the full text of AGPL v3, please visit: https://www.gnu.org/licenses/agpl-3.0.html
+---
 
-**Definition of Non-Commercial Use:**
-Use that is not intended for or directed towards commercial advantage or monetary compensation.
+## 1. Open Source License (GNU AGPL v3)
 
-**User Scale Limitation:**
-This open-source license applies only to individuals or organizations with a total number of users (including employees, members, contributors, etc.) not exceeding 10.
+You may use this project under the **GNU Affero General Public License v3.0 (AGPL v3)** if one of the following applies:
+- Your usage is strictly **non-commercial**;
+- Your usage is for **personal, educational, or research** purposes;
+- You are an individual or organization with **no more than 10 total users**.
 
-If your use does **not** meet the above criteria (i.e., for commercial purposes or with more than 10 users), you must contact the project maintainer to obtain a commercial license.
+Full text of AGPL v3: https://www.gnu.org/licenses/agpl-3.0.html
 
-## Commercial License
+> Note: Even under AGPL v3, you must comply with its obligations, such as making your source code available.
 
-For any commercial use or if your user count exceeds 10, you must obtain written authorization and sign a commercial license from the project maintainer in advance.
-Please apply for commercial authorization via:
+---
 
+## 2. Commercial License
+
+If your use does not meet the above criteria, for example:
+- **Commercial purposes** (services or products that directly or indirectly generate revenue);
+- Organizations with **more than 10 users**;
+- Or if you wish to avoid the obligations of AGPL v3;
+
+Then you must obtain a **Commercial License** from the project maintainer.
+
+For commercial licensing, please contact:
 - Email: re_dev@qq.com
 
-## License Policy Updates
+---
 
-The project maintainer reserves the right to update this license policy (including user scale definitions and thresholds) as needed. Relevant updates will be announced through official project channels (such as the code repository or official website).
+## 3. License Policy Updates
+
+The project maintainer reserves the right to update this licensing policy. Updates will be announced through official project channels (such as the code repository or official website).
