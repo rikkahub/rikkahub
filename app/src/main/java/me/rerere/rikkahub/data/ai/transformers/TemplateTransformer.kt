@@ -1,14 +1,10 @@
 package me.rerere.rikkahub.data.ai.transformers
 
-import android.content.Context
 import io.pebbletemplates.pebble.PebbleEngine
 import io.pebbletemplates.pebble.loader.Loader
-import me.rerere.ai.provider.Model
-import me.rerere.ai.ui.InputMessageTransformer
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.utils.toLocalDate
 import me.rerere.rikkahub.utils.toLocalTime
 import java.io.Reader
@@ -21,13 +17,10 @@ class TemplateTransformer(
     private val settingsStore: SettingsStore
 ) : InputMessageTransformer {
     override suspend fun transform(
-        context: Context,
+        ctx: TransformerContext,
         messages: List<UIMessage>,
-        model: Model
     ): List<UIMessage> {
-        val settings = settingsStore.settingsFlow.value
-        val assistant = settings.getCurrentAssistant()
-        val template = engine.getTemplate(assistant.id.toString())
+        val template = engine.getTemplate(ctx.assistant.id.toString())
         return messages.map { message ->
             message.copy(
                 parts = message.parts.map { part ->

@@ -74,6 +74,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.transformers.DefaultPlaceholderProvider
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
+import me.rerere.rikkahub.data.ai.transformers.TransformerContext
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
@@ -274,9 +275,12 @@ fun AssistantPromptSubPage(
                     value = runCatching {
                         UiState.Success(
                             templateTransformer.transform(
-                                context = context,
-                                messages = rawMessages,
-                                model = Model(modelId = "gpt-4o", displayName = "GPT-4o")
+                                ctx = TransformerContext(
+                                    context = context,
+                                    model = Model(modelId = "gpt-4o", displayName = "GPT-4o"),
+                                    assistant = assistant
+                                ),
+                                messages = rawMessages
                             )
                         )
                     }.getOrElse {

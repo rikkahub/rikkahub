@@ -1,22 +1,18 @@
 package me.rerere.rikkahub.data.ai.transformers
 
-import android.content.Context
 import androidx.core.net.toFile
 import androidx.core.net.toUri
 import com.chaquo.python.Python
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import me.rerere.ai.provider.Model
-import me.rerere.ai.ui.InputMessageTransformer
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import java.io.File
 
 object DocumentAsPromptTransformer : InputMessageTransformer {
     override suspend fun transform(
-        context: Context,
+        ctx: TransformerContext,
         messages: List<UIMessage>,
-        model: Model
     ): List<UIMessage> {
         return withContext(Dispatchers.IO) {
             messages.map { message ->

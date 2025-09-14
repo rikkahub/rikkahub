@@ -1,7 +1,15 @@
-package me.rerere.ai.ui
+package me.rerere.rikkahub.data.ai.transformers
 
 import android.content.Context
 import me.rerere.ai.provider.Model
+import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.model.Assistant
+
+class TransformerContext(
+    val context: Context,
+    val model: Model,
+    val assistant: Assistant,
+)
 
 interface MessageTransformer {
     /**
@@ -12,9 +20,8 @@ interface MessageTransformer {
      * 对于输出消息，会对消息输出chunk进行转换
      */
     suspend fun transform(
-        context: Context,
+        ctx: TransformerContext,
         messages: List<UIMessage>,
-        model: Model,
     ): List<UIMessage> {
         return messages
     }
@@ -29,9 +36,8 @@ interface OutputMessageTransformer : MessageTransformer {
      * 不能还没结束生成就transform，因此提供一个visualTransform
      */
     suspend fun visualTransform(
-        context: Context,
+        ctx: TransformerContext,
         messages: List<UIMessage>,
-        model: Model,
     ): List<UIMessage> {
         return messages
     }
@@ -40,9 +46,8 @@ interface OutputMessageTransformer : MessageTransformer {
      * 消息生成完成后调用
      */
     suspend fun onGenerationFinish(
-        context: Context,
+        ctx: TransformerContext,
         messages: List<UIMessage>,
-        model: Model,
     ): List<UIMessage> {
         return messages
     }
@@ -51,21 +56,25 @@ interface OutputMessageTransformer : MessageTransformer {
 suspend fun List<UIMessage>.transforms(
     transformers: List<MessageTransformer>,
     context: Context,
-    model: Model
+    model: Model,
+    assistant: Assistant,
 ): List<UIMessage> {
+    val ctx = TransformerContext(context, model, assistant)
     return transformers.fold(this) { acc, transformer ->
-        transformer.transform(context, acc, model)
+        transformer.transform(ctx, acc)
     }
 }
 
 suspend fun List<UIMessage>.visualTransforms(
     transformers: List<MessageTransformer>,
     context: Context,
-    model: Model
+    model: Model,
+    assistant: Assistant,
 ): List<UIMessage> {
+    val ctx = TransformerContext(context, model, assistant)
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {
-            transformer.visualTransform(context, acc, model)
+            transformer.visualTransform(ctx, acc)
         } else {
             acc
         }
@@ -75,11 +84,13 @@ suspend fun List<UIMessage>.visualTransforms(
 suspend fun List<UIMessage>.onGenerationFinish(
     transformers: List<MessageTransformer>,
     context: Context,
-    model: Model
+    model: Model,
+    assistant: Assistant,
 ): List<UIMessage> {
+    val ctx = TransformerContext(context, model, assistant)
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {
-            transformer.onGenerationFinish(context, acc, model)
+            transformer.onGenerationFinish(ctx, acc)
         } else {
             acc
         }

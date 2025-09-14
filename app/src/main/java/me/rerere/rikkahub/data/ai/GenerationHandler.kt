@@ -16,32 +16,30 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import me.rerere.ai.provider.CustomBody
-import me.rerere.ai.registry.ModelRegistry
-import me.rerere.rikkahub.utils.applyPlaceholders
-import java.util.Locale
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
 import me.rerere.ai.core.merge
+import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.InputMessageTransformer
-import me.rerere.ai.ui.MessageTransformer
-import me.rerere.ai.ui.OutputMessageTransformer
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
-import me.rerere.ai.ui.onGenerationFinish
-import me.rerere.ai.ui.transforms
 import me.rerere.ai.ui.truncate
-import me.rerere.ai.ui.visualTransforms
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_LEARNING_MODE_PROMPT
+import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
+import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
+import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
+import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
+import me.rerere.rikkahub.data.ai.transformers.transforms
+import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -49,6 +47,8 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.utils.applyPlaceholders
+import java.util.Locale
 
 private const val TAG = "GenerationHandler"
 
@@ -72,7 +72,7 @@ class GenerationHandler(
         messages: List<UIMessage>,
         inputTransformers: List<InputMessageTransformer> = emptyList(),
         outputTransformers: List<OutputMessageTransformer> = emptyList(),
-        assistant: Assistant? = null,
+        assistant: Assistant,
         memories: (suspend () -> List<AssistantMemory>)? = null,
         tools: List<Tool> = emptyList(),
         truncateIndex: Int = -1,
@@ -110,13 +110,19 @@ class GenerationHandler(
                 messages = messages,
                 onUpdateMessages = {
                     messages = it.transforms(
-                        outputTransformers,
-                        context,
-                        model
+                        transformers = outputTransformers,
+                        context = context,
+                        model = model,
+                        assistant = assistant
                     )
                     emit(
                         GenerationChunk.Messages(
-                            messages.visualTransforms(outputTransformers, context, model)
+                            messages.visualTransforms(
+                                transformers = outputTransformers,
+                                context = context,
+                                model = model,
+                                assistant = assistant
+                            )
                         )
                     )
                 },
@@ -127,10 +133,20 @@ class GenerationHandler(
                 tools = toolsInternal,
                 memories = memories?.invoke() ?: emptyList(),
                 truncateIndex = truncateIndex,
-                stream = assistant?.streamOutput ?: true
+                stream = assistant.streamOutput
             )
-            messages = messages.visualTransforms(outputTransformers, context, model)
-            messages = messages.onGenerationFinish(outputTransformers, context, model)
+            messages = messages.visualTransforms(
+                transformers = outputTransformers,
+                context = context,
+                model = model,
+                assistant = assistant
+            )
+            messages = messages.onGenerationFinish(
+                transformers = outputTransformers,
+                context = context,
+                model = model,
+                assistant = assistant
+            )
             emit(GenerationChunk.Messages(messages))
 
             val toolCalls = messages.last().getToolCalls()
@@ -179,13 +195,22 @@ class GenerationHandler(
                 role = MessageRole.TOOL,
                 parts = results
             )
-            emit(GenerationChunk.Messages(messages.transforms(outputTransformers, context, model)))
+            emit(
+                GenerationChunk.Messages(
+                    messages.transforms(
+                        transformers = outputTransformers,
+                        context = context,
+                        model = model,
+                        assistant = assistant
+                    )
+                )
+            )
         }
 
     }.flowOn(Dispatchers.IO)
 
     private suspend fun generateInternal(
-        assistant: Assistant?,
+        assistant: Assistant,
         settings: Settings,
         messages: List<UIMessage>,
         onUpdateMessages: suspend (List<UIMessage>) -> Unit,
@@ -199,56 +224,53 @@ class GenerationHandler(
         stream: Boolean
     ) {
         val internalMessages = buildList {
-            if (assistant != null) {
-                // 如果存在助手，构造系统消息
-                val system = buildString {
-                    // 如果助手有系统提示，则添加到消息中
-                    if (assistant.systemPrompt.isNotBlank()) {
-                        append(assistant.systemPrompt)
-                    }
-
-                    // 记忆
-                    if (assistant.enableMemory) {
-                        appendLine()
-                        append(buildMemoryPrompt(model = model, memories = memories))
-                    }
-                    if (assistant.enableRecentChatsReference) {
-                        appendLine()
-                        append(buildRecentChatsPrompt(assistant))
-                    }
-
-                    // 学习模式
-                    if(assistant.learningMode) {
-                        appendLine()
-                        append(settings.learningModePrompt.ifEmpty { DEFAULT_LEARNING_MODE_PROMPT })
-                        appendLine()
-                    }
-
-                    // 工具prompt
-                    tools.forEach { tool ->
-                        appendLine()
-                        append(tool.systemPrompt(model))
-                    }
+            val system = buildString {
+                // 如果助手有系统提示，则添加到消息中
+                if (assistant.systemPrompt.isNotBlank()) {
+                    append(assistant.systemPrompt)
                 }
-                if (system.isNotBlank()) add(UIMessage.system(system))
+
+                // 记忆
+                if (assistant.enableMemory) {
+                    appendLine()
+                    append(buildMemoryPrompt(model = model, memories = memories))
+                }
+                if (assistant.enableRecentChatsReference) {
+                    appendLine()
+                    append(buildRecentChatsPrompt(assistant))
+                }
+
+                // 学习模式
+                if (assistant.learningMode) {
+                    appendLine()
+                    append(settings.learningModePrompt.ifEmpty { DEFAULT_LEARNING_MODE_PROMPT })
+                    appendLine()
+                }
+
+                // 工具prompt
+                tools.forEach { tool ->
+                    appendLine()
+                    append(tool.systemPrompt(model))
+                }
             }
-            addAll(messages.truncate(truncateIndex).limitContext(assistant?.contextMessageSize ?: 32))
-        }.transforms(transformers, context, model)
+            if (system.isNotBlank()) add(UIMessage.system(system))
+            addAll(messages.truncate(truncateIndex).limitContext(assistant.contextMessageSize))
+        }.transforms(transformers, context, model, assistant)
 
         var messages: List<UIMessage> = messages
         val params = TextGenerationParams(
             model = model,
-            temperature = assistant?.temperature,
-            topP = assistant?.topP,
-            maxTokens = assistant?.maxTokens,
+            temperature = assistant.temperature,
+            topP = assistant.topP,
+            maxTokens = assistant.maxTokens,
             tools = tools,
-            thinkingBudget = assistant?.thinkingBudget,
+            thinkingBudget = assistant.thinkingBudget,
             customHeaders = buildList {
-                assistant?.customHeaders?.let { addAll(it) }
+                addAll(assistant.customHeaders)
                 addAll(model.customHeaders)
             },
             customBody = buildList {
-                assistant?.customBodies?.let { addAll(it) }
+                addAll(assistant.customBodies)
                 addAll(model.customBodies)
             }
         )

@@ -11,7 +11,6 @@ import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.InputMessageTransformer
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.cache.LruCache
@@ -45,8 +44,11 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
         )
     }
 
-    override suspend fun transform(context: Context, messages: List<UIMessage>, model: Model): List<UIMessage> {
-        if (model.inputModalities.contains(Modality.IMAGE)) {
+    override suspend fun transform(
+        ctx: TransformerContext,
+        messages: List<UIMessage>,
+    ): List<UIMessage> {
+        if (ctx.model.inputModalities.contains(Modality.IMAGE)) {
             // 如果模型支持图片输入，直接返回原始消息
             return messages
         }

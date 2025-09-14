@@ -7,12 +7,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import me.rerere.ai.provider.Model
-import me.rerere.rikkahub.R
-import me.rerere.ai.ui.InputMessageTransformer
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.model.Assistant
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import java.time.LocalDate
@@ -27,7 +27,8 @@ import java.util.TimeZone
 data class PlaceholderCtx(
     val context: Context,
     val settingsStore: SettingsStore,
-    val model: Model
+    val model: Model,
+    val assistant: Assistant,
 )
 
 interface PlaceholderProvider {
@@ -104,7 +105,7 @@ object DefaultPlaceholderProvider : PlaceholderProvider {
         }
 
         placeholder("char", { Text(stringResource(R.string.placeholder_char)) }) {
-            it.settingsStore.settingsFlow.value.getCurrentAssistant().name.ifBlank { "assistant" }
+            it.assistant.name.ifBlank { "assistant" }
         }
 
         placeholder("user", { Text(stringResource(R.string.placeholder_user)) }) {
@@ -137,9 +138,8 @@ object PlaceholderTransformer : InputMessageTransformer, KoinComponent {
     private val defaultProvider = DefaultPlaceholderProvider
 
     override suspend fun transform(
-        context: Context,
+        ctx: TransformerContext,
         messages: List<UIMessage>,
-        model: Model
     ): List<UIMessage> {
         val settingsStore = get<SettingsStore>()
         return messages.map {
@@ -147,7 +147,7 @@ object PlaceholderTransformer : InputMessageTransformer, KoinComponent {
                 parts = it.parts.map { part ->
                     if (part is UIMessagePart.Text) {
                         part.copy(
-                            text = replacePlaceholders(part.text, context, settingsStore, model)
+                            text = replacePlaceholders(text = part.text, ctx = ctx, settingsStore = settingsStore)
                         )
                     } else {
                         part
@@ -159,13 +159,17 @@ object PlaceholderTransformer : InputMessageTransformer, KoinComponent {
 
     private fun replacePlaceholders(
         text: String,
-        context: Context,
-        settingsStore: SettingsStore,
-        model: Model
+        ctx: TransformerContext,
+        settingsStore: SettingsStore
     ): String {
         var result = text
 
-        val ctx = PlaceholderCtx(context, settingsStore, model)
+        val ctx = PlaceholderCtx(
+            context = ctx.context,
+            settingsStore = settingsStore,
+            model = ctx.model,
+            assistant = ctx.assistant
+        )
         defaultProvider.placeholders.forEach { (key, placeholderInfo) ->
             val value = placeholderInfo.resolver(ctx)
             result = result
