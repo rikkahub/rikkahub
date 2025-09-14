@@ -204,8 +204,14 @@ class ChatService(
 
     // 获取对话的StateFlow
     fun getConversationFlow(conversationId: Uuid): StateFlow<Conversation> {
+        val settings = settingsStore.settingsFlow.value
         return conversations.getOrPut(conversationId) {
-            MutableStateFlow(Conversation.ofId(conversationId))
+            MutableStateFlow(
+                Conversation.ofId(
+                    id = conversationId,
+                    assistantId = settings.getCurrentAssistant().id
+                )
+            )
         }
     }
 
@@ -248,8 +254,10 @@ class ChatService(
             // 新建对话, 并添加预设消息
             val currentSettings = settingsStore.settingsFlowRaw.first()
             val assistant = currentSettings.getCurrentAssistant()
-            val newConversation = Conversation.ofId(conversationId)
-                .updateCurrentMessages(assistant.presetMessages)
+            val newConversation = Conversation.ofId(
+                id = conversationId,
+                assistantId = assistant.id,
+            ).updateCurrentMessages(assistant.presetMessages)
             updateConversation(conversationId, newConversation)
         }
     }
@@ -710,8 +718,9 @@ class ChatService(
 
     // 保存对话
     suspend fun saveConversation(conversationId: Uuid, conversation: Conversation) {
-        val settings = settingsStore.settingsFlow.first()
-        val updatedConversation = conversation.copy(assistantId = settings.assistantId)
+        if (conversation.title.isBlank() && conversation.messageNodes.isEmpty()) return // 如果对话为空，则不保存
+
+        val updatedConversation = conversation.copy()
         updateConversation(conversationId, updatedConversation)
 
         try {
