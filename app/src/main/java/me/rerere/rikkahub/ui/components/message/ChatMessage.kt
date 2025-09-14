@@ -72,8 +72,10 @@ import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
@@ -154,6 +156,7 @@ fun ChatMessage(
         }
         ProvideTextStyle(textStyle) {
             MessagePartsBlock(
+                assistant = assistant,
                 role = message.role,
                 parts = message.parts,
                 annotations = message.annotations,
@@ -243,6 +246,7 @@ fun ChatMessage(
 @OptIn(FlowPreview::class)
 @Composable
 private fun MessagePartsBlock(
+    assistant: Assistant?,
     role: MessageRole,
     model: Model?,
     parts: List<UIMessagePart>,
@@ -291,6 +295,7 @@ private fun MessagePartsBlock(
         ChatMessageReasoning(
             reasoning = reasoning,
             model = model,
+            assistant = assistant
         )
     }
 
@@ -305,7 +310,11 @@ private fun MessagePartsBlock(
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         MarkdownBlock(
-                            content = part.text,
+                            content = part.text.replaceRegexes(
+                                assistant = assistant,
+                                scope = AssistantAffectScope.USER,
+                                visual = true,
+                            ),
                             onClickCitation = { id ->
                                 handleClickCitation(id)
                             }
@@ -314,7 +323,11 @@ private fun MessagePartsBlock(
                 }
             } else {
                 MarkdownBlock(
-                    content = part.text,
+                    content = part.text.replaceRegexes(
+                        assistant = assistant,
+                        scope = AssistantAffectScope.ASSISTANT,
+                        visual = true,
+                    ),
                     onClickCitation = { id ->
                         handleClickCitation(id)
                     },

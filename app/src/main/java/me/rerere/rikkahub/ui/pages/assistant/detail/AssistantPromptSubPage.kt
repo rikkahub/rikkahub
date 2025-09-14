@@ -21,12 +21,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -47,10 +50,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,6 +61,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.composables.icons.lucide.Fullscreen
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
@@ -67,25 +69,24 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.transformers.DefaultPlaceholderProvider
-import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.ui.components.message.ChatMessage
+import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
-import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.insertAtCursor
 import me.rerere.rikkahub.utils.onError
 import me.rerere.rikkahub.utils.onSuccess
 import org.koin.compose.koinInject
-import kotlin.collections.component1
-import kotlin.collections.component2
 import kotlin.uuid.Uuid
 
 @Composable
@@ -490,6 +491,224 @@ fun AssistantPromptSubPage(
                 ) {
                     Icon(Lucide.Plus, null)
                 }
+            }
+        }
+
+        Card {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text("Message Regexes")
+                },
+                description = {
+                    Text("Define regex patterns to transform messages before sending/receiving")
+                }
+            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(horizontal = 8.dp)
+            ) {
+                assistant.regexes.fastForEachIndexed { index, regex ->
+                    AssistantRegexCard(
+                        regex = regex,
+                        onUpdate = onUpdate,
+                        assistant = assistant,
+                        index = index
+                    )
+                }
+                Button(
+                    onClick = {
+                        onUpdate(
+                            assistant.copy(
+                                regexes = assistant.regexes + AssistantRegex(
+                                    id = Uuid.random()
+                                )
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Lucide.Plus, null)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssistantRegexCard(
+    regex: AssistantRegex,
+    onUpdate: (Assistant) -> Unit,
+    assistant: Assistant,
+    index: Int
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enabled")
+                Switch(
+                    checked = regex.enabled,
+                    onCheckedChange = { enabled ->
+                        onUpdate(
+                            assistant.copy(
+                                regexes = assistant.regexes.mapIndexed { i, reg ->
+                                    if (i == index) {
+                                        reg.copy(enabled = enabled)
+                                    } else {
+                                        reg
+                                    }
+                                }
+                            )
+                        )
+                    },
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = {
+                        onUpdate(
+                            assistant.copy(
+                                regexes = assistant.regexes.filterIndexed { i, _ ->
+                                    i != index
+                                }
+                            )
+                        )
+                    }
+                ) {
+                    Icon(Lucide.Trash2, null)
+                }
+            }
+
+            OutlinedTextField(
+                value = regex.name,
+                onValueChange = { name ->
+                    onUpdate(
+                        assistant.copy(
+                            regexes = assistant.regexes.mapIndexed { i, reg ->
+                                if (i == index) {
+                                    reg.copy(name = name)
+                                } else {
+                                    reg
+                                }
+                            }
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Name") }
+            )
+
+            OutlinedTextField(
+                value = regex.findRegex,
+                onValueChange = { findRegex ->
+                    onUpdate(
+                        assistant.copy(
+                            regexes = assistant.regexes.mapIndexed { i, reg ->
+                                if (i == index) {
+                                    reg.copy(findRegex = findRegex)
+                                } else {
+                                    reg
+                                }
+                            }
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Find Regex") },
+                placeholder = { Text("e.g., \\b\\w+@\\w+\\.\\w+\\b") },
+            )
+
+            OutlinedTextField(
+                value = regex.replaceString,
+                onValueChange = { replaceString ->
+                    onUpdate(
+                        assistant.copy(
+                            regexes = assistant.regexes.mapIndexed { i, reg ->
+                                if (i == index) {
+                                    reg.copy(replaceString = replaceString)
+                                } else {
+                                    reg
+                                }
+                            }
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Replace String") },
+                placeholder = { Text("e.g., [EMAIL]") }
+            )
+
+            Column {
+                Text(
+                    text = "Affecting Scopes:",
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    AssistantAffectScope.entries.forEach { scope ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Checkbox(
+                                checked = scope in regex.affectingScope,
+                                onCheckedChange = { checked ->
+                                    val newScopes = if (checked) {
+                                        regex.affectingScope + scope
+                                    } else {
+                                        regex.affectingScope - scope
+                                    }
+                                    onUpdate(
+                                        assistant.copy(
+                                            regexes = assistant.regexes.mapIndexed { i, reg ->
+                                                if (i == index) {
+                                                    reg.copy(affectingScope = newScopes)
+                                                } else {
+                                                    reg
+                                                }
+                                            }
+                                        )
+                                    )
+                                }
+                            )
+                            Text(
+                                text = scope.name.lowercase().replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = regex.visualOnly,
+                    onCheckedChange = { visualOnly ->
+                        onUpdate(
+                            assistant.copy(
+                                regexes = assistant.regexes.mapIndexed { i, reg ->
+                                    if (i == index) {
+                                        reg.copy(visualOnly = visualOnly)
+                                    } else {
+                                        reg
+                                    }
+                                }
+                            )
+                        )
+                    }
+                )
+                Text("Visual Only (affects display only, not actual message)")
             }
         }
     }

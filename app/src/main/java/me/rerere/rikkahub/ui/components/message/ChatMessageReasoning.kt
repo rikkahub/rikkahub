@@ -62,6 +62,9 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.modifier.shimmer
@@ -80,6 +83,7 @@ enum class ReasoningCardState(val expanded: Boolean) {
 fun ChatMessageReasoning(
     reasoning: UIMessagePart.Reasoning,
     model: Model?,
+    assistant: Assistant?,
     modifier: Modifier = Modifier,
     fadeHeight: Float = 64f,
 ) {
@@ -236,7 +240,11 @@ fun ChatMessageReasoning(
                 ) {
                     SelectionContainer {
                         MarkdownBlock(
-                            content = reasoning.reasoning,
+                            content = reasoning.reasoning.replaceRegexes(
+                                assistant = assistant,
+                                scope = AssistantAffectScope.ASSISTANT,
+                                visual = true,
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.fillMaxSize(),
                         )

@@ -43,11 +43,11 @@ import androidx.navigation.NavHostController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import me.rerere.highlight.HighlightText
 import me.rerere.highlight.Highlighter
+import me.rerere.highlight.LocalHighlighter
 import me.rerere.highlight.buildHighlightText
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -57,8 +57,6 @@ import me.rerere.rikkahub.ui.theme.AtomOneLightPalette
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.base64Encode
-import me.rerere.rikkahub.utils.exportImageFile
-import me.rerere.rikkahub.utils.saveMessageImage
 import kotlin.time.Clock
 
 @Composable
@@ -254,6 +252,15 @@ class HighlightCodeVisualTransformation(
         return TransformedText(
             text = annotatedString,
             offsetMapping = OffsetMapping.Identity
+        )
+    }
+
+    companion object {
+        @Composable
+        fun regex() = HighlightCodeVisualTransformation(
+            language = "regex",
+            highlighter = LocalHighlighter.current,
+            darkMode = LocalDarkMode.current,
         )
     }
 }

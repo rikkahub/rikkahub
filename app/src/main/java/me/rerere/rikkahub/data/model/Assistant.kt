@@ -25,6 +25,7 @@ data class Assistant(
     val messageTemplate: String = "{{ message }}",
     val presetMessages: List<UIMessage> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
+    val regexes: List<AssistantRegex> = emptyList(),
     val thinkingBudget: Int? = 1024,
     val maxTokens: Int? = null,
     val customHeaders: List<CustomHeader> = emptyList(),
@@ -46,3 +47,47 @@ data class AssistantMemory(
     val id: Int,
     val content: String = "",
 )
+
+@Serializable
+enum class AssistantAffectScope {
+    USER,
+    ASSISTANT,
+}
+
+@Serializable
+data class AssistantRegex(
+    val id: Uuid,
+    val name: String = "",
+    val enabled: Boolean = true,
+    val findRegex: String = "", // 正则表达式
+    val replaceString: String = "", // 替换字符串
+    val affectingScope: Set<AssistantAffectScope> = setOf(),
+    val visualOnly: Boolean = false, // 是否仅在视觉上影响
+)
+
+fun String.replaceRegexes(
+    assistant: Assistant?,
+    scope: AssistantAffectScope,
+    visual: Boolean = false
+): String {
+    if (assistant == null) return this
+    if (assistant.regexes.isEmpty()) return this
+    return assistant.regexes.fold(this) { acc, regex ->
+        if (regex.enabled && regex.visualOnly == visual && regex.affectingScope.contains(scope)) {
+            try {
+                val result = acc.replace(
+                    regex = Regex(regex.findRegex),
+                    replacement = regex.replaceString,
+                )
+                // println("Regex: ${regex.findRegex} -> ${result}")
+                result
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // 如果正则表达式格式错误，返回原字符串
+                acc
+            }
+        } else {
+            acc
+        }
+    }
+}
