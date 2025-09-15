@@ -181,6 +181,9 @@ class ChatService(
         try {
             this.addConversationReference(conversationId)
             action()
+        } catch (e: Exception) {
+            Logging.log(TAG, "withConversationReferences: $e")
+            throw e
         } finally {
             this.removeConversationReference(conversationId)
         }
