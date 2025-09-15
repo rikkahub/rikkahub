@@ -447,7 +447,7 @@ class ChatService(
     }
 
     // 创建搜索工具
-    private suspend fun createSearchTool(settings: Settings): Tool {
+    private fun createSearchTool(settings: Settings): Tool {
         return Tool(
             name = "search_web",
             description = "search web for latest information",
