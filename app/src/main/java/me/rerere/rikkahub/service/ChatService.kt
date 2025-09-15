@@ -481,44 +481,55 @@ class ChatService(
                         JsonObject(map)
                     }
                 results
-            }, systemPrompt = { model ->
+            }, systemPrompt = { model, messages ->
                 if (model.tools.isNotEmpty()) return@Tool ""
-                """
-                ## tool: search_web
+                val hasToolCall =
+                    messages.any { it.getToolCalls().any { toolCall -> toolCall.toolName == "search_web" } }
+                val prompt = StringBuilder()
+                prompt.append(
+                    """
+                    ## tool: search_web
 
-                ### when
-                - You can use the search_web tool to search the internet for the latest news or to confirm some facts.
-                - You can perform multiple search if needed
-                - Generate keywords based on the user's question
-                - Today is {{cur_date}}
-
-                ### result example
-                ```json
-                {
-                    "items": [
+                    ### usage
+                    - You can use the search_web tool to search the internet for the latest news or to confirm some facts.
+                    - You can perform multiple search if needed
+                    - Generate keywords based on the user's question
+                    - Today is {{cur_date}}
+                    """.trimIndent()
+                )
+                if (hasToolCall) {
+                    prompt.append(
+                        """
+                        ### result example
+                        ```json
                         {
-                            "id": "random id in 6 characters",
-                            "title": "Title",
-                            "url": "https://example.com",
-                            "text": "Some relevant snippets"
+                            "items": [
+                                {
+                                    "id": "random id in 6 characters",
+                                    "title": "Title",
+                                    "url": "https://example.com",
+                                    "text": "Some relevant snippets"
+                                }
+                            ]
                         }
-                    ]
+                        ```
+
+                        ### citation
+                        After using the search tool, when replying to users, you need to add a reference format to the referenced search terms in the content.
+                        When citing facts or data from search results, you need to add a citation marker after the sentence: `[citation,domain](id of the search result)`.
+
+                        For example:
+                        ```
+                        The capital of France is Paris. [citation,example.com](id of the search result)
+
+                        The population of Paris is about 2.1 million. [citation,example.com](id of the search result) [citation,example2.com](id of the search result)
+                        ```
+
+                        If no search results are cited, you do not need to add a citation marker.
+                        """.trimIndent()
+                    )
                 }
-                ```
-
-                ### citation
-                After using the search tool, when replying to users, you need to add a reference format to the referenced search terms in the content.
-                When citing facts or data from search results, you need to add a citation marker after the sentence: `[citation,domain](id of the search result)`.
-
-                For example:
-                ```
-                The capital of France is Paris. [citation,example.com](id of the search result)
-
-                The population of Paris is about 2.1 million. [citation,example.com](id of the search result) [citation,example2.com](id of the search result)
-                ```
-
-                If no search results are cited, you do not need to add a citation marker.
-                """.trimIndent()
+                prompt.toString()
             }
         )
     }

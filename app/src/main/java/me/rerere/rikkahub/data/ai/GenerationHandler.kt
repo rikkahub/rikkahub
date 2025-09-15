@@ -250,7 +250,7 @@ class GenerationHandler(
                 // 工具prompt
                 tools.forEach { tool ->
                     appendLine()
-                    append(tool.systemPrompt(model))
+                    append(tool.systemPrompt(model, messages))
                 }
             }
             if (system.isNotBlank()) add(UIMessage.system(system))
