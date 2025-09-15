@@ -15,6 +15,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -174,18 +176,6 @@ class ChatService(
         appScope.launch {
             delay(500)
             checkAllConversationsReferences()
-        }
-    }
-
-    private inline fun withConversationReferences(conversationId: Uuid, action: () -> Unit) {
-        try {
-            this.addConversationReference(conversationId)
-            action()
-        } catch (e: Exception) {
-            Logging.log(TAG, "withConversationReferences: $e")
-            throw e
-        } finally {
-            this.removeConversationReference(conversationId)
         }
     }
 
@@ -443,15 +433,15 @@ class ChatService(
         }.onSuccess {
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
+
+            addConversationReference(conversationId) // 添加引用
             appScope.launch {
-                withConversationReferences(conversationId) {
-                    generateTitle(conversationId, finalConversation)
+                coroutineScope {
+                    launch { generateTitle(conversationId, finalConversation) }
+                    launch { generateSuggestion(conversationId, finalConversation) }
                 }
-            }
-            appScope.launch {
-                withConversationReferences(conversationId) {
-                    generateSuggestion(conversationId, finalConversation)
-                }
+            }.invokeOnCompletion {
+                removeConversationReference(conversationId) // 移除引用
             }
         }
     }

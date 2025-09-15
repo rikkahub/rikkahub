@@ -1,12 +1,15 @@
 package me.rerere.rikkahub
 
 import android.app.Application
+import android.util.Log
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.remoteConfigSettings
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -88,4 +91,11 @@ class RikkaHubApp : Application() {
     }
 }
 
-class AppScope : CoroutineScope by CoroutineScope(SupervisorJob() + Dispatchers.Default)
+class AppScope : CoroutineScope by CoroutineScope(
+    SupervisorJob()
+        + Dispatchers.Main
+        + CoroutineName("AppScope")
+        + CoroutineExceptionHandler { _, e ->
+            Log.e(TAG, "AppScope exception", e)
+        }
+)
