@@ -100,6 +100,21 @@ val DEFAULT_PROVIDERS = listOf(
         )
     ),
     ProviderSetting.OpenAI(
+        id = Uuid.parse("da020a90-f7b3-4c29-b90e-c511a0630630"),
+        name = "小马算力",
+        baseUrl = "https://api.tokenpony.cn/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        description = {
+            MarkdownBlock(
+                content = """
+                    [小马算力](https://www.tokenpony.cn/7CCC11oI) 是一家提供国产模型的API网关服务，使用统一接口接入多种模型
+                """.trimIndent()
+            )
+        }
+    ),
+    ProviderSetting.OpenAI(
         id = Uuid.parse("f76cae46-069a-4334-ab8e-224e4979e58c"),
         name = "阿里云百炼",
         baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
