@@ -109,7 +109,8 @@ val DEFAULT_PROVIDERS = listOf(
         description = {
             MarkdownBlock(
                 content = """
-                    [小马算力](https://www.tokenpony.cn/7CCC11oI) 是一家提供国产模型的API网关服务，使用统一接口接入多种模型
+                    小马算力是一家提供国产模型的API网关服务，使用统一接口接入多种模型
+                    官网: [tokenpony.cn](https://www.tokenpony.cn/79clb)
                 """.trimIndent()
             )
         }
