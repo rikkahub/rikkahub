@@ -14,7 +14,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.Migration_6_7
 import me.rerere.rikkahub.data.mcp.McpManager
-import me.rerere.rikkahub.data.sync.DataSync
+import me.rerere.rikkahub.data.sync.WebdavSync
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -97,7 +97,7 @@ val dataSourceModule = module {
     }
 
     single {
-        DataSync(settingsStore = get(), json = get(), context = get())
+        WebdavSync(settingsStore = get(), json = get(), context = get())
     }
 
     single<Retrofit> {

@@ -70,7 +70,7 @@ import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.WebDavConfig
-import me.rerere.rikkahub.data.sync.BackupFileItem
+import me.rerere.rikkahub.data.sync.WebDavBackupItem
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.StickyHeader
@@ -374,7 +374,7 @@ private fun WebDavPage(
                     stringResource(R.string.backup_page_webdav_backup_files),
                     modifier = Modifier.fillMaxWidth()
                 )
-                val backupItems by vm.backupFileItems.collectAsStateWithLifecycle()
+                val backupItems by vm.webDavBackupItems.collectAsStateWithLifecycle()
                 backupItems.onSuccess {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -462,10 +462,10 @@ private fun WebDavPage(
 
 @Composable
 private fun BackupItemCard(
-    item: BackupFileItem,
+    item: WebDavBackupItem,
     isRestoring: Boolean = false,
-    onDelete: (BackupFileItem) -> Unit = {},
-    onRestore: (BackupFileItem) -> Unit = {},
+    onDelete: (WebDavBackupItem) -> Unit = {},
+    onRestore: (WebDavBackupItem) -> Unit = {},
 ) {
     Card {
         Column(

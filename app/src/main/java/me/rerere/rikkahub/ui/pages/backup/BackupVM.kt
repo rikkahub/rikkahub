@@ -17,8 +17,8 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.sync.BackupFileItem
-import me.rerere.rikkahub.data.sync.DataSync
+import me.rerere.rikkahub.data.sync.WebDavBackupItem
+import me.rerere.rikkahub.data.sync.WebdavSync
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.UiState
 import java.io.File
@@ -27,7 +27,7 @@ private const val TAG = "BackupVM"
 
 class BackupVM(
     private val settingsStore: SettingsStore,
-    private val dataSync: DataSync,
+    private val webdavSync: WebdavSync,
 ) : ViewModel() {
     val settings = settingsStore.settingsFlow.stateIn(
         scope = viewModelScope,
@@ -35,7 +35,7 @@ class BackupVM(
         initialValue = Settings.dummy()
     )
 
-    val backupFileItems = MutableStateFlow<UiState<List<BackupFileItem>>>(UiState.Idle)
+    val webDavBackupItems = MutableStateFlow<UiState<List<WebDavBackupItem>>>(UiState.Idle)
 
     init {
         loadBackupFileItems()
@@ -50,42 +50,42 @@ class BackupVM(
     fun loadBackupFileItems() {
         viewModelScope.launch {
             runCatching {
-                backupFileItems.emit(UiState.Loading)
-                backupFileItems.emit(
+                webDavBackupItems.emit(UiState.Loading)
+                webDavBackupItems.emit(
                     value = UiState.Success(
-                        data = dataSync.listBackupFiles(
+                        data = webdavSync.listBackupFiles(
                             webDavConfig = settings.value.webDavConfig
                         ).sortedByDescending { it.lastModified }
                     )
                 )
             }.onFailure {
-                backupFileItems.emit(UiState.Error(it))
+                webDavBackupItems.emit(UiState.Error(it))
             }
         }
     }
 
     suspend fun testWebDav() {
-        dataSync.testWebdav(settings.value.webDavConfig)
+        webdavSync.testWebdav(settings.value.webDavConfig)
     }
 
     suspend fun backup() {
-        dataSync.backupToWebDav(settings.value.webDavConfig)
+        webdavSync.backupToWebDav(settings.value.webDavConfig)
     }
 
-    suspend fun restore(item: BackupFileItem) {
-        dataSync.restoreFromWebDav(webDavConfig = settings.value.webDavConfig, item = item)
+    suspend fun restore(item: WebDavBackupItem) {
+        webdavSync.restoreFromWebDav(webDavConfig = settings.value.webDavConfig, item = item)
     }
 
-    suspend fun deleteWebDavBackupFile(item: BackupFileItem) {
-        dataSync.deleteWebDavBackupFile(settings.value.webDavConfig, item)
+    suspend fun deleteWebDavBackupFile(item: WebDavBackupItem) {
+        webdavSync.deleteWebDavBackupFile(settings.value.webDavConfig, item)
     }
 
     suspend fun exportToFile(): File {
-        return dataSync.prepareBackupFile(settings.value.webDavConfig.copy())
+        return webdavSync.prepareBackupFile(settings.value.webDavConfig.copy())
     }
 
     suspend fun restoreFromLocalFile(file: File) {
-        dataSync.restoreFromLocalFile(file, settings.value.webDavConfig)
+        webdavSync.restoreFromLocalFile(file, settings.value.webDavConfig)
     }
 
     fun restoreFromChatBox(file: File) {

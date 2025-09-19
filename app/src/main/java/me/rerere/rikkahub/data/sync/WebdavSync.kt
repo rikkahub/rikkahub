@@ -31,7 +31,7 @@ import java.util.zip.ZipOutputStream
 
 private const val TAG = "DataSync"
 
-class DataSync(
+class WebdavSync(
     private val settingsStore: SettingsStore,
     private val json: Json,
     private val context: Context,
@@ -64,10 +64,10 @@ class DataSync(
         }
     }
 
-    suspend fun listBackupFiles(webDavConfig: WebDavConfig): List<BackupFileItem> =
+    suspend fun listBackupFiles(webDavConfig: WebDavConfig): List<WebDavBackupItem> =
         withContext(Dispatchers.IO) {
             val collection = webDavConfig.requireCollection()
-            val files = mutableListOf<BackupFileItem>()
+            val files = mutableListOf<WebDavBackupItem>()
             collection.propfind(
                 depth = 1,
                 DisplayName.NAME,
@@ -85,7 +85,7 @@ class DataSync(
                             .firstOrNull()?.lastModified ?: 0L
                     )
                     files.add(
-                        BackupFileItem(
+                        WebDavBackupItem(
                             href = response.href.toString(),
                             displayName = displayName,
                             size = size,
@@ -97,7 +97,7 @@ class DataSync(
             files
         }
 
-    suspend fun restoreFromWebDav(webDavConfig: WebDavConfig, item: BackupFileItem) =
+    suspend fun restoreFromWebDav(webDavConfig: WebDavConfig, item: WebDavBackupItem) =
         withContext(Dispatchers.IO) {
             val collection = DavCollection(
                 httpClient = webDavConfig.requireClient(),
@@ -146,7 +146,7 @@ class DataSync(
             }
         }
 
-    suspend fun deleteWebDavBackupFile(webDavConfig: WebDavConfig, item: BackupFileItem) =
+    suspend fun deleteWebDavBackupFile(webDavConfig: WebDavConfig, item: WebDavBackupItem) =
         withContext(Dispatchers.IO) {
             val collection = DavCollection(
                 httpClient = webDavConfig.requireClient(),
@@ -439,7 +439,7 @@ private suspend fun DavCollection.ensureCollectionExists() = withContext(Dispatc
     }
 }
 
-data class BackupFileItem(
+data class WebDavBackupItem(
     val href: String,
     val displayName: String,
     val size: Long,
