@@ -8,6 +8,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.Density
@@ -22,6 +24,8 @@ import kotlin.math.roundToInt
 
 private val MAX_HEIGHT = 10000.dp
 private val MAX_WIDTH = 10000.dp
+
+val LocalExportContext = staticCompositionLocalOf { false }
 
 /**
  * Draws an arbitrary composable into a bitmap
@@ -62,7 +66,11 @@ class BitmapComposer(private val mainScope: CoroutineScope) {
             // Step 3: Create and configure the ComposeView using the activity
             val composeView = ComposeView(activity).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-                setContent { content() }
+                setContent {
+                    CompositionLocalProvider(LocalExportContext provides true) {
+                        content()
+                    }
+                }
             }
 
             // add the composable view to the container
