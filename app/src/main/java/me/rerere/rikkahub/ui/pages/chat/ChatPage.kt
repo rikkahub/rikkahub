@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
@@ -137,6 +138,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
         }
     )
 
+    val chatListState = rememberLazyListState()
+    LaunchedEffect(vm) {
+        if(!vm.chatListInitialized) {
+            chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
+            vm.chatListInitialized = true
+        }
+    }
+
     when {
         isBigScreen -> {
             PermanentNavigationDrawer(
@@ -158,6 +167,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
                     drawerState = drawerState,
                     navController = navController,
                     vm = vm,
+                    chatListState = chatListState,
                     enableWebSearch = enableWebSearch,
                     currentChatModel = currentChatModel,
                     bigScreen = true
@@ -186,6 +196,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
                     drawerState = drawerState,
                     navController = navController,
                     vm = vm,
+                    chatListState = chatListState,
                     enableWebSearch = enableWebSearch,
                     currentChatModel = currentChatModel,
                     bigScreen = false
@@ -208,6 +219,7 @@ private fun ChatPageContent(
     drawerState: DrawerState,
     navController: NavHostController,
     vm: ChatVM,
+    chatListState: LazyListState,
     enableWebSearch: Boolean,
     currentChatModel: Model?,
 ) {
@@ -216,7 +228,7 @@ private fun ChatPageContent(
     LaunchedEffect(loadingJob) {
         inputState.loading = loadingJob != null
     }
-    val chatListState = rememberLazyListState()
+
     Surface(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()

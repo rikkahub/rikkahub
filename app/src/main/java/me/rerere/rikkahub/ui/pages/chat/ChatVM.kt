@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -50,6 +53,7 @@ class ChatVM(
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
+    var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
 
     // 异步任务 (从ChatService获取，响应式)
     val conversationJob: StateFlow<Job?> =
