@@ -278,6 +278,7 @@
   <string name="language_japanese">🇯🇵 일본어</string>
   <string name="language_korean">🇰🇷 한국어</string>
   <string name="language_simplified_chinese">🇨🇳 중국어(간체)</string>
+  <string name="language_spanish">🇪🇸 스페인어</string>
   <string name="language_traditional_chinese">🇨🇳 중국어(번체)</string>
   <string name="mcp_picker_syncing">MCP 서버 동기화 중...</string>
   <string name="mcp_picker_title">MCP 서버</string>

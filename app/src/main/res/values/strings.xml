@@ -622,6 +622,7 @@
   <string name="language_french">🇫🇷 Français</string>
   <string name="language_german">🇩🇪 Deutsch</string>
   <string name="language_italian">🇮🇹 Italiano</string>
+  <string name="language_spanish">🇪🇸 Español</string>
 
   <!-- Donate -->
   <string name="setting_page_donate">Donate</string>
