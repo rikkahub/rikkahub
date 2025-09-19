@@ -7,10 +7,12 @@ import io.modelcontextprotocol.kotlin.sdk.Tool
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.RequestOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.ClassDiscriminatorMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -137,8 +139,8 @@ class McpManager(
         }
     }
 
-    suspend fun addClient(config: McpServerConfig) {
-        this.removeClient(config) // Remove first
+    suspend fun addClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
+        removeClient(config) // Remove first
         val transport = getTransport(config)
         val client = Client(
             clientInfo = Implementation(
@@ -150,7 +152,7 @@ class McpManager(
         runCatching {
             setStatus(config = config, status = McpStatus.Connecting)
             client.connect(transport)
-            this.sync(config)
+            sync(config)
             setStatus(config = config, status = McpStatus.Connected)
             Log.i(TAG, "addClient: connected ${config.commonOptions.name}")
         }.onFailure {
@@ -159,7 +161,7 @@ class McpManager(
         }
     }
 
-    suspend fun sync(config: McpServerConfig) {
+    private suspend fun sync(config: McpServerConfig) {
         val client = clients[config] ?: return
 
         setStatus(config = config, status = McpStatus.Connecting)
@@ -224,16 +226,17 @@ class McpManager(
         setStatus(config = config, status = McpStatus.Connected)
     }
 
-    suspend fun syncAll() {
+    suspend fun syncAll() = withContext(Dispatchers.IO) {
         clients.keys.toList().forEach { config ->
-            runCatching { this.sync(config) }
-                .onFailure {
-                    it.printStackTrace()
-                }
+            runCatching {
+                sync(config)
+            }.onFailure {
+                it.printStackTrace()
+            }
         }
     }
 
-    suspend fun removeClient(config: McpServerConfig) {
+    suspend fun removeClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
         val toRemove = clients.entries.filter { it.key.id == config.id }
         toRemove.forEach { entry ->
             runCatching {
