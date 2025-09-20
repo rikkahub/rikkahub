@@ -9,18 +9,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -45,18 +44,13 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.GripHorizontal
 import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import me.rerere.rikkahub.R
@@ -77,11 +71,12 @@ import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
-import me.rerere.rikkahub.ui.theme.extendColors
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import sh.calvin.reorderable.rememberReorderableLazyStaggeredGridState
 import kotlin.uuid.Uuid
+import androidx.compose.foundation.lazy.items as lazyItems
 
 @Composable
 fun AssistantPage(vm: AssistantVM = koinViewModel()) {
@@ -107,25 +102,19 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(stringResource(R.string.assistant_page_title))
-                },
-                navigationIcon = {
-                    BackButton()
-                },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            createState.open(Assistant())
-                        }
-                    ) {
-                        Icon(Lucide.Plus, stringResource(R.string.assistant_page_add))
-                    }
+            TopAppBar(title = {
+                Text(stringResource(R.string.assistant_page_title))
+            }, navigationIcon = {
+                BackButton()
+            }, actions = {
+                IconButton(
+                    onClick = {
+                        createState.open(Assistant())
+                    }) {
+                    Icon(Lucide.Plus, stringResource(R.string.assistant_page_add))
                 }
-            )
-        }
-    ) {
+            })
+        }) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -146,27 +135,14 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
             val haptic = LocalHapticFeedback.current
 
             // 标签过滤器
-            if (settings.assistantTags.isNotEmpty()) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                ) {
-                    lazyItems(items = settings.assistantTags, key = { tag -> tag.id }) { tag ->
-                        FilterChip(
-                            onClick = {
-                                selectedTagIds = if (tag.id in selectedTagIds) {
-                                    selectedTagIds - tag.id
-                                } else {
-                                    selectedTagIds + tag.id
-                                }
-                            },
-                            label = { Text(tag.name) },
-                            selected = tag.id in selectedTagIds,
-                            shape = RoundedCornerShape(50),
-                        )
-                    }
+            AssistantTagsFilterRow(
+                settings = settings,
+                vm = vm,
+                selectedTagIds = selectedTagIds,
+                onUpdateSelectedTagIds = { ids ->
+                    selectedTagIds = ids
                 }
-            }
+            )
 
             LazyVerticalStaggeredGrid(
                 modifier = Modifier
@@ -180,8 +156,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
             ) {
                 items(filteredAssistants, key = { assistant -> assistant.id }) { assistant ->
                     ReorderableItem(
-                        state = reorderableState,
-                        key = assistant.id
+                        state = reorderableState, key = assistant.id
                     ) { isDragging ->
                         val memories by vm.getMemories(assistant).collectAsStateWithLifecycle(
                             initialValue = emptyList(),
@@ -209,18 +184,14 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                                     Icon(
                                         imageVector = Lucide.GripHorizontal,
                                         contentDescription = null,
-                                        modifier = Modifier.longPressDraggableHandle(
-                                            onDragStarted = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                            },
-                                            onDragStopped = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                            }
-                                        )
+                                        modifier = Modifier.longPressDraggableHandle(onDragStarted = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                        }, onDragStopped = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                        })
                                     )
                                 }
-                            }
-                        )
+                            })
                     }
                 }
             }
@@ -228,6 +199,69 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     }
 
     AssistantCreationSheet(createState)
+}
+
+@Composable
+private fun AssistantTagsFilterRow(
+    settings: Settings,
+    vm: AssistantVM,
+    selectedTagIds: Set<Uuid>,
+    onUpdateSelectedTagIds: (Set<Uuid>) -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    if (settings.assistantTags.isNotEmpty()) {
+        val tagsListState = rememberLazyListState()
+        val tagsReorderableState = rememberReorderableLazyListState(tagsListState) { from, to ->
+            val newTags = settings.assistantTags.toMutableList().apply {
+                add(to.index, removeAt(from.index))
+            }
+            vm.updateSettings(settings.copy(assistantTags = newTags))
+        }
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp),
+            state = tagsListState
+        ) {
+            lazyItems(items = settings.assistantTags, key = { tag -> tag.id }) { tag ->
+                ReorderableItem(
+                    state = tagsReorderableState, key = tag.id
+                ) { isDragging ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        FilterChip(
+                            onClick = {
+                                onUpdateSelectedTagIds(
+                                    if (tag.id in selectedTagIds) {
+                                        selectedTagIds - tag.id
+                                    } else {
+                                        selectedTagIds + tag.id
+                                    }
+                                )
+                            },
+                            label = {
+                                Text(tag.name)
+                            },
+                            selected = tag.id in selectedTagIds,
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier
+                                .scale(if (isDragging) 0.95f else 1f)
+                                .longPressDraggableHandle(
+                                    onDragStarted = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                    },
+                                    onDragStopped = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                    },
+                                )
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -250,8 +284,7 @@ private fun AssistantCreationSheet(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -261,15 +294,13 @@ private fun AssistantCreationSheet(
                         },
                     ) {
                         OutlinedTextField(
-                            value = assistant.name,
-                            onValueChange = {
+                            value = assistant.name, onValueChange = {
                                 update(
                                     assistant.copy(
                                         name = it
                                     )
                                 )
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                            }, modifier = Modifier.fillMaxWidth()
                         )
                     }
 
@@ -288,15 +319,13 @@ private fun AssistantCreationSheet(
                     TextButton(
                         onClick = {
                             state.dismiss()
-                        }
-                    ) {
+                        }) {
                         Text(stringResource(R.string.assistant_page_cancel))
                     }
                     TextButton(
                         onClick = {
                             state.confirm()
-                        }
-                    ) {
+                        }) {
                         Text(stringResource(R.string.assistant_page_save))
                     }
                 }
@@ -318,8 +347,7 @@ private fun AssistantItem(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     Card(
-        modifier = modifier.fillMaxWidth(),
-        onClick = onEdit
+        modifier = modifier.fillMaxWidth(), onClick = onEdit
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -360,8 +388,7 @@ private fun AssistantItem(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     assistant.tags.fastForEach { tagId ->
-                        val tag = settings.assistantTags.find { it.id == tagId }
-                            ?: return@fastForEach
+                        val tag = settings.assistantTags.find { it.id == tagId } ?: return@fastForEach
                         Surface(
                             shape = RoundedCornerShape(50),
                             color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -377,11 +404,13 @@ private fun AssistantItem(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if(assistant.id !in DEFAULT_ASSISTANTS_IDS) {
+                if (assistant.id !in DEFAULT_ASSISTANTS_IDS) {
                     Tooltip(tooltip = { Text(stringResource(R.string.assistant_page_delete)) }) {
                         Icon(
                             imageVector = Lucide.Trash2,
@@ -404,8 +433,7 @@ private fun AssistantItem(
                                 onCopy()
                             }
                             .size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
-                    )
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f))
                 }
             }
         }
@@ -426,8 +454,7 @@ private fun AssistantItem(
                     onClick = {
                         showDeleteDialog = false
                         onDelete()
-                    }
-                ) {
+                    }) {
                     Text(stringResource(R.string.confirm))
                 }
             },
@@ -435,8 +462,7 @@ private fun AssistantItem(
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
-                    }
-                ) {
+                    }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
