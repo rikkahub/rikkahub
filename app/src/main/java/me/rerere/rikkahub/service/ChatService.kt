@@ -278,6 +278,7 @@ class ChatService(
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
+                e.printStackTrace()
                 _errorFlow.emit(e)
             }
         }
