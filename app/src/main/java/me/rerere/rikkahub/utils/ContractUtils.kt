@@ -14,7 +14,6 @@ open class GetContentWithMultiMime : ActivityResultContract<List<String>, List<U
             .addCategory(Intent.CATEGORY_OPENABLE)
             .setType("*/*")
             .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-            .putExtra(Intent.EXTRA_MIME_TYPES, input.toTypedArray())
     }
 
     final override fun getSynchronousResult(

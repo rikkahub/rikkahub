@@ -924,20 +924,67 @@ fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
 @Composable
 fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
     val context = LocalContext.current
+    val toaster = LocalToaster.current
     val pickMedia =
         rememberLauncherForActivityResult(GetContentWithMultiMime()) { uris ->
             if (uris.isNotEmpty()) {
-                val documents = uris.map { uri ->
+                val allowedMimeTypes = setOf(
+                    "text/plain",
+                    "text/html",
+                    "text/css",
+                    "text/javascript",
+                    "text/csv",
+                    "text/xml",
+                    "application/json",
+                    "application/javascript",
+                    "application/pdf",
+                    "application/msword",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/vnd.ms-excel",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "application/vnd.ms-powerpoint",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                )
+
+                val documents = uris.mapNotNull { uri ->
                     val fileName = context.getFileNameFromUri(uri) ?: "file"
-                    val mime = context.getFileMimeType(uri)
-                    val localUri = context.createChatFilesByContents(listOf(uri))[0]
-                    UIMessagePart.Document(
-                        url = localUri.toString(),
-                        fileName = fileName,
-                        mime = mime ?: "text/*"
-                    )
+                    val mime = context.getFileMimeType(uri) ?: "text/plain"
+
+                    // Filter by MIME type or file extension
+                    val isAllowed = allowedMimeTypes.contains(mime) ||
+                        mime.startsWith("text/") ||
+                        mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+                        mime == "application/pdf" ||
+                        fileName.endsWith(".txt", ignoreCase = true) ||
+                        fileName.endsWith(".md", ignoreCase = true) ||
+                        fileName.endsWith(".csv", ignoreCase = true) ||
+                        fileName.endsWith(".json", ignoreCase = true) ||
+                        fileName.endsWith(".js", ignoreCase = true) ||
+                        fileName.endsWith(".html", ignoreCase = true) ||
+                        fileName.endsWith(".css", ignoreCase = true) ||
+                        fileName.endsWith(".xml", ignoreCase = true) ||
+                        fileName.endsWith(".py", ignoreCase = true) ||
+                        fileName.endsWith(".java", ignoreCase = true) ||
+                        fileName.endsWith(".kt", ignoreCase = true)
+
+                    if (isAllowed) {
+                        val localUri = context.createChatFilesByContents(listOf(uri))[0]
+                        UIMessagePart.Document(
+                            url = localUri.toString(),
+                            fileName = fileName,
+                            mime = mime
+                        )
+                    } else {
+                        null
+                    }
                 }
-                onAddFiles(documents)
+
+                if (documents.isNotEmpty()) {
+                    onAddFiles(documents)
+                } else {
+                    // Show toast for unsupported file types
+                    toaster.show("不支持的文件类型", type = ToastType.Error)
+                }
             }
         }
     BigIconTextButton(
@@ -949,13 +996,7 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
         }
     ) {
         pickMedia.launch(
-            listOf(
-                "text/*",
-                "application/json",
-                "application/javascript",
-                "application/pdf",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
+            listOf("*/*")
         )
     }
 }
