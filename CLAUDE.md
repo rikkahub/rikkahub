@@ -91,7 +91,6 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 - Multi-module project with version catalogs
 - Supports ABI splits for arm64-v8a and x86_64
 - Uses KSP for annotation processing
-- Chaquopy for Python integration (PDF/DOCX processing)
 
 ### Target SDK
 

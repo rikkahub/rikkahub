@@ -1,6 +1,5 @@
 [versions]
 agp = "8.11.0"
-chaquo-python = "16.1.0"
 barcodeScanning = "17.3.0"
 cameraCore = "1.5.0-rc01"
 dav4jvm = "2.2.1"
@@ -148,6 +147,5 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
 firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebase-crashlytics" }
-chaquo-python = { id = "com.chaquo.python", version.ref = "chaquo-python" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineprofile" }

@@ -4,8 +4,6 @@ import android.app.Application
 import android.util.Log
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.remoteConfigSettings
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -44,11 +42,6 @@ class RikkaHubApp : Application() {
 
         // set cursor window size
         DatabaseUtil.setCursorWindowSize(16 * 1024 * 1024)
-
-        // Start python
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-        }
 
         // delete temp files
         deleteTempFiles()

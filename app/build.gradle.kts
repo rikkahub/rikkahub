@@ -13,7 +13,6 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
-    alias(libs.plugins.chaquo.python)
 }
 
 android {
@@ -139,17 +138,6 @@ kotlin {
     }
 }
 
-chaquopy {
-    defaultConfig {
-        version = "3.12"
-        if(Os.isFamily(Os.FAMILY_MAC)) buildPython("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3")
-        pip {
-            install("pypdf")
-            install("python-docx")
-        }
-    }
-}
-
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -241,6 +229,9 @@ dependencies {
     implementation(libs.dav4jvm) {
         exclude(group = "org.ogce", module = "xpp3")
     }
+
+    // iText
+    implementation("com.itextpdf.android:kernel-android:9.2.0")
 
     // Apache Commons Text
     implementation(libs.commons.text)
