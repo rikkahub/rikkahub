@@ -127,7 +127,9 @@ class ImgGenVM(
                     model = model,
                     prompt = _prompt.value,
                     numOfImages = _numberOfImages.value,
-                    aspectRatio = _aspectRatio.value
+                    aspectRatio = _aspectRatio.value,
+                    customHeaders = model.customHeaders,
+                    customBody = model.customBodies
                 )
 
                 val result = providerManager.getProviderByType(provider)

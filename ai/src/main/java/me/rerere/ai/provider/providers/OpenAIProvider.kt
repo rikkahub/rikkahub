@@ -24,6 +24,8 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.json
+import me.rerere.ai.util.mergeCustomBody
+import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.getByKey
 import me.rerere.common.http.jsonPrimitiveOrNull
@@ -159,11 +161,12 @@ class OpenAIProvider(
                         ImageAspectRatio.PORTRAIT -> "1024x1536"
                     }
                 )
-            }
+            }.mergeCustomBody(params.customBody)
         )
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/generations")
+            .headers(params.customHeaders.toHeaders())
             .addHeader("Authorization", "Bearer $key")
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
