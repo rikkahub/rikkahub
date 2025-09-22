@@ -33,6 +33,8 @@ android {
 }
 
 dependencies {
+    // https://mvnrepository.com/artifact/org.dom4j/dom4j
+    implementation(libs.dom4j)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
