@@ -237,9 +237,6 @@ dependencies {
         exclude(group = "org.ogce", module = "xpp3")
     }
 
-    // iText
-    implementation("com.itextpdf.android:kernel-android:9.2.0")
-
     // Apache Commons Text
     implementation(libs.commons.text)
 
@@ -266,6 +263,7 @@ dependencies {
 
     // modules
     implementation(project(":ai"))
+    implementation(project(":document"))
     implementation(project(":highlight"))
     implementation(project(":search"))
     implementation(project(":tts"))

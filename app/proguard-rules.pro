@@ -26,12 +26,6 @@
 # keep jlatexmath
 -keep class org.scilab.forge.jlatexmath.** {*;}
 
-# keep itext
--keep class com.itextpdf.** {*;}
--dontwarn com.fasterxml.jackson.**
--dontwarn org.bouncycastle.**
--dontwarn com.itextpdf.**
-
 # keep XML parsing classes for DOCX processing
 -keep class javax.xml.** {*;}
 -keep class org.w3c.dom.** {*;}
