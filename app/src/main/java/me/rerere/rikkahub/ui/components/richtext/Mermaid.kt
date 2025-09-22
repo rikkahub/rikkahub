@@ -37,6 +37,7 @@ import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
+import com.google.common.cache.CacheBuilder
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
@@ -45,6 +46,10 @@ import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.escapeHtml
 import me.rerere.rikkahub.utils.exportImage
 import me.rerere.rikkahub.utils.toCssHex
+
+private val mermaidHeightCache = CacheBuilder.newBuilder()
+    .maximumSize(100)
+    .build<String, Int>()
 
 /**
  * A component that renders Mermaid diagrams.
@@ -64,8 +69,8 @@ fun Mermaid(
     val activity = LocalActivity.current
     val toaster = LocalToaster.current
 
-    var contentHeight by remember { mutableIntStateOf(150) }
-    var height = with(density) {
+    var contentHeight by remember { mutableIntStateOf(mermaidHeightCache.getIfPresent(code) ?: 150) }
+    val height = with(density) {
         contentHeight.toDp()
     }
     val jsInterface = remember {
@@ -73,7 +78,8 @@ fun Mermaid(
             onHeightChanged = { height ->
                 // 需要乘以density
                 // https://stackoverflow.com/questions/43394498/how-to-get-the-full-height-of-in-android-webview
-                contentHeight = (height * context.resources.displayMetrics.density).toInt()
+                contentHeight = (height * density.density).toInt()
+                mermaidHeightCache.put(code, contentHeight)
             },
             onExportImage = { base64Image ->
                 runCatching {
@@ -138,6 +144,9 @@ fun Mermaid(
                 .clip(RoundedCornerShape(4.dp))
                 .animateContentSize()
                 .height(height),
+            onUpdated = {
+                it.evaluateJavascript("calculateAndSendHeight();", null)
+            }
         )
 
         // 导出图片按钮
