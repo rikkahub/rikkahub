@@ -233,9 +233,7 @@ class SettingsStore(
         .toMutableStateFlow(scope, Settings.dummy())
 
     suspend fun update(settings: Settings) {
-        require(settings.init.not()) {
-            "Cannot update dummy settings"
-        }
+        if(settings.init) return
         settingsFlow.value = settings
         dataStore.edit { preferences ->
             preferences[DYNAMIC_COLOR] = settings.dynamicColor
