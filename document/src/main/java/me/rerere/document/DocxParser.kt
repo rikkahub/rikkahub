@@ -1,7 +1,7 @@
 package me.rerere.document
 
-import org.dom4j.Element
-import org.dom4j.io.SAXReader
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
 import java.io.File
 import java.io.InputStream
 import java.util.zip.ZipInputStream
@@ -34,14 +34,28 @@ object DocxParser {
 
     private fun parseDocumentXml(inputStream: InputStream): String {
         return try {
-            val reader = SAXReader()
-            val document = reader.read(inputStream)
+            val factory = XmlPullParserFactory.newInstance()
+            factory.isNamespaceAware = true
+            val parser = factory.newPullParser()
+            parser.setInput(inputStream, "UTF-8")
 
             val result = StringBuilder()
-            val body = document.rootElement.element("body")
+            var inBody = false
 
-            if (body != null) {
-                processElement(body, result, 0)
+            while (parser.eventType != XmlPullParser.END_DOCUMENT) {
+                when (parser.eventType) {
+                    XmlPullParser.START_TAG -> {
+                        when (parser.name) {
+                            "body" -> inBody = true
+                            "p" -> if (inBody) processParagraph(parser, result)
+                            "tbl" -> if (inBody) processTable(parser, result)
+                        }
+                    }
+                    XmlPullParser.END_TAG -> {
+                        if (parser.name == "body") inBody = false
+                    }
+                }
+                parser.next()
             }
 
             result.toString().trim()
@@ -50,100 +64,134 @@ object DocxParser {
         }
     }
 
-    private fun processElement(element: Element, result: StringBuilder, listLevel: Int) {
-        when (element.name) {
-            "p" -> {
-                val paragraphText = extractParagraphText(element)
-                if (paragraphText.isNotBlank()) {
-                    // Check if it's a list item
-                    val listInfo = getListInfo(element)
-                    if (listInfo != null) {
-                        val indent = "  ".repeat(listInfo.level)
-                        val marker = if (listInfo.isNumbered) "${listInfo.number}. " else "- "
-                        result.append("$indent$marker$paragraphText\n")
-                    } else {
-                        // Check for heading style
-                        val headingLevel = getHeadingLevel(element)
-                        if (headingLevel > 0) {
-                            val headingPrefix = "#".repeat(headingLevel)
-                            result.append("$headingPrefix $paragraphText\n\n")
-                        } else {
-                            result.append("$paragraphText\n\n")
+    private fun processParagraph(parser: XmlPullParser, result: StringBuilder) {
+        val paragraphStartDepth = parser.depth
+        val paragraphContent = StringBuilder()
+        var listInfo: ListInfo? = null
+        var headingLevel = 0
+
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "r" -> extractRunText(parser, paragraphContent)
+                        "pPr" -> {
+                            listInfo = extractListInfo(parser)
+                            headingLevel = extractHeadingLevel(parser)
                         }
                     }
                 }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "p" && parser.depth == paragraphStartDepth) {
+                        break
+                    }
+                }
             }
+        }
 
-            "tbl" -> {
-                processTable(element, result)
-                result.append("\n")
-            }
-
-            else -> {
-                // Process child elements
-                element.elements().forEach { child ->
-                    processElement(child, result, listLevel)
+        val paragraphText = paragraphContent.toString().trim()
+        if (paragraphText.isNotBlank()) {
+            when {
+                listInfo != null -> {
+                    val indent = "  ".repeat(listInfo.level)
+                    val marker = if (listInfo.isNumbered) "${listInfo.number}. " else "- "
+                    result.append("$indent$marker$paragraphText\n")
+                }
+                headingLevel > 0 -> {
+                    val headingPrefix = "#".repeat(headingLevel)
+                    result.append("$headingPrefix $paragraphText\n\n")
+                }
+                else -> {
+                    result.append("$paragraphText\n\n")
                 }
             }
         }
     }
 
-    private fun extractParagraphText(paragraphElement: Element): String {
-        val result = StringBuilder()
-
-        paragraphElement.elements("r").forEach { runElement ->
-            val runText = extractRunText(runElement)
-            result.append(runText)
-        }
-
-        return result.toString().trim()
-    }
-
-    private fun extractRunText(runElement: Element): String {
-        val result = StringBuilder()
+    private fun extractRunText(parser: XmlPullParser, result: StringBuilder) {
+        val runStartDepth = parser.depth
         var isBold = false
         var isItalic = false
 
-        // Check formatting
-        val rPr = runElement.element("rPr")
-        if (rPr != null) {
-            isBold = rPr.element("b") != null
-            isItalic = rPr.element("i") != null
-        }
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "rPr" -> {
+                            val formatting = extractFormatting(parser)
+                            isBold = formatting.first
+                            isItalic = formatting.second
+                        }
+                        "t" -> {
+                            parser.next()
+                            if (parser.eventType == XmlPullParser.TEXT) {
+                                var text = parser.text ?: ""
 
-        // Extract text
-        runElement.elements("t").forEach { textElement ->
-            var text = textElement.text ?: ""
+                                // Apply markdown formatting
+                                text = when {
+                                    isBold && isItalic -> "***$text***"
+                                    isBold -> "**$text**"
+                                    isItalic -> "*$text*"
+                                    else -> text
+                                }
 
-            // Apply markdown formatting
-            if (isBold && isItalic) {
-                text = "***$text***"
-            } else if (isBold) {
-                text = "**$text**"
-            } else if (isItalic) {
-                text = "*$text*"
+                                result.append(text)
+                            }
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "r" && parser.depth == runStartDepth) {
+                        break
+                    }
+                }
             }
-
-            result.append(text)
         }
-
-        return result.toString()
     }
 
-    private fun processTable(tableElement: Element, result: StringBuilder) {
+    private fun extractFormatting(parser: XmlPullParser): Pair<Boolean, Boolean> {
+        val rPrStartDepth = parser.depth
+        var isBold = false
+        var isItalic = false
+
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "b" -> isBold = true
+                        "i" -> isItalic = true
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "rPr" && parser.depth == rPrStartDepth) {
+                        break
+                    }
+                }
+            }
+        }
+
+        return Pair(isBold, isItalic)
+    }
+
+    private fun processTable(parser: XmlPullParser, result: StringBuilder) {
+        val tableStartDepth = parser.depth
         val rows = mutableListOf<List<String>>()
 
-        // Extract table rows
-        tableElement.elements("tr").forEach { rowElement ->
-            val cells = mutableListOf<String>()
-
-            rowElement.elements("tc").forEach { cellElement ->
-                val cellText = extractCellText(cellElement)
-                cells.add(cellText)
-            }
-
-            if (cells.isNotEmpty()) {
-                rows.add(cells)
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    if (parser.name == "tr") {
+                        val cells = extractTableRow(parser)
+                        if (cells.isNotEmpty()) {
+                            rows.add(cells)
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "tbl" && parser.depth == tableStartDepth) {
+                        break
+                    }
+                }
             }
         }
 
@@ -170,47 +218,161 @@ object DocxParser {
                 }
             }
         }
+        result.append("\n")
     }
 
-    private fun extractCellText(cellElement: Element): String {
+    private fun extractTableRow(parser: XmlPullParser): List<String> {
+        val rowStartDepth = parser.depth
+        val cells = mutableListOf<String>()
+
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    if (parser.name == "tc") {
+                        val cellText = extractCellText(parser)
+                        cells.add(cellText)
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "tr" && parser.depth == rowStartDepth) {
+                        break
+                    }
+                }
+            }
+        }
+
+        return cells
+    }
+
+    private fun extractCellText(parser: XmlPullParser): String {
+        val cellStartDepth = parser.depth
         val result = StringBuilder()
 
-        cellElement.elements("p").forEach { paragraphElement ->
-            val paragraphText = extractParagraphText(paragraphElement)
-            if (paragraphText.isNotBlank()) {
-                if (result.isNotEmpty()) {
-                    result.append(" ")
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    if (parser.name == "p") {
+                        val paragraphText = extractCellParagraphText(parser)
+                        if (paragraphText.isNotBlank()) {
+                            if (result.isNotEmpty()) {
+                                result.append(" ")
+                            }
+                            result.append(paragraphText)
+                        }
+                    }
                 }
-                result.append(paragraphText)
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "tc" && parser.depth == cellStartDepth) {
+                        break
+                    }
+                }
             }
         }
 
         return result.toString().trim()
     }
 
-    private fun getListInfo(paragraphElement: Element): ListInfo? {
-        // 简化的列表检测逻辑
-        val pPr = paragraphElement.element("pPr")
-        if (pPr != null) {
-            val numPr = pPr.element("numPr")
-            if (numPr != null) {
-                val ilvl = numPr.element("ilvl")?.attributeValue("val")?.toIntOrNull() ?: 0
-                val numId = numPr.element("numId")?.attributeValue("val")
-                return ListInfo(level = ilvl, isNumbered = numId != null, number = 1) // 简化处理
+    private fun extractCellParagraphText(parser: XmlPullParser): String {
+        val paragraphStartDepth = parser.depth
+        val result = StringBuilder()
+
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    if (parser.name == "r") {
+                        extractRunText(parser, result)
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "p" && parser.depth == paragraphStartDepth) {
+                        break
+                    }
+                }
             }
         }
-        return null
+
+        return result.toString().trim()
     }
 
-    private fun getHeadingLevel(paragraphElement: Element): Int {
-        val pPr = paragraphElement.element("pPr")
-        if (pPr != null) {
-            val pStyle = pPr.element("pStyle")
-            val styleVal = pStyle?.attributeValue("val")
-            if (styleVal?.startsWith("Heading") == true || styleVal?.startsWith("heading") == true) {
-                return styleVal.lastOrNull()?.digitToIntOrNull() ?: 1
+    private fun extractListInfo(parser: XmlPullParser): ListInfo? {
+        val pPrStartDepth = parser.depth
+        var level = 0
+        var isNumbered = false
+
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "numPr" -> {
+                            // Found numbering properties
+                            val numInfo = extractNumberingInfo(parser)
+                            level = numInfo.first
+                            isNumbered = numInfo.second
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "pPr" && parser.depth == pPrStartDepth) {
+                        break
+                    }
+                }
             }
         }
+
+        return if (level > 0 || isNumbered) {
+            ListInfo(level = level, isNumbered = isNumbered, number = 1) // 简化处理
+        } else null
+    }
+
+    private fun extractNumberingInfo(parser: XmlPullParser): Pair<Int, Boolean> {
+        val numPrStartDepth = parser.depth
+        var level = 0
+        var hasNumId = false
+
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "ilvl" -> {
+                            level = parser.getAttributeValue(null, "val")?.toIntOrNull() ?: 0
+                        }
+                        "numId" -> {
+                            hasNumId = parser.getAttributeValue(null, "val") != null
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "numPr" && parser.depth == numPrStartDepth) {
+                        break
+                    }
+                }
+            }
+        }
+
+        return Pair(level, hasNumId)
+    }
+
+    private fun extractHeadingLevel(parser: XmlPullParser): Int {
+        val pPrStartDepth = parser.depth
+
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                XmlPullParser.START_TAG -> {
+                    if (parser.name == "pStyle") {
+                        val styleVal = parser.getAttributeValue(null, "val")
+                        if (styleVal?.startsWith("Heading") == true || styleVal?.startsWith("heading") == true) {
+                            return styleVal.lastOrNull()?.digitToIntOrNull() ?: 1
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "pPr" && parser.depth == pPrStartDepth) {
+                        break
+                    }
+                }
+            }
+        }
+
         return 0
     }
 }
