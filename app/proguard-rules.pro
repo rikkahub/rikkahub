@@ -26,12 +26,4 @@
 # keep jlatexmath
 -keep class org.scilab.forge.jlatexmath.** {*;}
 
-# keep XML parsing classes for DOCX processing
--keep class javax.xml.** {*;}
--keep class org.w3c.dom.** {*;}
--keep class org.xml.sax.** {*;}
--dontwarn javax.xml.**
--dontwarn org.w3c.dom.**
--dontwarn org.xml.sax.**
-
 -dontobfuscate
