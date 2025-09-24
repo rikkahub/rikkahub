@@ -9,6 +9,7 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
+        maven("https://repo.itextsupport.com/android")
     }
     resolutionStrategy {
         eachPlugin {
@@ -36,3 +37,4 @@ include(":search")
 include(":tts")
 include(":common")
 include(":app:baselineprofile")
+include(":document")

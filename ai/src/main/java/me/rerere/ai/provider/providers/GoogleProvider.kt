@@ -650,7 +650,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     ImageAspectRatio.PORTRAIT -> "9:16"
                 })
             }
-        }
+        }.mergeCustomBody(params.customBody)
 
         val url = buildUrl(
             providerSetting = providerSetting,
@@ -665,6 +665,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             providerSetting = providerSetting,
             request = Request.Builder()
                 .url(url)
+                .headers(params.customHeaders.toHeaders())
                 .post(
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )

@@ -68,7 +68,8 @@ internal class MyWebViewClient(private val state: WebViewState) : WebViewClient(
 fun WebView(
     state: WebViewState,
     modifier: Modifier = Modifier,
-    onCreated: (WebView) -> Unit = {}
+    onCreated: (WebView) -> Unit = {},
+    onUpdated: (WebView) -> Unit = {},
 ) {
     // Remember the clients based on the state
     val webChromeClient = remember { MyWebChromeClient(state) }
@@ -104,7 +105,18 @@ fun WebView(
                 }
             },
             modifier = Modifier.fillMaxWidth(), // Make WebView fill the width
+            onReset = {
+                state.interfaces.forEach { (name, _) ->
+                    it.removeJavascriptInterface(name)
+                }
+                Log.d(TAG, "AndroidView: Resetting WebView")
+            },
             update = { webView ->
+                state.webView = webView
+                state.interfaces.forEach { (name, obj) ->
+                    webView.addJavascriptInterface(obj, name)
+                }
+                Log.d(TAG, "AndroidView: Updating WebView")
                 // Ensure clients are updated if state changes (though unlikely here)
                 // webView.webChromeClient = webChromeClient
                 // webView.webViewClient = webViewClient
@@ -143,6 +155,7 @@ fun WebView(
                         // NO-OP: State changes related to navigation are handled by the methods in WebViewState
                     }
                 }
+                onUpdated(webView)
             }
         )
 

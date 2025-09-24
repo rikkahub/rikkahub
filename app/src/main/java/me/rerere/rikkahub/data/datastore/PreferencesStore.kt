@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.datastore
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.IOException
 import androidx.datastore.preferences.SharedPreferencesMigration
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -233,8 +234,9 @@ class SettingsStore(
         .toMutableStateFlow(scope, Settings.dummy())
 
     suspend fun update(settings: Settings) {
-        require(settings.init.not()) {
-            "Cannot update dummy settings"
+        if(settings.init) {
+            Log.w(TAG, "Cannot update dummy settings")
+            return
         }
         settingsFlow.value = settings
         dataStore.edit { preferences ->
