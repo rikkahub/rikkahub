@@ -185,7 +185,7 @@ val DEFAULT_PROVIDERS = listOf(
         name = "AiHubMix",
         baseUrl = "https://aihubmix.com/v1",
         apiKey = "",
-        enabled = false,
+        enabled = true,
         builtIn = true,
         description = {
             Text(
