@@ -68,7 +68,10 @@
 
 ## 💖 致谢
 
-* 感谢 [SiliconFlow](https://siliconflow.cn/) 与我们合作提供免费模型
+- 感谢 [SiliconFlow](https://siliconflow.cn/) 与我们合作提供免费模型
+- 感谢 [Aihubmix](https://aihubmix.com/) 的支持。推荐通过 aihubmix ⼀站式使⽤全球主流模型
+（openAI、Claude、google Gemini、DeepSeek、Qwen等上百个模型）
+
 
 ## 💰 捐赠
 
