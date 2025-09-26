@@ -42,6 +42,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.LinkUpOptions -> LinkUpService
                 is SearchServiceOptions.BraveOptions -> BraveSearchService
                 is SearchServiceOptions.MetasoOptions -> MetasoSearchService
+                is SearchServiceOptions.OllamaOptions -> OllamaSearchService
             } as SearchService<T>
         }
 
@@ -92,7 +93,8 @@ sealed class SearchServiceOptions {
             SearXNGOptions::class to "SearXNG",
             LinkUpOptions::class to "LinkUp",
             BraveOptions::class to "Brave",
-            MetasoOptions::class to "秘塔"
+            MetasoOptions::class to "秘塔",
+            OllamaOptions::class to "Ollama",
         )
     }
 
@@ -153,6 +155,13 @@ sealed class SearchServiceOptions {
     @Serializable
     @SerialName("metaso")
     data class MetasoOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("ollama")
+    data class OllamaOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
     ) : SearchServiceOptions()

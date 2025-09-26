@@ -299,6 +299,13 @@ private fun SearchProviderCard(
                     }
                 }
 
+                is SearchServiceOptions.OllamaOptions -> {
+                    OllamaOptions(options as SearchServiceOptions.OllamaOptions) {
+                        options = it
+                        onUpdateService(options)
+                    }
+                }
+
                 is SearchServiceOptions.BingLocalOptions -> {}
             }
 
@@ -650,6 +657,30 @@ private fun BraveOptions(
 private fun MetasoOptions(
     options: SearchServiceOptions.MetasoOptions,
     onUpdateOptions: (SearchServiceOptions.MetasoOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun OllamaOptions(
+    options: SearchServiceOptions.OllamaOptions,
+    onUpdateOptions: (SearchServiceOptions.OllamaOptions) -> Unit
 ) {
     FormItem(
         label = {
