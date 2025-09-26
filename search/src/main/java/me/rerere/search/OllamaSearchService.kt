@@ -28,7 +28,7 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
     @Composable
     override fun Description() {
         val uriHandler = LocalUriHandler.current
-        TextButton(onClick = { uriHandler.openUri("https://ollama.com/") }) {
+        TextButton(onClick = { uriHandler.openUri("https://ollama.com/settings/keys") }) {
             Text(stringResource(R.string.click_to_get_api_key))
         }
     }
@@ -54,7 +54,7 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
 
             val body = buildJsonObject {
                 put("query", query)
-                put("max_results", commonOptions.resultSize)
+                put("max_results", commonOptions.resultSize.coerceIn(5..10))
             }
 
             val request = Request.Builder()
