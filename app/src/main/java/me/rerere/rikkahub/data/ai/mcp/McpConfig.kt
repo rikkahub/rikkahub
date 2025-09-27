@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.mcp
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.InputSchema
 import kotlin.uuid.Uuid
@@ -31,6 +32,7 @@ sealed class McpServerConfig {
     ): McpServerConfig
 
     @Serializable
+    @SerialName("sse")
     data class SseTransportServer(
         override val id: Uuid = Uuid.random(),
         override val commonOptions: McpCommonOptions = McpCommonOptions(),
@@ -42,6 +44,7 @@ sealed class McpServerConfig {
     }
 
     @Serializable
+    @SerialName("streamable_http")
     data class StreamableHTTPServer(
         override val id: Uuid = Uuid.random(),
         override val commonOptions: McpCommonOptions,

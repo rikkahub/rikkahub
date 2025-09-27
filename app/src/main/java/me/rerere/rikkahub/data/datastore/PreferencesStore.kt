@@ -19,12 +19,13 @@ import kotlinx.serialization.Serializable
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_LEARNING_MODE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
-import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Tag
@@ -44,7 +45,7 @@ private val Context.settingsStore by preferencesDataStore(
     name = "settings",
     produceMigrations = { context ->
         listOf(
-            SharedPreferencesMigration(context, "settings"),
+            PreferenceStoreV1Migration()
         )
     }
 )
@@ -54,6 +55,9 @@ class SettingsStore(
     scope: AppScope,
 ) : KoinComponent {
     companion object {
+        // 版本号
+        val VERSION = intPreferencesKey("data_version")
+
         // UI设置
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_ID = stringPreferencesKey("theme_id")
