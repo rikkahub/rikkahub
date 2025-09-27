@@ -733,4 +733,6 @@
   <string name="assistant_page_regex_visual_only">Visual Only (affects display only, not actual message)</string>
   <string name="assistant_page_regex_title">Message Regexes</string>
   <string name="assistant_page_regex_desc">Define regex patterns to transform messages before sending/receiving</string>
+  <string name="setting_display_page_developer_mode">Developer Mode</string>
+  <string name="setting_display_page_developer_mode_desc">Show more debugging features. Not recommended for general users.</string>
 </resources>

@@ -352,6 +352,8 @@
   <string name="setting_display_page_chat_list_model_icon_title">チャットリストのモデルアイコン</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">アプリ起動時に新しい会話を自動作成する</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">起動時に新しいチャット</string>
+  <string name="setting_display_page_developer_mode">開発者モード</string>
+  <string name="setting_display_page_developer_mode_desc">デバッグ機能を追加で表示します。一般ユーザーへの推奨しません。</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_desc">メッセージ生成時に触覚フィードバックを有効にする</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">メッセージ生成時の触覚効果</string>
   <string name="setting_display_page_font_size_preview">これは**サンプル**のチャットテキストです</string>

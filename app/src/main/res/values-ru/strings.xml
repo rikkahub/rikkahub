@@ -352,6 +352,8 @@
   <string name="setting_display_page_chat_list_model_icon_title">Значок модели в списке чатов</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">Создавать новый диалог при запуске приложения</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">Новый чат при запуске</string>
+  <string name="setting_display_page_developer_mode">Режим разработчика</string>
+  <string name="setting_display_page_developer_mode_desc">Показать дополнительные функции отладки. Не рекомендуется для обычных пользователей.</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_desc">Включить виброотклик при генерации сообщений</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">Тактильный эффект при генерации сообщения</string>
   <string name="setting_display_page_font_size_preview">Это **пример** текста чата</string>

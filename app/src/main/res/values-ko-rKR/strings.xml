@@ -352,6 +352,8 @@
   <string name="setting_display_page_chat_list_model_icon_title">채팅 목록 모델 아이콘</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">앱 시작 시 새 대화 생성</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">앱 시작 시 새 채팅 생성</string>
+  <string name="setting_display_page_developer_mode">개발자 모드</string>
+  <string name="setting_display_page_developer_mode_desc">더 많은 디버깅 기능을 표시합니다. 일반 사용자에게는 권장하지 않습니다.</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_desc">메시지 생성 시 진동 피드백 활성화</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">메시지 생성 진동 효과 활성화</string>
   <string name="setting_display_page_font_size_preview">이것은 **예제** 채팅 텍스트입니다</string>

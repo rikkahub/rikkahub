@@ -227,6 +227,26 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 )
             }
 
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_developer_mode))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_developer_mode_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.developerMode,
+                            onCheckedChange = {
+                                vm.updateSettings(settings.copy(developerMode = it))
+                            }
+                        )
+                    },
+                )
+            }
+
             stickyHeader {
                 Text(
                     text = stringResource(R.string.setting_page_chat_settings),

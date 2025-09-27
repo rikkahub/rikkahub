@@ -352,6 +352,8 @@
   <string name="setting_display_page_chat_list_model_icon_title">聊天列表模型圖標</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">當應用程式啟動時，自動建立一個新的對話</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">啟動時新建對話</string>
+  <string name="setting_display_page_developer_mode">開發者模式</string>
+  <string name="setting_display_page_developer_mode_desc">顯示更多偵錯功能，不建議一般使用者開啟。</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_desc">訊息生成時啟用觸覺回饋效果</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">訊息生成觸覺回饋</string>
   <string name="setting_display_page_font_size_preview">這是一個**示例**的聊天文本</string>
