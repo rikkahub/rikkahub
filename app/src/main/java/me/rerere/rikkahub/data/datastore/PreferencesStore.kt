@@ -58,6 +58,7 @@ class SettingsStore(
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_ID = stringPreferencesKey("theme_id")
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
+        val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
 
         // 模型选择
         val ENABLE_WEB_SEARCH = booleanPreferencesKey("enable_web_search")
@@ -137,6 +138,7 @@ class SettingsStore(
                 assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
+                developerMode = preferences[DEVELOPER_MODE] == true,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
                 searchServices = preferences[SEARCH_SERVICES]?.let {
                     JsonInstant.decodeFromString(it)
@@ -242,6 +244,7 @@ class SettingsStore(
         dataStore.edit { preferences ->
             preferences[DYNAMIC_COLOR] = settings.dynamicColor
             preferences[THEME_ID] = settings.themeId
+            preferences[DEVELOPER_MODE] = settings.developerMode
             preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
 
             preferences[ENABLE_WEB_SEARCH] = settings.enableWebSearch
