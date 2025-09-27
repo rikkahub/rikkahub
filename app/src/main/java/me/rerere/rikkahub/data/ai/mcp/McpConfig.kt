@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.mcp
+package me.rerere.rikkahub.data.ai.mcp
 
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.InputSchema

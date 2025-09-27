@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.mcp.McpManager
+import me.rerere.rikkahub.data.ai.mcp.McpManager
 
 class SettingVM(
     private val settingsStore: SettingsStore,

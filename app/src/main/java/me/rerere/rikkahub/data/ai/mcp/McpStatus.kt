@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.mcp
+package me.rerere.rikkahub.data.ai.mcp
 
 sealed class McpStatus {
     object Idle : McpStatus()

@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.ui.UIMessage
-import me.rerere.rikkahub.data.ai.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import kotlin.uuid.Uuid
 
 @Serializable

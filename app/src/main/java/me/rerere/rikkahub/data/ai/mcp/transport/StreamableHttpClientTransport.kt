@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.mcp.transport
+package me.rerere.rikkahub.data.ai.mcp.transport
 
 import android.util.Log
 import io.modelcontextprotocol.kotlin.sdk.JSONRPCMessage

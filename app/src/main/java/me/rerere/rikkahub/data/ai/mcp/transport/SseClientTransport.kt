@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.mcp.transport
+package me.rerere.rikkahub.data.ai.mcp.transport
 
 import android.util.Log
 import io.ktor.http.URLBuilder
@@ -15,7 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import me.rerere.common.http.await
-import me.rerere.rikkahub.data.mcp.McpJson
+import me.rerere.rikkahub.data.ai.mcp.McpJson
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient

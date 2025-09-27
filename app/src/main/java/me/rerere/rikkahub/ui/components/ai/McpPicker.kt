@@ -41,9 +41,9 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquareOff
 import com.composables.icons.lucide.Terminal
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.mcp.McpManager
-import me.rerere.rikkahub.data.mcp.McpServerConfig
-import me.rerere.rikkahub.data.mcp.McpStatus
+import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.ai.mcp.McpStatus
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType

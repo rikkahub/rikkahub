@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.mcp
+package me.rerere.rikkahub.data.ai.mcp
 
 import android.util.Log
 import io.modelcontextprotocol.kotlin.sdk.CallToolRequest
@@ -23,8 +23,8 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.mcp.transport.SseClientTransport
-import me.rerere.rikkahub.data.mcp.transport.StreamableHttpClientTransport
+import me.rerere.rikkahub.data.ai.mcp.transport.SseClientTransport
+import me.rerere.rikkahub.data.ai.mcp.transport.StreamableHttpClientTransport
 import me.rerere.rikkahub.utils.checkDifferent
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
