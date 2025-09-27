@@ -121,7 +121,6 @@ import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
-import me.rerere.rikkahub.utils.GetContentWithMultiMime
 import me.rerere.rikkahub.utils.createChatFilesByContents
 import me.rerere.rikkahub.utils.deleteChatFiles
 import me.rerere.rikkahub.utils.getFileMimeType
@@ -926,7 +925,7 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
     val context = LocalContext.current
     val toaster = LocalToaster.current
     val pickMedia =
-        rememberLauncherForActivityResult(GetContentWithMultiMime()) { uris ->
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isNotEmpty()) {
                 val allowedMimeTypes = setOf(
                     "text/plain",
@@ -995,9 +994,7 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
             Text(stringResource(R.string.upload_file))
         }
     ) {
-        pickMedia.launch(
-            listOf("*/*")
-        )
+        pickMedia.launch(arrayOf("*/*"))
     }
 }
 
