@@ -30,7 +30,7 @@
 - 🔄 多種類型的供應商支持，自定義 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
 - 🖼️ 多模態輸入支持
 - 📝 Markdown 渲染（支持代碼高亮、數學公式、表格、Mermaid）
-- 🔍 搜尋功能（Exa、Tavily、Zhipu、LinkUp、Brave、..）
+- 🔍 搜尋功能（Exa、Tavily、Zhipu、LinkUp、Brave、Perplexity、..）
 - 🧩 Prompt 變量（模型名稱、時間等）
 - 🤳 二維碼導出和導入提供商
 - 🤖 智能體自定義
