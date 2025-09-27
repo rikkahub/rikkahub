@@ -43,6 +43,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.BraveOptions -> BraveSearchService
                 is SearchServiceOptions.MetasoOptions -> MetasoSearchService
                 is SearchServiceOptions.OllamaOptions -> OllamaSearchService
+                is SearchServiceOptions.PerplexityOptions -> PerplexitySearchService
             } as SearchService<T>
         }
 
@@ -95,6 +96,7 @@ sealed class SearchServiceOptions {
             BraveOptions::class to "Brave",
             MetasoOptions::class to "秘塔",
             OllamaOptions::class to "Ollama",
+            PerplexityOptions::class to "Perplexity",
         )
     }
 
@@ -164,6 +166,14 @@ sealed class SearchServiceOptions {
     data class OllamaOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("perplexity")
+    data class PerplexityOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+        val maxTokensPerPage: Int? = 1024,
     ) : SearchServiceOptions()
 }
 

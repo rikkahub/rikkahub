@@ -38,6 +38,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.GripHorizontal
@@ -301,6 +303,13 @@ private fun SearchProviderCard(
 
                 is SearchServiceOptions.OllamaOptions -> {
                     OllamaOptions(options as SearchServiceOptions.OllamaOptions) {
+                        options = it
+                        onUpdateService(options)
+                    }
+                }
+
+                is SearchServiceOptions.PerplexityOptions -> {
+                    PerplexityOptions(options as SearchServiceOptions.PerplexityOptions) {
                         options = it
                         onUpdateService(options)
                     }
@@ -697,6 +706,49 @@ private fun OllamaOptions(
                 )
             },
             modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun PerplexityOptions(
+    options: SearchServiceOptions.PerplexityOptions,
+    onUpdateOptions: (SearchServiceOptions.PerplexityOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text("Max Tokens / Page")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.maxTokensPerPage?.takeIf { it > 0 }?.toString() ?: "",
+            onValueChange = { value ->
+                onUpdateOptions(
+                    options.copy(
+                        maxTokensPerPage = value.toIntOrNull()
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
     }
 }

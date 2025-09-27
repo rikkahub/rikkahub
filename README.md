@@ -35,7 +35,7 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 - 🛠️ MCP support
 - 📝 Markdown Rendering (with code highlighting, Latex formulas, tables, Mermaid)
 - 🪾 Message Branching
-- 🔍 Search capabilities (Exa, Tavily, Zhipu, LinkUp, Brave, etc.)
+- 🔍 Search capabilities (Exa, Tavily, Zhipu, LinkUp, Brave, Perplexity, etc.)
 - 🧩 Prompt variables (model name, time, etc.)
 - 🤳 QR code export and import for providers
 - 🤖 Agent customization
