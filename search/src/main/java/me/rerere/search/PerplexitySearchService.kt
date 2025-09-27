@@ -1,5 +1,6 @@
 package me.rerere.search
 
+import android.util.Log
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,6 +23,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 private const val PERPLEXITY_ENDPOINT = "https://api.perplexity.ai/search"
+private const val TAG = "PerplexitySearchService"
 
 object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOptions> {
     override val name: String = "Perplexity"
@@ -71,6 +73,8 @@ object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOp
                     }
                 }
             }
+
+            Log.i(TAG, "search: $body")
 
             val request = Request.Builder()
                 .url(PERPLEXITY_ENDPOINT)
