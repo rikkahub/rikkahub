@@ -38,7 +38,7 @@ class PreferenceStoreV1Migration : DataMigration<Preferences> {
         } ?: "[]"
 
         // 更新版本
-        // prefs[SettingsStore.VERSION] = 1
+        prefs[SettingsStore.VERSION] = 1
 
         return prefs.toPreferences()
     }
