@@ -69,7 +69,8 @@ val dataSourceModule = module {
             providerManager = get(),
             json = get(),
             memoryRepo = get(),
-            conversationRepo = get()
+            conversationRepo = get(),
+            aiLoggingManager = get()
         )
     }
 
