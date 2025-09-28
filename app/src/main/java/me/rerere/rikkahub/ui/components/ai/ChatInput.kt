@@ -964,7 +964,14 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                         fileName.endsWith(".xml", ignoreCase = true) ||
                         fileName.endsWith(".py", ignoreCase = true) ||
                         fileName.endsWith(".java", ignoreCase = true) ||
-                        fileName.endsWith(".kt", ignoreCase = true)
+                        fileName.endsWith(".kt", ignoreCase = true) ||
+                        fileName.endsWith(".ts", ignoreCase = true) ||
+                        fileName.endsWith(".tsx", ignoreCase = true) ||
+                        fileName.endsWith(".md", ignoreCase = true) ||
+                        fileName.endsWith(".markdown", ignoreCase = true) ||
+                        fileName.endsWith(".mdx", ignoreCase = true) ||
+                        fileName.endsWith(".yml", ignoreCase = true) ||
+                        fileName.endsWith(".yaml", ignoreCase = true)
 
                     if (isAllowed) {
                         val localUri = context.createChatFilesByContents(listOf(uri))[0]
