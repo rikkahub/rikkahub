@@ -51,6 +51,8 @@ object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOp
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -110,6 +112,14 @@ object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOp
                 error("response failed #${response.code}: ${response.body?.string()}")
             }
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.PerplexityOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Perplexity"))
     }
 
     @Serializable

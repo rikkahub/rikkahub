@@ -46,6 +46,8 @@ object BraveSearchService : SearchService<SearchServiceOptions.BraveOptions> {
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -86,6 +88,14 @@ object BraveSearchService : SearchService<SearchServiceOptions.BraveOptions> {
                 error("Brave search failed with code ${response.code}: ${response.message}")
             }
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.BraveOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Brave"))
     }
 
     @Serializable

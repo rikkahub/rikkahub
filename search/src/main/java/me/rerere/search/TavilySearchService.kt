@@ -60,6 +60,8 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -106,6 +108,14 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
                 error("response failed #${response.code}")
             }
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.TavilyOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Tavily"))
     }
 
     @Serializable

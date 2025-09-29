@@ -48,6 +48,8 @@ object ZhipuSearchService : SearchService<SearchServiceOptions.ZhipuOptions> {
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -94,6 +96,14 @@ object ZhipuSearchService : SearchService<SearchServiceOptions.ZhipuOptions> {
                 error("response failed #${response.code}")
             }
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.ZhipuOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Zhipu"))
     }
 
     @Serializable

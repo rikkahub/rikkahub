@@ -49,6 +49,8 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -94,6 +96,14 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
                 error("response failed #${response.code}: ${response.body?.string()}")
             }
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.LinkUpOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for LinkUp"))
     }
 
     @Serializable

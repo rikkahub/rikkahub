@@ -46,6 +46,8 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -97,6 +99,14 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
                 error("Search request failed with code ${response.code}: $errorBody")
             }
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.MetasoOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Metaso"))
     }
 
     @Serializable

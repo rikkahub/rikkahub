@@ -48,6 +48,8 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -95,6 +97,14 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                 error("response failed #${response.code}")
             }
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.ExaOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Exa"))
     }
 
     @Serializable

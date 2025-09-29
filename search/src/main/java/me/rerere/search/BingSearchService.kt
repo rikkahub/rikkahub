@@ -34,6 +34,8 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -77,5 +79,13 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
 
             SearchResult(items = results)
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.BingLocalOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Bing"))
     }
 }

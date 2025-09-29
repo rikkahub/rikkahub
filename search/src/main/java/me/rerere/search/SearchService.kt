@@ -21,6 +21,8 @@ interface SearchService<T : SearchServiceOptions> {
 
     val parameters: InputSchema?
 
+    val scrapingParameters: InputSchema?
+
     @Composable
     fun Description()
 
@@ -29,6 +31,12 @@ interface SearchService<T : SearchServiceOptions> {
         commonOptions: SearchCommonOptions,
         serviceOptions: T
     ): Result<SearchResult>
+
+    suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: T
+    ): Result<ScrapedResult>
 
     companion object {
         @Suppress("UNCHECKED_CAST")
@@ -50,6 +58,9 @@ interface SearchService<T : SearchServiceOptions> {
 
         internal val httpClient by lazy {
             OkHttpClient.Builder()
+                .retryOnConnectionFailure(true)
+                .followRedirects(true)
+                .followSslRedirects(true)
                 .build()
         }
 
@@ -79,6 +90,19 @@ data class SearchResult(
         val text: String,
     )
 }
+
+@Serializable
+data class ScrapedResult(
+    val content: String,
+    val metadata: ScrapedResultMetadata? = null,
+)
+
+@Serializable
+data class ScrapedResultMetadata(
+    val title: String? = null,
+    val description: String? = null,
+    val language: String? = null,
+)
 
 @Serializable
 sealed class SearchServiceOptions {

@@ -44,6 +44,8 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -83,6 +85,14 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
                 error("Ollama search failed with code ${response.code}: ${response.message}")
             }
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.OllamaOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Ollama"))
     }
 
     @Serializable

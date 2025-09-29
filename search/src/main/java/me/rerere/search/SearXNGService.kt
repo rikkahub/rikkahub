@@ -45,6 +45,8 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -117,6 +119,15 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
             }
         }
     }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.SearXNGOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for SearXNG"))
+    }
+
 
     @Serializable
     data class SearXNGResponse(

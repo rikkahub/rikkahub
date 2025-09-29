@@ -71,6 +71,8 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
             required = listOf("query")
         )
 
+    override val scrapingParameters: InputSchema? = null
+
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
@@ -135,6 +137,14 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
                 items = result
             )
         }
+    }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.FirecrawlOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for Firecrawl"))
     }
 
     private fun JsonElement?.asStringList(): List<String>? {
