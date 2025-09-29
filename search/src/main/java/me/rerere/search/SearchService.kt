@@ -44,6 +44,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.MetasoOptions -> MetasoSearchService
                 is SearchServiceOptions.OllamaOptions -> OllamaSearchService
                 is SearchServiceOptions.PerplexityOptions -> PerplexitySearchService
+                is SearchServiceOptions.FirecrawlOptions -> FirecrawlSearchService
             } as SearchService<T>
         }
 
@@ -97,6 +98,7 @@ sealed class SearchServiceOptions {
             MetasoOptions::class to "秘塔",
             OllamaOptions::class to "Ollama",
             PerplexityOptions::class to "Perplexity",
+            FirecrawlOptions::class to "Firecrawl",
         )
     }
 
@@ -174,6 +176,13 @@ sealed class SearchServiceOptions {
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
         val maxTokensPerPage: Int? = 1024,
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("firecrawl")
+    data class FirecrawlOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
     ) : SearchServiceOptions()
 }
 

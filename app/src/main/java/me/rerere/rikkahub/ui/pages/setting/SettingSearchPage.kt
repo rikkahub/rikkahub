@@ -316,6 +316,13 @@ private fun SearchProviderCard(
                 }
 
                 is SearchServiceOptions.BingLocalOptions -> {}
+
+                is SearchServiceOptions.FirecrawlOptions -> {
+                    FirecrawlOptions(options as SearchServiceOptions.FirecrawlOptions) {
+                        options = it
+                        onUpdateService(options)
+                    }
+                }
             }
 
             ProvideTextStyle(MaterialTheme.typography.labelMedium) {
@@ -749,6 +756,30 @@ private fun PerplexityOptions(
             },
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+    }
+}
+
+@Composable
+private fun FirecrawlOptions(
+    options: SearchServiceOptions.FirecrawlOptions,
+    onUpdateOptions: (SearchServiceOptions.FirecrawlOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
