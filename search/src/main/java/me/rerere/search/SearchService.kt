@@ -93,6 +93,12 @@ data class SearchResult(
 
 @Serializable
 data class ScrapedResult(
+    val urls: List<ScrapedResultUrl>,
+)
+
+@Serializable
+data class ScrapedResultUrl(
+    val url: String,
     val content: String,
     val metadata: ScrapedResultMetadata? = null,
 )

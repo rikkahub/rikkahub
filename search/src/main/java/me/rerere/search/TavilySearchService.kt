@@ -7,13 +7,14 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
@@ -60,7 +61,16 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override val scrapingParameters: InputSchema?
+        get() = InputSchema.Obj(
+            properties = buildJsonObject {
+                put("urls", buildJsonObject {
+                    put("type", "array")
+                    put("description", "urls to scrape")
+                })
+            },
+            required = listOf("urls")
+        )
 
     override suspend fun search(
         params: JsonObject,
@@ -114,8 +124,36 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.TavilyOptions
-    ): Result<ScrapedResult> {
-        return Result.failure(Exception("Scraping is not supported for Tavily"))
+    ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
+        runCatching {
+            val urls = params["urls"]?.jsonArray ?: error("urls is required")
+            val body = buildJsonObject {
+                put("urls", urls)
+            }
+            val request = Request.Builder()
+                .url("https://api.tavily.com/extract")
+                .post(body.toString().toRequestBody())
+                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .build()
+            val response = httpClient.newCall(request).await()
+            if (response.isSuccessful) {
+                val response = response.body.string().let {
+                    json.decodeFromString<ScrapeResponse>(it)
+                }
+                return@withContext Result.success(
+                    ScrapedResult(
+                        urls = response.results.map {
+                            ScrapedResultUrl(
+                                url = it.url,
+                                content = it.rawContent,
+                            )
+                        }
+                    )
+                )
+            } else {
+                error("response failed #${response.code}")
+            }
+        }
     }
 
     @Serializable
@@ -124,15 +162,27 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
         val followUpQuestions: String? = null,
         val answer: String? = null,
         val images: List<String> = emptyList(),
-        val results: List<ResultItem>,
+        val results: List<TavilySearchService.SearchResultItem>,
     )
 
     @Serializable
-    data class ResultItem(
+    data class SearchResultItem(
         val title: String,
         val url: String,
         val content: String,
         val score: Double,
         val rawContent: String? = null
+    )
+
+    @Serializable
+    data class ScrapeResponse(
+        val results: List<ScrapedResultItem>,
+    )
+
+    @Serializable
+    data class ScrapedResultItem(
+        val url: String,
+        @SerialName("raw_content")
+        val rawContent: String,
     )
 }
