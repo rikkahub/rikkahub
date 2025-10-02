@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.GripHorizontal
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
@@ -217,7 +220,7 @@ private fun SearchProviderCard(
     var options by remember(service) {
         mutableStateOf(service)
     }
-
+    var expand by remember { mutableStateOf(false) }
     Card(
         modifier = modifier
     ) {
@@ -228,99 +231,118 @@ private fun SearchProviderCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Select(
-                options = SearchServiceOptions.TYPES.keys.toList(),
-                selectedOption = options::class,
-                optionToString = { SearchServiceOptions.TYPES[it] ?: "[Unknown]" },
-                onOptionSelected = {
-                    options = it.primaryConstructor!!.callBy(mapOf())
-                    onUpdateService(options)
-                },
-                optionLeading = {
-                    AutoAIIcon(
-                        name = SearchServiceOptions.TYPES[it] ?: it.simpleName ?: "unknown",
-                        modifier = Modifier.size(24.dp)
+            Row {
+                Select(
+                    options = SearchServiceOptions.TYPES.keys.toList(),
+                    selectedOption = options::class,
+                    optionToString = { SearchServiceOptions.TYPES[it] ?: "[Unknown]" },
+                    onOptionSelected = {
+                        options = it.primaryConstructor!!.callBy(mapOf())
+                        onUpdateService(options)
+                    },
+                    optionLeading = {
+                        AutoAIIcon(
+                            name = SearchServiceOptions.TYPES[it] ?: it.simpleName ?: "unknown",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    },
+                    leading = {
+                        AutoAIIcon(
+                            name = SearchServiceOptions.TYPES[options::class] ?: "unknown",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                IconButton(
+                    onClick = {
+                        expand = !expand
+                    }
+                ) {
+                    Icon(
+                        if (expand) Lucide.ChevronUp else Lucide.ChevronDown,
+                        contentDescription = if (expand) "Hide details" else "Show details"
                     )
-                },
-                leading = {
-                    AutoAIIcon(
-                        name = SearchServiceOptions.TYPES[options::class] ?: "unknown",
-                        modifier = Modifier.size(24.dp)
-                    )
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            when (options) {
-                is SearchServiceOptions.TavilyOptions -> {
-                    TavilyOptions(options as SearchServiceOptions.TavilyOptions) {
-                        options = it
-                        onUpdateService(options)
-                    }
                 }
+            }
 
-                is SearchServiceOptions.ExaOptions -> {
-                    ExaOptions(options as SearchServiceOptions.ExaOptions) {
-                        options = it
-                        onUpdateService(options)
-                    }
-                }
+            AnimatedVisibility(expand) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    when (options) {
+                        is SearchServiceOptions.TavilyOptions -> {
+                            TavilyOptions(options as SearchServiceOptions.TavilyOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
 
-                is SearchServiceOptions.ZhipuOptions -> {
-                    ZhipuOptions(options as SearchServiceOptions.ZhipuOptions) {
-                        options = it
-                        onUpdateService(options)
-                    }
-                }
+                        is SearchServiceOptions.ExaOptions -> {
+                            ExaOptions(options as SearchServiceOptions.ExaOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
 
-                is SearchServiceOptions.SearXNGOptions -> {
-                    SearXNGOptions(options as SearchServiceOptions.SearXNGOptions) {
-                        options = it
-                        onUpdateService(options)
-                    }
-                }
+                        is SearchServiceOptions.ZhipuOptions -> {
+                            ZhipuOptions(options as SearchServiceOptions.ZhipuOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
 
-                is SearchServiceOptions.LinkUpOptions -> {
-                    SearchLinkUpOptions(options as SearchServiceOptions.LinkUpOptions) {
-                        options = it
-                        onUpdateService(options)
-                    }
-                }
+                        is SearchServiceOptions.SearXNGOptions -> {
+                            SearXNGOptions(options as SearchServiceOptions.SearXNGOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
 
-                is SearchServiceOptions.BraveOptions -> {
-                    BraveOptions(options as SearchServiceOptions.BraveOptions) {
-                        options = it
-                        onUpdateService(options)
-                    }
-                }
+                        is SearchServiceOptions.LinkUpOptions -> {
+                            SearchLinkUpOptions(options as SearchServiceOptions.LinkUpOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
 
-                is SearchServiceOptions.MetasoOptions -> {
-                    MetasoOptions(options as SearchServiceOptions.MetasoOptions) {
-                        options = it
-                        onUpdateService(options)
-                    }
-                }
+                        is SearchServiceOptions.BraveOptions -> {
+                            BraveOptions(options as SearchServiceOptions.BraveOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
 
-                is SearchServiceOptions.OllamaOptions -> {
-                    OllamaOptions(options as SearchServiceOptions.OllamaOptions) {
-                        options = it
-                        onUpdateService(options)
-                    }
-                }
+                        is SearchServiceOptions.MetasoOptions -> {
+                            MetasoOptions(options as SearchServiceOptions.MetasoOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
 
-                is SearchServiceOptions.PerplexityOptions -> {
-                    PerplexityOptions(options as SearchServiceOptions.PerplexityOptions) {
-                        options = it
-                        onUpdateService(options)
-                    }
-                }
+                        is SearchServiceOptions.OllamaOptions -> {
+                            OllamaOptions(options as SearchServiceOptions.OllamaOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
 
-                is SearchServiceOptions.BingLocalOptions -> {}
+                        is SearchServiceOptions.PerplexityOptions -> {
+                            PerplexityOptions(options as SearchServiceOptions.PerplexityOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
 
-                is SearchServiceOptions.FirecrawlOptions -> {
-                    FirecrawlOptions(options as SearchServiceOptions.FirecrawlOptions) {
-                        options = it
-                        onUpdateService(options)
+                        is SearchServiceOptions.BingLocalOptions -> {}
+
+                        is SearchServiceOptions.FirecrawlOptions -> {
+                            FirecrawlOptions(options as SearchServiceOptions.FirecrawlOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
                     }
                 }
             }
