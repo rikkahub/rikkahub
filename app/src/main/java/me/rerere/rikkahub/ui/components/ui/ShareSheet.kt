@@ -25,14 +25,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Share2
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
 @Composable
 fun ShareSheet(
@@ -65,7 +60,7 @@ fun ShareSheet(
                             intent.type = "text/plain"
                             intent.putExtra(
                                 Intent.EXTRA_TEXT,
-                                state.currentProvider?.encode() ?: ""
+                                state.currentProvider?.encodeForShare() ?: ""
                             )
                             try {
                                 context.startActivity(Intent.createChooser(intent, null))
@@ -79,7 +74,7 @@ fun ShareSheet(
                 }
 
                 QRCode(
-                    value = state.currentProvider?.encode() ?: "",
+                    value = state.currentProvider?.encodeForShare() ?: "",
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .fillMaxWidth()
@@ -90,49 +85,16 @@ fun ShareSheet(
     }
 }
 
-@OptIn(ExperimentalEncodingApi::class)
-private fun ProviderSetting.encode(): String {
+fun ProviderSetting.encodeForShare(): String {
     return buildString {
         append("ai-provider:")
         append("v1:")
 
-        val value = JsonInstant.encodeToString(buildJsonObject {
-            // "type": "openai-compat", "google", "anthropic"
-            put(
-                "type", JsonPrimitive(
-                    when (this@encode) {
-                        is ProviderSetting.OpenAI -> "openai-compat"
-                        is ProviderSetting.Google -> "google"
-                        is ProviderSetting.Claude -> "claude"
-                    }
-                )
-            )
-
-            // display name
-            put("name", JsonPrimitive(name))
-
-            // provider settings
-            when (this@encode) {
-                is ProviderSetting.OpenAI -> {
-                    put("apiKey", JsonPrimitive(apiKey))
-                    put("baseUrl", JsonPrimitive(baseUrl))
-                }
-
-                is ProviderSetting.Google -> {
-                    put("apiKey", JsonPrimitive(apiKey))
-                }
-
-                is ProviderSetting.Claude -> {
-                    put("apiKey", JsonPrimitive(apiKey))
-                    put("baseUrl", JsonPrimitive(baseUrl))
-                }
-            }
-        })
+        val value = JsonInstant.encodeToString(this@encodeForShare.copyProvider(models = emptyList()))
         append(Base64.encode(value.encodeToByteArray()))
     }
 }
 
-@OptIn(ExperimentalEncodingApi::class)
 fun decodeProviderSetting(value: String): ProviderSetting {
     require(value.startsWith("ai-provider:v1:")) { "Invalid provider setting string" }
 
@@ -142,27 +104,8 @@ fun decodeProviderSetting(value: String): ProviderSetting {
     // Base64解码
     val jsonBytes = Base64.decode(base64Str)
     val jsonStr = jsonBytes.decodeToString()
-    val jsonObj = JsonInstant.parseToJsonElement(jsonStr).jsonObject
 
-    val type = jsonObj["type"]?.jsonPrimitive?.content ?: error("Missing type")
-    val name = jsonObj["name"]?.jsonPrimitive?.content ?: error("Missing name")
-
-    return when (type) {
-        "openai-compat" -> ProviderSetting.OpenAI(
-            name = name,
-            apiKey = jsonObj["apiKey"]?.jsonPrimitive?.content ?: error("Missing apiKey"),
-            baseUrl = jsonObj["baseUrl"]?.jsonPrimitive?.content ?: error("Missing baseUrl"),
-            models = emptyList()
-        )
-
-        "google" -> ProviderSetting.Google(
-            name = name,
-            apiKey = jsonObj["apiKey"]?.jsonPrimitive?.content ?: error("Missing apiKey"),
-            models = emptyList()
-        )
-
-        else -> error("Unknown provider type: $type")
-    }
+    return JsonInstant.decodeFromString<ProviderSetting>(jsonStr)
 }
 
 class ShareSheetState {
