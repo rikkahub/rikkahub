@@ -460,6 +460,7 @@ private fun MarkdownNode(
                     model = imageUrl,
                     contentDescription = altText,
                     modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
                         .widthIn(min = 120.dp)
                         .heightIn(min = 120.dp),
                 )

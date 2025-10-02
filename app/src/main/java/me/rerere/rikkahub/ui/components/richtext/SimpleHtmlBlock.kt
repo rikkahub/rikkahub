@@ -12,11 +12,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -36,15 +34,12 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import coil3.compose.AsyncImagePainter
+import androidx.core.graphics.toColorInt
+import me.rerere.rikkahub.ui.components.table.DataTable
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
-import androidx.core.graphics.toColorInt
-import me.rerere.rikkahub.ui.components.table.DataTable
 
 @Composable
 fun SimpleHtmlBlock(
@@ -52,7 +47,7 @@ fun SimpleHtmlBlock(
     modifier: Modifier = Modifier
 ) {
     val document = remember(html) {
-        runCatching {  Jsoup.parse(html) }.getOrElse {
+        runCatching { Jsoup.parse(html) }.getOrElse {
             Jsoup.parse("<p>Error parsing HTML: ${it.message}</p>")
         }
     }
@@ -91,6 +86,7 @@ private fun RenderNode(
                 )
             }
         }
+
         is Element -> {
             when (node.tagName().lowercase()) {
                 "p" -> {
@@ -110,6 +106,7 @@ private fun RenderNode(
                         )
                     }
                 }
+
                 "h1", "h2", "h3", "h4", "h5", "h6" -> {
                     val headingLevel = node.tagName().substring(1).toIntOrNull() ?: 1
                     val textStyle = when (headingLevel) {
@@ -137,24 +134,31 @@ private fun RenderNode(
                         )
                     }
                 }
+
                 "ul", "ol" -> {
                     RenderList(node, node.tagName() == "ol", onLinkClick)
                 }
+
                 "details" -> {
                     RenderDetails(node, onLinkClick)
                 }
+
                 "img" -> {
                     RenderImage(node)
                 }
+
                 "progress" -> {
                     RenderProgress(node)
                 }
+
                 "table" -> {
                     RenderTable(node, onLinkClick)
                 }
+
                 "br" -> {
                     Spacer(modifier = Modifier.height(8.dp))
                 }
+
                 "div" -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         node.childNodes().forEach { childNode ->
@@ -162,6 +166,7 @@ private fun RenderNode(
                         }
                     }
                 }
+
                 else -> {
                     // Render other elements as text
                     val annotatedString = buildAnnotatedStringFromElement(node, onLinkClick)
@@ -292,7 +297,7 @@ private fun RenderImage(
                 .padding(vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
-            AsyncImage(
+            ZoomableAsyncImage(
                 model = src,
                 contentDescription = alt.takeIf { it.isNotEmpty() },
                 modifier = Modifier
@@ -300,17 +305,6 @@ private fun RenderImage(
                     .heightIn(max = 400.dp)
                     .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Fit,
-                onState = { state ->
-                    when (state) {
-                        is AsyncImagePainter.State.Loading -> {
-                            // Show loading indicator
-                        }
-                        is AsyncImagePainter.State.Error -> {
-                            // Handle error silently or show placeholder
-                        }
-                        else -> Unit
-                    }
-                }
             )
         }
     }
@@ -335,6 +329,7 @@ private fun processElementNodes(
             is TextNode -> {
                 builder.append(node.text())
             }
+
             is Element -> {
                 when (node.tagName().lowercase()) {
                     "b", "strong" -> {
@@ -346,6 +341,7 @@ private fun processElementNodes(
                             builder.length
                         )
                     }
+
                     "i", "em" -> {
                         val start = builder.length
                         processElementNodes(node, builder, onLinkClick)
@@ -355,6 +351,7 @@ private fun processElementNodes(
                             builder.length
                         )
                     }
+
                     "u" -> {
                         val start = builder.length
                         processElementNodes(node, builder, onLinkClick)
@@ -364,6 +361,7 @@ private fun processElementNodes(
                             builder.length
                         )
                     }
+
                     "a" -> {
                         val href = node.attr("href")
                         val start = builder.length
@@ -385,6 +383,7 @@ private fun processElementNodes(
                             )
                         }
                     }
+
                     "code" -> {
                         val start = builder.length
                         processElementNodes(node, builder, onLinkClick)
@@ -397,9 +396,11 @@ private fun processElementNodes(
                             builder.length
                         )
                     }
+
                     "br" -> {
                         builder.append("\n")
                     }
+
                     "span" -> {
                         val start = builder.length
                         processElementNodes(node, builder, onLinkClick)
@@ -417,6 +418,7 @@ private fun processElementNodes(
                             }
                         }
                     }
+
                     "font" -> {
                         val start = builder.length
                         processElementNodes(node, builder, onLinkClick)
@@ -434,6 +436,7 @@ private fun processElementNodes(
                             }
                         }
                     }
+
                     else -> {
                         processElementNodes(node, builder, onLinkClick)
                     }
@@ -487,9 +490,11 @@ private fun parseColor(colorString: String): Color? {
                         val b = hex[2].toString().repeat(2)
                         Color("#$r$g$b".toColorInt())
                     }
+
                     else -> null
                 }
             }
+
             colorString.startsWith("rgb(") -> {
                 // RGB color
                 val rgb = colorString.removePrefix("rgb(").removeSuffix(")")
@@ -498,6 +503,7 @@ private fun parseColor(colorString: String): Color? {
                     Color(values[0]!!, values[1]!!, values[2]!!)
                 } else null
             }
+
             colorString.startsWith("rgba(") -> {
                 // RGBA color
                 val rgba = colorString.removePrefix("rgba(").removeSuffix(")")
@@ -508,11 +514,13 @@ private fun parseColor(colorString: String): Color? {
                     val b = values[2].toIntOrNull()
                     val a = values[3].toFloatOrNull()
                     if (r != null && g != null && b != null && a != null &&
-                        r in 0..255 && g in 0..255 && b in 0..255 && a in 0f..1f) {
+                        r in 0..255 && g in 0..255 && b in 0..255 && a in 0f..1f
+                    ) {
                         Color(r, g, b, (a * 255).toInt())
                     } else null
                 } else null
             }
+
             else -> {
                 // Named colors
                 when (colorString.lowercase()) {
@@ -593,6 +601,7 @@ private fun RenderProgress(
                     Modifier.fillMaxWidth()
                 }
             }
+
             width.endsWith("px") -> {
                 val pixels = width.removeSuffix("px").toIntOrNull()
                 if (pixels != null && pixels > 0) {
@@ -601,6 +610,7 @@ private fun RenderProgress(
                     Modifier.fillMaxWidth()
                 }
             }
+
             else -> {
                 val pixels = width.toIntOrNull()
                 if (pixels != null && pixels > 0) {
