@@ -54,6 +54,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.OllamaOptions -> OllamaSearchService
                 is SearchServiceOptions.PerplexityOptions -> PerplexitySearchService
                 is SearchServiceOptions.FirecrawlOptions -> FirecrawlSearchService
+                is SearchServiceOptions.JinaOptions -> JinaSearchService
             } as SearchService<T>
         }
 
@@ -131,6 +132,7 @@ sealed class SearchServiceOptions {
             OllamaOptions::class to "Ollama",
             PerplexityOptions::class to "Perplexity",
             FirecrawlOptions::class to "Firecrawl",
+            JinaOptions::class to "Jina",
         )
     }
 
@@ -213,6 +215,13 @@ sealed class SearchServiceOptions {
     @Serializable
     @SerialName("firecrawl")
     data class FirecrawlOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("jina")
+    data class JinaOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
     ) : SearchServiceOptions()

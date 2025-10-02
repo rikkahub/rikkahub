@@ -126,7 +126,7 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
                         onClick = {
                             vm.updateSettings(
                                 settings.copy(
-                                    searchServices = settings.searchServices + SearchServiceOptions.BingLocalOptions()
+                                    searchServices =  listOf(SearchServiceOptions.BingLocalOptions()) + settings.searchServices
                                 )
                             )
                         }
@@ -345,6 +345,13 @@ private fun SearchProviderCard(
 
                         is SearchServiceOptions.FirecrawlOptions -> {
                             FirecrawlOptions(options as SearchServiceOptions.FirecrawlOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
+
+                        is SearchServiceOptions.JinaOptions -> {
+                            JinaOptions(options as SearchServiceOptions.JinaOptions) {
                                 options = it
                                 onUpdateService(options)
                             }
@@ -817,6 +824,30 @@ private fun PerplexityOptions(
 private fun FirecrawlOptions(
     options: SearchServiceOptions.FirecrawlOptions,
     onUpdateOptions: (SearchServiceOptions.FirecrawlOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun JinaOptions(
+    options: SearchServiceOptions.JinaOptions,
+    onUpdateOptions: (SearchServiceOptions.JinaOptions) -> Unit
 ) {
     FormItem(
         label = {
