@@ -14,7 +14,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import me.rerere.common.http.await
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.mcp.McpJson
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
@@ -53,6 +55,7 @@ internal class SseClientTransport(
             }
             .build()
             .toString()
+            .trimEnd('/')
     }
 
     override suspend fun start() {
@@ -63,9 +66,7 @@ internal class SseClientTransport(
             )
         }
 
-        Log.i(TAG, "start: $urlString")
-
-        eventSourceFactory.newEventSource(
+        session = eventSourceFactory.newEventSource(
             request = Request.Builder()
                 .url(urlString)
                 .headers(
@@ -75,7 +76,10 @@ internal class SseClientTransport(
                                 add(key, value)
                             }
                         }
-                        .build())
+                        .build()
+                )
+                .addHeader("Accept", "text/event-stream")
+                .addHeader("User-Agent", "RikkaHub/${BuildConfig.VERSION_NAME}")
                 .build(),
             listener = object : EventSourceListener() {
                 override fun onOpen(eventSource: EventSource, response: Response) {
@@ -95,7 +99,7 @@ internal class SseClientTransport(
                 ) {
                     super.onFailure(eventSource, t, response)
                     t?.printStackTrace()
-                    Log.i(TAG, "onFailure: $urlString / $t")
+                    Log.i(TAG, "onFailure: $urlString / $t / $baseUrl")
                     endpoint.completeExceptionally(t ?: Exception("SSE Failure"))
                     _onError(t ?: Exception("SSE Failure"))
                     _onClose()
@@ -107,12 +111,11 @@ internal class SseClientTransport(
                     type: String?,
                     data: String
                 ) {
-                    Log.i(TAG, "onEvent:  #$id($type) - $data")
+                    Log.i(TAG, "onEvent($baseUrl):  #$id($type) - $data")
                     when (type) {
                         "error" -> {
                             val e = IllegalStateException("SSE error: $data")
                             _onError(e)
-                            throw e
                         }
 
                         "open" -> {
@@ -128,6 +131,7 @@ internal class SseClientTransport(
                                     // 相对路径，加上baseUrl
                                     baseUrl + if (data.startsWith("/")) data else "/$data"
                                 }
+                            Log.i(TAG, "onEvent: endpoint: $endpointData")
                             endpoint.complete(endpointData)
                         }
 
@@ -145,7 +149,10 @@ internal class SseClientTransport(
                 }
             }
         )
-        endpoint.await()
+        withTimeout(30000) {
+            endpoint.await()
+            Log.i(TAG, "start: Connected to endpoint ${endpoint.getCompleted()}")
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -153,6 +160,8 @@ internal class SseClientTransport(
         if (!endpoint.isCompleted) {
             error("Not connected")
         }
+
+        Log.i(TAG, "send: POSTing to endpoint ${endpoint.getCompleted()} - $message")
 
         try {
             val request = Request.Builder()
@@ -169,10 +178,11 @@ internal class SseClientTransport(
                 )
                 .build()
             val response = client.newCall(request).await()
-
             if (!response.isSuccessful) {
-                val text = response.body?.string()
+                val text = response.body.string()
                 error("Error POSTing to endpoint ${endpoint.getCompleted()} (HTTP ${response.code}): $text")
+            } else {
+                Log.i(TAG, "send: POST to endpoint ${endpoint.getCompleted()} successful")
             }
         } catch (e: Exception) {
             _onError(e)

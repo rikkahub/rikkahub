@@ -47,7 +47,7 @@ leakcanary = "2.14"
 workmanager = "2.10.3"
 reorderable = "3.0.0"
 objectbox = "4.3.0"
-mcp = "0.6.0"
+mcp = "0.7.2"
 pebble = "3.2.4"
 browser = "1.9.0"
 appcompat = "1.7.1"
@@ -57,6 +57,7 @@ uiautomator = "2.3.0"
 benchmarkMacroJunit4 = "1.2.4"
 baselineprofile = "1.4.0"
 profileinstaller = "1.4.1"
+ktor = "3.3.0"
 
 [libraries]
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }
@@ -139,6 +140,10 @@ ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
 androidx-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
 androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmarkMacroJunit4" }
 androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
