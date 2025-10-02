@@ -133,6 +133,7 @@ private fun computeAIIconByName(name: String): String? {
         PATTERN_SEARCH_EXA.containsMatchIn(lowerName) -> "exa.png"
         PATTERN_SEARCH_BRAVE.containsMatchIn(lowerName) -> "brave.svg"
         PATTERN_SEARCH_METASO.containsMatchIn(lowerName) -> "metaso.svg"
+        PATTERN_SEARCH_FIRECRAWL.containsMatchIn(lowerName) -> "firecrawl.svg"
         else -> null
     }
 
@@ -190,6 +191,7 @@ private val PATTERN_SEARCH_TAVILY = Regex("tavily")
 private val PATTERN_SEARCH_EXA = Regex("exa")
 private val PATTERN_SEARCH_BRAVE = Regex("brave")
 private val PATTERN_SEARCH_METASO = Regex("metaso|秘塔")
+private val PATTERN_SEARCH_FIRECRAWL = Regex("firecrawl")
 
 @Composable
 fun SiliconFlowPowerByIcon(modifier: Modifier = Modifier) {
