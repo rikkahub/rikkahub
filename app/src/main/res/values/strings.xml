@@ -735,4 +735,6 @@
   <string name="assistant_page_regex_desc">Define regex patterns to transform messages before sending/receiving</string>
   <string name="setting_display_page_developer_mode">Developer Mode</string>
   <string name="setting_display_page_developer_mode_desc">Show more debugging features. Not recommended for general users.</string>
+    <string name="chat_message_tool_scrape_prefix">Scrape website: %1$s</string>
+  <string name="chat_message_tool_scrape_web">Scrape web page</string>
 </resources>

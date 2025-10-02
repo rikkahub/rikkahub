@@ -179,6 +179,8 @@
   <string name="chat_message_tool_create_memory">記憶を作成しました</string>
   <string name="chat_message_tool_delete_memory">記憶を削除しました</string>
   <string name="chat_message_tool_edit_memory">記憶を更新しました</string>
+  <string name="chat_message_tool_scrape_prefix">ウェブサイトをスクレイピング: %1$s</string>
+  <string name="chat_message_tool_scrape_web">ウェブページを取得</string>
   <string name="chat_message_tool_search_prefix">検索: %1$s</string>
   <string name="chat_message_tool_search_results_count">%1$d件の結果</string>
   <string name="chat_message_tool_search_web">ウェブ検索: %1$s</string>

@@ -50,6 +50,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
@@ -64,7 +65,6 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
-import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -385,7 +385,7 @@ class ChatService(
                 outputTransformers = outputTransformers,
                 tools = buildList {
                     if (settings.enableWebSearch) {
-                        add(createSearchTool(settings))
+                        addAll(createSearchTool(settings))
                     }
                     addAll(localTools.getTools(settings.getCurrentAssistant().localTools))
                     mcpManager.getAllAvailableTools().forEach { tool ->
@@ -447,47 +447,49 @@ class ChatService(
     }
 
     // 创建搜索工具
-    private fun createSearchTool(settings: Settings): Tool {
-        return Tool(
-            name = "search_web",
-            description = "search web for latest information",
-            parameters = {
-                val options = settings.searchServices.getOrElse(
-                    index = settings.searchServiceSelected,
-                    defaultValue = { SearchServiceOptions.DEFAULT })
-                val service = SearchService.getService(options)
-                service.parameters
-            },
-            execute = {
-                val options = settings.searchServices.getOrElse(
-                    index = settings.searchServiceSelected,
-                    defaultValue = { SearchServiceOptions.DEFAULT })
-                val service = SearchService.getService(options)
-                val result = service.search(
-                    params = it.jsonObject,
-                    commonOptions = settings.searchCommonOptions,
-                    serviceOptions = options,
-                )
-                val results =
-                    JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject.let { json ->
-                        val map = json.toMutableMap()
-                        map["items"] =
-                            JsonArray(map["items"]!!.jsonArray.mapIndexed { index, item ->
-                                JsonObject(item.jsonObject.toMutableMap().apply {
-                                    put("id", JsonPrimitive(Uuid.random().toString().take(6)))
-                                    put("index", JsonPrimitive(index + 1))
-                                })
-                            })
-                        JsonObject(map)
-                    }
-                results
-            }, systemPrompt = { model, messages ->
-                if (model.tools.isNotEmpty()) return@Tool ""
-                val hasToolCall =
-                    messages.any { it.getToolCalls().any { toolCall -> toolCall.toolName == "search_web" } }
-                val prompt = StringBuilder()
-                prompt.append(
-                    """
+    private fun createSearchTool(settings: Settings): Set<Tool> {
+        return buildSet {
+            add(
+                Tool(
+                    name = "search_web",
+                    description = "search web for latest information",
+                    parameters = {
+                        val options = settings.searchServices.getOrElse(
+                            index = settings.searchServiceSelected,
+                            defaultValue = { SearchServiceOptions.DEFAULT })
+                        val service = SearchService.getService(options)
+                        service.parameters
+                    },
+                    execute = {
+                        val options = settings.searchServices.getOrElse(
+                            index = settings.searchServiceSelected,
+                            defaultValue = { SearchServiceOptions.DEFAULT })
+                        val service = SearchService.getService(options)
+                        val result = service.search(
+                            params = it.jsonObject,
+                            commonOptions = settings.searchCommonOptions,
+                            serviceOptions = options,
+                        )
+                        val results =
+                            JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject.let { json ->
+                                val map = json.toMutableMap()
+                                map["items"] =
+                                    JsonArray(map["items"]!!.jsonArray.mapIndexed { index, item ->
+                                        JsonObject(item.jsonObject.toMutableMap().apply {
+                                            put("id", JsonPrimitive(Uuid.random().toString().take(6)))
+                                            put("index", JsonPrimitive(index + 1))
+                                        })
+                                    })
+                                JsonObject(map)
+                            }
+                        results
+                    }, systemPrompt = { model, messages ->
+                        if (model.tools.isNotEmpty()) return@Tool ""
+                        val hasToolCall =
+                            messages.any { it.getToolCalls().any { toolCall -> toolCall.toolName == "search_web" } }
+                        val prompt = StringBuilder()
+                        prompt.append(
+                            """
                     ## tool: search_web
 
                     ### usage
@@ -496,10 +498,10 @@ class ChatService(
                     - Generate keywords based on the user's question
                     - Today is {{cur_date}}
                     """.trimIndent()
-                )
-                if (hasToolCall) {
-                    prompt.append(
-                        """
+                        )
+                        if (hasToolCall) {
+                            prompt.append(
+                                """
                         ### result example
                         ```json
                         {
@@ -527,11 +529,54 @@ class ChatService(
 
                         If no search results are cited, you do not need to add a citation marker.
                         """.trimIndent()
-                    )
-                }
-                prompt.toString()
+                            )
+                        }
+                        prompt.toString()
+                    }
+                )
+            )
+
+            val options = settings.searchServices.getOrElse(
+                index = settings.searchServiceSelected,
+                defaultValue = { SearchServiceOptions.DEFAULT })
+            val service = SearchService.getService(options)
+            if (service.scrapingParameters != null) {
+                add(
+                    Tool(
+                    name = "scrape_web",
+                    description = "scrape web for content",
+                    parameters = {
+                        val options = settings.searchServices.getOrElse(
+                            index = settings.searchServiceSelected,
+                            defaultValue = { SearchServiceOptions.DEFAULT })
+                        val service = SearchService.getService(options)
+                        service.scrapingParameters
+                    },
+                    execute = {
+                        val options = settings.searchServices.getOrElse(
+                            index = settings.searchServiceSelected,
+                            defaultValue = { SearchServiceOptions.DEFAULT })
+                        val service = SearchService.getService(options)
+                        val result = service.scrape(
+                            params = it.jsonObject,
+                            commonOptions = settings.searchCommonOptions,
+                            serviceOptions = options,
+                        )
+                        JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject
+                    },
+                    systemPrompt = { model, messages ->
+                        return@Tool """
+                            ## tool: scrape_web
+
+                            ### usage
+                            - You can use the scrape_web tool to scrape urls for detailed content.
+                            - You can perform multiple scrape if needed.
+                            - For common problems, try not to use this tool unless the user requests it.
+                        """.trimIndent()
+                    }
+                ))
             }
-        )
+        }
     }
 
     // 检查无效消息

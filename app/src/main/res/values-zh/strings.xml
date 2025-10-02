@@ -179,6 +179,8 @@
   <string name="chat_message_tool_create_memory">创建了记忆</string>
   <string name="chat_message_tool_delete_memory">删除了记忆</string>
   <string name="chat_message_tool_edit_memory">更新了记忆</string>
+  <string name="chat_message_tool_scrape_prefix">抓取网站：%1$s</string>
+  <string name="chat_message_tool_scrape_web">抓取网页</string>
   <string name="chat_message_tool_search_prefix">搜索: %1$s</string>
   <string name="chat_message_tool_search_results_count">共 %1$d 条结果</string>
   <string name="chat_message_tool_search_web">搜索网页: %1$s</string>

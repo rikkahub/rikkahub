@@ -22,7 +22,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -104,6 +103,7 @@ fun ToolCallItem(
                         "create_memory", "edit_memory" -> Lucide.BookHeart
                         "delete_memory" -> Lucide.BookDashed
                         "search_web" -> Lucide.Earth
+                        "scrape_web" -> Lucide.Earth
                         else -> Lucide.Wrench
                     },
                     contentDescription = null,
@@ -124,7 +124,7 @@ fun ToolCallItem(
                             arguments.jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull
                                 ?: ""
                         )
-
+                        "scrape_web" -> stringResource(R.string.chat_message_tool_scrape_web)
                         else -> stringResource(
                             R.string.chat_message_tool_call_generic,
                             toolName
@@ -315,6 +315,46 @@ private fun ToolCallPreviewSheet(
                                 language = "json",
                                 fontSize = 12.sp
                             )
+                        }
+                    }
+
+                    "scrape_web" -> {
+                        val urls = content.jsonObject["urls"]?.jsonArray ?: emptyList()
+                        Text(
+                            text = stringResource(
+                                R.string.chat_message_tool_scrape_prefix,
+                                urls.joinToString(", ") { it.jsonObject["url"]?.jsonPrimitiveOrNull?.contentOrNull ?: "" }),
+                        )
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(urls) { url ->
+                                val urlObject = url.jsonObject
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = urlObject["url"]?.jsonPrimitive?.content ?: "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Card {
+                                        MarkdownBlock(
+                                            content = urlObject["content"]?.jsonPrimitive?.content ?: "",
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    8.dp
+                                                )
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 

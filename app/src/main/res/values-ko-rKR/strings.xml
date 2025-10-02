@@ -179,6 +179,8 @@
   <string name="chat_message_tool_create_memory">기억 생성됨</string>
   <string name="chat_message_tool_delete_memory">기억 삭제됨</string>
   <string name="chat_message_tool_edit_memory">기억 업데이트됨</string>
+  <string name="chat_message_tool_scrape_prefix">웹사이트 긁어오기: %1$s</string>
+  <string name="chat_message_tool_scrape_web">웹 페이지 긁어오기</string>
   <string name="chat_message_tool_search_prefix">검색: %1$s</string>
   <string name="chat_message_tool_search_results_count">%1$d개 결과</string>
   <string name="chat_message_tool_search_web">웹 검색: %1$s</string>

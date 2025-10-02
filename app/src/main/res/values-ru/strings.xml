@@ -179,6 +179,8 @@
   <string name="chat_message_tool_create_memory">Создана заметка</string>
   <string name="chat_message_tool_delete_memory">Удалённая память</string>
   <string name="chat_message_tool_edit_memory">Обновлена память</string>
+  <string name="chat_message_tool_scrape_prefix">Собрать данные с сайта: %1$s</string>
+  <string name="chat_message_tool_scrape_web">Собрать данные со страницы</string>
   <string name="chat_message_tool_search_prefix">Поиск: %1$s</string>
   <string name="chat_message_tool_search_results_count">%1$d результатов</string>
   <string name="chat_message_tool_search_web">Поиск в интернете: %1$s</string>
