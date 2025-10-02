@@ -15,11 +15,11 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
@@ -70,7 +70,20 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override val scrapingParameters: InputSchema?
+        get() = InputSchema.Obj(
+            properties = buildJsonObject {
+                put("url", buildJsonObject {
+                    put("type", "string")
+                    put("description", "URL to scrape")
+                })
+                put("onlyMainContent", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Whether to only scrape main content, default is true")
+                })
+            },
+            required = listOf("url")
+        )
 
     override suspend fun search(
         params: JsonObject,
@@ -142,8 +155,53 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.FirecrawlOptions
-    ): Result<ScrapedResult> {
-        return Result.failure(Exception("Scraping is not supported for Firecrawl"))
+    ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
+            val onlyMainContent = params["onlyMainContent"]?.jsonPrimitive?.contentOrNull?.toBoolean() ?: true
+
+            val body = buildJsonObject {
+                put("url", url)
+                put("onlyMainContent", onlyMainContent)
+                put("maxAge", 172800000)
+                put("parsers", buildJsonArray { })
+                put("formats", buildJsonArray {
+                    add("markdown")
+                })
+            }
+
+            val request = Request.Builder()
+                .url("https://api.firecrawl.dev/v2/scrape")
+                .post(body.toString().toRequestBody())
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .build()
+
+            val response = httpClient.newCall(request).await()
+            if (!response.isSuccessful) {
+                error("response failed #${response.code}")
+            }
+
+            val bodyString = response.body.string()
+            val payload = json.parseToJsonElement(bodyString).jsonObject
+
+            val success = payload["success"]?.jsonPrimitive?.contentOrNull?.toBoolean() ?: false
+            if (!success) {
+                error("scrape request failed")
+            }
+
+            val data = payload["data"]?.jsonObject ?: error("empty response data")
+            val markdown = data["markdown"]?.jsonPrimitive?.content ?: ""
+
+            ScrapedResult(
+                urls = listOf(
+                    ScrapedResultUrl(
+                        url = url,
+                        content = markdown
+                    )
+                )
+            )
+        }
     }
 
     private fun JsonElement?.asStringList(): List<String>? {
