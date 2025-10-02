@@ -43,12 +43,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.GripHorizontal
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.SquarePen
 import com.composables.icons.lucide.Trash2
+import com.composables.icons.lucide.X
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -56,6 +56,8 @@ import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 import me.rerere.rikkahub.ui.components.ui.Select
+import me.rerere.rikkahub.ui.components.ui.Tag
+import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.utils.plus
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchService
@@ -229,9 +231,11 @@ private fun SearchProviderCard(
                 .animateContentSize()
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Select(
                     options = SearchServiceOptions.TYPES.keys.toList(),
                     selectedOption = options::class,
@@ -261,11 +265,13 @@ private fun SearchProviderCard(
                     }
                 ) {
                     Icon(
-                        if (expand) Lucide.ChevronUp else Lucide.ChevronDown,
+                        imageVector = if (expand) Lucide.X else Lucide.SquarePen,
                         contentDescription = if (expand) "Hide details" else "Show details"
                     )
                 }
             }
+
+            SearchAbilityTagLine(options = options, modifier = Modifier.padding(horizontal = 8.dp))
 
             AnimatedVisibility(expand) {
                 Column(
@@ -344,11 +350,11 @@ private fun SearchProviderCard(
                             }
                         }
                     }
-                }
-            }
 
-            ProvideTextStyle(MaterialTheme.typography.labelMedium) {
-                SearchService.getService(options).Description()
+                    ProvideTextStyle(MaterialTheme.typography.labelMedium) {
+                        SearchService.getService(options).Description()
+                    }
+                }
             }
 
             Row(
@@ -374,6 +380,31 @@ private fun SearchProviderCard(
                 ) {
                     dragHandle()
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchAbilityTagLine(
+    modifier: Modifier = Modifier,
+    options: SearchServiceOptions
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+    ) {
+        Tag(
+            type = TagType.DEFAULT,
+        ) {
+            Text(stringResource(R.string.search_ability_search))
+        }
+        if (SearchService.getService(options).scrapingParameters != null) {
+            Tag(
+                type = TagType.DEFAULT,
+            ) {
+                Text(stringResource(R.string.search_ability_scrape))
             }
         }
     }

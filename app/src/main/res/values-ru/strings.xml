@@ -343,6 +343,8 @@
   <string name="reasoning_set_budget">Установить лимит рассуждений (%1$d токенов)</string>
   <string name="regenerate">Сгенерировать заново</string>
   <string name="render_with_webview">Отображать в WebView</string>
+  <string name="search_ability_scrape">Собрать</string>
+  <string name="search_ability_search">Поиск</string>
   <string name="search_picker_title">Поиск настроек</string>
   <string name="select_and_copy">Выделить и скопировать</string>
   <string name="send">Отправить</string>

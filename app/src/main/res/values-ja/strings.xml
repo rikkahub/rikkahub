@@ -343,6 +343,8 @@
   <string name="reasoning_set_budget">推論予算を設定 (%1$d トークン)</string>
   <string name="regenerate">再生成</string>
   <string name="render_with_webview">WebViewで表示</string>
+  <string name="search_ability_scrape">スクレイピング</string>
+  <string name="search_ability_search">検索</string>
   <string name="search_picker_title">検索設定</string>
   <string name="select_and_copy">選択コピー</string>
   <string name="send">送信</string>

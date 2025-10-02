@@ -343,6 +343,8 @@
   <string name="reasoning_set_budget">設置推理預算 (%1$d tokens)</string>
   <string name="regenerate">重新生成</string>
   <string name="render_with_webview">網頁視圖渲染</string>
+  <string name="search_ability_scrape">爬取</string>
+  <string name="search_ability_search">搜尋</string>
   <string name="search_picker_title">搜尋設定</string>
   <string name="select_and_copy">選擇複製</string>
   <string name="send">發送</string>

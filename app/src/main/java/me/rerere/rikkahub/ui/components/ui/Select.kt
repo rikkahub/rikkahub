@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastForEach
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Lucide
@@ -77,7 +78,7 @@ fun <T> Select(
                 expanded = false
             }
         ) {
-            options.forEach { option ->
+            options.fastForEach { option ->
                 DropdownMenuItem(
                     onClick = {
                         onOptionSelected(option)

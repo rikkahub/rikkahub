@@ -343,6 +343,8 @@
   <string name="reasoning_set_budget">사고 예산 설정(%1$d 토큰)</string>
   <string name="regenerate">다시 생성</string>
   <string name="render_with_webview">WebView로 렌더링</string>
+  <string name="search_ability_scrape">스크래핑</string>
+  <string name="search_ability_search">검색</string>
   <string name="search_picker_title">검색 설정</string>
   <string name="select_and_copy">선택 및 복사</string>
   <string name="send">전송</string>

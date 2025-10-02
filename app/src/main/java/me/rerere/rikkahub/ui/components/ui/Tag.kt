@@ -39,14 +39,14 @@ fun Tag(
         TagType.ERROR -> MaterialTheme.extendColors.red2
         TagType.WARNING -> MaterialTheme.extendColors.orange2
         TagType.INFO -> MaterialTheme.extendColors.blue2
-        else -> MaterialTheme.extendColors.gray2
+        else -> MaterialTheme.colorScheme.tertiaryContainer
     }
     val textColor = when (type) {
         TagType.SUCCESS -> MaterialTheme.extendColors.gray8
         TagType.ERROR -> MaterialTheme.extendColors.red8
         TagType.WARNING -> MaterialTheme.extendColors.orange8
         TagType.INFO -> MaterialTheme.extendColors.blue8
-        else -> MaterialTheme.extendColors.gray8
+        else -> MaterialTheme.colorScheme.onTertiaryContainer
     }
     ProvideTextStyle(MaterialTheme.typography.labelSmall.copy(color = textColor)) {
         Row(
