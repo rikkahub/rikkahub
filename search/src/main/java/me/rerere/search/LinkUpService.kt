@@ -49,7 +49,16 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema? = null
+    override val scrapingParameters: InputSchema?
+        get() = InputSchema.Obj(
+            properties = buildJsonObject {
+                put("url", buildJsonObject {
+                    put("type", "string")
+                    put("description", "url to scrape")
+                })
+            },
+            required = listOf("url")
+        )
 
     override suspend fun search(
         params: JsonObject,
@@ -102,8 +111,43 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.LinkUpOptions
-    ): Result<ScrapedResult> {
-        return Result.failure(Exception("Scraping is not supported for LinkUp"))
+    ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
+            val body = buildJsonObject {
+                put("url", JsonPrimitive(url))
+                put("includeRawHtml", JsonPrimitive(false))
+                put("renderJs", JsonPrimitive(false))
+                put("extractImages", JsonPrimitive(false))
+            }
+
+            val request = Request.Builder()
+                .url("https://api.linkup.so/v1/fetch")
+                .post(body.toString().toRequestBody())
+                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .addHeader("Content-Type", "application/json")
+                .build()
+
+            val response = httpClient.newCall(request).await()
+            if (response.isSuccessful) {
+                val responseBody = response.body.string().let {
+                    json.decodeFromString<LinkUpFetchResponse>(it)
+                }
+
+                return@withContext Result.success(
+                    ScrapedResult(
+                        urls = listOf(
+                            ScrapedResultUrl(
+                                url = url,
+                                content = responseBody.markdown
+                            )
+                        )
+                    )
+                )
+            } else {
+                error("response failed #${response.code}: ${response.body?.string()}")
+            }
+        }
     }
 
     @Serializable
@@ -117,5 +161,10 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
         val name: String,
         val url: String,
         val snippet: String
+    )
+
+    @Serializable
+    data class LinkUpFetchResponse(
+        val markdown: String
     )
 }

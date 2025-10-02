@@ -13,6 +13,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Response
 import okhttp3.internal.closeQuietly
 import okio.IOException
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
 import kotlin.uuid.Uuid
 
@@ -61,6 +62,7 @@ interface SearchService<T : SearchServiceOptions> {
                 .retryOnConnectionFailure(true)
                 .followRedirects(true)
                 .followSslRedirects(true)
+                .readTimeout(30, TimeUnit.SECONDS)
                 .build()
         }
 
