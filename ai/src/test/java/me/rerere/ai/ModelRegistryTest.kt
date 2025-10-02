@@ -20,6 +20,8 @@ class ModelRegistryTest {
 
     @Test
     fun testGemini25() {
+        assert(ModelRegistry.GEMINI_LATEST.match("gemini-flash-latest"))
+        assert(ModelRegistry.GEMINI_LATEST.match("gemini-pro-latest"))
         assert(ModelRegistry.GEMINI_2_5_FLASH.match("gemini-2.5-flash"))
         assert(!ModelRegistry.GEMINI_2_5_FLASH.match("gemini-2.5-pro"))
         assert(!ModelRegistry.GEMINI_2_5_FLASH.match("gemini-2.5-flash-image-preview"))
