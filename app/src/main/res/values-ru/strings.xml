@@ -547,6 +547,7 @@
   <string name="setting_provider_page_save_success">Сохранено успешно</string>
   <string name="setting_provider_page_scan_error">Ошибка: %s</string>
   <string name="setting_provider_page_scan_qr_code">Сканировать QR-код</string>
+  <string name="setting_provider_page_search_providers">Поиск поставщиков</string>
   <string name="setting_provider_page_select_from_gallery">Выбрать из галереи</string>
   <string name="setting_provider_page_service_account_email">Электронная почта служебной учётной записи</string>
   <string name="setting_provider_page_share">Поделиться</string>

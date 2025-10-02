@@ -547,6 +547,7 @@
   <string name="setting_provider_page_save_success">保存成功</string>
   <string name="setting_provider_page_scan_error">错误: %s</string>
   <string name="setting_provider_page_scan_qr_code">扫描二维码</string>
+  <string name="setting_provider_page_search_providers">搜索提供商</string>
   <string name="setting_provider_page_select_from_gallery">从相册选择</string>
   <string name="setting_provider_page_service_account_email">服务账户邮箱</string>
   <string name="setting_provider_page_share">分享</string>

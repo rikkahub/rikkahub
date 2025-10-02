@@ -547,6 +547,7 @@
   <string name="setting_provider_page_save_success">저장 성공</string>
   <string name="setting_provider_page_scan_error">오류: %s</string>
   <string name="setting_provider_page_scan_qr_code">QR 코드 스캔</string>
+  <string name="setting_provider_page_search_providers">공급자 검색</string>
   <string name="setting_provider_page_select_from_gallery">갤러리에서 선택</string>
   <string name="setting_provider_page_service_account_email">서비스 계정 이메일</string>
   <string name="setting_provider_page_share">공유</string>
