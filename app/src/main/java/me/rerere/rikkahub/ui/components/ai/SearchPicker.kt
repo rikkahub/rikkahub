@@ -32,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -88,9 +89,9 @@ fun SearchPickerButton(
                 contentAlignment = Alignment.Center
             ) {
                 if (enableSearch && currentService != null) {
-                    Icon(
-                        imageVector = Lucide.Earth,
-                        contentDescription = stringResource(R.string.use_web_search),
+                    AutoAIIcon(
+                        name = SearchServiceOptions.TYPES[currentService::class] ?: "Search",
+                        color = Color.Transparent
                     )
                 } else {
                     Icon(

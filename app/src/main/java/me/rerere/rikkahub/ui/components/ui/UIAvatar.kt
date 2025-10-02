@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -49,11 +50,12 @@ fun TextAvatar(
     text: String,
     modifier: Modifier = Modifier,
     loading: Boolean = false,
+    color: Color = MaterialTheme.colorScheme.secondaryContainer
 ) {
     Box(
         modifier = modifier
             .clip(shape = rememberAvatarShape(loading))
-            .background(MaterialTheme.colorScheme.secondary)
+            .background(color)
             .size(32.dp),
         contentAlignment = Alignment.Center
     ) {
