@@ -336,7 +336,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         // System message if available
         val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
         if (systemMessage != null && !params.model.outputModalities.contains(Modality.IMAGE)) {
-            put("system_instruction", buildJsonObject {
+            put("systemInstruction", buildJsonObject {
                 putJsonArray("parts") {
                     add(buildJsonObject {
                         put(
