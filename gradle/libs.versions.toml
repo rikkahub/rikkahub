@@ -2,7 +2,7 @@
 agp = "8.11.0"
 barcodeScanning = "17.3.0"
 cameraCore = "1.5.0-rc01"
-dav4jvm = "2.2.1"
+dav4jvm = "main-SNAPSHOT"
 dom4j = "2.2.0"
 jlatexmath = "1.2"
 kotlin = "2.2.10"

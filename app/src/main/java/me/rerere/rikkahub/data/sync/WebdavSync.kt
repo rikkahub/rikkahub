@@ -2,13 +2,13 @@ package me.rerere.rikkahub.data.sync
 
 import android.content.Context
 import android.util.Log
-import at.bitfire.dav4jvm.BasicDigestAuthHandler
-import at.bitfire.dav4jvm.DavCollection
-import at.bitfire.dav4jvm.Response
-import at.bitfire.dav4jvm.exception.NotFoundException
-import at.bitfire.dav4jvm.property.DisplayName
-import at.bitfire.dav4jvm.property.GetContentLength
-import at.bitfire.dav4jvm.property.GetLastModified
+import at.bitfire.dav4jvm.okhttp.BasicDigestAuthHandler
+import at.bitfire.dav4jvm.okhttp.DavCollection
+import at.bitfire.dav4jvm.okhttp.Response
+import at.bitfire.dav4jvm.okhttp.exception.NotFoundException
+import at.bitfire.dav4jvm.property.webdav.DisplayName
+import at.bitfire.dav4jvm.property.webdav.GetContentLength
+import at.bitfire.dav4jvm.property.webdav.GetLastModified
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -80,10 +80,8 @@ class WebdavSync(
                         .firstOrNull()?.displayName ?: "Unknown"
                     val size = response.properties.filterIsInstance<GetContentLength>()
                         .firstOrNull()?.contentLength ?: 0L
-                    val lastModified = Instant.ofEpochMilli(
-                        response.properties.filterIsInstance<GetLastModified>()
-                            .firstOrNull()?.lastModified ?: 0L
-                    )
+                    val lastModified = response.properties.filterIsInstance<GetLastModified>()
+                        .firstOrNull()?.lastModified ?: Instant.EPOCH
                     files.add(
                         WebDavBackupItem(
                             href = response.href.toString(),
@@ -395,7 +393,7 @@ private fun WebDavConfig.requireClient(): OkHttpClient {
     val authHandler = BasicDigestAuthHandler(
         domain = null,
         username = this.username,
-        password = this.password
+        password = this.password.toCharArray()
     )
     val okHttpClient = OkHttpClient.Builder()
         .followRedirects(false)
