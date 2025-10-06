@@ -211,7 +211,41 @@ val DEFAULT_PROVIDERS = listOf(
             Text(
                 text = "支持gpt, claude, gemini等200+模型"
             )
-        }
+        },
+        models = listOf(
+            Model(
+                id = Uuid.parse("ea7b9574-e590-42ac-a9ac-01e3aa213f4f"),
+                modelId = "gpt-5",
+                displayName = "GPT 5",
+                inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            ),
+            Model(
+                id = Uuid.parse("5c33502d-2307-40bd-83fc-133f504bb0c9"),
+                modelId = "claude-sonnet-4-5-20250929",
+                displayName = "Claude Sonnet 4.5",
+                inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            ),
+            Model(
+                id = Uuid.parse("64081a31-4331-4ead-91bc-96e05497431a"),
+                modelId = "DeepSeek-V3.2-Exp",
+                displayName = "DeepSeek V3.2 Exp",
+                inputModalities = listOf(Modality.TEXT),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = listOf(ModelAbility.TOOL),
+            ),
+            Model(
+                id = Uuid.parse("71d7f143-4ce1-49b5-b70d-7a6620a4e716"),
+                modelId = "qwen3-max",
+                displayName = "Qwen3 Max",
+                inputModalities = listOf(Modality.TEXT),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = listOf(ModelAbility.TOOL),
+            ),
+        )
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("da93779f-3956-48cc-82ef-67bb482eaaf7"),
