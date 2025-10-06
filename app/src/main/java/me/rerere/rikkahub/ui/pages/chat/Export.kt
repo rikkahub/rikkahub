@@ -622,6 +622,7 @@ private fun ExportedToolCall(
                     "create_memory", "edit_memory" -> Lucide.BookHeart
                     "delete_memory" -> Lucide.BookDashed
                     "search_web" -> Lucide.Earth
+                    "scrape_web" -> Lucide.Earth
                     else -> Lucide.Wrench
                 },
                 contentDescription = null,
@@ -641,7 +642,7 @@ private fun ExportedToolCall(
                             }.getOrDefault("")
                             stringResource(R.string.chat_message_tool_search_web, query)
                         }
-
+                        "scrape_web" -> stringResource(R.string.chat_message_tool_scrape_web)
                         else -> stringResource(R.string.chat_message_tool_call_generic, toolCall.toolName)
                     },
                     style = MaterialTheme.typography.titleSmall,
@@ -669,6 +670,7 @@ private fun ExportedToolResult(toolResult: UIMessagePart.ToolResult) {
                     "create_memory", "edit_memory" -> Lucide.BookHeart
                     "delete_memory" -> Lucide.BookDashed
                     "search_web" -> Lucide.Earth
+                    "scrape_web" -> Lucide.Earth
                     else -> Lucide.Wrench
                 },
                 contentDescription = null,
@@ -687,7 +689,7 @@ private fun ExportedToolResult(toolResult: UIMessagePart.ToolResult) {
                                     ?: ""
                             stringResource(R.string.chat_message_tool_search_web, query)
                         }
-
+                        "scrape_web" -> stringResource(R.string.chat_message_tool_scrape_web)
                         else -> stringResource(R.string.chat_message_tool_call_generic, toolResult.toolName)
                     },
                     style = MaterialTheme.typography.titleSmall,
