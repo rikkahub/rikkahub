@@ -177,6 +177,7 @@ class SettingsStore(
                     provider.copyProvider(
                         builtIn = defaultProvider.builtIn,
                         description = defaultProvider.description,
+                        shortDescription = defaultProvider.shortDescription,
                     )
                 } else provider
             }.toMutableList()

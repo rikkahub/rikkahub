@@ -12,7 +12,6 @@ import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
-import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -190,13 +189,27 @@ val DEFAULT_PROVIDERS = listOf(
         description = {
             Text(
                 text = buildAnnotatedString {
-                    append("提供 OpenAI、Claude、Google Gemini 等主流模型的高并发和稳定服务, 官网：")
+                    append("提供 OpenAI、Claude、Google Gemini 等主流模型的高并发和稳定服务")
+                    appendLine()
+                    append("官网：")
                     withLink(LinkAnnotation.Url("https://aihubmix.com?aff=pG7r")) {
                         withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
                             append("https://aihubmix.com")
                         }
                     }
+                    appendLine()
+                    append("充值: ")
+                    withLink(LinkAnnotation.Url("https://console.aihubmix.com/topup")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("https://console.aihubmix.com/topup")
+                        }
+                    }
                 }
+            )
+        },
+        shortDescription = {
+            Text(
+                text = "支持gpt, claude, gemini等200+模型"
             )
         }
     ),

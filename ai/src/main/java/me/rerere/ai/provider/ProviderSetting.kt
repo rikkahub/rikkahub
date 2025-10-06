@@ -40,6 +40,7 @@ sealed class ProviderSetting {
 
     abstract val builtIn: Boolean
     abstract val description: @Composable() () -> Unit
+    abstract val shortDescription: @Composable() () -> Unit
 
     abstract fun addModel(model: Model): ProviderSetting
     abstract fun editModel(model: Model): ProviderSetting
@@ -54,6 +55,7 @@ sealed class ProviderSetting {
         balanceOption: BalanceOption = this.balanceOption,
         builtIn: Boolean = this.builtIn,
         description: @Composable (() -> Unit) = this.description,
+        shortDescription: @Composable (() -> Unit) = this.shortDescription,
     ): ProviderSetting
 
     @Serializable
@@ -67,6 +69,7 @@ sealed class ProviderSetting {
         override val balanceOption: BalanceOption = BalanceOption(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://api.openai.com/v1",
         var chatCompletionsPath: String = "/chat/completions",
@@ -102,7 +105,8 @@ sealed class ProviderSetting {
             proxy: ProviderProxy,
             balanceOption: BalanceOption,
             builtIn: Boolean,
-            description: @Composable (() -> Unit)
+            description: @Composable (() -> Unit),
+            shortDescription: @Composable (() -> Unit),
         ): ProviderSetting {
             return this.copy(
                 id = id,
@@ -112,7 +116,8 @@ sealed class ProviderSetting {
                 builtIn = builtIn,
                 description = description,
                 proxy = proxy,
-                balanceOption = balanceOption
+                balanceOption = balanceOption,
+                shortDescription = shortDescription
             )
         }
     }
@@ -128,6 +133,7 @@ sealed class ProviderSetting {
         override val balanceOption: BalanceOption = BalanceOption(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta", // only for google AI
         var vertexAI: Boolean = false,
@@ -166,7 +172,8 @@ sealed class ProviderSetting {
             proxy: ProviderProxy,
             balanceOption: BalanceOption,
             builtIn: Boolean,
-            description: @Composable (() -> Unit)
+            description: @Composable (() -> Unit),
+            shortDescription: @Composable (() -> Unit),
         ): ProviderSetting {
             return this.copy(
                 id = id,
@@ -175,6 +182,7 @@ sealed class ProviderSetting {
                 models = models,
                 builtIn = builtIn,
                 description = description,
+                shortDescription = shortDescription,
                 proxy = proxy,
                 balanceOption = balanceOption
             )
@@ -192,6 +200,7 @@ sealed class ProviderSetting {
         override val balanceOption: BalanceOption = BalanceOption(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://api.anthropic.com/v1",
     ) : ProviderSetting() {
@@ -225,7 +234,8 @@ sealed class ProviderSetting {
             proxy: ProviderProxy,
             balanceOption: BalanceOption,
             builtIn: Boolean,
-            description: @Composable (() -> Unit)
+            description: @Composable (() -> Unit),
+            shortDescription: @Composable (() -> Unit),
         ): ProviderSetting {
             return this.copy(
                 id = id,
@@ -236,6 +246,7 @@ sealed class ProviderSetting {
                 balanceOption = balanceOption,
                 builtIn = builtIn,
                 description = description,
+                shortDescription = shortDescription,
             )
         }
     }
