@@ -569,7 +569,7 @@ class ChatService(
                             ## tool: scrape_web
 
                             ### usage
-                            - You can use the scrape_web tool to scrape urls for detailed content.
+                            - You can use the scrape_web tool to scrape url for detailed content.
                             - You can perform multiple scrape if needed.
                             - For common problems, try not to use this tool unless the user requests it.
                         """.trimIndent()

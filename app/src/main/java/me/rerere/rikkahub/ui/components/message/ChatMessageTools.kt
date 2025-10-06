@@ -179,6 +179,14 @@ fun ToolCallItem(
                         }
                     }
                 }
+                if(toolName == "scrape_web") {
+                    val url = arguments.jsonObject["url"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+                    Text(
+                        text = url,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                    )
+                }
             }
         }
     }

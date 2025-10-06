@@ -64,12 +64,12 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
     override val scrapingParameters: InputSchema?
         get() = InputSchema.Obj(
             properties = buildJsonObject {
-                put("urls", buildJsonObject {
-                    put("type", "array")
-                    put("description", "urls to scrape")
+                put("url", buildJsonObject {
+                    put("type", "string")
+                    put("description", "url to scrape")
                 })
             },
-            required = listOf("urls")
+            required = listOf("url")
         )
 
     override suspend fun search(
@@ -126,9 +126,11 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
         serviceOptions: SearchServiceOptions.TavilyOptions
     ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
-            val urls = params["urls"]?.jsonArray ?: error("urls is required")
+            val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
             val body = buildJsonObject {
-                put("urls", urls)
+                put("urls", buildJsonArray {
+                    add(url)
+                })
             }
             val request = Request.Builder()
                 .url("https://api.tavily.com/extract")
