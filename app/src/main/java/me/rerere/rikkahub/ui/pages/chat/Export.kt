@@ -37,7 +37,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,10 +79,14 @@ import me.rerere.common.android.appTempFolder
 import me.rerere.highlight.Highlighter
 import me.rerere.highlight.LocalHighlighter
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.BitmapComposer
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.JsonInstant
@@ -108,6 +111,7 @@ fun ChatExportSheet(
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val settings = LocalSettings.current
     var imageExportOptions by remember { mutableStateOf(ImageExportOptions()) }
 
     if (visible) {
@@ -193,12 +197,13 @@ fun ChatExportSheet(
                                     scope.launch {
                                         runCatching {
                                             exportToImage(
-                                                context,
-                                                scope,
-                                                density,
-                                                conversation,
-                                                selectedMessages,
-                                                imageExportOptions
+                                                context = context,
+                                                scope = scope,
+                                                density = density,
+                                                conversation = conversation,
+                                                messages = selectedMessages,
+                                                settings = settings,
+                                                options = imageExportOptions
                                             )
                                         }.onFailure {
                                             it.printStackTrace()
@@ -303,6 +308,7 @@ private suspend fun exportToImage(
     density: Density,
     conversation: Conversation,
     messages: List<UIMessage>,
+    settings: Settings,
     options: ImageExportOptions = ImageExportOptions()
 ) {
     val filename = "chat-export-${LocalDateTime.now().toLocalString()}.png"
@@ -320,11 +326,13 @@ private suspend fun exportToImage(
         width = 540.dp,
         screenDensity = density,
         content = {
-            ExportedChatImage(
-                conversation = conversation,
-                messages = messages,
-                options = options
-            )
+            CompositionLocalProvider(LocalSettings provides settings) {
+                ExportedChatImage(
+                    conversation = conversation,
+                    messages = messages,
+                    options = options
+                )
+            }
         }
     )
 
@@ -415,7 +423,11 @@ private fun ExportedChatImage(
 
                     // Messages
                     messages.forEach { message ->
-                        ExportedChatMessage(message = message, options = options)
+                        ExportedChatMessage(
+                            message = message,
+                            options = options,
+                            prevMessage = messages.getOrNull(messages.indexOf(message) - 1)
+                        )
                     }
 
                     // Watermark
@@ -435,18 +447,25 @@ private fun ExportedChatImage(
 @Composable
 private fun ExportedChatMessage(
     message: UIMessage,
+    prevMessage: UIMessage? = null,
     options: ImageExportOptions = ImageExportOptions()
 ) {
     if (message.parts.isEmptyUIMessage()) return
     val context = LocalContext.current
-
-    val arrangement = if (message.role == MessageRole.USER) Arrangement.End else Arrangement.Start
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = arrangement
-    ) {
+    val settings = LocalSettings.current
+    val model = message.modelId?.let { settings.findModelById(it) }
+    // Always show model icon for assistant messages in exported images
+    val showModelIcon = message.role == MessageRole.ASSISTANT && prevMessage?.role == MessageRole.USER
+    val iconLabel = when {
+        model?.modelId?.isNotBlank() == true -> model.modelId
+        model?.displayName?.isNotBlank() == true -> model.displayName
+        else -> "AI"
+    }
+    val messageContent: @Composable () -> Unit = {
         Column(
-            modifier = Modifier.widthIn(max = (540 * 0.9).dp),
+            modifier = Modifier
+                .widthIn(max = (540 * 0.9).dp)
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start
         ) {
@@ -506,6 +525,28 @@ private fun ExportedChatMessage(
             }
         }
     }
+
+    if (showModelIcon) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            AutoAIIcon(
+                name = iconLabel,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .size(36.dp)
+            )
+
+            Text(
+                text = iconLabel,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+    }
+    messageContent()
 }
 
 @Composable
