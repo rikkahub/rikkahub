@@ -386,12 +386,12 @@ private fun BoxScope.MessageJumper(
 ) {
     AnimatedVisibility(
         visible = show,
-        modifier = Modifier.align(Alignment.CenterEnd),
+        modifier = Modifier.align(Alignment.CenterStart),
         enter = slideInHorizontally(
-            initialOffsetX = { it * 2 },
+            initialOffsetX = { -it * 2 },
         ),
         exit = slideOutHorizontally(
-            targetOffsetX = { it * 2 },
+            targetOffsetX = { -it * 2 },
         )
     ) {
         Column(
