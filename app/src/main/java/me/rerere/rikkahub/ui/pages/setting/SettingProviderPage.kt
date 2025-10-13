@@ -80,6 +80,7 @@ import me.rerere.rikkahub.utils.ImageUtils
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyStaggeredGridState
+import java.util.Locale
 
 @Composable
 fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
@@ -107,6 +108,15 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
+                    if(Locale.getDefault().language == "zh") {
+                        IconButton(
+                            onClick = {
+                                navController.navigate(Screen.SettingProviderDetail(providerId = "1b1395ed-b702-4aeb-8bc1-b681c4456953"))
+                            }
+                        ) {
+                            AutoAIIcon("AiHubMix")
+                        }
+                    }
                     ImportProviderButton {
                         vm.updateSettings(
                             settings.copy(
