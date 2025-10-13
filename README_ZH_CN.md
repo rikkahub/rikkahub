@@ -22,6 +22,20 @@
 🔗 [前往官网下载](https://rikka-ai.com/download)
 🔗 [前往 Google Play 下载](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
+
+## 💖 赞助商
+
+<div align="center">
+  <img src="app/src/main/assets/icons/aihubmix-color.svg" alt="Aihubmix" width="50" />
+  <p style="font-size: 16px; font-weight: bold;">Aihubmix</p>
+  <p style="font-size: 14px;">感谢 <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> 的资金支持。我们推荐使用 aihubmix 作为全球主流模型的一站式服务平台。（OpenAI、Claude、Google Gemini、DeepSeek、Qwen 以及数百种其他模型）。</p>
+</div>
+<div align="center">
+  <img src="app/src/main/assets/icons/siliconflow.svg" alt="SiliconFlow" width="50" />
+  <p style="font-size: 16px; font-weight: bold;">SiliconFlow</p>
+  <p style="font-size: 14px;">感谢 <a href="https://siliconflow.cn/">siliconflow.cn</a> 与我们合作提供免费模型。</p>
+</div>
+
 ## ✨ 功能特色
 
 - 🎨 现代化安卓APP设计（Material You / 预测性返回）
@@ -65,13 +79,6 @@
 > 1. 添加新语言，因为添加新语言会增加后续本地化的工作量
 > 2. 添加新功能，这个项目是有态度的
 > 3. AI生成的大规模重构和更改
-
-## 💖 致谢
-
-- 感谢 [SiliconFlow](https://siliconflow.cn/) 与我们合作提供免费模型
-- 感谢 [Aihubmix](https://aihubmix.com/) 的支持。推荐通过 aihubmix ⼀站式使⽤全球主流模型
-（openAI、Claude、google Gemini、DeepSeek、Qwen等上百个模型）
-
 
 ## 💰 捐赠
 

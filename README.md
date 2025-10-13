@@ -31,7 +31,7 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 <div align="center">
   <img src="app/src/main/assets/icons/aihubmix-color.svg" alt="Aihubmix" width="50" />
   <p style="font-size: 16px; font-weight: bold;">Aihubmix</p>
-  <p style="font-size: 14px;">Thanks to <a href="https://aihubmix.com/">aihubmix.com</a> for their financial support. We recommend using aihubmix as a one-stop shop for mainstream models worldwide. (OpenAI, Claude, Google Gemini, DeepSeek, Qwen, and hundreds more).</p>
+  <p style="font-size: 14px;">Thanks to <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> for their financial support. We recommend using aihubmix as a one-stop shop for mainstream models worldwide. (OpenAI, Claude, Google Gemini, DeepSeek, Qwen, and hundreds more).</p>
 </div>
 <div align="center">
   <img src="app/src/main/assets/icons/siliconflow.svg" alt="SiliconFlow" width="50" />
