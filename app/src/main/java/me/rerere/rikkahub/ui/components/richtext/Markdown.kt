@@ -100,6 +100,7 @@ private val INLINE_LATEX_REGEX = Regex("\\\\\\((.+?)\\\\\\)")
 private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MATCHES_ALL)
 val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
+private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
 
 // 预处理markdown内容
 private fun preProcess(content: String): String {
@@ -167,7 +168,8 @@ private fun MarkdownPreview() {
 
                     4. For in that sleep of death what dreams may come [citation](1)
 
-                    This is Markdown Test, This is Markdown Test.
+                    This is Markdown Test, This <br/> is Markdown Test.
+                    ha<br/>ha
 
                     ***
                     This is Markdown Test, This is Markdown Test.
@@ -784,7 +786,8 @@ private fun TableNode(node: ASTNode, content: String, modifier: Modifier = Modif
         rows = rowComposables,
         modifier = modifier.padding(vertical = 8.dp),
         columnMinWidths = List(columnCount) { 80.dp },
-        columnMaxWidths = List(columnCount) { 200.dp })
+        columnMaxWidths = List(columnCount) { 200.dp },
+    )
 }
 
 private fun AnnotatedString.Builder.appendMarkdownNodeContent(
@@ -810,8 +813,16 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
         }
 
         node is LeafASTNode -> {
+            val text = node.getTextInNode(content).let {
+                if (trim) {
+                    it.trim()
+                } else {
+                    it
+                }.replace(BREAK_LINE_REGEX, "\n")
+            }
             append(
-                node.getTextInNode(content).let { if (trim) it.trim() else it })
+                text = text,
+            )
         }
 
         node.type == MarkdownElementTypes.EMPH -> {
