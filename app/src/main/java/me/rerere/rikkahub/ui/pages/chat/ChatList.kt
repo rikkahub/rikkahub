@@ -585,7 +585,7 @@ private fun SharedTransitionScope.ChatListPreview(
                         ) {
                             val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
                             val highlightedText = remember(searchQuery, message) {
-                                val fullText = message.toText().ifEmpty { "[...]" }
+                                val fullText = message.toText().trim().ifBlank { "[...]" }
                                 val messageText = extractMatchingSnippet(
                                     text = fullText,
                                     query = searchQuery
