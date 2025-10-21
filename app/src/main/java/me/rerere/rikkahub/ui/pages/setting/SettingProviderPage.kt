@@ -42,6 +42,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,12 +82,21 @@ import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyStaggeredGridState
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
+    val scope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
+    val lazyListState = rememberLazyStaggeredGridState()
+    val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
+        val newProviders = settings.providers.toMutableList().apply {
+            add(to.index, removeAt(from.index))
+        }
+        vm.updateSettings(settings.copy(providers = newProviders))
+    }
 
     val filteredProviders = remember(settings.providers, searchQuery) {
         if (searchQuery.isBlank()) {
@@ -111,7 +121,14 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     if(Locale.getDefault().language == "zh") {
                         IconButton(
                             onClick = {
-                                navController.navigate(Screen.SettingProviderDetail(providerId = "1b1395ed-b702-4aeb-8bc1-b681c4456953"))
+                                val aihubmixIndex = filteredProviders.indexOfFirst {
+                                    it.id.toString() == "1b1395ed-b702-4aeb-8bc1-b681c4456953"
+                                }
+                                if (aihubmixIndex != -1) {
+                                    scope.launch {
+                                        lazyListState.animateScrollToItem(aihubmixIndex)
+                                    }
+                                }
                             }
                         ) {
                             AutoAIIcon("AiHubMix")
@@ -162,13 +179,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 shape = CircleShape,
             )
 
-            val lazyListState = rememberLazyStaggeredGridState()
-            val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
-                val newProviders = settings.providers.toMutableList().apply {
-                    add(to.index, removeAt(from.index))
-                }
-                vm.updateSettings(settings.copy(providers = newProviders))
-            }
+
             LazyVerticalStaggeredGrid(
                 modifier = Modifier
                     .fillMaxWidth()
