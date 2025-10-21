@@ -186,6 +186,7 @@
   <string name="chat_message_tool_search_web">搜索网页: %1$s</string>
   <string name="chat_page_cancel">取消</string>
   <string name="chat_page_clear_context">清空上下文</string>
+  <string name="chat_page_recent">最近</string>
   <string name="chat_page_date_format_different_year">%1$d年%2$d月%3$d日</string>
   <string name="chat_page_date_format_same_year">%1$d月%2$d日</string>
   <string name="chat_page_delete">删除</string>

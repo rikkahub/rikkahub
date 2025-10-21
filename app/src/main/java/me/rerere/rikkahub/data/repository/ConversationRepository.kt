@@ -1,6 +1,10 @@
 package me.rerere.rikkahub.data.repository
 
 import android.content.Context
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -19,6 +23,11 @@ class ConversationRepository(
     private val context: Context,
     private val conversationDAO: ConversationDAO,
 ) {
+    companion object {
+        private const val PAGE_SIZE = 20
+        private const val INITIAL_LOAD_SIZE = 40
+    }
+
     fun getAllConversations(): Flow<List<Conversation>> = conversationDAO
         .getAll()
         .map { flow ->
@@ -26,6 +35,19 @@ class ConversationRepository(
                 conversationEntityToConversation(entity)
             }
         }
+
+    fun getAllConversationsPaging(): Flow<PagingData<Conversation>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            initialLoadSize = INITIAL_LOAD_SIZE,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { conversationDAO.getAllPaging() }
+    ).flow.map { pagingData ->
+        pagingData.map { entity ->
+            conversationEntityToConversation(entity)
+        }
+    }
 
     suspend fun getRecentConversations(assistantId: Uuid, limit: Int = 10): List<Conversation> {
         return conversationDAO.getRecentConversationsOfAssistant(
@@ -44,6 +66,19 @@ class ConversationRepository(
             }
     }
 
+    fun getConversationsOfAssistantPaging(assistantId: Uuid): Flow<PagingData<Conversation>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            initialLoadSize = INITIAL_LOAD_SIZE,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { conversationDAO.getConversationsOfAssistantPaging(assistantId.toString()) }
+    ).flow.map { pagingData ->
+        pagingData.map { entity ->
+            conversationEntityToConversation(entity)
+        }
+    }
+
     fun searchConversations(titleKeyword: String): Flow<List<Conversation>> {
         return conversationDAO
             .searchConversations(titleKeyword)
@@ -54,6 +89,19 @@ class ConversationRepository(
             }
     }
 
+    fun searchConversationsPaging(titleKeyword: String): Flow<PagingData<Conversation>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            initialLoadSize = INITIAL_LOAD_SIZE,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { conversationDAO.searchConversationsPaging(titleKeyword) }
+    ).flow.map { pagingData ->
+        pagingData.map { entity ->
+            conversationEntityToConversation(entity)
+        }
+    }
+
     fun searchConversationsOfAssistant(assistantId: Uuid, titleKeyword: String): Flow<List<Conversation>> {
         return conversationDAO
             .searchConversationsOfAssistant(assistantId.toString(), titleKeyword)
@@ -62,6 +110,19 @@ class ConversationRepository(
                     conversationEntityToConversation(entity)
                 }
             }
+    }
+
+    fun searchConversationsOfAssistantPaging(assistantId: Uuid, titleKeyword: String): Flow<PagingData<Conversation>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            initialLoadSize = INITIAL_LOAD_SIZE,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { conversationDAO.searchConversationsOfAssistantPaging(assistantId.toString(), titleKeyword) }
+    ).flow.map { pagingData ->
+        pagingData.map { entity ->
+            conversationEntityToConversation(entity)
+        }
     }
 
     suspend fun getConversationById(uuid: Uuid): Conversation? {

@@ -207,6 +207,7 @@
   <string name="chat_page_new_message">새 메시지</string>
   <string name="chat_page_nickname_placeholder">이름을 입력하세요</string>
   <string name="chat_page_no_conversations">대화 없음</string>
+  <string name="chat_page_recent">최근</string>
   <string name="chat_page_regenerate_title">제목 다시 생성</string>
   <string name="chat_page_save">저장</string>
   <string name="chat_page_scroll_to_bottom">맨 아래로 스크롤</string>

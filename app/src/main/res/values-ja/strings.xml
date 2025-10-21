@@ -207,6 +207,7 @@
   <string name="chat_page_new_message">新しいメッセージ</string>
   <string name="chat_page_nickname_placeholder">ニックネームを入力してください</string>
   <string name="chat_page_no_conversations">会話がありません</string>
+  <string name="chat_page_recent">最近</string>
   <string name="chat_page_regenerate_title">タイトルを再生成</string>
   <string name="chat_page_save">保存</string>
   <string name="chat_page_scroll_to_bottom">一番下へスクロール</string>

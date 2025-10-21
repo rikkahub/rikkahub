@@ -207,6 +207,7 @@
   <string name="chat_page_new_message">Новое сообщение</string>
   <string name="chat_page_nickname_placeholder">Введите никнейм</string>
   <string name="chat_page_no_conversations">Нет бесед</string>
+  <string name="chat_page_recent">Недавние</string>
   <string name="chat_page_regenerate_title">Сгенерировать заголовок заново</string>
   <string name="chat_page_save">Сохранить</string>
   <string name="chat_page_scroll_to_bottom">Прокрутить вниз</string>

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -43,6 +42,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.itemKey
 import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pin
@@ -64,17 +65,16 @@ import kotlin.uuid.Uuid
 @Composable
 fun ColumnScope.ConversationList(
     current: Conversation,
-    conversations: List<Conversation>,
+    conversations: LazyPagingItems<Conversation>,
     conversationJobs: Collection<Uuid>,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     onClick: (Conversation) -> Unit = {},
     onDelete: (Conversation) -> Unit = {},
     onRegenerateTitle: (Conversation) -> Unit = {},
     onPin: (Conversation) -> Unit = {}
 ) {
-    var searchInput by remember {
-        mutableStateOf("")
-    }
     val navController = LocalNavController.current
 
     Row(
@@ -85,18 +85,16 @@ fun ColumnScope.ConversationList(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         TextField(
-            value = searchInput,
-            onValueChange = {
-                searchInput = it
-            },
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
             modifier = Modifier
                 .weight(1f),
             shape = RoundedCornerShape(50),
             trailingIcon = {
-                AnimatedVisibility(searchInput.isNotEmpty()) {
+                AnimatedVisibility(searchQuery.isNotEmpty()) {
                     IconButton(
                         onClick = {
-                            searchInput = ""
+                            onSearchQueryChange("")
                         }
                     ) {
                         Icon(Lucide.X, null)
@@ -127,42 +125,11 @@ fun ColumnScope.ConversationList(
         }
     }
 
-    // 分离置顶和普通对话
-    val calculateConversations by remember(conversations) {
-        derivedStateOf {
-            val filtered = conversations
-                .filter { conversation ->
-                    conversation.title.contains(searchInput, true)
-                }
-
-            // 分离置顶和非置顶对话
-            val (pinned, unpinned) = filtered.partition { it.isPinned }
-
-            // 置顶对话按更新时间排序
-            val pinnedSorted = pinned.sortedByDescending { it.updateAt }
-
-            // 非置顶对话按日期分组
-            val unpinnedGrouped = unpinned
-                .groupBy { conversation ->
-                    val instant = conversation.updateAt
-                    instant.atZone(ZoneId.systemDefault()).toLocalDate()
-                }
-                .toSortedMap(compareByDescending { it })
-                .mapValues { (_, conversations) ->
-                    conversations.sortedByDescending { it.updateAt }
-                }
-
-            pinnedSorted to unpinnedGrouped
-        }
-    }
-
-    val (pinnedConversations, groupedConversations) = calculateConversations
-
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (conversations.isEmpty()) {
+        if (conversations.itemCount == 0) {
             item {
                 Surface(
                     modifier = Modifier
@@ -174,41 +141,31 @@ fun ColumnScope.ConversationList(
                     Text(
                         text = stringResource(id = R.string.chat_page_no_conversations),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(16.dp)
                     )
                 }
             }
         }
 
-        // 置顶对话区域
-        if (pinnedConversations.isNotEmpty()) {
-            stickyHeader {
-                PinnedHeader()
-            }
+        items(
+            count = conversations.itemCount,
+            key = conversations.itemKey { it.id }
+        ) { index ->
+            val conversation = conversations[index]
+            if (conversation != null) {
+                // 检查是否需要显示置顶标题
+                val showPinnedHeader = index == 0 && conversation.isPinned
+                val previousConversation = if (index > 0) conversations[index - 1] else null
+                val showUnpinnedHeader = previousConversation?.isPinned == true && !conversation.isPinned
 
-            items(pinnedConversations, key = { it.id }) { conversation ->
-                ConversationItem(
-                    conversation = conversation,
-                    selected = conversation.id == current.id,
-                    loading = conversation.id in conversationJobs,
-                    onClick = onClick,
-                    onDelete = onDelete,
-                    onRegenerateTitle = onRegenerateTitle,
-                    onPin = onPin,
-                    modifier = Modifier.animateItem()
-                )
-            }
-        }
+                if (showPinnedHeader) {
+                    PinnedHeader()
+                }
+                if (showUnpinnedHeader) {
+                    UnpinnedHeader()
+                }
 
-        // 普通对话按日期分组
-        groupedConversations.forEach { (date, conversationsInGroup) ->
-            // 添加日期标题
-            stickyHeader {
-                DateHeader(date = date)
-            }
-
-            // 每组内的对话列表
-            items(conversationsInGroup, key = { it.id }) { conversation ->
                 ConversationItem(
                     conversation = conversation,
                     selected = conversation.id == current.id,
@@ -250,26 +207,7 @@ private fun PinnedHeader() {
 }
 
 @Composable
-private fun DateHeader(date: LocalDate) {
-    val today = LocalDate.now()
-    val yesterday = today.minusDays(1)
-
-    val displayText = when {
-        date.isEqual(today) -> stringResource(id = R.string.chat_page_today)
-        date.isEqual(yesterday) -> stringResource(id = R.string.chat_page_yesterday)
-        else -> {
-            // 使用Android本地化日期格式
-            val formatStyle = if (date.year == today.year) {
-                // 同一年仅显示月日
-                date.toLocalString(false)
-            } else {
-                // 不同年显示完整日期
-                date.toLocalString(true)
-            }
-            formatStyle
-        }
-    }
-
+private fun UnpinnedHeader() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -278,7 +216,7 @@ private fun DateHeader(date: LocalDate) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = displayText,
+            text = stringResource(R.string.chat_page_recent),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary

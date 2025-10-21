@@ -207,6 +207,7 @@
   <string name="chat_page_new_message">新訊息</string>
   <string name="chat_page_nickname_placeholder">請輸入暱稱</string>
   <string name="chat_page_no_conversations">沒有對話記錄</string>
+  <string name="chat_page_recent">最近</string>
   <string name="chat_page_regenerate_title">重新生成標題</string>
   <string name="chat_page_save">保存</string>
   <string name="chat_page_scroll_to_bottom">滾動到底部</string>

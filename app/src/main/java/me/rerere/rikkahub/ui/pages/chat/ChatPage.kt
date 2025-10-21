@@ -97,7 +97,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
     }
 
     val setting by vm.settings.collectAsStateWithLifecycle()
-    val conversations by vm.conversations.collectAsStateWithLifecycle()
     val conversation by vm.conversation.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
@@ -159,7 +158,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
                     ChatDrawerContent(
                         navController = navController,
                         current = conversation,
-                        conversations = conversations,
                         vm = vm,
                         settings = setting
                     )
@@ -188,7 +186,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
                     ChatDrawerContent(
                         navController = navController,
                         current = conversation,
-                        conversations = conversations,
                         vm = vm,
                         settings = setting
                     )
