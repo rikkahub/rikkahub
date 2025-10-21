@@ -45,6 +45,7 @@ import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Settings2
+import com.composables.icons.lucide.Sparkles
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -121,7 +122,7 @@ fun ChatDrawerContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -220,6 +221,19 @@ fun ChatDrawerContent(
                     val currentAssistantId = settings.assistantId
                     navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
                 }
+            )
+
+            NavigationDrawerItem(
+                icon = {
+                    Icon(Lucide.Sparkles, "Menu")
+                },
+                label = {
+                    Text(stringResource(R.string.menu))
+                },
+                onClick = {
+                    navController.navigate(Screen.Menu)
+                },
+                selected = false
             )
 
             NavigationDrawerItem(

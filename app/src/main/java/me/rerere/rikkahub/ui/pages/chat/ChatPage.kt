@@ -40,9 +40,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.composables.icons.lucide.List
 import com.composables.icons.lucide.ListTree
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCirclePlus
+import com.composables.icons.lucide.Option
 import com.composables.icons.lucide.Sparkles
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Job
@@ -434,7 +436,7 @@ private fun TopBar(
                     onClickMenu()
                 }
             ) {
-                Icon(Lucide.Sparkles, "Menu")
+                Icon(Lucide.List, "Chat Options")
             }
 
             IconButton(

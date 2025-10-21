@@ -284,6 +284,7 @@
   <string name="language_traditional_chinese">🇨🇳 중국어(번체)</string>
   <string name="mcp_picker_syncing">MCP 서버 동기화 중...</string>
   <string name="mcp_picker_title">MCP 서버</string>
+  <string name="menu">메뉴</string>
   <string name="menu_page_afternoon_greeting">좋은 오후입니다\uD83D\uDC4B</string>
   <string name="menu_page_ai_translator">AI 번역기</string>
   <string name="menu_page_evening_greeting">좋은 저녁입니다\uD83D\uDC4B</string>

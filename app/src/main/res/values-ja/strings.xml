@@ -284,6 +284,7 @@
   <string name="language_traditional_chinese">🇨🇳 繁體中文</string>
   <string name="mcp_picker_syncing">MCPサーバーを同期中...</string>
   <string name="mcp_picker_title">MCPサーバー</string>
+  <string name="menu">メニュー</string>
   <string name="menu_page_afternoon_greeting">こんにちは\uD83D\uDC4B</string>
   <string name="menu_page_ai_translator">AI翻訳</string>
   <string name="menu_page_evening_greeting">こんばんは\uD83D\uDC4B</string>

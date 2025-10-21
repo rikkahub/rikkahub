@@ -740,4 +740,5 @@
   <string name="search_ability_search">Search</string>
   <string name="search_ability_scrape">Scrape</string>
   <string name="setting_provider_page_search_providers">Search providers</string>
+    <string name="menu">Menu</string>
 </resources>
