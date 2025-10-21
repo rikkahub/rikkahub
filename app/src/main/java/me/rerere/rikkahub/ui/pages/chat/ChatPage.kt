@@ -28,8 +28,11 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +49,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCirclePlus
 import com.composables.icons.lucide.Option
 import com.composables.icons.lucide.Sparkles
+import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -227,6 +231,8 @@ private fun ChatPageContent(
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    var previewMode by rememberSaveable { mutableStateOf(false) }
+
     LaunchedEffect(loadingJob) {
         inputState.loading = loadingJob != null
     }
@@ -243,11 +249,12 @@ private fun ChatPageContent(
                     conversation = conversation,
                     bigScreen = bigScreen,
                     drawerState = drawerState,
+                    previewMode = previewMode,
                     onNewChat = {
                         navigateToChatPage(navController)
                     },
                     onClickMenu = {
-                        navController.navigate(Screen.Menu)
+                        previewMode = !previewMode
                     },
                     onUpdateTitle = {
                         vm.updateTitle(it)
@@ -320,6 +327,7 @@ private fun ChatPageContent(
                 conversation = conversation,
                 state = chatListState,
                 loading = loadingJob != null,
+                previewMode = previewMode,
                 settings = setting,
                 onRegenerate = {
                     vm.regenerateAtMessage(it)
@@ -360,6 +368,12 @@ private fun ChatPageContent(
                 onClearTranslation = { message ->
                     vm.clearTranslationField(message.id)
                 },
+                onJumpToMessage = { index ->
+                    previewMode = false
+                    scope.launch {
+                        chatListState.animateScrollToItem(index)
+                    }
+                },
             )
         }
     }
@@ -371,6 +385,7 @@ private fun TopBar(
     conversation: Conversation,
     drawerState: DrawerState,
     bigScreen: Boolean,
+    previewMode: Boolean,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
@@ -436,7 +451,7 @@ private fun TopBar(
                     onClickMenu()
                 }
             ) {
-                Icon(Lucide.List, "Chat Options")
+                Icon(if (previewMode) Lucide.X else Lucide.List, "Chat Options")
             }
 
             IconButton(

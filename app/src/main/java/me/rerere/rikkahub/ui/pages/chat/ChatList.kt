@@ -1,10 +1,17 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +68,7 @@ import com.composables.icons.lucide.ChevronsDown
 import com.composables.icons.lucide.ChevronsUp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MousePointer2
+import com.composables.icons.lucide.Share
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -89,6 +97,7 @@ fun ChatList(
     conversation: Conversation,
     state: LazyListState,
     loading: Boolean,
+    previewMode: Boolean,
     settings: Settings,
     onRegenerate: (UIMessage) -> Unit = {},
     onEdit: (UIMessage) -> Unit = {},
@@ -98,6 +107,60 @@ fun ChatList(
     onClickSuggestion: (String) -> Unit = {},
     onTranslate: ((UIMessage, java.util.Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
+    onJumpToMessage: (Int) -> Unit = {},
+) {
+    SharedTransitionLayout {
+        AnimatedContent(
+            targetState = previewMode,
+            label = "ChatListMode",
+        ) { target ->
+            if (target) {
+                ChatListPreview(
+                    innerPadding = innerPadding,
+                    conversation = conversation,
+                    state = state,
+                    settings = settings,
+                    onJumpToMessage = onJumpToMessage,
+                    animatedVisibilityScope = this@AnimatedContent,
+                )
+            } else {
+                ChatListNormal(
+                    innerPadding = innerPadding,
+                    conversation = conversation,
+                    state = state,
+                    loading = loading,
+                    settings = settings,
+                    onRegenerate = onRegenerate,
+                    onEdit = onEdit,
+                    onForkMessage = onForkMessage,
+                    onDelete = onDelete,
+                    onUpdateMessage = onUpdateMessage,
+                    onClickSuggestion = onClickSuggestion,
+                    onTranslate = onTranslate,
+                    onClearTranslation = onClearTranslation,
+                    animatedVisibilityScope = this@AnimatedContent,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SharedTransitionScope.ChatListNormal(
+    innerPadding: PaddingValues,
+    conversation: Conversation,
+    state: LazyListState,
+    loading: Boolean,
+    settings: Settings,
+    onRegenerate: (UIMessage) -> Unit,
+    onEdit: (UIMessage) -> Unit,
+    onForkMessage: (UIMessage) -> Unit,
+    onDelete: (UIMessage) -> Unit,
+    onUpdateMessage: (MessageNode) -> Unit,
+    onClickSuggestion: (String) -> Unit,
+    onTranslate: ((UIMessage, java.util.Locale) -> Unit)?,
+    onClearTranslation: (UIMessage) -> Unit,
+    animatedVisibilityScope: AnimatedVisibilityScope,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -155,6 +218,10 @@ fun ChatList(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "conversation_list"),
+                    animatedVisibilityScope = animatedVisibilityScope
+                )
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
@@ -341,6 +408,97 @@ fun ChatList(
                     onClickSuggestion = onClickSuggestion,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SharedTransitionScope.ChatListPreview(
+    innerPadding: PaddingValues,
+    conversation: Conversation,
+    state: LazyListState,
+    settings: Settings,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    onJumpToMessage: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .padding(innerPadding)
+            .fillMaxSize(),
+    ) {
+        LazyColumn(
+            state = state,
+            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "conversation_list"),
+                    animatedVisibilityScope = animatedVisibilityScope
+                )
+                .fillMaxWidth()
+                .weight(1f),
+        ) {
+            itemsIndexed(
+                items = conversation.messageNodes,
+                key = { index, item -> item.id },
+            ) { index, node ->
+                val message = node.currentMessage
+                val isUser = message.role == me.rerere.ai.core.MessageRole.USER
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onJumpToMessage(index)
+                        }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 消息序号
+                    Text(
+                        text = "#${index + 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+
+                    // 角色标识
+                    Text(
+                        text = if (isUser) "User" else "AI",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+
+                    // 消息预览（单行）
+                    Text(
+                        text = message.toText().take(100),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (index < conversation.messageNodes.lastIndex) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            IconButton(
+                onClick = { }
+            ) {
+                Icon(Lucide.Share, null)
             }
         }
     }
