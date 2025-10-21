@@ -105,7 +105,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
     override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> =
         withContext(Dispatchers.IO) {
-            val url = buildUrl(providerSetting = providerSetting, path = "models")
+            val url = buildUrl(providerSetting = providerSetting, path = "models?pageSize=100")
             val request = transformRequest(
                 providerSetting = providerSetting,
                 request = Request.Builder()
