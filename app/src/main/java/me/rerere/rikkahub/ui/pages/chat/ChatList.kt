@@ -131,7 +131,6 @@ fun ChatList(
                 ChatListPreview(
                     innerPadding = innerPadding,
                     conversation = conversation,
-                    state = state,
                     settings = settings,
                     onJumpToMessage = onJumpToMessage,
                     animatedVisibilityScope = this@AnimatedContent,
@@ -495,7 +494,6 @@ private fun buildHighlightedText(
 private fun SharedTransitionScope.ChatListPreview(
     innerPadding: PaddingValues,
     conversation: Conversation,
-    state: LazyListState,
     settings: Settings,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onJumpToMessage: (Int) -> Unit
@@ -551,7 +549,6 @@ private fun SharedTransitionScope.ChatListPreview(
 
         // 消息预览
         LazyColumn(
-            state = state,
             contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
