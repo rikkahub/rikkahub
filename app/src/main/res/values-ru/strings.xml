@@ -215,7 +215,9 @@
   <string name="chat_page_today">Сегодня</string>
   <string name="chat_page_yesterday">Вчера</string>
   <string name="citations_count">%1$d цитирований</string>
+  <string name="code_block_collapse">Свернуть</string>
   <string name="code_block_copy">Копировать код</string>
+  <string name="code_block_expand">Развернуть</string>
   <string name="code_block_preview">Предпросмотр</string>
   <string name="collapse_translation">Свернуть перевод</string>
   <string name="confirm">Подтвердить</string>
@@ -356,6 +358,10 @@
   <string name="setting_display_page_auto_collapse_thinking_title">Автоматически сворачивать мысли</string>
   <string name="setting_display_page_chat_list_model_icon_desc">Отображать значки моделей в списке сообщений чата</string>
   <string name="setting_display_page_chat_list_model_icon_title">Значок модели в списке чатов</string>
+  <string name="setting_display_page_code_block_auto_collapse_desc">Автоматически сворачивать блоки кода по умолчанию</string>
+  <string name="setting_display_page_code_block_auto_collapse_title">Автосворачивание блоков кода</string>
+  <string name="setting_display_page_code_block_auto_wrap_desc">Автоматически переносить длинные строки в блоках кода</string>
+  <string name="setting_display_page_code_block_auto_wrap_title">Автоперенос блоков кода</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">Создавать новый диалог при запуске приложения</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">Новый чат при запуске</string>
   <string name="setting_display_page_developer_mode">Режим разработчика</string>

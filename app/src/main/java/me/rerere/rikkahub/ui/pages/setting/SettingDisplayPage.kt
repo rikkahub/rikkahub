@@ -418,6 +418,46 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
 
             item {
                 ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_auto_wrap_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_auto_wrap_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.codeBlockAutoWrap,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(codeBlockAutoWrap = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_auto_collapse_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_auto_collapse_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.codeBlockAutoCollapse,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(codeBlockAutoCollapse = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
                     headlineContent = {
                         Text(stringResource(R.string.setting_display_page_font_size_title))
                     },

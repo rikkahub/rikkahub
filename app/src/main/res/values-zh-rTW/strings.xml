@@ -215,7 +215,9 @@
   <string name="chat_page_today">今天</string>
   <string name="chat_page_yesterday">昨天</string>
   <string name="citations_count">%1$d 條引用</string>
+  <string name="code_block_collapse">摺疊</string>
   <string name="code_block_copy">複製代碼</string>
+  <string name="code_block_expand">展開</string>
   <string name="code_block_preview">預覽</string>
   <string name="collapse_translation">收合翻譯</string>
   <string name="confirm">確認</string>
@@ -356,6 +358,10 @@
   <string name="setting_display_page_auto_collapse_thinking_title">自動折疊思考</string>
   <string name="setting_display_page_chat_list_model_icon_desc">是否在聊天列表消息中顯示模型圖標</string>
   <string name="setting_display_page_chat_list_model_icon_title">聊天列表模型圖標</string>
+  <string name="setting_display_page_code_block_auto_collapse_desc">預設自動摺疊程式碼區塊</string>
+  <string name="setting_display_page_code_block_auto_collapse_title">程式碼區塊自動摺疊</string>
+  <string name="setting_display_page_code_block_auto_wrap_desc">自動換行程式碼區塊中的長行</string>
+  <string name="setting_display_page_code_block_auto_wrap_title">程式碼區塊自動換行</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">當應用程式啟動時，自動建立一個新的對話</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">啟動時新建對話</string>
   <string name="setting_display_page_developer_mode">開發者模式</string>

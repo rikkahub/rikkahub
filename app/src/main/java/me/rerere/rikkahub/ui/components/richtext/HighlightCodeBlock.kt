@@ -5,23 +5,31 @@ import android.net.Uri
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +48,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.composables.icons.lucide.ChevronsDown
+import com.composables.icons.lucide.ChevronsUp
+import com.composables.icons.lucide.Lucide
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -52,12 +63,17 @@ import me.rerere.highlight.buildHighlightText
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.theme.AtomOneDarkPalette
 import me.rerere.rikkahub.ui.theme.AtomOneLightPalette
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.base64Encode
+import me.rerere.rikkahub.utils.toDp
 import kotlin.time.Clock
+
+private const val COLLAPSE_LINES = 10
 
 @Composable
 fun HighlightCodeBlock(
@@ -77,6 +93,12 @@ fun HighlightCodeBlock(
     val scope = rememberCoroutineScope()
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val settings = LocalSettings.current
+
+    var isExpanded by remember(settings.displaySetting.codeBlockAutoCollapse) {
+        mutableStateOf(!settings.displaySetting.codeBlockAutoCollapse)
+    }
+    val autoWrap = settings.displaySetting.codeBlockAutoWrap
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/plain")
@@ -106,7 +128,7 @@ fun HighlightCodeBlock(
             clipboardManager = clipboardManager,
             code = code,
             createDocumentLauncher = createDocumentLauncher,
-            navController = navController
+            navController = navController,
         )
         if (completeCodeBlock && language == "mermaid") {
             Mermaid(
@@ -116,19 +138,64 @@ fun HighlightCodeBlock(
             return
         }
         val textStyle = LocalTextStyle.current.merge(style)
+        val codeLines = remember(code) { code.lines() }
+        val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
         SelectionContainer {
             HighlightText(
-                code = code,
+                code = if (isExpanded) code else collapsedCode,
                 language = language,
                 modifier = Modifier
-                    .horizontalScroll(scrollState),
+                    .animateContentSize()
+                    .then(
+                        if (autoWrap) {
+                            // 换行模式：不需要横向滚动
+                            Modifier
+                        } else {
+                            // 不换行模式：启用横向滚动
+                            Modifier.horizontalScroll(scrollState)
+                        }
+                    ),
                 fontSize = textStyle.fontSize,
                 lineHeight = textStyle.lineHeight,
                 colors = colorPalette,
                 overflow = TextOverflow.Visible,
-                softWrap = false,
+                softWrap = autoWrap,
                 fontFamily = JetbrainsMono
             )
+        }
+
+        // 代码折叠按钮
+        if (settings.displaySetting.codeBlockAutoCollapse && codeLines.size > COLLAPSE_LINES) {
+            Box(
+                modifier = Modifier
+                    .onClick {
+                        isExpanded = !isExpanded
+                    }
+                    .fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) Lucide.ChevronsUp else Lucide.ChevronsDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(textStyle.fontSize.toDp())
+                    )
+                    Text(
+                        text = if (isExpanded) {
+                            stringResource(id = R.string.code_block_collapse)
+                        } else {
+                            stringResource(id = R.string.code_block_expand)
+                        },
+                        fontSize = textStyle.fontSize,
+                        lineHeight = textStyle.lineHeight,
+                    )
+                }
+            }
         }
     }
 }
@@ -140,7 +207,7 @@ private fun HighlightCodeActions(
     clipboardManager: Clipboard,
     code: String,
     createDocumentLauncher: ManagedActivityResultLauncher<String, Uri?>,
-    navController: NavHostController
+    navController: NavHostController,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),

@@ -215,7 +215,9 @@
   <string name="chat_page_today">今日</string>
   <string name="chat_page_yesterday">昨日</string>
   <string name="citations_count">%1$d 件の引用</string>
+  <string name="code_block_collapse">折りたたむ</string>
   <string name="code_block_copy">コードをコピー</string>
+  <string name="code_block_expand">展開</string>
   <string name="code_block_preview">プレビュー</string>
   <string name="collapse_translation">翻訳を折りたたむ</string>
   <string name="confirm">確認</string>
@@ -356,6 +358,10 @@
   <string name="setting_display_page_auto_collapse_thinking_title">思考を自動折りたたむ</string>
   <string name="setting_display_page_chat_list_model_icon_desc">チャットリストのメッセージにモデルアイコンを表示するかどうか</string>
   <string name="setting_display_page_chat_list_model_icon_title">チャットリストのモデルアイコン</string>
+  <string name="setting_display_page_code_block_auto_collapse_desc">デフォルトでコードブロックを自動的に折りたたむ</string>
+  <string name="setting_display_page_code_block_auto_collapse_title">コードブロックの自動折りたたみ</string>
+  <string name="setting_display_page_code_block_auto_wrap_desc">コードブロック内の長い行を自動的に折り返す</string>
+  <string name="setting_display_page_code_block_auto_wrap_title">コードブロックの自動折り返し</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">アプリ起動時に新しい会話を自動作成する</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">起動時に新しいチャット</string>
   <string name="setting_display_page_developer_mode">開発者モード</string>

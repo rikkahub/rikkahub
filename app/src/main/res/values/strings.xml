@@ -258,6 +258,8 @@
   <!-- Code Block -->
   <string name="code_block_copy">Copy Code</string>
   <string name="code_block_preview">Preview</string>
+  <string name="code_block_expand">Expand</string>
+  <string name="code_block_collapse">Collapse</string>
 
   <!-- Mermaid Diagram -->
   <string name="mermaid_export">Export</string>
@@ -742,4 +744,8 @@
   <string name="search_ability_scrape">Scrape</string>
   <string name="setting_provider_page_search_providers">Search providers</string>
     <string name="menu">Menu</string>
+  <string name="setting_display_page_code_block_auto_wrap_title">Code Block Auto Wrap</string>
+  <string name="setting_display_page_code_block_auto_wrap_desc">Automatically wrap long lines in code blocks</string>
+  <string name="setting_display_page_code_block_auto_collapse_title">Code Block Auto Collapse</string>
+  <string name="setting_display_page_code_block_auto_collapse_desc">Automatically collapse code blocks by default</string>
 </resources>
