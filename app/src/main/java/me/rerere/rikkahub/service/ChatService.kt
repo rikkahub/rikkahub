@@ -377,7 +377,7 @@ class ChatService(
                     }
                 },
                 assistant = settings.getCurrentAssistant(),
-                memories = { memoryRepository.getMemoriesOfAssistant(settings.assistantId.toString()) },
+                memories = memoryRepository.getMemoriesOfAssistant(settings.assistantId.toString()),
                 inputTransformers = buildList {
                     addAll(inputTransformers)
                     add(templateTransformer)
@@ -543,29 +543,29 @@ class ChatService(
             if (service.scrapingParameters != null) {
                 add(
                     Tool(
-                    name = "scrape_web",
-                    description = "scrape web for content",
-                    parameters = {
-                        val options = settings.searchServices.getOrElse(
-                            index = settings.searchServiceSelected,
-                            defaultValue = { SearchServiceOptions.DEFAULT })
-                        val service = SearchService.getService(options)
-                        service.scrapingParameters
-                    },
-                    execute = {
-                        val options = settings.searchServices.getOrElse(
-                            index = settings.searchServiceSelected,
-                            defaultValue = { SearchServiceOptions.DEFAULT })
-                        val service = SearchService.getService(options)
-                        val result = service.scrape(
-                            params = it.jsonObject,
-                            commonOptions = settings.searchCommonOptions,
-                            serviceOptions = options,
-                        )
-                        JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject
-                    },
-                    systemPrompt = { model, messages ->
-                        return@Tool """
+                        name = "scrape_web",
+                        description = "scrape web for content",
+                        parameters = {
+                            val options = settings.searchServices.getOrElse(
+                                index = settings.searchServiceSelected,
+                                defaultValue = { SearchServiceOptions.DEFAULT })
+                            val service = SearchService.getService(options)
+                            service.scrapingParameters
+                        },
+                        execute = {
+                            val options = settings.searchServices.getOrElse(
+                                index = settings.searchServiceSelected,
+                                defaultValue = { SearchServiceOptions.DEFAULT })
+                            val service = SearchService.getService(options)
+                            val result = service.scrape(
+                                params = it.jsonObject,
+                                commonOptions = settings.searchCommonOptions,
+                                serviceOptions = options,
+                            )
+                            JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject
+                        },
+                        systemPrompt = { model, messages ->
+                            return@Tool """
                             ## tool: scrape_web
 
                             ### usage
@@ -573,8 +573,8 @@ class ChatService(
                             - You can perform multiple scrape if needed.
                             - For common problems, try not to use this tool unless the user requests it.
                         """.trimIndent()
-                    }
-                ))
+                        }
+                    ))
             }
         }
     }

@@ -74,7 +74,7 @@ class GenerationHandler(
         inputTransformers: List<InputMessageTransformer> = emptyList(),
         outputTransformers: List<OutputMessageTransformer> = emptyList(),
         assistant: Assistant,
-        memories: (suspend () -> List<AssistantMemory>)? = null,
+        memories: List<AssistantMemory>? = null,
         tools: List<Tool> = emptyList(),
         truncateIndex: Int = -1,
         maxSteps: Int = 256,
@@ -132,7 +132,7 @@ class GenerationHandler(
                 providerImpl = providerImpl,
                 provider = provider,
                 tools = toolsInternal,
-                memories = memories?.invoke() ?: emptyList(),
+                memories = memories ?: emptyList(),
                 truncateIndex = truncateIndex,
                 stream = assistant.streamOutput
             )
