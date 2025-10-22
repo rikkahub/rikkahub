@@ -27,6 +27,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -352,6 +353,13 @@ private fun SearchProviderCard(
 
                         is SearchServiceOptions.JinaOptions -> {
                             JinaOptions(options as SearchServiceOptions.JinaOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
+
+                        is SearchServiceOptions.BochaOptions -> {
+                            BochaOptions(options as SearchServiceOptions.BochaOptions) {
                                 options = it
                                 onUpdateService(options)
                             }
@@ -866,4 +874,49 @@ private fun JinaOptions(
             modifier = Modifier.fillMaxWidth()
         )
     }
+}
+
+@Composable
+private fun BochaOptions(
+    options: SearchServiceOptions.BochaOptions,
+    onUpdateOptions: (SearchServiceOptions.BochaOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text("Summary")
+        },
+        description = {
+            Text("Enable summary generation")
+        },
+        tail = {
+            Switch(
+                checked = options.summary,
+                onCheckedChange = { checked ->
+                    onUpdateOptions(
+                        options.copy(
+                            summary = checked
+                        )
+                    )
+                }
+            )
+        }
+    )
 }
