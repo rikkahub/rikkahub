@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -64,6 +65,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.theme.AtomOneDarkPalette
 import me.rerere.rikkahub.ui.theme.AtomOneLightPalette
@@ -118,9 +120,9 @@ fun HighlightCodeBlock(
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(8.dp),
+            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
     ) {
         HighlightCodeActions(
             language = language,
@@ -137,6 +139,8 @@ fun HighlightCodeBlock(
             )
             return
         }
+        Spacer(Modifier.height(8.dp))
+
         val textStyle = LocalTextStyle.current.merge(style)
         val codeLines = remember(code) { code.lines() }
         val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
@@ -164,6 +168,7 @@ fun HighlightCodeBlock(
             )
         }
 
+        Spacer(Modifier.height(4.dp))
         // 代码折叠按钮
         if (settings.displaySetting.codeBlockAutoCollapse && codeLines.size > COLLAPSE_LINES) {
             Box(
@@ -178,6 +183,7 @@ fun HighlightCodeBlock(
                         .align(Alignment.Center)
                         .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = if (isExpanded) Lucide.ChevronsUp else Lucide.ChevronsDown,
@@ -216,6 +222,7 @@ private fun HighlightCodeActions(
         Text(
             text = language,
             fontSize = 12.sp,
+            lineHeight = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
                 .copy(alpha = 0.5f),
         )
@@ -231,13 +238,13 @@ private fun HighlightCodeActions(
                             )
                         )
                     }
-                }
-                .padding(1.dp),
+                },
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 text = stringResource(id = R.string.chat_page_save),
                 fontSize = 12.sp,
+                lineHeight = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.clickable {
                     val extension = when (language.lowercase()) {
@@ -269,6 +276,7 @@ private fun HighlightCodeActions(
             Text(
                 text = stringResource(id = R.string.code_block_copy),
                 fontSize = 12.sp,
+                lineHeight = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.clickable {
                     scope.launch {
@@ -281,6 +289,7 @@ private fun HighlightCodeActions(
                 Text(
                     text = stringResource(id = R.string.code_block_preview),
                     fontSize = 12.sp,
+                    lineHeight = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier
                         .clickable {
