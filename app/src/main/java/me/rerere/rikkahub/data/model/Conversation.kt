@@ -11,6 +11,18 @@ import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANT_ID
 import java.time.Instant
 import kotlin.uuid.Uuid
 
+/**
+ * 精简版的会话信息，用于列表显示，不包含消息内容以避免 OOM
+ */
+data class ConversationSummary(
+    val id: Uuid,
+    val assistantId: Uuid,
+    val title: String,
+    val isPinned: Boolean = false,
+    val createAt: Instant,
+    val updateAt: Instant,
+)
+
 @Serializable
 data class Conversation(
     val id: Uuid = Uuid.Companion.random(),

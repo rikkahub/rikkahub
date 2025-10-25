@@ -5,11 +5,9 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.map
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.model.Conversation
@@ -54,7 +52,7 @@ class ConversationRepository(
         pagingSourceFactory = { conversationDAO.getConversationsOfAssistantPaging(assistantId.toString()) }
     ).flow.map { pagingData ->
         pagingData.map { entity ->
-            conversationEntityToConversation(entity)
+            conversationSummaryToConversation(entity)
         }
     }
 
@@ -77,7 +75,7 @@ class ConversationRepository(
         pagingSourceFactory = { conversationDAO.searchConversationsPaging(titleKeyword) }
     ).flow.map { pagingData ->
         pagingData.map { entity ->
-            conversationEntityToConversation(entity)
+            conversationSummaryToConversation(entity)
         }
     }
 
@@ -100,7 +98,7 @@ class ConversationRepository(
         pagingSourceFactory = { conversationDAO.searchConversationsOfAssistantPaging(assistantId.toString(), titleKeyword) }
     ).flow.map { pagingData ->
         pagingData.map { entity ->
-            conversationEntityToConversation(entity)
+            conversationSummaryToConversation(entity)
         }
     }
 
@@ -183,4 +181,28 @@ class ConversationRepository(
             isPinned = !(getConversationById(conversationId)?.isPinned ?: false)
         )
     }
+
+    private fun conversationSummaryToConversation(entity: LightConversationEntity): Conversation {
+        return Conversation(
+            id = Uuid.parse(entity.id),
+            assistantId = Uuid.parse(entity.assistantId),
+            title = entity.title,
+            isPinned = entity.isPinned,
+            createAt = Instant.ofEpochMilli(entity.createAt),
+            updateAt = Instant.ofEpochMilli(entity.updateAt),
+            messageNodes = emptyList(),
+        )
+    }
 }
+
+/**
+ * 轻量级的会话查询结果，不包含 nodes 和 suggestions 字段
+ */
+data class LightConversationEntity(
+    val id: String,
+    val assistantId: String,
+    val title: String,
+    val isPinned: Boolean,
+    val createAt: Long,
+    val updateAt: Long,
+)
