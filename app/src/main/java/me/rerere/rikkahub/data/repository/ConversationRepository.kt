@@ -28,27 +28,6 @@ class ConversationRepository(
         private const val INITIAL_LOAD_SIZE = 40
     }
 
-    fun getAllConversations(): Flow<List<Conversation>> = conversationDAO
-        .getAll()
-        .map { flow ->
-            flow.map { entity ->
-                conversationEntityToConversation(entity)
-            }
-        }
-
-    fun getAllConversationsPaging(): Flow<PagingData<Conversation>> = Pager(
-        config = PagingConfig(
-            pageSize = PAGE_SIZE,
-            initialLoadSize = INITIAL_LOAD_SIZE,
-            enablePlaceholders = false
-        ),
-        pagingSourceFactory = { conversationDAO.getAllPaging() }
-    ).flow.map { pagingData ->
-        pagingData.map { entity ->
-            conversationEntityToConversation(entity)
-        }
-    }
-
     suspend fun getRecentConversations(assistantId: Uuid, limit: Int = 10): List<Conversation> {
         return conversationDAO.getRecentConversationsOfAssistant(
             assistantId = assistantId.toString(),
@@ -132,14 +111,6 @@ class ConversationRepository(
         } else null
     }
 
-    suspend fun upsertConversation(conversation: Conversation) {
-        if (getConversationById(conversation.id) != null) {
-            updateConversation(conversation)
-        } else {
-            insertConversation(conversation)
-        }
-    }
-
     suspend fun insertConversation(conversation: Conversation) {
         conversationDAO.insert(
             conversationToConversationEntity(conversation)
@@ -196,13 +167,6 @@ class ConversationRepository(
         )
     }
 
-    suspend fun deleteAllConversations() = withContext(Dispatchers.IO) {
-        conversationDAO.getAll().first().forEach { conversation ->
-            conversationDAO.delete(conversation)
-            context.deleteChatFiles(conversationEntityToConversation(conversation).files)
-        }
-    }
-
     fun getPinnedConversations(): Flow<List<Conversation>> {
         return conversationDAO
             .getPinnedConversations()
@@ -217,20 +181,6 @@ class ConversationRepository(
         conversationDAO.updatePinStatus(
             id = conversationId.toString(),
             isPinned = !(getConversationById(conversationId)?.isPinned ?: false)
-        )
-    }
-
-    suspend fun pinConversation(conversationId: Uuid) {
-        conversationDAO.updatePinStatus(
-            id = conversationId.toString(),
-            isPinned = true
-        )
-    }
-
-    suspend fun unpinConversation(conversationId: Uuid) {
-        conversationDAO.updatePinStatus(
-            id = conversationId.toString(),
-            isPinned = false
         )
     }
 }
