@@ -62,10 +62,24 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.uuid.Uuid
 
+/**
+ * Represents different types of items in the conversation list
+ */
+sealed class ConversationListItem {
+    data class DateHeader(
+        val date: LocalDate,
+        val label: String
+    ) : ConversationListItem()
+    data object PinnedHeader : ConversationListItem()
+    data class Item(
+        val conversation: Conversation
+    ) : ConversationListItem()
+}
+
 @Composable
 fun ColumnScope.ConversationList(
     current: Conversation,
-    conversations: LazyPagingItems<Conversation>,
+    conversations: LazyPagingItems<ConversationListItem>,
     conversationJobs: Collection<Uuid>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
@@ -150,41 +164,76 @@ fun ColumnScope.ConversationList(
 
         items(
             count = conversations.itemCount,
-            key = conversations.itemKey { it.id }
+            key = conversations.itemKey { item ->
+                when (item) {
+                    is ConversationListItem.DateHeader -> "date_${item.date}"
+                    is ConversationListItem.PinnedHeader -> "pinned_header"
+                    is ConversationListItem.Item -> item.conversation.id.toString()
+                }
+            }
         ) { index ->
-            val conversation = conversations[index]
-            if (conversation != null) {
-                // 检查是否需要显示置顶标题
-                val showPinnedHeader = index == 0 && conversation.isPinned
-                val previousConversation = if (index > 0) conversations[index - 1] else null
-                val showUnpinnedHeader = previousConversation?.isPinned == true && !conversation.isPinned
-
-                if (showPinnedHeader) {
-                    PinnedHeader()
-                }
-                if (showUnpinnedHeader) {
-                    UnpinnedHeader()
+            when (val item = conversations[index]) {
+                is ConversationListItem.DateHeader -> {
+                    DateHeaderItem(
+                        label = item.label,
+                        modifier = Modifier.animateItem()
+                    )
                 }
 
-                ConversationItem(
-                    conversation = conversation,
-                    selected = conversation.id == current.id,
-                    loading = conversation.id in conversationJobs,
-                    onClick = onClick,
-                    onDelete = onDelete,
-                    onRegenerateTitle = onRegenerateTitle,
-                    onPin = onPin,
-                    modifier = Modifier.animateItem()
-                )
+                is ConversationListItem.PinnedHeader -> {
+                    PinnedHeader(
+                        modifier = Modifier.animateItem()
+                    )
+                }
+
+                is ConversationListItem.Item -> {
+                    ConversationItem(
+                        conversation = item.conversation,
+                        selected = item.conversation.id == current.id,
+                        loading = item.conversation.id in conversationJobs,
+                        onClick = onClick,
+                        onDelete = onDelete,
+                        onRegenerateTitle = onRegenerateTitle,
+                        onPin = onPin,
+                        modifier = Modifier.animateItem()
+                    )
+                }
+
+                null -> {
+                    // Placeholder for loading state
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PinnedHeader() {
+private fun DateHeaderItem(
+    label: String,
+    modifier: Modifier = Modifier
+) {
     Row(
-        modifier = Modifier
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@Composable
+private fun PinnedHeader(
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -199,24 +248,6 @@ private fun PinnedHeader() {
         Spacer(Modifier.size(8.dp))
         Text(
             text = stringResource(R.string.pinned_chats),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-    }
-}
-
-@Composable
-private fun UnpinnedHeader() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = stringResource(R.string.chat_page_recent),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
