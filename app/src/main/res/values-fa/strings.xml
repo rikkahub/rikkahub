@@ -1,0 +1,707 @@
+<resources>
+    <string name="app_name">ریکاهاب</string>
+    <string name="chat_input_placeholder">گفتگو با هوش مصنوعی</string>
+    <string name="editing">ویرایش</string>
+    <string name="cancel_edit">رد ویرایش</string>
+    <string name="stop">توقف</string>
+    <string name="send">فرستادن</string>
+    <string name="more_options">گزینه‌های بیشتر</string>
+    <string name="use_web_search">جستجوی وب</string>
+    <string name="web_search_enabled">جستجوی وب به‌کار گرفته شد</string>
+    <string name="web_search_disabled">جستجوی وب از کار افتاد</string>
+    <string name="search_picker_title">تنظیمات جستجو</string>
+    <string name="built_in_search_title">جستجوی درونی</string>
+    <string name="built_in_search_description">به‌کارگیری ویژگی جستجوی درونی مدل</string>
+    <string name="photo">عکس</string>
+    <string name="take_picture">گرفتن عکس</string>
+    <string name="shortcut_take_picture">گرفتن عکس و پرسیدن</string>
+    <string name="upload_file">بارگذاری پرونده</string>
+    <string name="copy">رونوشت</string>
+    <string name="regenerate">بازسازی</string>
+    <string name="edit">ویرایش</string>
+    <string name="tts">متن به گفتار</string>
+    <string name="test_tts">آزمایش متن به گفتار</string>
+    <string name="deep_thinking">اندیشیدن ژرف</string>
+    <string name="citations_count">%1$d ارجاع</string>
+    <string name="back">بازگشت</string>
+    <string name="settings">تنظیمات</string>
+    <string name="confirm">پذیرفتن</string>
+    <string name="cancel">رد کردن</string>
+    <string name="confirm_delete">پذیرفتن پاک کردن</string>
+    <string name="delete">پاک کردن</string>
+    <string name="tools_warning">مدل کنونی ویژگی فراخوانی ابزار ندارد. لطفاً ویژگی ابزار مدل را در تنظیمات به‌کار بگیرید تا از ویژگی‌هایی مانند جستجو/MCP بهره ببرید.</string>
+    <!-- Chat Page -->
+    <string name="chat_page_no_conversations">هیچ گفتگویی نیست</string>
+    <string name="chat_page_new_message">پیام نو</string>
+    <string name="chat_page_today">امروز</string>
+    <string name="chat_page_yesterday">دیروز</string>
+    <string name="chat_page_date_format_same_year">%1$d/%2$d</string>
+    <string name="chat_page_date_format_different_year">%1$d/%2$d/%3$d</string>
+    <string name="chat_page_regenerate_title">بازسازی عنوان</string>
+    <string name="chat_page_delete">پاک کردن</string>
+    <string name="chat_page_history">تاریخچه گفتگو</string>
+    <string name="chat_page_scroll_to_bottom">پیمایش به پایین</string>
+    <string name="chat_page_edit_title">ویرایش عنوان</string>
+    <string name="chat_page_save">ذخیره</string>
+    <string name="chat_page_cancel">رد کردن</string>
+    <string name="chat_page_new_chat">گفتگوی نو</string>
+    <string name="chat_page_edit_title_warning">لطفاً پیش از ویرایش عنوان، گفتگو کنید</string>
+    <string name="chat_page_search_placeholder">جستجوی گفتگوها</string>
+    <string name="chat_page_clear_context">پاک کردن زمینه</string>
+    <string name="chat_page_recent">اخیر</string>
+    <!-- Export Chat -->
+    <string name="chat_page_export_format">قالب خروجی</string>
+    <string name="chat_page_export_markdown">مارک‌داون</string>
+    <string name="chat_page_export_markdown_desc">خروجی گفتگو به عنوان پرونده مارک‌داون</string>
+    <string name="chat_page_export_image">خروجی به عنوان تصویر</string>
+    <string name="chat_page_export_image_desc">خروجی گفتگو به عنوان تصویر PNG</string>
+    <string name="chat_page_export_image_expand_reasoning">گسترش اندیشیدن</string>
+    <string name="chat_page_export_success">به %1$s خروجی گرفته شد</string>
+    <string name="chat_page_export_share_via">هم‌رسانی از راه</string>
+    <string name="setting_page_display_setting">تنظیمات نمایش</string>
+    <string name="setting_page_display_setting_desc">مدیریت تنظیمات نمایش</string>
+    <string name="setting_page_dynamic_color">رنگ پویا</string>
+    <string name="setting_page_dynamic_color_desc">به‌کارگیری رنگ پویا</string>
+    <string name="setting_page_general_settings">تنظیمات کلی</string>
+    <string name="setting_page_model_and_services">مدل‌ها و خدمات</string>
+    <string name="setting_page_default_model">مدل پیش‌فرض و پرامپت</string>
+    <string name="setting_page_default_model_desc">تنظیم مدل‌های پیش‌فرض برای هر ویژگی</string>
+    <string name="setting_page_providers">فراهم‌کننده‌ها</string>
+    <string name="setting_page_providers_desc">پیکربندی فراهم‌کننده‌های هوش مصنوعی</string>
+    <string name="setting_page_search_service">خدمت جستجو</string>
+    <string name="setting_page_search_service_desc">راه‌اندازی خدمت جستجو</string>
+    <string name="setting_page_tts_service">خدمت متن به گفتار</string>
+    <string name="setting_page_tts_service_desc">پیکربندی فراهم‌کننده‌های خدمت متن به گفتار</string>
+    <string name="setting_page_search_title">خدمت جستجو</string>
+    <string name="setting_page_search_providers">فراهم‌کننده‌های جستجو</string>
+    <string name="setting_page_search_add_provider">افزودن فراهم‌کننده</string>
+    <string name="setting_page_search_provider_type">نوع فراهم‌کننده</string>
+    <string name="setting_page_search_delete_provider">پاک کردن فراهم‌کننده</string>
+    <string name="setting_page_search_common_options">گزینه‌های مشترک</string>
+    <string name="setting_page_search_result_size">اندازه نتیجه</string>
+    <string name="setting_page_mcp">MCP</string>
+    <string name="setting_page_mcp_desc">پیکربندی کارسازهای MCP</string>
+    <string name="setting_page_assistant">دستیار</string>
+    <string name="setting_page_assistant_desc">راه‌اندازی دستیاران شخصی (عامل‌ها)</string>
+    <string name="setting_page_documentation">مستندات</string>
+    <string name="setting_page_documentation_desc">نمایش دستورالعمل‌های کاربرد برنامه و مستندات کمک</string>
+    <string name="setting_page_about">درباره</string>
+    <string name="setting_page_about_desc">درباره این برنامه</string>
+    <string name="setting_page_chat_storage">حافظه گفتگو</string>
+    <string name="setting_page_chat_storage_desc">%1$d پرونده، %2$.2f مگابایت</string>
+    <string name="calculating">در حال محاسبه...</string>
+    <string name="setting_page_share">هم‌رسانی</string>
+    <string name="setting_page_share_desc">هم‌رسانی این برنامه با دوستان</string>
+    <string name="setting_page_share_text">ریکاهاب - دستیار هوش مصنوعی اندروید آزاد\n\nوبگاه: https://rikka-ai.com/</string>
+    <string name="setting_page_no_share_app">برنامه هم‌رسانی پیدا نشد</string>
+    <string name="setting_page_config_api_title">لطفاً API و مدل را پیکربندی کنید</string>
+    <string name="setting_page_config_api_desc">شما هنوز API و مدل را پیکربندی نکرده‌اید، لطفاً ابتدا پیکربندی کنید</string>
+    <string name="setting_page_config">پیکربندی</string>
+    <!-- Model Settings -->
+    <string name="setting_page_built_in_tools">ابزارهای درونی</string>
+    <string name="setting_page_built_in_tools_desc">انتخاب ابزارهای درونی پشتیبانی‌شده توسط مدل. این ابزارها مستقیماً توسط API فراهم می‌شوند بدون نیاز به پشتیبانی برنامه. اکنون این ویژگی تنها توسط API رسمی جمینی پشتیبانی می‌شود.</string>
+    <string name="setting_page_built_in_tools_search">جستجو</string>
+    <string name="setting_page_built_in_tools_search_desc">به‌کارگیری ادغام جستجوی گوگل</string>
+    <string name="setting_page_built_in_tools_url_context">زمینه URL</string>
+    <string name="setting_page_built_in_tools_url_context_desc">به‌کارگیری پردازش محتوای URL</string>
+    <!-- Setting Model Page -->
+    <string name="setting_model_page_title">تنظیمات مدل</string>
+    <string name="setting_model_page_chat_model">مدل گفتگو</string>
+    <string name="setting_model_page_title_model">مدل خلاصه عنوان</string>
+    <string name="setting_model_page_suggestion_model">مدل پیشنهاد گفتگو</string>
+    <string name="setting_model_page_translate_model">مدل ترجمه</string>
+    <string name="setting_model_page_translate_model_desc">مدل مورد استفاده برای ویژگی‌های ترجمه</string>
+    <string name="setting_model_page_prompt">پرامپت</string>
+    <string name="setting_model_page_translate_prompt_vars">متغیرها: متن منبع: {source_text}، زبان هدف: {target_lang}</string>
+    <string name="setting_model_page_reset_to_default">بازنشانی به پیش‌فرض</string>
+    <string name="setting_model_page_suggestion_model_desc">مدل مورد استفاده برای ساخت پیشنهادهای گفتگو، پیشنهاد می‌شود از مدل‌های سریع و ارزان استفاده شود</string>
+    <string name="setting_model_page_suggestion_prompt_vars">متغیرها: محتوای گفتگو: {content}، زبان: {locale}</string>
+    <string name="setting_model_page_title_model_desc">مدل مورد استفاده برای خلاصه عنوان گفتگوها، پیشنهاد می‌شود از مدل‌های سریع و ارزان استفاده شود</string>
+    <string name="setting_model_page_chat_model_desc">مدل گفتگو پیش‌فرض کلی</string>
+    <!-- Translator Page -->
+    <string name="translator_page_title">مترجم</string>
+    <string name="translator_page_input_text">متن ورودی</string>
+    <string name="translator_page_input_placeholder">متن برای ترجمه وارد کنید...</string>
+    <string name="translator_page_result">نتیجه ترجمه</string>
+    <string name="translator_page_result_placeholder">نتیجه ترجمه اینجا نمایش داده می‌شود</string>
+    <string name="translator_page_target_language">زبان هدف:</string>
+    <string name="translator_page_translate">ترجمه</string>
+    <string name="translator_page_cancel">رد کردن</string>
+    <!-- Assistant Page -->
+    <string name="assistant_page_title">تنظیمات دستیار</string>
+    <string name="assistant_page_add">افزودن</string>
+    <string name="assistant_page_name">نام دستیار</string>
+    <string name="assistant_page_system_prompt">پرامپت سیستم</string>
+    <string name="assistant_page_available_variables">«متغیرهای در دسترس: »</string>
+    <string name="assistant_page_temperature">دما</string>
+    <string name="assistant_page_strict">سخت‌گیر</string>
+    <string name="assistant_page_balanced">متعادل</string>
+    <string name="assistant_page_creative">خلاق</string>
+    <string name="assistant_page_chaotic">آشفته (خطرناک)</string>
+    <string name="assistant_page_top_p">بالای P</string>
+    <string name="assistant_page_top_p_warning">لطفاً این مقدار را تغییر ندهید مگر اینکه بدانید چه می‌کنید</string>
+    <string name="assistant_page_context_message_size">اندازه پیام زمینه</string>
+    <string name="assistant_page_context_message_desc">کنترل می‌کند که چند پیام تاریخی به عنوان زمینه به مدل فرستاده شود. پیام‌های بیش از این تعداد نادیده گرفته می‌شوند، تنها N پیام اخیر نگه داشته می‌شود، که می‌تواند توکن‌ها را ذخیره کند</string>
+    <string name="assistant_page_context_message_count">اندازه پیام زمینه: %d</string>
+    <string name="assistant_page_memory">حافظه</string>
+    <string name="assistant_page_memory_desc">هنگامی که حافظه به‌کار گرفته شود، مدل سعی می‌کند اطلاعات شما را در گفتگوها ضبط کند و در گفتگوهای بعدی استفاده کند. این ویژگی نیاز به پشتیبانی مدل از فراخوانی ابزار دارد تا درست کار کند</string>
+    <string name="assistant_page_recent_chats">ارجاع به گفتگوهای اخیر</string>
+    <string name="assistant_page_recent_chats_desc">هنگامی که به‌کار گرفته شود، دستیار به تاریخچه گفتگوهای اخیر ارجاع می‌دهد تا پاسخ‌های زمینه‌دارتری بدهد</string>
+    <string name="assistant_page_manage_memory">مدیریت حافظه (%d مورد)</string>
+    <string name="assistant_page_cancel">رد کردن</string>
+    <string name="assistant_page_save">ذخیره</string>
+    <string name="assistant_page_manage_memory_title">مدیریت حافظه</string>
+    <string name="assistant_page_delete">پاک کردن</string>
+    <string name="assistant_page_delete_dialog_text">آیا مطمئن هستید که می‌خواهید این دستیار را پاک کنید؟ این کنش برگشت‌ناپذیر است.</string>
+    <string name="assistant_page_default_assistant">دستیار پیش‌فرض</string>
+    <string name="setting_provider_page_delete_dialog_text">آیا مطمئن هستید که می‌خواهید این فراهم‌کننده را پاک کنید؟ این کنش برگشت‌ناپذیر است.</string>
+    <string name="assistant_page_temperature_value">دما: %s</string>
+    <string name="assistant_page_memory_count">حافظه: %d</string>
+    <string name="assistant_page_no_system_prompt">بدون پرامپت سیستم</string>
+    <string name="assistant_page_clone">شبیه‌سازی</string>
+    <string name="assistant_page_top_p_value">بالای P: %s</string>
+    <string name="assistant_page_thinking_budget">بودجه اندیشیدن</string>
+    <string name="assistant_page_thinking_budget_default">پیش‌فرض</string>
+    <string name="assistant_page_max_tokens">حداکثر توکن‌ها</string>
+    <string name="assistant_page_max_tokens_desc">حداکثر تعداد توکن برای ساخت. خالی بگذارید برای بدون محدودیت.</string>
+    <string name="assistant_page_max_tokens_no_limit">بدون محدودیت</string>
+    <string name="assistant_page_max_tokens_limit">محدودیت: %d توکن</string>
+    <string name="assistant_page_max_tokens_no_token_limit">بدون محدودیت توکن</string>
+    <string name="assistant_page_message_template">الگوی محتوای پیام</string>
+    <string name="assistant_page_message_template_desc">کنترل قالب محتوای پیام‌های گفتگو پیش از فرستادن به LLM، معمولاً نیازی به تغییر نیست</string>
+    <string name="assistant_page_template_preview">پیش‌نمایش:</string>
+    <string name="assistant_page_template_variable_role">نقش</string>
+    <string name="assistant_page_template_variable_message">محتوا</string>
+    <string name="assistant_page_template_variable_time">زمان</string>
+    <string name="assistant_page_template_variable_date">تاریخ</string>
+    <string name="assistant_page_template_variables_label">متغیرها:</string>
+    <!-- Local Tools -->
+    <string name="assistant_page_local_tools_javascript_engine_title">موتور جاوااسکریپت</string>
+    <string name="assistant_page_local_tools_javascript_engine_desc">اجرای کد جاوااسکریپت با موتور QuickJS برای محاسبات و اسکریپتینگ</string>
+    <!-- Custom Headers and Bodies -->
+    <string name="assistant_page_custom_headers">سربرگ‌های سفارشی</string>
+    <string name="assistant_page_header_name">نام سربرگ</string>
+    <string name="assistant_page_header_value">مقدار سربرگ</string>
+    <string name="assistant_page_delete_header">پاک کردن سربرگ</string>
+    <string name="assistant_page_add_header">افزودن سربرگ</string>
+    <string name="assistant_page_custom_bodies">بدنه سفارشی</string>
+    <string name="assistant_page_body_key">کلید بدنه</string>
+    <string name="assistant_page_body_value">مقدار بدنه (JSON)</string>
+    <string name="assistant_page_invalid_json">JSON نامعتبر: %s</string>
+    <string name="assistant_page_delete_body">پاک کردن بدنه</string>
+    <string name="assistant_page_add_body">افزودن بدنه</string>
+    <!-- Notification -->
+    <string name="notification_channel_chat_completed">گفتگو کامل شد</string>
+    <!-- Theme Types -->
+    <string name="setting_page_theme_type_standard">استاندارد</string>
+    <string name="setting_page_theme_type_medium_contrast">تضاد متوسط</string>
+    <string name="setting_page_theme_type_high_contrast">تضاد بالا</string>
+    <!-- Theme Names -->
+    <string name="theme_name_black">سیاه خنثی</string>
+    <string name="theme_name_sakura">صورتی ساکورا</string>
+    <string name="theme_name_ocean">آبی اقیانوس</string>
+    <string name="theme_name_spring">سبز چمنزار</string>
+    <!-- Menu Page -->
+    <string name="menu_page_morning_greeting">صبح بخیر 👋</string>
+    <string name="menu_page_afternoon_greeting">عصر بخیر 👋</string>
+    <string name="menu_page_evening_greeting">شب بخیر 👋</string>
+    <string name="menu_page_night_greeting">دیروقت است، مراقب باشید 👋</string>
+    <string name="menu_page_ai_translator">مترجم هوش مصنوعی</string>
+    <string name="menu_page_image_generation">ساخت تصویر</string>
+    <string name="menu_page_knowledge_base">پایگاه دانش (در حال کار)</string>
+    <string name="menu_page_llm_leaderboard">رتبه‌بندی LLM</string>
+    <!-- ModelList Page -->
+    <string name="model_list_select_model">انتخاب مدل</string>
+    <string name="model_list_no_providers">هیچ فراهم‌کننده هوش مصنوعی در دسترس نیست، لطفاً در تنظیمات بیفزایید</string>
+    <string name="model_list_favorite">برگزیده‌ها</string>
+    <string name="model_list_search_placeholder">نام مدل را برای جستجو وارد کنید</string>
+    <!-- About Page -->
+    <string name="about_page_title">درباره</string>
+    <string name="about_page_version">نگارش</string>
+    <string name="about_page_system">سامانه</string>
+    <string name="about_page_website">وبگاه</string>
+    <string name="about_page_github">گیتهاب</string>
+    <string name="about_page_license">پروانه</string>
+    <!-- History Page -->
+    <string name="history_page_title">تاریخچه گفتگو</string>
+    <string name="history_page_reset_chat">بازنشانی گفتگو</string>
+    <string name="history_page_search_placeholder">کلیدواژه‌ها را برای جستجوی گفتگو وارد کنید</string>
+    <string name="history_page_new_conversation">گفتگوی نو</string>
+    <string name="history_page_clear">پاک کردن</string>
+    <string name="history_page_search">جستجو</string>
+    <string name="history_page_delete_all">پاک کردن همه</string>
+    <string name="history_page_conversation_deleted">گفتگو پاک شد</string>
+    <string name="history_page_undo">بازگردانی</string>
+    <string name="history_page_delete_all_conversations">پاک کردن همه گفتگوها</string>
+    <string name="history_page_delete_all_confirmation">آیا مطمئن هستید که می‌خواهید همه گفتگوها را پاک کنید؟ این کنش برگشت‌ناپذیر است.</string>
+    <string name="history_page_delete">پاک کردن</string>
+    <string name="history_page_cancel">رد کردن</string>
+    <string name="history_page_pin">سنجاق کردن</string>
+    <string name="history_page_unpin">برداشتن سنجاق</string>
+    <!-- Code Block -->
+    <string name="code_block_copy">رونوشت کد</string>
+    <string name="code_block_preview">پیش‌نمایش</string>
+    <string name="code_block_expand">گسترش</string>
+    <string name="code_block_collapse">جمع کردن</string>
+    <!-- Mermaid Diagram -->
+    <string name="mermaid_export">خروجی</string>
+    <string name="mermaid_export_success">خروجی موفق</string>
+    <string name="mermaid_export_failed">خروجی شکست خورد</string>
+    <!-- Avatar Component -->
+    <string name="avatar_change_avatar">تغییر آواتار</string>
+    <string name="avatar_pick_image">انتخاب تصویر</string>
+    <string name="avatar_pick_emoji">انتخاب ایموجی</string>
+    <string name="avatar_input_url">وارد کردن URL</string>
+    <string name="avatar_reset">بازنشانی</string>
+    <string name="avatar_cancel">رد کردن</string>
+    <string name="avatar_url_dialog_title">وارد کردن URL تصویر</string>
+    <string name="avatar_url_hint">URL تصویر وارد کنید</string>
+    <string name="avatar_url_confirm">پذیرفتن</string>
+    <!-- Assistant Picker -->
+    <string name="assistant_picker_expand">گسترش</string>
+    <string name="assistant_picker_selected">انتخاب‌شده</string>
+    <!-- Emoji Picker -->
+    <string name="emoji_picker_search_placeholder">جستجوی ایموجی‌ها...</string>
+    <string name="emoji_picker_select_skin_tone">انتخاب رنگ پوست</string>
+    <!-- Reasoning -->
+    <string name="reasoning_set_budget">تنظیم بودجه اندیشیدن (%1$d توکن)</string>
+    <!-- Chat Page - Nickname Edit -->
+    <string name="chat_page_edit_nickname">ویرایش لقب</string>
+    <string name="chat_page_nickname_placeholder">لطفاً لقب وارد کنید</string>
+    <!-- User -->
+    <string name="user_default_name">کاربر</string>
+    <!-- Data Settings -->
+    <string name="setting_page_data_settings">تنظیمات داده</string>
+    <string name="setting_page_data_backup">پشتیبان‌گیری داده</string>
+    <string name="setting_page_data_backup_desc">پشتیبان‌گیری و بازیابی داده برنامه</string>
+    <string name="reasoning_off">خاموش</string>
+    <string name="reasoning_off_desc">خاموش کردن ویژگی اندیشیدن، مدل مستقیماً به پرسش‌ها پاسخ می‌دهد.</string>
+    <string name="reasoning_auto">خودکار</string>
+    <string name="reasoning_auto_desc">اجازه دهید مدل سطح اندیشیدن را خودکار تعیین کند.</string>
+    <string name="reasoning_light">اندیشیدن سبک</string>
+    <string name="reasoning_light_desc">مدل از مقدار کمی اندیشیدن برای پاسخ به پرسش‌ها استفاده می‌کند.</string>
+    <string name="reasoning_medium">اندیشیدن متوسط</string>
+    <string name="reasoning_medium_desc">مدل از اندیشیدن بیشتری برای پاسخ به پرسش‌ها استفاده می‌کند.</string>
+    <string name="reasoning_heavy">اندیشیدن سنگین</string>
+    <string name="reasoning_heavy_desc">مدل از مقدار زیادی اندیشیدن برای پاسخ به پرسش‌ها استفاده می‌کند.</string>
+    <string name="reasoning_custom">بودجه اندیشیدن سفارشی</string>
+    <!-- Setting Display Page -->
+    <string name="setting_display_page_show_user_avatar_title">نمایش آواتار کاربر</string>
+    <string name="setting_display_page_show_user_avatar_desc">آیا آواتار کاربر در پیام‌های گفتگو نمایش داده شود</string>
+    <string name="setting_display_page_chat_list_model_icon_title">نماد مدل فهرست گفتگو</string>
+    <string name="setting_display_page_chat_list_model_icon_desc">آیا نمادهای مدل در پیام‌های فهرست گفتگو نمایش داده شود</string>
+    <string name="setting_display_page_show_model_name_title">نمایش نام مدل</string>
+    <string name="setting_display_page_show_model_name_desc">آیا نام‌های مدل در پیام‌های گفتگو نمایش داده شود</string>
+    <string name="setting_display_page_show_token_usage_title">نمایش آمار توکن و زمینه</string>
+    <string name="setting_display_page_show_token_usage_desc">نمایش مصرف توکن و شمار پیام</string>
+    <string name="setting_display_page_auto_collapse_thinking_title">جمع کردن خودکار اندیشیدن</string>
+    <string name="setting_display_page_auto_collapse_thinking_desc">جمع کردن خودکار محتوای اندیشیدن پس از پایان اندیشیدن</string>
+    <string name="setting_display_page_show_updates_title">نمایش به‌روزرسانی‌ها</string>
+    <string name="setting_display_page_show_updates_desc">آیا اعلان‌های به‌روزرسانی برنامه نمایش داده شود</string>
+    <string name="setting_display_page_show_message_jumper_title">نمایش پرشگر پیام</string>
+    <string name="setting_display_page_show_message_jumper_desc">نمایش دکمه‌های پرش سریع در سمت راست هنگام پیمایش فهرست گفتگو</string>
+    <string name="setting_display_page_create_new_conversation_on_start_title">گفتگوی نو هنگام راه‌اندازی</string>
+    <string name="setting_display_page_create_new_conversation_on_start_desc">ساخت گفتگو نو هنگام شروع برنامه</string>
+    <string name="setting_display_page_font_size_title">اندازه قلم گفتگو</string>
+    <string name="setting_display_page_font_size_preview">این یک متن نمونه گفتگو است</string>
+    <string name="setting_display_page_enable_message_generation_haptic_effect_title">اثر لمسی ساخت پیام</string>
+    <string name="setting_display_page_enable_message_generation_haptic_effect_desc">به‌کارگیری بازخورد لمسی هنگام ساخت پیام‌ها</string>
+    <string name="setting_display_page_skip_crop_image_title">پرش از ویرایش تصویر</string>
+    <string name="setting_display_page_skip_crop_image_desc">پرش از رابط برش پس از وارد کردن تصاویر یا گرفتن عکس</string>
+    <string name="setting_display_page_amoled_dark_mode_title">حالت تاریک AMOLED</string>
+    <string name="setting_display_page_amoled_dark_mode_desc">استفاده از زمینه سیاه خالص در پوسته تاریک، مناسب برای صفحه‌های AMOLED</string>
+    <string name="setting_display_page_title">تنظیمات نمایش</string>
+    <!-- Share Handler Page -->
+    <string name="share_handler_page_title">انتخاب دستیار</string>
+    <!-- Color Mode -->
+    <string name="setting_page_color_mode">حالت رنگ</string>
+    <string name="setting_page_color_mode_system">سامانه</string>
+    <string name="setting_page_color_mode_light">روشن</string>
+    <string name="setting_page_color_mode_dark">تاریک</string>
+    <!-- Assistant Detail Page -->
+    <string name="assistant_page_tab_basic">تنظیمات پایه</string>
+    <string name="assistant_page_tab_prompt">پرامپت‌ها</string>
+    <string name="assistant_page_tab_memory">حافظه</string>
+    <string name="assistant_page_tab_request">درخواست سفارشی</string>
+    <string name="assistant_page_tab_mcp">MCP</string>
+    <string name="assistant_page_tab_local_tools">ابزارهای محلی</string>
+    <string name="assistant_page_stream_output">خروجی جریانی</string>
+    <string name="assistant_page_stream_output_desc">آیا خروجی جریانی برای پیام‌ها به‌کار گرفته شود</string>
+    <string name="assistant_page_use_assistant_avatar">استفاده از آواتار دستیار</string>
+    <string name="assistant_page_use_assistant_avatar_desc">استفاده از آواتار و نام دستیار به جای آواتار و نام مدل در گفتگوها</string>
+    <string name="assistant_page_chat_model">مدل گفتگو</string>
+    <string name="assistant_page_chat_model_desc">تنظیم مدل گفتگو پیش‌فرض برای دستیار. اگر تنظیم نشود، مدل گفتگو پیش‌فرض کلی استفاده می‌شود</string>
+    <string name="assistant_page_preset_messages">پیام‌های گفتگو پیش‌تنظیم</string>
+    <string name="assistant_page_preset_messages_desc">تنظیم پیام‌های گفتگو اولیه</string>
+    <!-- MCP Setting Page -->
+    <string name="setting_mcp_page_title">MCP</string>
+    <string name="setting_mcp_page_basic_settings">تنظیمات پایه</string>
+    <string name="setting_mcp_page_tools">ابزارها</string>
+    <string name="setting_mcp_page_enable">به‌کارگیری</string>
+    <string name="setting_mcp_page_enable_desc">آیا این کارساز MCP به‌کار گرفته شود</string>
+    <string name="setting_mcp_page_name">نام</string>
+    <string name="setting_mcp_page_name_desc">نام نمایشی برای کارساز MCP</string>
+    <string name="setting_mcp_page_name_placeholder">مثل: کارساز MCP من</string>
+    <string name="setting_mcp_page_transport_type">نوع حمل</string>
+    <string name="setting_mcp_page_transport_type_desc">انتخاب نوع پروتکل حمل برای کارساز MCP</string>
+    <string name="setting_mcp_page_server_url">URL کارساز</string>
+    <string name="setting_mcp_page_sse_url_desc">نشانی URL برای کارساز حمل SSE</string>
+    <string name="setting_mcp_page_streamable_http_url_desc">نشانی URL برای کارساز HTTP جریانی</string>
+    <string name="setting_mcp_page_sse_url_placeholder">https://example.com/sse</string>
+    <string name="setting_mcp_page_streamable_http_url_placeholder">https://example.com/mcp</string>
+    <string name="setting_mcp_page_custom_headers">سربرگ‌های سفارشی</string>
+    <string name="setting_mcp_page_custom_headers_desc">افزودن سربرگ‌های HTTP سفارشی برای درخواست‌های کارساز MCP</string>
+    <string name="setting_mcp_page_header_name">نام سربرگ</string>
+    <string name="setting_mcp_page_header_name_placeholder">مثل: Authorization</string>
+    <string name="setting_mcp_page_header_value">مقدار سربرگ</string>
+    <string name="setting_mcp_page_header_value_placeholder">مثل: Bearer token123</string>
+    <string name="setting_mcp_page_delete_header">پاک کردن سربرگ</string>
+    <string name="setting_mcp_page_add_header">افزودن سربرگ</string>
+    <string name="setting_mcp_page_save">ذخیره</string>
+    <string name="setting_mcp_page_url_label">URL</string>
+    <string name="setting_mcp_page_tools_unavailable_message">نمی‌توان فهرست ابزارها را هنگام افزودن کارساز MCP دید، لطفاً پس از افزودن بررسی کنید</string>
+    <!-- MCP Picker -->
+    <string name="mcp_picker_title">کارسازهای MCP</string>
+    <string name="mcp_picker_syncing">در حال همگام‌سازی کارسازهای MCP...</string>
+    <!-- Setting Provider Page -->
+    <string name="setting_provider_page_title">فراهم‌کننده‌ها</string>
+    <string name="setting_provider_page_scan_error">خطا: %s</string>
+    <string name="setting_provider_page_no_permission">بدون دسترسی</string>
+    <string name="setting_provider_page_import_success">وارد کردن موفق</string>
+    <string name="setting_provider_page_add_provider">افزودن فراهم‌کننده</string>
+    <string name="setting_provider_page_add">افزودن</string>
+    <string name="setting_provider_page_enabled">به‌کار گرفته‌شده</string>
+    <string name="setting_provider_page_disabled">از کار افتاده</string>
+    <string name="setting_provider_page_model_count">%d مدل</string>
+    <string name="setting_provider_page_share">هم‌رسانی</string>
+    <string name="setting_provider_page_models">مدل‌ها</string>
+    <string name="setting_provider_page_configuration">پیکربندی</string>
+    <string name="setting_provider_page_save_success">ذخیره موفق</string>
+    <string name="setting_provider_page_save">ذخیره</string>
+    <string name="setting_provider_page_no_models">هیچ مدلی نیست</string>
+    <string name="setting_provider_page_add_models_hint">دکمه زیر را برای افزودن مدل‌ها کلیک کنید</string>
+    <string name="setting_provider_page_add_new_model">افزودن مدل نو</string>
+    <string name="setting_provider_page_add_model">افزودن مدل</string>
+    <string name="setting_provider_page_model_id">شناسه مدل</string>
+    <string name="setting_provider_page_model_id_placeholder">مثل: gpt-3.5-turbo</string>
+    <string name="setting_provider_page_model_display_name">نام نمایشی مدل</string>
+    <string name="setting_provider_page_model_display_name_placeholder">مثل: GPT-3.5، برای نمایش UI</string>
+    <string name="setting_provider_page_model_type">نوع مدل</string>
+    <string name="setting_provider_page_chat_model">گفتگو</string>
+    <string name="setting_provider_page_embedding_model">جاسازی</string>
+    <string name="setting_provider_page_image_model">تصویر</string>
+    <string name="setting_provider_page_input_modality">مدالیتی ورودی</string>
+    <string name="setting_provider_page_output_modality">مدالیتی خروجی</string>
+    <string name="setting_provider_page_text">متن</string>
+    <string name="setting_provider_page_image">تصویر</string>
+    <string name="setting_provider_page_abilities">ویژگی‌ها</string>
+    <string name="setting_provider_page_tool">ابزار</string>
+    <string name="setting_provider_page_reasoning">اندیشیدن</string>
+    <string name="setting_provider_page_filter_placeholder">نام مدل را برای پالایش وارد کنید</string>
+    <string name="setting_provider_page_filter_example">مثل: GPT-3.5</string>
+    <string name="setting_provider_page_edit_model">ویرایش مدل</string>
+    <string name="setting_provider_page_model_name">نام مدل</string>
+    <string name="setting_provider_page_test_connection">آزمایش اتصال</string>
+    <string name="setting_provider_page_test_success">آزمایش موفق</string>
+    <string name="setting_provider_page_test">آزمایش</string>
+    <string name="setting_provider_page_import_dialog_title">وارد کردن پیکربندی فراهم‌کننده</string>
+    <string name="setting_provider_page_import_dialog_message">لطفاً روش وارد کردن را انتخاب کنید:</string>
+    <string name="setting_provider_page_scan_qr_code">پویش کد QR</string>
+    <string name="setting_provider_page_select_from_gallery">انتخاب از گالری</string>
+    <string name="setting_provider_page_qr_decode_failed">تجزیه کد QR شکست خورد: %s</string>
+    <string name="setting_provider_page_image_read_failed">نمی‌توان تصویر را خواند</string>
+    <string name="setting_provider_page_no_qr_found">هیچ کد QR معتبر پیدا نشد</string>
+    <string name="setting_provider_page_image_qr_decode_failed">تجزیه کد QR از تصویر شکست خورد: %s</string>
+    <string name="setting_provider_page_enable">به‌کارگیری</string>
+    <string name="setting_provider_page_name">نام</string>
+    <string name="setting_provider_page_api_key">کلید API</string>
+    <string name="setting_provider_page_api_base_url">نشانی پایه API</string>
+    <string name="setting_provider_page_api_path">مسیر API</string>
+    <string name="setting_provider_page_response_api">API پاسخ</string>
+    <string name="setting_provider_page_vertex_ai">Vertex AI</string>
+    <string name="setting_provider_page_location">مکان (مثل us-central1)</string>
+    <string name="setting_provider_page_project_id">شناسه پروژه</string>
+    <string name="setting_provider_page_basic_settings">تنظیمات پایه</string>
+    <string name="setting_provider_page_advanced_settings">تنظیمات پیشرفته</string>
+    <string name="setting_provider_page_network_proxy">پروکسی شبکه</string>
+    <string name="setting_provider_page_proxy_host">میزبان</string>
+    <string name="setting_provider_page_proxy_port">درگاه</string>
+    <string name="setting_provider_page_proxy_username">نام کاربری (اختیاری)</string>
+    <string name="setting_provider_page_proxy_password">گذرواژه (اختیاری)</string>
+    <string name="setting_provider_page_provider_override">جایگزینی فراهم‌کننده</string>
+    <string name="setting_provider_page_provider_override_desc">پیکربندی تنظیمات فراهم‌کننده سفارشی برای این مدل خاص. ویژگی‌های مشترک از فراهم‌کننده والد ارث‌بری می‌شود.</string>
+    <string name="setting_provider_page_add_provider_override">افزودن جایگزینی فراهم‌کننده</string>
+    <string name="setting_provider_page_configure_provider_override">پیکربندی جایگزینی فراهم‌کننده</string>
+    <string name="setting_provider_page_service_account_email">رایانامه حساب خدمت</string>
+    <string name="setting_provider_page_private_key">کلید خصوصی</string>
+    <string name="setting_provider_page_response_api_warning">API پاسخ، API نسل بعدی OpenAI است. بیشتر فراهم‌کننده‌ها آن را پشتیبانی نمی‌کنند. اگر نمی‌دانید چیست، آن را به‌کار نگیرید.</string>
+    <!-- TTS Settings -->
+    <string name="setting_tts_page_title">متن به گفتار</string>
+    <string name="setting_tts_page_add_provider">افزودن فراهم‌کننده متن به گفتار</string>
+    <string name="setting_tts_page_add">افزودن</string>
+    <string name="setting_tts_page_enabled">به‌کار گرفته‌شده</string>
+    <string name="setting_tts_page_disabled">از کار افتاده</string>
+    <string name="setting_tts_page_provider_type">نوع فراهم‌کننده</string>
+    <string name="setting_tts_page_provider_type_description">نوع فراهم‌کننده متن به گفتار را انتخاب کنید</string>
+    <string name="setting_tts_page_name">نام</string>
+    <string name="setting_tts_page_name_description">نام سفارشی برای این فراهم‌کننده متن به گفتار</string>
+    <string name="setting_tts_page_name_placeholder">نام فراهم‌کننده وارد کنید</string>
+    <string name="setting_tts_page_api_key">کلید API</string>
+    <string name="setting_tts_page_api_key_description">کلید API فراهم‌کننده شما</string>
+    <string name="setting_tts_page_base_url">نشانی پایه</string>
+    <string name="setting_tts_page_base_url_description">نقطه پایانی نشانی پایه API</string>
+    <string name="setting_tts_page_model">مدل</string>
+    <string name="setting_tts_page_model_description">مدل متن به گفتار برای استفاده</string>
+    <string name="setting_tts_page_voice">صدا</string>
+    <string name="setting_tts_page_voice_description">صدا برای استفاده در ترکیب گفتار</string>
+    <string name="setting_tts_page_voice_name">نام صدا</string>
+    <string name="setting_tts_page_voice_name_description">نام صدا</string>
+    <string name="setting_tts_page_speed">سرعت</string>
+    <string name="setting_tts_page_speed_description">سرعت گفتار (0.25 - 4.0)</string>
+    <string name="setting_tts_page_speech_rate">نرخ گفتار</string>
+    <string name="setting_tts_page_speech_rate_description">کنترل سرعت گفتار (0.1 - 3.0، 1.0 عادی است)</string>
+    <string name="setting_tts_page_pitch">زیروبم</string>
+    <string name="setting_tts_page_pitch_description">کنترل زیروبم گفتار (0.1 - 2.0، 1.0 عادی است)</string>
+    <string name="setting_tts_page_language">زبان</string>
+    <string name="setting_tts_page_language_description">کد زبان برای متن به گفتار (مثل en-US، zh-CN، ja-JP)</string>
+    <string name="setting_tts_page_edit_provider">ویرایش فراهم‌کننده</string>
+    <string name="setting_tts_page_select">انتخاب</string>
+    <string name="setting_tts_page_selected">انتخاب‌شده</string>
+    <string name="setting_tts_page_default_name">متن به گفتار سامانه</string>
+    <string name="setting_tts_page_test_text">سلام، این یک آزمایش متن به گفتار است.</string>
+    <string name="setting_tts_page_provider_openai">OpenAI</string>
+    <string name="setting_tts_page_provider_gemini">Gemini</string>
+    <string name="setting_tts_page_provider_system">متن به گفتار سامانه</string>
+    <string name="setting_tts_page_add_provider_content_description">افزودن فراهم‌کننده متن به گفتار</string>
+    <string name="setting_tts_page_more_options_content_description">گزینه‌های بیشتر</string>
+    <string name="setting_tts_page_default_openai_name">TTS OpenAI</string>
+    <string name="setting_tts_page_default_gemini_name">TTS Gemini</string>
+    <string name="setting_tts_page_default_system_name">متن به گفتار سامانه</string>
+    <string name="setting_tts_page_api_key_placeholder_openai">sk-...</string>
+    <string name="setting_tts_page_api_key_placeholder_gemini">AIza...</string>
+    <string name="setting_tts_page_base_url_placeholder">https://api.openai.com/v1</string>
+    <string name="setting_tts_page_model_placeholder_openai">gpt-4o-mini-tts</string>
+    <string name="setting_tts_page_model_placeholder_gemini">gemini-2.5-flash-preview-tts</string>
+    <string name="setting_tts_page_voice_name_placeholder">Kore</string>
+    <string name="setting_tts_page_voice_id">شناسه صدا</string>
+    <string name="setting_tts_page_voice_id_description">شناسه صدا برای ترکیب گفتار</string>
+    <string name="setting_tts_page_emotion">احساس</string>
+    <string name="setting_tts_page_emotion_description">سبک احساس برای ترکیب گفتار</string>
+    <string name="setting_tts_page_emotion_placeholder">happy</string>
+    <!-- Chat Message Tool Calls -->
+    <string name="chat_message_tool_create_memory">حافظه ساخته شد</string>
+    <string name="chat_message_tool_edit_memory">حافظه به‌روزرسانی شد</string>
+    <string name="chat_message_tool_delete_memory">حافظه پاک شد</string>
+    <string name="chat_message_tool_search_web">جستجوی وب: %1$s</string>
+    <string name="chat_message_tool_call_generic">ابزار %1$s فراخوانی شد</string>
+    <string name="chat_message_tool_search_prefix">جستجو: %1$s</string>
+    <string name="chat_message_tool_call_title">فراخوانی ابزار</string>
+    <string name="chat_message_tool_call_label">ابزار %1$s فراخوانی شد</string>
+    <string name="chat_message_tool_call_result">نتیجه فراخوانی</string>
+    <string name="chat_message_tool_search_results_count">%1$d نتیجه</string>
+    <!-- Backup and Restore Page -->
+    <string name="backup_page_title">پشتیبان‌گیری و بازیابی</string>
+    <string name="backup_page_webdav_backup">پشتیبان‌گیری WebDAV</string>
+    <string name="backup_page_import_export">وارد و خروجی</string>
+    <string name="backup_page_webdav_server_address">نشانی کارساز WebDAV</string>
+    <string name="backup_page_username">نام کاربری</string>
+    <string name="backup_page_password">گذرواژه</string>
+    <string name="backup_page_path">مسیر</string>
+    <string name="backup_page_backup_items">موارد پشتیبان‌گیری</string>
+    <string name="backup_page_chat_records">ثبت‌های گفتگو</string>
+    <string name="backup_page_files">پرونده‌ها</string>
+    <string name="backup_page_test_connection">آزمایش اتصال</string>
+    <string name="backup_page_restore">بازیابی</string>
+    <string name="backup_page_backup_now">پشتیبان‌گیری اکنون</string>
+    <string name="backup_page_backing_up">در حال پشتیبان‌گیری...</string>
+    <string name="backup_page_webdav_backup_files">پرونده‌های پشتیبان‌گیری WebDAV</string>
+    <string name="backup_page_last_modified">آخرین تغییر</string>
+    <string name="backup_page_size">اندازه</string>
+    <string name="backup_page_delete">پاک کردن</string>
+    <string name="backup_page_restore_now">بازیابی</string>
+    <string name="backup_page_restoring">در حال بازیابی...</string>
+    <string name="backup_page_connection_success">اتصال موفق</string>
+    <string name="backup_page_connection_failed">اتصال شکست خورد: %s</string>
+    <string name="backup_page_backup_success">پشتیبان‌گیری موفق</string>
+    <string name="backup_page_unknown_error">خطای ناشناخته</string>
+    <string name="backup_page_loading_failed">بارگذاری پرونده‌های پشتیبان شکست خورد: %s</string>
+    <string name="backup_page_delete_success">پاک کردن موفق</string>
+    <string name="backup_page_delete_failed">پاک کردن شکست خورد: %s</string>
+    <string name="backup_page_restore_success">بازیابی موفق</string>
+    <string name="backup_page_restore_failed">بازیابی شکست خورد: %s</string>
+    <string name="backup_page_restart_app">باز راه‌اندازی برنامه</string>
+    <string name="backup_page_restart_desc">برنامه نیاز به باز راه‌اندازی دارد تا تغییرات اعمال شود.</string>
+    <string name="backup_page_local_backup_export">خروجی به پرونده</string>
+    <string name="backup_page_local_backup_import">وارد از پرونده</string>
+    <string name="backup_page_exporting">در حال خروجی...</string>
+    <string name="backup_page_export_desc">خروجی داده برنامه به پرونده</string>
+    <string name="backup_page_importing">در حال وارد کردن...</string>
+    <string name="backup_page_import_desc">وارد کردن پرونده پشتیبان محلی</string>
+    <string name="backup_page_import_from_other_app">وارد از برنامه دیگر</string>
+    <string name="backup_page_import_from_chatbox">وارد از ChatBox</string>
+    <string name="backup_page_import_chatbox_desc">وارد کردن داده از ChatBox</string>
+    <!-- Tag Input -->
+    <string name="add">افزودن</string>
+    <string name="tag_input_dialog_title">افزودن برچسب</string>
+    <string name="tag_input_dialog_label">نام برچسب</string>
+    <string name="tag_input_dialog_placeholder">نام برچسب وارد کنید...</string>
+    <string name="tag_input_dialog_existing_tags">برچسب‌های موجود</string>
+    <string name="tag_input_dialog_create_new">ساخت برچسب نو</string>
+    <string name="tag_input_dialog_tag_exists">برچسب با این نام از پیش هست</string>
+    <string name="assistant_page_tags">برچسب‌ها</string>
+    <string name="assistant_page_chat_background">زمینه گفتگو</string>
+    <string name="assistant_page_chat_background_desc">تنظیم تصویر زمینه برای صفحه گفتگو دستیار</string>
+    <string name="assistant_page_select_background">انتخاب تصویر زمینه</string>
+    <string name="assistant_page_change_background">تغییر تصویر زمینه</string>
+    <string name="assistant_page_background_set">تصویر زمینه تنظیم شد</string>
+    <string name="assistant_page_remove">برداشتن</string>
+    <string name="assistant_page_select_from_gallery">انتخاب از گالری</string>
+    <string name="assistant_page_enter_image_url">وارد کردن URL تصویر</string>
+    <string name="assistant_page_remove_background">برداشتن زمینه</string>
+    <string name="assistant_page_image_url">URL تصویر</string>
+    <string name="assistant_page_confirm">پذیرفتن</string>
+    <!-- Long Press Actions -->
+    <string name="select_and_copy">انتخاب و رونوشت</string>
+    <string name="copy_all">رونوشت همه</string>
+    <string name="no_text_content_to_copy">هیچ محتوای متنی برای رونوشت در دسترس نیست</string>
+    <string name="share">هم‌رسانی</string>
+    <string name="create_fork">ساخت شاخه</string>
+    <string name="render_with_webview">نمایش با WebView</string>
+    <!-- Translation -->
+    <string name="translate">ترجمه</string>
+    <string name="translation_language_selection_title">انتخاب زبان ترجمه</string>
+    <string name="translation_text">ترجمه</string>
+    <string name="expand_translation">گسترش ترجمه</string>
+    <string name="collapse_translation">جمع کردن ترجمه</string>
+    <string name="translation_model_not_configured">مدل ترجمه پیکربندی نشده</string>
+    <string name="translation_clear">پاک کردن ترجمه</string>
+    <string name="unknown_language">زبان ناشناخته</string>
+    <string name="translating">در حال ترجمه...</string>
+    <!-- Language Names with Emojis -->
+    <string name="language_simplified_chinese">🇨🇳 چینی ساده</string>
+    <string name="language_english">🇺🇸 انگلیسی</string>
+    <string name="language_traditional_chinese">🇨🇳 چینی سنتی</string>
+    <string name="language_japanese">🇯🇵 ژاپنی</string>
+    <string name="language_korean">🇰🇷 کره‌ای</string>
+    <string name="language_french">🇫🇷 فرانسوی</string>
+    <string name="language_german">🇩🇪 آلمانی</string>
+    <string name="language_italian">🇮🇹 ایتالیایی</string>
+    <string name="language_spanish">🇪🇸 اسپانیایی</string>
+    <!-- Donate -->
+    <string name="setting_page_donate">اهدا</string>
+    <string name="setting_page_donate_desc">اگر خوشتان آمد، از کار نویسنده حمایت کنید</string>
+    <string name="donate_page_title">اهدا</string>
+    <string name="donate_page_donation_methods">روش‌های اهدا</string>
+    <string name="donate_page_sponsor_list">فهرست حامیان</string>
+    <string name="donate_page_patreon_desc">برای کاربران جهانی، پس از حمایت نقش دیسکورد بگیرید</string>
+    <string name="donate_page_afdian_desc">برای کاربران 🇨🇳</string>
+    <!-- Silicon Flow -->
+    <string name="silicon_flow_description">**فراهم‌کننده پیشرو جهانی ویژگی هوش مصنوعی، شتاب‌دهی AGI برای سود بشر.**</string>
+    <string name="silicon_flow_website">وبگاه: [https://cloud.siliconflow.cn/](https://cloud.siliconflow.cn/i/u1Ia4Ycf)</string>
+    <string name="silicon_flow_built_in_models">* مدل‌های رایگان درونی Silicon Flow بدون کلید API در دسترس هستند. برای مدل‌های قدرتمندتر، لطفاً درخواست دهید و کلید API خود را پیکربندی کنید.</string>
+    <!-- Image Generation Page -->
+    <string name="imggen_page_title">ساخت تصویر</string>
+    <string name="imggen_page_cancel_generation_title">رد ساخت</string>
+    <string name="imggen_page_cancel_generation_message">آیا مطمئن هستید که می‌خواهید ساخت تصویر را رد کنید؟</string>
+    <string name="imggen_page_confirm">پذیرفتن</string>
+    <string name="imggen_page_cancel">رد کردن</string>
+    <string name="imggen_page_gallery">گالری</string>
+    <string name="imggen_page_prompt_placeholder">تصویر مورد نظر را توصیف کنید...</string>
+    <string name="imggen_page_generate_image">ساخت تصویر</string>
+    <string name="imggen_page_no_generated_images">هیچ تصویر ساخته‌شده‌ای نیست</string>
+    <string name="imggen_page_image_saved_success">تصویر به گالری ذخیره شد</string>
+    <string name="imggen_page_save_failed">ذخیره شکست خورد: %1$s</string>
+    <string name="imggen_page_save">ذخیره</string>
+    <string name="imggen_page_delete">پاک کردن</string>
+    <string name="imggen_page_settings_title">تنظیمات ساخت تصویر</string>
+    <string name="imggen_page_model_selection">انتخاب مدل</string>
+    <string name="imggen_page_model_selection_desc">انتخاب مدل هوش مصنوعی برای ساخت تصویر</string>
+    <string name="imggen_page_generation_count">شمار ساخت</string>
+    <string name="imggen_page_generation_count_desc">تعداد تصاویر برای ساخت هر بار</string>
+    <string name="imggen_page_aspect_ratio">نسبت تصویر</string>
+    <string name="imggen_page_aspect_ratio_desc">انتخاب نسبت تصویر برای تصاویر ساخته‌شده</string>
+    <string name="imggen_page_aspect_ratio_square">1:1 مربع</string>
+    <string name="imggen_page_aspect_ratio_landscape">16:9 افقی</string>
+    <string name="imggen_page_aspect_ratio_portrait">9:16 عمودی</string>
+    <!-- Placeholder Names -->
+    <string name="placeholder_current_date">تاریخ</string>
+    <string name="placeholder_current_time">زمان</string>
+    <string name="placeholder_current_datetime">تاریخ و زمان</string>
+    <string name="placeholder_model_id">شناسه مدل</string>
+    <string name="placeholder_model_name">نام مدل</string>
+    <string name="placeholder_locale">محلی</string>
+    <string name="placeholder_timezone">منطقه زمانی</string>
+    <string name="placeholder_system_version">نگارش سامانه</string>
+    <string name="placeholder_device_info">اطلاعات دستگاه</string>
+    <string name="placeholder_battery_level">سطح باتری</string>
+    <string name="placeholder_nickname">لقب کاربر</string>
+    <string name="placeholder_char">نام دستیار</string>
+    <string name="placeholder_user">کاربر</string>
+    <!-- Assistant Importer -->
+    <string name="assistant_importer_importing">در حال وارد کردن...</string>
+    <string name="assistant_importer_import_tavern_png">وارد کردن کارت شخصیت Tavern (PNG)</string>
+    <string name="assistant_importer_import_tavern_json">وارد کردن کارت شخصیت Tavern (JSON)</string>
+    <string name="assistant_importer_import_failed">وارد کردن شکست خورد</string>
+    <string name="assistant_importer_missing_data_field">زمینه داده گم‌شده</string>
+    <string name="assistant_importer_missing_name_field">زمینه نام گم‌شده</string>
+    <string name="assistant_importer_missing_spec_field">زمینه مشخصات گم‌شده</string>
+    <string name="assistant_importer_unsupported_spec">مشخصات پشتیبانی‌نشده: %s</string>
+    <string name="assistant_importer_read_json_failed">خواندن JSON شکست خورد</string>
+    <string name="assistant_importer_unsupported_file_type">نوع پرونده پشتیبانی‌نشده: %s</string>
+    <string name="pinned_chats">گفتگوهای سنجاق‌شده</string>
+    <string name="unpin_chat">برداشتن سنجاق گفتگو</string>
+    <string name="pin_chat">سنجاق کردن گفتگو</string>
+    <string name="export_image_warning">«محتوای بالا توسط هوش مصنوعی ساخته شده و ممکن است نادرستی داشته باشد. »</string>
+    <string name="chat_page_learning_mode">حالت یادگیری</string>
+    <string name="chat_page_learning_mode_desc">کمک به یادگیری دانش گام به گام</string>
+    <string name="setting_model_page_learning_mode">پرامپت حالت یادگیری</string>
+    <string name="setting_model_page_learning_mode_desc">پیکربندی پرامپت مورد استفاده برای حالت یادگیری</string>
+    <string name="setting_model_page_ocr_model">مدل OCR</string>
+    <string name="setting_model_page_ocr_model_desc">مدل مورد استفاده برای شناسایی نوری نویسه روی تصاویر</string>
+    <string name="setting_model_page_ocr_prompt_vars">متغیرها: داده تصویر: {images}</string>
+    <string name="setting_provider_page_balance_api_path">مسیر API موجودی</string>
+    <string name="setting_provider_page_balance_json_key">کلید Json نتیجه</string>
+    <string name="setting_provider_page_balance_info">«دریافت موجودی حساب »</string>
+    <string name="assistant_page_quick_messages">پیام‌های سریع</string>
+    <string name="assistant_page_quick_messages_desc">پیکربندی میانبرهای پیام سریع</string>
+    <string name="assistant_page_quick_message_title">عنوان</string>
+    <string name="assistant_page_quick_message_content">محتوا</string>
+    <string name="setting_mcp_page_no_mcp_servers_found">هیچ کارساز MCP پیدا نشد</string>
+    <string name="setting_mcp_page_add_one_to_get_started">یکی بیفزایید تا شروع شود</string>
+    <string name="setting_page_theme_setting">تنظیمات پوسته</string>
+    <string name="setting_page_basic_settings">تنظیمات پایه</string>
+    <string name="setting_page_chat_settings">تنظیمات گفتگو</string>
+    <string name="permission_required">نیازمند</string>
+    <string name="permission_permanently_denied">برای همیشه انکارشده</string>
+    <string name="permission_go_to_settings">رفتن به تنظیمات</string>
+    <string name="permission_diaog_title">درخواست دسترسی</string>
+    <string name="permission_desc_require_permission">برای فراهم کردن تجربه کاربری بهتر، برنامه به دسترسی‌های زیر نیاز دارد:</string>
+    <string name="permission_desc_goto_setting">برخی دسترسی‌ها برای همیشه انکار شده‌اند، لطفاً به تنظیمات برنامه بروید و آنها را دستی به‌کار بگیرید:</string>
+    <string name="permission_camera">دوربین</string>
+    <string name="permission_camera_desc">دسترسی دوربین برای گرفتن عکس نیاز است</string>
+    <string name="notification_chat_done_title">پیام گفتگو ساخته شد</string>
+    <string name="setting_display_page_notification_message_generated">به‌کارگیری اعلان پس از ساخت پیام</string>
+    <string name="setting_display_page_notification_message_generated_desc">نمایش اعلان هنگام ساخت پیام اگر برنامه در پیش‌زمینه نباشد</string>
+    <string name="permission_notification">اعلان</string>
+    <string name="permission_notification_desc">فرستادن اعلان‌ها</string>
+    <string name="theme_name_autumn">زرد پاییزی</string>
+    <string name="assistant_page_regex_name">نام</string>
+    <string name="assistant_page_regex_find_regex">پیدا کردن regex</string>
+    <string name="assistant_page_regex_replace_string">جایگزین رشته</string>
+    <string name="assistant_page_regex_affecting_scopes">دامنه‌های تأثیرگذار:</string>
+    <string name="assistant_page_regex_visual_only">تنها بصری (تنها نمایش را تأثیر می‌گذارد، نه پیام واقعی)</string>
+    <string name="assistant_page_regex_title">regex پیام</string>
+    <string name="assistant_page_regex_desc">تعریف الگوهای regex برای تبدیل پیام‌ها پیش از فرستادن/دریافت</string>
+    <string name="setting_display_page_developer_mode">حالت توسعه‌دهنده</string>
+    <string name="setting_display_page_developer_mode_desc">نمایش ویژگی‌های دیباگینگ بیشتر. برای کاربران عمومی پیشنهاد نمی‌شود.</string>
+    <string name="chat_message_tool_scrape_prefix">خزیدن در وبگاه: %1$s</string>
+    <string name="chat_message_tool_scrape_web">خزیدن در صفحه وب</string>
+    <string name="search_ability_search">جستجو</string>
+    <string name="search_ability_scrape">خزیدن</string>
+    <string name="setting_provider_page_search_providers">فراهم‌کننده‌های جستجو</string>
+    <string name="menu">منو</string>
+    <string name="setting_display_page_code_block_auto_wrap_title">پیچیدن خودکار بلوک کد</string>
+    <string name="setting_display_page_code_block_auto_wrap_desc">پیچیدن خودکار خطوط بلند در بلوک‌های کد</string>
+    <string name="setting_display_page_code_block_auto_collapse_title">جمع کردن خودکار بلوک کد</string>
+    <string name="setting_display_page_code_block_auto_collapse_desc">جمع کردن خودکار بلوک‌های کد به طور پیش‌فرض</string>
+</resources>
