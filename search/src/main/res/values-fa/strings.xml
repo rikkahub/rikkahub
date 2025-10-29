@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="bing_desc">توجه کنید که جستجوی بینگ مبتنی بر خزنده است، که ممکن است ناپایدار باشد و پیشنهاد نمی‌شود.</string>
+  <string name="click_to_get_api_key">کلیک کنید تا کلید API بگیرید</string>
+  <string name="searxng_desc_1">settings.yml نیاز به به‌کارگیری پشتیبانی قالب json دارد:</string>
+  <string name="searxng_desc_2">search:\n formats:\n - html\n - json</string>
+</resources>
