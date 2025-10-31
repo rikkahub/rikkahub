@@ -255,7 +255,7 @@ class ChatService(
     }
 
     // 发送消息
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>) {
+    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean=true) {
         // 取消现有的生成任务
         getGenerationJob(conversationId)?.cancel()
 
@@ -273,7 +273,9 @@ class ChatService(
                 saveConversation(conversationId, newConversation)
 
                 // 开始补全
-                handleMessageComplete(conversationId)
+                if(answer){
+                    handleMessageComplete(conversationId)
+                }
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
@@ -281,7 +283,6 @@ class ChatService(
                 _errorFlow.emit(e)
             }
         }
-
         setGenerationJob(conversationId, job)
         job.invokeOnCompletion {
             setGenerationJob(conversationId, null)

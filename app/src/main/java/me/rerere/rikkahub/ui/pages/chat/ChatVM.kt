@@ -247,7 +247,7 @@ class ChatVM(
     val updateState =
         updateChecker.checkUpdate().stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
 
-    fun handleMessageSend(content: List<UIMessagePart>) {
+    fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean=true) {
         if (content.isEmptyInputMessage()) return
         analytics.logEvent("ai_send_message", null)
 
@@ -272,7 +272,7 @@ class ChatVM(
             content
         }
 
-        chatService.sendMessage(_conversationId, processedContent)
+        chatService.sendMessage(_conversationId, processedContent, answer)
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
