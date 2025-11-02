@@ -247,7 +247,13 @@ class ChatVM(
     val updateState =
         updateChecker.checkUpdate().stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
 
-    fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean=true) {
+    /**
+     * 处理消息发送
+     *
+     * @param content 消息内容
+     * @param answer 是否触发消息生成，如果为false，则仅添加消息到消息列表中
+     */
+    fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
         if (content.isEmptyInputMessage()) return
         analytics.logEvent("ai_send_message", null)
 
