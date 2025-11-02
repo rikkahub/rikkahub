@@ -13,6 +13,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.content.MediaType
 import androidx.compose.foundation.content.ReceiveContentListener
 import androidx.compose.foundation.content.consume
@@ -50,7 +51,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -149,6 +149,7 @@ fun ChatInput(
     onClearContext: () -> Unit,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
+    onLongSendClick: () -> Unit,
 ) {
     val context = LocalContext.current
     val toaster = LocalToaster.current
@@ -159,6 +160,11 @@ fun ChatInput(
     fun sendMessage() {
         keyboardController?.hide()
         if (state.loading) onCancelClick() else onSendClick()
+    }
+
+    fun sendMessageWithoutAnswer() {
+        keyboardController?.hide()
+        if (state.loading) onCancelClick() else onLongSendClick()
     }
 
     var expand by remember { mutableStateOf(ExpandState.Collapsed) }
@@ -283,22 +289,44 @@ fun ChatInput(
                 }
 
                 // Send Button
-                IconButton(
-                    onClick = {
-                        expand = ExpandState.Collapsed
-                        sendMessage()
-                    },
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = if (state.loading) MaterialTheme.colorScheme.errorContainer else Color.Unspecified,
-                        contentColor = if (state.loading) MaterialTheme.colorScheme.onErrorContainer else Color.Unspecified,
-                    ),
-                    enabled = state.loading || !state.isEmpty(),
-                ) {
+                Box (
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .combinedClickable(
+                            enabled = state.loading || !state.isEmpty(),
+                            onClick = {
+                                expand = ExpandState.Collapsed
+                                sendMessage()
+                            },
+                            onLongClick = {
+                                expand = ExpandState.Collapsed
+                                sendMessageWithoutAnswer()
+                            }
+                        )
+                ){
+                    val containerColor = when {
+                        state.loading -> MaterialTheme.colorScheme.errorContainer // 加载时，红色
+                        state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh // 禁用时(输入为空)，灰色
+                        else -> MaterialTheme.colorScheme.primary // 启用时(输入非空)，绿色/主题色
+                    }
+                    val contentColor = when {
+                        state.loading -> MaterialTheme.colorScheme.onErrorContainer
+                        state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) // 禁用时，内容用带透明度的灰色
+                        else -> MaterialTheme.colorScheme.onPrimary
+                    }
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        shape = CircleShape,
+                        color = containerColor,
+                        content = {}
+                    )
                     if (state.loading) {
                         KeepScreenOn()
-                        Icon(Lucide.X, stringResource(R.string.stop))
+                        Icon(Lucide.X, stringResource(R.string.stop),tint=contentColor)
                     } else {
-                        Icon(Lucide.ArrowUp, stringResource(R.string.send))
+                        Icon(Lucide.ArrowUp, stringResource(R.string.send),tint=contentColor)
                     }
                 }
             }
