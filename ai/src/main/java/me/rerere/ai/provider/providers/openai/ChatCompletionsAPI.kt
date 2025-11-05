@@ -45,6 +45,7 @@ import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
+import me.rerere.common.http.jsonArrayOrNull
 import me.rerere.common.http.jsonObjectOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -336,7 +337,7 @@ class ChatCompletionsAPI(
                         // OpenAI 官方
                         // 文档中，只支持 "low", "medium", "high"
                         if (level != ReasoningLevel.AUTO) {
-                            put("reasoning_effort", level.effort)
+                            put("reasoning_effort", if(level.effort == "minimal") "low" else level.effort)
                         }
                     }
                 }
@@ -509,7 +510,7 @@ class ChatCompletionsAPI(
                 }
             },
             annotations = parseAnnotations(
-                jsonObject["annotations"]?.jsonArray ?: JsonArray(
+                jsonArray = jsonObject["annotations"]?.jsonArrayOrNull ?: JsonArray(
                     emptyList()
                 )
             ),
