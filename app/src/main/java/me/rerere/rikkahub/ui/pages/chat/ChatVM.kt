@@ -484,7 +484,8 @@ class ChatVM(
 
     fun generateTitle(conversation: Conversation, force: Boolean = false) {
         viewModelScope.launch {
-            chatService.generateTitle(_conversationId, conversation, force)
+            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
+            chatService.generateTitle(_conversationId, conversationFull, force)
         }
     }
 

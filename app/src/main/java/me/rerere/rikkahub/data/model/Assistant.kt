@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
@@ -90,4 +91,22 @@ fun String.replaceRegexes(
             acc
         }
     }
+}
+
+@Serializable
+sealed class PromptInjection {
+    @Serializable
+    @SerialName("mode")
+    data class ModeInjection(
+        val name: String,
+        val priority: Int,
+        val prompt: String,
+    ) : PromptInjection()
+
+    @Serializable
+    @SerialName("regex")
+    data class RegexInjection(
+        val name: String,
+        val regex: String,
+    ) : PromptInjection()
 }
