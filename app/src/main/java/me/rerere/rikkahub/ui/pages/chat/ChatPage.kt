@@ -136,6 +136,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
                         add(UIMessagePart.Image(url = file.toString()))
                     } else if (type?.startsWith("video/") == true) {
                         add(UIMessagePart.Video(url = file.toString()))
+                    } else if (type?.startsWith("audio/") == true) {
+                        add(UIMessagePart.Audio(url = file.toString()))
                     }
                 }
             }

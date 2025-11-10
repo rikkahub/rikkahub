@@ -96,6 +96,7 @@ import com.composables.icons.lucide.Fullscreen
 import com.composables.icons.lucide.GraduationCap
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Music
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.X
@@ -603,6 +604,38 @@ private fun MediaFileInputRow(
                 )
             }
         }
+        state.messageContent.filterIsInstance<UIMessagePart.Audio>().fastForEach { audio ->
+            Box {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    tonalElevation = 4.dp
+                ) {
+                    AsyncImage(
+                        model = audio.url,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                Icon(
+                    imageVector = Lucide.X,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .size(20.dp)
+                        .clickable {
+                            // Remove image
+                            state.messageContent =
+                                state.messageContent.filterNot { it == audio }
+                            // Delete image
+                            context.deleteChatFiles(listOf(audio.url.toUri()))
+                        }
+                        .align(Alignment.TopEnd)
+                        .background(MaterialTheme.colorScheme.secondary),
+                    tint = MaterialTheme.colorScheme.onSecondary
+                )
+            }
+        }
         state.messageContent.filterIsInstance<UIMessagePart.Document>()
             .fastForEach { document ->
                 Box {
@@ -686,6 +719,11 @@ private fun FilesPicker(
             if(provider?.name?.contains("gemini", ignoreCase = true) == true) {
                 VideoPickButton {
                     state.addVideos(it)
+                    onDismiss()
+                }
+
+                AudioPickButton {
+                    state.addAudios(it)
                     onDismiss()
                 }
             }
@@ -1011,6 +1049,29 @@ fun VideoPickButton(onAddVideos: (List<Uri>) -> Unit = {}) {
         }
     ) {
         videoPickerLauncher.launch("video/*")
+    }
+}
+
+@Composable
+fun AudioPickButton(onAddAudios: (List<Uri>) -> Unit = {}) {
+    val context = LocalContext.current
+    val audioPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { selectedUris ->
+        if (selectedUris.isNotEmpty()) {
+            onAddAudios(context.createChatFilesByContents(selectedUris))
+        }
+    }
+
+    BigIconTextButton(
+        icon = {
+            Icon(Lucide.Music, null)
+        },
+        text = {
+            Text("Audio")
+        }
+    ) {
+        audioPickerLauncher.launch("audio/*")
     }
 }
 

@@ -88,6 +88,14 @@ class ChatInputState {
         messageContent = newMessage
     }
 
+    fun addAudios(uris: List<Uri>) {
+        val newMessage = messageContent.toMutableList()
+        uris.forEach { uri ->
+            newMessage.add(UIMessagePart.Audio(uri.toString()))
+        }
+        messageContent = newMessage
+    }
+
     fun addFiles(uris: List<UIMessagePart.Document>) {
         val newMessage = messageContent.toMutableList()
         uris.forEach {
@@ -122,4 +130,3 @@ object ChatInputStateSaver : Saver<ChatInputState, String> {
         })
     }
 }
-
