@@ -45,6 +45,42 @@ fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<String>
     }
 }
 
+fun UIMessagePart.Video.encodeBase64(withPrefix: Boolean = true): Result<String> = runCatching {
+    when {
+        this.url.startsWith("file://") -> {
+            val filePath =
+                this.url.toUri().path ?: throw IllegalArgumentException("Invalid file URI: ${this.url}")
+            val file = File(filePath)
+            if (!file.exists()) {
+                throw IllegalArgumentException("File does not exist: ${this.url}")
+            }
+            val bytes = file.readBytes()
+            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            if (withPrefix) "data:video/mp4;base64,$encoded" else encoded
+        }
+
+        else -> throw IllegalArgumentException("Unsupported URL format: $url")
+    }
+}
+
+fun UIMessagePart.Audio.encodeBase64(withPrefix: Boolean = true): Result<String> = runCatching {
+    when {
+        this.url.startsWith("file://") -> {
+            val filePath =
+                this.url.toUri().path ?: throw IllegalArgumentException("Invalid file URI: ${this.url}")
+            val file = File(filePath)
+            if (!file.exists()) {
+                throw IllegalArgumentException("File does not exist: ${this.url}")
+            }
+            val bytes = file.readBytes()
+            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            if (withPrefix) "data:audio/mp3;base64,$encoded" else encoded
+        }
+
+        else -> throw IllegalArgumentException("Unsupported URL format: $url")
+    }
+}
+
 private fun convertToJpeg(file: File) = runCatching {
     val bitmap = BitmapFactory.decodeFile(file.absolutePath)
     FileOutputStream(file).use { outputStream ->
