@@ -1,5 +1,5 @@
 [versions]
-agp = "8.11.0"
+agp = "8.13.0"
 barcodeScanning = "17.3.0"
 cameraCore = "1.5.1"
 dav4jvm = "main-SNAPSHOT"
