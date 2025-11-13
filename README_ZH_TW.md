@@ -71,7 +71,7 @@
 - [compose-icons/lucide](https://composeicons.com/icon-libraries/lucide) (圖標庫)
 
 > [!TIP]
-> 你需要在 `app` 資料夾下添加 `google-services.json` 檔案才能構建應用。
+> 構建應用需要 `google-services.json` 檔案。對於本地開發，專案提供了一個虛擬模板檔案（`google-services.json.example`），如果檔案不存在，構建時會自動複製。使用虛擬檔案時 Firebase 功能（分析、崩潰報告）將無法工作，但應用可以正常構建和運行。
 
 > [!IMPORTANT]  
 > 以下PR將被拒絕：

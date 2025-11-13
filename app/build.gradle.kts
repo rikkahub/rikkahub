@@ -15,6 +15,27 @@ plugins {
     alias(libs.plugins.firebase.crashlytics)
 }
 
+// Automatically copy google-services.json.example if google-services.json doesn't exist
+tasks.register("ensureGoogleServicesJson") {
+    val googleServicesFile = file("google-services.json")
+    val exampleFile = file("google-services.json.example")
+    
+    doFirst {
+        if (!googleServicesFile.exists() && exampleFile.exists()) {
+            exampleFile.copyTo(googleServicesFile, overwrite = false)
+            println("Copied google-services.json.example to google-services.json")
+            println("Note: This is a dummy file for local development. Firebase features will not work.")
+        }
+    }
+}
+
+// Make sure the task runs before the Google Services plugin processes the file
+tasks.whenTaskAdded {
+    if (name.contains("process") && name.contains("GoogleServices")) {
+        dependsOn("ensureGoogleServicesJson")
+    }
+}
+
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 36

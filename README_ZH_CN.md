@@ -72,7 +72,7 @@
 - [compose-icons/lucide](https://composeicons.com/icon-libraries/lucide) (图标库)
 
 > [!TIP]
-> 你需要在 `app` 文件夹下添加 `google-services.json` 文件才能构建应用。
+> 构建应用需要 `google-services.json` 文件。对于本地开发，项目提供了一个虚拟模板文件（`google-services.json.example`），如果文件不存在，构建时会自动复制。使用虚拟文件时 Firebase 功能（分析、崩溃报告）将无法工作，但应用可以正常构建和运行。
 
 > [!IMPORTANT]  
 > 以下PR将被拒绝：
