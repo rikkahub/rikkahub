@@ -1,7 +1,9 @@
 package me.rerere.rikkahub.ui.components.ai
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
@@ -46,6 +48,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
@@ -67,6 +73,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,10 +91,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toFile
 import androidx.core.net.toUri
 import coil3.compose.AsyncImage
+import com.ai.assistance.operit.api.speech.SpeechServiceFactory
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.Eraser
@@ -154,7 +163,6 @@ fun ChatInput(
     val context = LocalContext.current
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
-
     val keyboardController = LocalSoftwareKeyboardController.current
 
     fun sendMessage() {
@@ -363,50 +371,58 @@ fun ChatInput(
 }
 
 @Composable
-private fun TextInputRow(
+fun TextInputRow(
     state: ChatInputState,
     context: Context,
 ) {
     val assistant = LocalSettings.current.getCurrentAssistant()
+    val coroutineScope = rememberCoroutineScope()
+
+    // 获取语音识别服务单例
+    val speechService = remember { SpeechServiceFactory.getInstance(context) }
+
+    // 文本状态
+    var textValue by remember { mutableStateOf(state.textContent.text) }
+
+    LaunchedEffect(textValue) {
+        state.textContent.edit { replace(0, length, textValue) }
+    }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 12.dp)
     ) {
-        // TextField
         Surface(
             shape = RoundedCornerShape(32.dp),
             tonalElevation = 4.dp,
             modifier = Modifier.weight(1f)
         ) {
             Column {
+                // 可编辑提示区
                 if (state.isEditing()) {
-                    Surface(
-                        tonalElevation = 8.dp
-                    ) {
+                    Surface(tonalElevation = 8.dp) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = stringResource(R.string.editing),
-                            )
+                            Text(text = stringResource(R.string.editing))
                             Spacer(Modifier.weight(1f))
                             Icon(
-                                Lucide.X, stringResource(R.string.cancel_edit),
-                                modifier = Modifier
-                                    .clickable {
-                                        state.clearInput()
-                                    }
+                                Lucide.X,
+                                stringResource(R.string.cancel_edit),
+                                modifier = Modifier.clickable { state.clearInput() }
                             )
                         }
                     }
                 }
+
                 var isFocused by remember { mutableStateOf(false) }
                 var isFullScreen by remember { mutableStateOf(false) }
+
                 val receiveContentListener = remember {
                     ReceiveContentListener { transferableContent ->
                         when {
@@ -415,66 +431,57 @@ private fun TextInputRow(
                                     val uri = item.uri
                                     if (uri != null) {
                                         state.addImages(
-                                            context.createChatFilesByContents(
-                                                listOf(
-                                                    uri
-                                                )
-                                            )
+                                            context.createChatFilesByContents(listOf(uri))
                                         )
                                     }
                                     uri != null
                                 }
                             }
-
                             else -> transferableContent
                         }
                     }
                 }
+
                 TextField(
                     state = state.textContent,
                     modifier = Modifier
                         .fillMaxWidth()
                         .contentReceiver(receiveContentListener)
-                        .onFocusChanged {
-                            isFocused = it.isFocused
-                        },
+                        .onFocusChanged { isFocused = it.isFocused },
                     shape = RoundedCornerShape(32.dp),
-                    placeholder = {
-                        Text(stringResource(R.string.chat_input_placeholder))
-                    },
+                    placeholder = { Text(stringResource(R.string.chat_input_placeholder)) },
                     lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
                     colors = TextFieldDefaults.colors().copy(
                         unfocusedIndicatorColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
                         focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent
                     ),
                     trailingIcon = {
                         if (isFocused) {
-                            IconButton(
-                                onClick = {
-                                    isFullScreen = !isFullScreen
-                                }
-                            ) {
+                            IconButton(onClick = { isFullScreen = !isFullScreen }) {
                                 Icon(Lucide.Fullscreen, null)
                             }
                         }
                     },
                     leadingIcon = if (assistant.quickMessages.isNotEmpty()) {
-                        {
-                            QuickMessageButton(assistant = assistant, state = state)
-                        }
+                        { QuickMessageButton(assistant = assistant, state = state) }
                     } else null,
                 )
+
                 if (isFullScreen) {
-                    FullScreenEditor(state = state) {
-                        isFullScreen = false
-                    }
+                    FullScreenEditor(state = state) { isFullScreen = false }
                 }
             }
         }
+
+        Spacer(Modifier.width(8.dp))
+
+        // 语音输入按钮
+        VoiceInputButtonWithSpeechService(state, speechService, context)
     }
 }
+
 
 @Composable
 private fun QuickMessageButton(
