@@ -709,6 +709,7 @@ private fun FilesPicker(
             modifier = Modifier
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             TakePicButton {
                 state.addImages(it)
