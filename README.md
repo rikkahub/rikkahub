@@ -78,7 +78,7 @@ Technology stack documentation:
 - [compose-icons/lucide](https://composeicons.com/icon-libraries/lucide) (Icon library)
 
 > [!TIP]
-> You need a `google-services.json` file at `app` folder to build the app.
+> A `google-services.json` file is required to build the app. For local development, a dummy template file (`google-services.json.example`) is provided and will be automatically copied during build if the file doesn't exist. Firebase features (Analytics, Crashlytics) will not work with the dummy file, but the app will build and run successfully.
 
 > [!IMPORTANT]  
 > The following PRs will be rejected: 
