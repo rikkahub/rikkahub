@@ -213,8 +213,8 @@ private fun LeaderBoard() {
             )
 
             LeaderBoardItem(
-                url = "https://livebench.ai/#/",
-                name = "LiveBench",
+                url = "https://artificialanalysis.ai/leaderboards/models",
+                name = "ArtificialAnalysis",
                 modifier = Modifier.weight(1f),
             )
         }
