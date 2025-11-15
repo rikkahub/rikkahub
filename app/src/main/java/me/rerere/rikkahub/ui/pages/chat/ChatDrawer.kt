@@ -103,56 +103,6 @@ fun ChatDrawerContent(
                 UpdateCard(vm)
             }
 
-            ConversationList(
-                current = current,
-                conversations = conversations,
-                conversationJobs = conversationJobs.keys,
-                searchQuery = searchQuery,
-                onSearchQueryChange = { vm.updateSearchQuery(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                onClick = {
-                    navigateToChatPage(navController, it.id)
-                },
-                onRegenerateTitle = {
-                    vm.generateTitle(it, true)
-                },
-                onDelete = {
-                    vm.deleteConversation(it)
-                    if (it.id == current.id) {
-                        navigateToChatPage(navController)
-                    }
-                },
-                onPin = {
-                    vm.updatePinnedStatus(it)
-                }
-            )
-
-            // 助手选择器
-            AssistantPicker(
-                settings = settings,
-                onUpdateSettings = {
-                    vm.updateSettings(it)
-                    scope.launch {
-                        val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
-                            Uuid.random()
-                        } else {
-                            repo.getConversationsOfAssistant(it.assistantId)
-                                .first()
-                                .firstOrNull()
-                                ?.id ?: Uuid.random()
-                        }
-                        navigateToChatPage(navController = navController, chatId = id)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                onClickSetting = {
-                    val currentAssistantId = settings.assistantId
-                    navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
-                }
-            )
-
             // 用户头像和昵称自定义区域
             Row(
                 modifier = Modifier
@@ -209,6 +159,56 @@ fun ChatDrawerContent(
                     )
                 }
             }
+
+            ConversationList(
+                current = current,
+                conversations = conversations,
+                conversationJobs = conversationJobs.keys,
+                searchQuery = searchQuery,
+                onSearchQueryChange = { vm.updateSearchQuery(it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                onClick = {
+                    navigateToChatPage(navController, it.id)
+                },
+                onRegenerateTitle = {
+                    vm.generateTitle(it, true)
+                },
+                onDelete = {
+                    vm.deleteConversation(it)
+                    if (it.id == current.id) {
+                        navigateToChatPage(navController)
+                    }
+                },
+                onPin = {
+                    vm.updatePinnedStatus(it)
+                }
+            )
+
+            // 助手选择器
+            AssistantPicker(
+                settings = settings,
+                onUpdateSettings = {
+                    vm.updateSettings(it)
+                    scope.launch {
+                        val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
+                            Uuid.random()
+                        } else {
+                            repo.getConversationsOfAssistant(it.assistantId)
+                                .first()
+                                .firstOrNull()
+                                ?.id ?: Uuid.random()
+                        }
+                        navigateToChatPage(navController = navController, chatId = id)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                onClickSetting = {
+                    val currentAssistantId = settings.assistantId
+                    navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
+                }
+            )
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
