@@ -51,7 +51,19 @@ data class Conversation(
                 .mapNotNull {
                     it.url.takeIf { it.startsWith("file://") }?.toUri()
                 }
-            return images + documents
+            val videos = messageNodes
+                .flatMap { node -> node.messages.flatMap { it.parts } }
+                .filterIsInstance<UIMessagePart.Video>()
+                .mapNotNull {
+                    it.url.takeIf { it.startsWith("file://") }?.toUri()
+                }
+            val audios = messageNodes
+                .flatMap { node -> node.messages.flatMap { it.parts } }
+                .filterIsInstance<UIMessagePart.Audio>()
+                .mapNotNull {
+                    it.url.takeIf { it.startsWith("file://") }?.toUri()
+                }
+            return images + documents + videos + audios
         }
 
     /**
