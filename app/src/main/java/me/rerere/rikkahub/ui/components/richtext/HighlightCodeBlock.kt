@@ -103,7 +103,7 @@ fun HighlightCodeBlock(
     val autoWrap = settings.displaySetting.codeBlockAutoWrap
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain")
+        contract = ActivityResultContracts.CreateDocument("*/*")
     ) { uri: Uri? ->
         uri?.let {
             scope.launch {
