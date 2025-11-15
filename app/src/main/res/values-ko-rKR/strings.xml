@@ -116,6 +116,7 @@
   <string name="assistant_page_use_assistant_avatar_desc">채팅에서 어시스턴트 아바타 및 이름을 모델의 것 대신 사용</string>
   <string name="assistant_picker_expand">확장</string>
   <string name="assistant_picker_selected">선택됨</string>
+  <string name="audio">오디오</string>
   <string name="avatar_cancel">취소</string>
   <string name="avatar_change_avatar">아바타 변경</string>
   <string name="avatar_input_url">URL 입력</string>
@@ -660,6 +661,7 @@
   <string name="upload_file">파일 업로드</string>
   <string name="use_web_search">웹 검색 사용</string>
   <string name="user_default_name">사용자</string>
+  <string name="video">동영상</string>
   <string name="web_search_disabled">웹 검색 비활성화됨</string>
   <string name="web_search_enabled">웹 검색 활성화됨</string>
 </resources>

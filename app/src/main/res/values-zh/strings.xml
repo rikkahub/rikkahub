@@ -116,6 +116,7 @@
   <string name="assistant_page_use_assistant_avatar_desc">在聊天中使用助手头像和名字而不是模型头像和名字</string>
   <string name="assistant_picker_expand">展开</string>
   <string name="assistant_picker_selected">已选择</string>
+  <string name="audio">音频</string>
   <string name="avatar_cancel">取消</string>
   <string name="avatar_change_avatar">更换头像</string>
   <string name="avatar_input_url">输入链接</string>
@@ -660,6 +661,7 @@
   <string name="upload_file">上传文件</string>
   <string name="use_web_search">网络搜索</string>
   <string name="user_default_name">用户</string>
+  <string name="video">视频</string>
   <string name="web_search_disabled">已禁用网页搜索</string>
   <string name="web_search_enabled">已启用网页搜索</string>
 </resources>

@@ -116,6 +116,7 @@
   <string name="assistant_page_use_assistant_avatar_desc">チャットでモデルアバターと名前ではなくアシスタントアバターと名前を使用</string>
   <string name="assistant_picker_expand">展開</string>
   <string name="assistant_picker_selected">選択済み</string>
+  <string name="audio">音声</string>
   <string name="avatar_cancel">キャンセル</string>
   <string name="avatar_change_avatar">アバターを変更</string>
   <string name="avatar_input_url">URLを入力</string>
@@ -660,6 +661,7 @@
   <string name="upload_file">ファイルをアップロード</string>
   <string name="use_web_search">ウェブ検索を</string>
   <string name="user_default_name">ユーザー</string>
+  <string name="video">動画</string>
   <string name="web_search_disabled">ウェブ検索が無効になりました</string>
   <string name="web_search_enabled">ウェブ検索が有効になりました</string>
 </resources>

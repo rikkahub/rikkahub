@@ -1050,7 +1050,7 @@ fun VideoPickButton(onAddVideos: (List<Uri>) -> Unit = {}) {
             Icon(Lucide.Video, null)
         },
         text = {
-            Text("Video")
+            Text(stringResource(R.string.video))
         }
     ) {
         videoPickerLauncher.launch("video/*")
@@ -1073,7 +1073,7 @@ fun AudioPickButton(onAddAudios: (List<Uri>) -> Unit = {}) {
             Icon(Lucide.Music, null)
         },
         text = {
-            Text("Audio")
+            Text(stringResource(R.string.audio))
         }
     ) {
         audioPickerLauncher.launch("audio/*")

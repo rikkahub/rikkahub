@@ -116,6 +116,7 @@
   <string name="assistant_page_use_assistant_avatar_desc">Использовать аватар и имя ассистента вместо аватара и имени модели в чатах</string>
   <string name="assistant_picker_expand">Развернуть</string>
   <string name="assistant_picker_selected">Выбрано</string>
+  <string name="audio">Аудио</string>
   <string name="avatar_cancel">Отмена</string>
   <string name="avatar_change_avatar">Сменить аватар</string>
   <string name="avatar_input_url">Введите URL</string>
@@ -660,6 +661,7 @@
   <string name="upload_file">Загрузить файл</string>
   <string name="use_web_search">Веб-поиск</string>
   <string name="user_default_name">Пользователь</string>
+  <string name="video">Видео</string>
   <string name="web_search_disabled">Веб-поиск отключён</string>
   <string name="web_search_enabled">Веб-поиск включён</string>
 </resources>

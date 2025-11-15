@@ -748,4 +748,6 @@
   <string name="setting_display_page_code_block_auto_wrap_desc">Automatically wrap long lines in code blocks</string>
   <string name="setting_display_page_code_block_auto_collapse_title">Code Block Auto Collapse</string>
   <string name="setting_display_page_code_block_auto_collapse_desc">Automatically collapse code blocks by default</string>
+    <string name="video">Video</string>
+  <string name="audio">Audio</string>
 </resources>
