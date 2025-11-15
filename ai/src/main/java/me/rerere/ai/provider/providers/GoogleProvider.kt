@@ -580,6 +580,28 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                         }
                                     }
 
+                                    is UIMessagePart.Video -> {
+                                        part.encodeBase64(false).onSuccess { base64Data ->
+                                            add(buildJsonObject {
+                                                put("inline_data", buildJsonObject {
+                                                    put("mime_type", "video/mp4")
+                                                    put("data", base64Data)
+                                                })
+                                            })
+                                        }
+                                    }
+
+                                    is UIMessagePart.Audio -> {
+                                        part.encodeBase64(false).onSuccess { base64Data ->
+                                            add(buildJsonObject {
+                                                put("inline_data", buildJsonObject {
+                                                    put("mime_type", "audio/mp3")
+                                                    put("data", base64Data)
+                                                })
+                                            })
+                                        }
+                                    }
+
                                     is UIMessagePart.ToolCall -> {
                                         add(buildJsonObject {
                                             put("functionCall", buildJsonObject {

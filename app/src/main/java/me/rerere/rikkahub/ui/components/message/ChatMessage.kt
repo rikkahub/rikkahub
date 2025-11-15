@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -57,6 +58,8 @@ import androidx.core.net.toFile
 import androidx.core.net.toUri
 import com.composables.icons.lucide.File
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Music
+import com.composables.icons.lucide.Video
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.serialization.json.JsonObject
@@ -414,6 +417,71 @@ private fun MessagePartsBlock(
                 }
             ) {
                 Text(stringResource(R.string.citations_count, annotations.size))
+            }
+        }
+    }
+
+    // Videos
+    val videos = parts.filterIsInstance<UIMessagePart.Video>()
+    if (videos.isNotEmpty()) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            videos.fastForEach {
+                Surface(
+                    tonalElevation = 2.dp,
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW)
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        intent.setDataAndType(it.url.toUri(), "video/*")
+                        val chooserIndent = Intent.createChooser(intent, null)
+                        context.startActivity(chooserIndent)
+                    },
+                    modifier = Modifier,
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center){
+                        Icon(Lucide.Video, null)
+                    }
+                }
+            }
+        }
+    }
+
+    // Audios
+    val audios = parts.filterIsInstance<UIMessagePart.Audio>()
+    if (audios.isNotEmpty()) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            audios.fastForEach {
+                Surface(
+                    tonalElevation = 2.dp,
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW)
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        intent.setDataAndType(it.url.toUri(), "audio/*")
+                        val chooserIndent = Intent.createChooser(intent, null)
+                        context.startActivity(chooserIndent)
+                    },
+                    modifier = Modifier,
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Lucide.Music,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }

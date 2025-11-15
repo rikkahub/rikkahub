@@ -96,7 +96,9 @@ import com.composables.icons.lucide.Fullscreen
 import com.composables.icons.lucide.GraduationCap
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Music
 import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.X
 import com.composables.icons.lucide.Zap
 import com.dokar.sonner.ToastType
@@ -109,6 +111,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -569,6 +572,70 @@ private fun MediaFileInputRow(
                 )
             }
         }
+        state.messageContent.filterIsInstance<UIMessagePart.Video>().fastForEach { video ->
+            Box {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    tonalElevation = 4.dp
+                ) {
+                    AsyncImage(
+                        model = video.url,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                Icon(
+                    imageVector = Lucide.X,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .size(20.dp)
+                        .clickable {
+                            // Remove image
+                            state.messageContent =
+                                state.messageContent.filterNot { it == video }
+                            // Delete image
+                            context.deleteChatFiles(listOf(video.url.toUri()))
+                        }
+                        .align(Alignment.TopEnd)
+                        .background(MaterialTheme.colorScheme.secondary),
+                    tint = MaterialTheme.colorScheme.onSecondary
+                )
+            }
+        }
+        state.messageContent.filterIsInstance<UIMessagePart.Audio>().fastForEach { audio ->
+            Box {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    tonalElevation = 4.dp
+                ) {
+                    AsyncImage(
+                        model = audio.url,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                Icon(
+                    imageVector = Lucide.X,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .size(20.dp)
+                        .clickable {
+                            // Remove image
+                            state.messageContent =
+                                state.messageContent.filterNot { it == audio }
+                            // Delete image
+                            context.deleteChatFiles(listOf(audio.url.toUri()))
+                        }
+                        .align(Alignment.TopEnd)
+                        .background(MaterialTheme.colorScheme.secondary),
+                    tint = MaterialTheme.colorScheme.onSecondary
+                )
+            }
+        }
         state.messageContent.filterIsInstance<UIMessagePart.Document>()
             .fastForEach { document ->
                 Box {
@@ -626,6 +693,8 @@ private fun FilesPicker(
     onUpdateAssistant: (Assistant) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val settings = LocalSettings.current
+    val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -645,6 +714,18 @@ private fun FilesPicker(
             ImagePickButton {
                 state.addImages(it)
                 onDismiss()
+            }
+
+            if(provider?.name?.contains("gemini", ignoreCase = true) == true) {
+                VideoPickButton {
+                    state.addVideos(it)
+                    onDismiss()
+                }
+
+                AudioPickButton {
+                    state.addAudios(it)
+                    onDismiss()
+                }
             }
 
             FilePickButton {
@@ -949,6 +1030,52 @@ fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
 }
 
 @Composable
+fun VideoPickButton(onAddVideos: (List<Uri>) -> Unit = {}) {
+    val context = LocalContext.current
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { selectedUris ->
+        if (selectedUris.isNotEmpty()) {
+            onAddVideos(context.createChatFilesByContents(selectedUris))
+        }
+    }
+
+    BigIconTextButton(
+        icon = {
+            Icon(Lucide.Video, null)
+        },
+        text = {
+            Text("Video")
+        }
+    ) {
+        videoPickerLauncher.launch("video/*")
+    }
+}
+
+@Composable
+fun AudioPickButton(onAddAudios: (List<Uri>) -> Unit = {}) {
+    val context = LocalContext.current
+    val audioPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { selectedUris ->
+        if (selectedUris.isNotEmpty()) {
+            onAddAudios(context.createChatFilesByContents(selectedUris))
+        }
+    }
+
+    BigIconTextButton(
+        icon = {
+            Icon(Lucide.Music, null)
+        },
+        text = {
+            Text("Audio")
+        }
+    ) {
+        audioPickerLauncher.launch("audio/*")
+    }
+}
+
+@Composable
 fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
     val context = LocalContext.current
     val toaster = LocalToaster.current
@@ -958,7 +1085,7 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                 val allowedMimeTypes = setOf(
                     "text/plain",
                     "text/html",
-                    "text/css",
+                   "text/css",
                     "text/javascript",
                     "text/csv",
                     "text/xml",

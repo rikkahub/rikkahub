@@ -336,6 +336,22 @@ sealed class UIMessagePart {
     }
 
     @Serializable
+    data class Video(
+        val url: String,
+        override var metadata: JsonObject? = null
+    ) : UIMessagePart() {
+        override val priority: Int = 1
+    }
+
+    @Serializable
+    data class Audio(
+        val url: String,
+        override var metadata: JsonObject? = null
+    ) : UIMessagePart() {
+        override val priority: Int = 1
+    }
+
+    @Serializable
     data class Document(
         val url: String,
         val fileName: String,
