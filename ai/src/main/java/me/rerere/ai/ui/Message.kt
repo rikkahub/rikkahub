@@ -243,6 +243,8 @@ fun List<UIMessagePart>.isEmptyInputMessage(): Boolean {
             is UIMessagePart.Text -> message.text.isBlank()
             is UIMessagePart.Image -> message.url.isBlank()
             is UIMessagePart.Document -> message.url.isBlank()
+            is UIMessagePart.Video -> message.url.isBlank()
+            is UIMessagePart.Audio -> message.url.isBlank()
             else -> true
         }
     }
@@ -259,6 +261,8 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
             is UIMessagePart.Image -> message.url.isBlank()
             is UIMessagePart.Document -> message.url.isBlank()
             is UIMessagePart.Reasoning -> message.reasoning.isBlank()
+            is UIMessagePart.Video -> message.url.isBlank()
+            is UIMessagePart.Audio -> message.url.isBlank()
             else -> true
         }
     }

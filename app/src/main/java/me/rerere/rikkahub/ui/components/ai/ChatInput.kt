@@ -91,6 +91,7 @@ import coil3.compose.AsyncImage
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.Eraser
+import com.composables.icons.lucide.FileAudio
 import com.composables.icons.lucide.Files
 import com.composables.icons.lucide.Fullscreen
 import com.composables.icons.lucide.GraduationCap
@@ -108,15 +109,14 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
-import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
-import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
@@ -294,7 +294,7 @@ fun ChatInput(
                 }
 
                 // Send Button
-                Box (
+                Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .size(40.dp)
@@ -310,7 +310,7 @@ fun ChatInput(
                                 sendMessageWithoutAnswer()
                             }
                         )
-                ){
+                ) {
                     val containerColor = when {
                         state.loading -> MaterialTheme.colorScheme.errorContainer // 加载时，红色
                         state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh // 禁用时(输入为空)，灰色
@@ -329,9 +329,9 @@ fun ChatInput(
                     )
                     if (state.loading) {
                         KeepScreenOn()
-                        Icon(Lucide.X, stringResource(R.string.stop),tint=contentColor)
+                        Icon(Lucide.X, stringResource(R.string.stop), tint = contentColor)
                     } else {
-                        Icon(Lucide.ArrowUp, stringResource(R.string.send),tint=contentColor)
+                        Icon(Lucide.ArrowUp, stringResource(R.string.send), tint = contentColor)
                     }
                 }
             }
@@ -581,11 +581,12 @@ private fun MediaFileInputRow(
                     shape = RoundedCornerShape(8.dp),
                     tonalElevation = 4.dp
                 ) {
-                    AsyncImage(
-                        model = video.url,
-                        contentDescription = null,
+                    Box(
                         modifier = Modifier.fillMaxSize(),
-                    )
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Lucide.Video, null)
+                    }
                 }
                 Icon(
                     imageVector = Lucide.X,
@@ -613,11 +614,12 @@ private fun MediaFileInputRow(
                     shape = RoundedCornerShape(8.dp),
                     tonalElevation = 4.dp
                 ) {
-                    AsyncImage(
-                        model = audio.url,
-                        contentDescription = null,
+                    Box(
                         modifier = Modifier.fillMaxSize(),
-                    )
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Lucide.FileAudio, null)
+                    }
                 }
                 Icon(
                     imageVector = Lucide.X,
@@ -718,7 +720,7 @@ private fun FilesPicker(
                 onDismiss()
             }
 
-            if(provider != null && provider is ProviderSetting.Google) {
+            if (provider != null && provider is ProviderSetting.Google) {
                 VideoPickButton {
                     state.addVideos(it)
                     onDismiss()
@@ -1087,7 +1089,7 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                 val allowedMimeTypes = setOf(
                     "text/plain",
                     "text/html",
-                   "text/css",
+                    "text/css",
                     "text/javascript",
                     "text/csv",
                     "text/xml",

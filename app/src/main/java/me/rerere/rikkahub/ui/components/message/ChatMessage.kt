@@ -433,7 +433,11 @@ private fun MessagePartsBlock(
                     onClick = {
                         val intent = Intent(Intent.ACTION_VIEW)
                         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        intent.setDataAndType(it.url.toUri(), "video/*")
+                        intent.data = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            it.url.toUri().toFile()
+                        )
                         val chooserIndent = Intent.createChooser(intent, null)
                         context.startActivity(chooserIndent)
                     },
@@ -460,7 +464,11 @@ private fun MessagePartsBlock(
                     onClick = {
                         val intent = Intent(Intent.ACTION_VIEW)
                         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        intent.setDataAndType(it.url.toUri(), "audio/*")
+                        intent.data = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            it.url.toUri().toFile()
+                        )
                         val chooserIndent = Intent.createChooser(intent, null)
                         context.startActivity(chooserIndent)
                     },
