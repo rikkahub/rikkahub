@@ -38,9 +38,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.composables.icons.lucide.BadgeInfo
-import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Database
+import com.composables.icons.lucide.Drama
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Hammer
 import com.composables.icons.lucide.HardDrive
@@ -168,7 +168,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     navController = navController,
                     title = { Text(stringResource(R.string.setting_page_assistant)) },
                     description = { Text(stringResource(R.string.setting_page_assistant_desc)) },
-                    icon = { Icon(Lucide.Bot, "Assistant") },
+                    icon = { Icon(Lucide.Drama, "Assistant") },
                     link = Screen.Assistant
                 )
             }

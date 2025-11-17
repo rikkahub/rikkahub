@@ -25,7 +25,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,11 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.paging.compose.collectAsLazyPagingItems
-import com.composables.icons.lucide.Bot
+import com.composables.icons.lucide.Drama
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Settings
-import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Sparkles
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -56,7 +54,6 @@ import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
-import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
@@ -217,7 +214,7 @@ fun ChatDrawerContent(
             ) {
                 DrawerAction(
                     icon = {
-                        Icon(imageVector = Lucide.Bot, contentDescription = stringResource(R.string.assistant_page_title))
+                        Icon(imageVector = Lucide.Drama, contentDescription = stringResource(R.string.assistant_page_title))
                     },
                     label = {
                         Text(stringResource(R.string.assistant_page_title))

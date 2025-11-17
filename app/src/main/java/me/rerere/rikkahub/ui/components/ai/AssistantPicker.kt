@@ -38,7 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.Bot
+import com.composables.icons.lucide.Drama
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pen
 import kotlinx.coroutines.launch
@@ -49,7 +49,6 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberAssistantState
-import me.rerere.rikkahub.ui.modifier.onClick
 import kotlin.uuid.Uuid
 
 @Composable
@@ -65,7 +64,7 @@ fun AssistantPicker(
 
     NavigationDrawerItem(
         icon = {
-            Icon(Lucide.Bot, contentDescription = null)
+            Icon(Lucide.Drama, contentDescription = null)
         },
         label = {
             Row(
