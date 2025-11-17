@@ -376,6 +376,28 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 )
             }
 
+            if (displaySetting.showMessageJumper) {
+                item {
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = {
+                            Text(stringResource(R.string.setting_display_page_message_jumper_position_title))
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.setting_display_page_message_jumper_position_desc))
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.messageJumperOnLeft,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(messageJumperOnLeft = it))
+                                }
+                            )
+                        },
+                    )
+                }
+            }
+
             item {
                 ListItem(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),

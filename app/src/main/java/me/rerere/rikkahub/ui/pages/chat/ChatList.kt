@@ -409,6 +409,7 @@ private fun SharedTransitionScope.ChatListNormal(
             // 消息快速跳转
             MessageJumper(
                 show = isRecentScroll && !state.isScrollInProgress && settings.displaySetting.showMessageJumper && !captureProgress,
+                onLeft = settings.displaySetting.messageJumperOnLeft,
                 scope = scope,
                 state = state
             )
@@ -648,17 +649,18 @@ private fun ChatSuggestionsRow(
 @Composable
 private fun BoxScope.MessageJumper(
     show: Boolean,
+    onLeft: Boolean,
     scope: CoroutineScope,
     state: LazyListState
 ) {
     AnimatedVisibility(
         visible = show,
-        modifier = Modifier.align(Alignment.CenterEnd),
+        modifier = Modifier.align(if (onLeft) Alignment.CenterStart else Alignment.CenterEnd),
         enter = slideInHorizontally(
-            initialOffsetX = { it * 2 },
+            initialOffsetX = { if (onLeft) -it * 2 else it * 2 },
         ),
         exit = slideOutHorizontally(
-            targetOffsetX = { it * 2 },
+            targetOffsetX = { if (onLeft) -it * 2 else it * 2 },
         )
     ) {
         Column(
