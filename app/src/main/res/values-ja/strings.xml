@@ -371,6 +371,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">メッセージ生成時の触覚効果</string>
   <string name="setting_display_page_font_size_preview">これは**サンプル**のチャットテキストです</string>
   <string name="setting_display_page_font_size_title">チャットフォントサイズ</string>
+  <string name="setting_display_page_message_jumper_position_desc">メッセージジャンパーを左側に移動</string>
+  <string name="setting_display_page_message_jumper_position_title">メッセージジャンパーの位置</string>
   <string name="setting_display_page_notification_message_generated">メッセージ生成後に通知を有効にする</string>
   <string name="setting_display_page_notification_message_generated_desc">アプリがフォアグラウンドにないときにメッセージが生成されたら通知を表示する</string>
   <string name="setting_display_page_show_message_jumper_desc">チャットリストをスクロールすると、右側にクイックジャンプボタンが表示されます。</string>

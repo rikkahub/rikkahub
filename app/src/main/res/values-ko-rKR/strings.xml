@@ -371,6 +371,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">메시지 생성 진동 효과 활성화</string>
   <string name="setting_display_page_font_size_preview">이것은 **예제** 채팅 텍스트입니다</string>
   <string name="setting_display_page_font_size_title">채팅 글꼴 크기</string>
+  <string name="setting_display_page_message_jumper_position_desc">메시지 점퍼를 왼쪽으로 이동</string>
+  <string name="setting_display_page_message_jumper_position_title">메시지 점퍼 위치</string>
   <string name="setting_display_page_notification_message_generated">메시지 생성 완료 알림 활성화</string>
   <string name="setting_display_page_notification_message_generated_desc">앱이 전경에 있지 않을 때 메시지가 생성되면 알림 표시</string>
   <string name="setting_display_page_show_message_jumper_desc">채팅 목록을 스크롤할 때 오른쪽에 빠른 점프 버튼 표시</string>

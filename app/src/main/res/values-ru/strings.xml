@@ -371,6 +371,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">Тактильный эффект при генерации сообщения</string>
   <string name="setting_display_page_font_size_preview">Это **пример** текста чата</string>
   <string name="setting_display_page_font_size_title">Размер шрифта чата</string>
+  <string name="setting_display_page_message_jumper_position_desc">Переместить переходчик сообщений влево</string>
+  <string name="setting_display_page_message_jumper_position_title">Положение перехода к сообщению</string>
   <string name="setting_display_page_notification_message_generated">Включить уведомление после генерации сообщения</string>
   <string name="setting_display_page_notification_message_generated_desc">Показывать уведомление при генерации сообщения, если приложение не активно</string>
   <string name="setting_display_page_show_message_jumper_desc">Отображать кнопки быстрого перехода справа при прокрутке списка чатов</string>
