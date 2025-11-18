@@ -326,6 +326,8 @@
   <string name="setting_display_page_show_updates_desc">Whether to display app update notifications</string>
   <string name="setting_display_page_show_message_jumper_title">Show Message Jumper</string>
     <string name="setting_display_page_show_message_jumper_desc">Display quick jump buttons on the right when scrolling the chat list</string>
+    <string name="setting_display_page_message_jumper_position_title">Message Jumper Position</string>
+    <string name="setting_display_page_message_jumper_position_desc">Move  Message Jumper to left side</string>
     <string name="setting_display_page_create_new_conversation_on_start_title">New chat on launch</string>
     <string name="setting_display_page_create_new_conversation_on_start_desc">Create a new conversation when the app starts</string>
     <string name="setting_display_page_font_size_title">Chat Font Size</string>

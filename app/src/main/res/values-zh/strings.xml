@@ -375,6 +375,8 @@
   <string name="setting_display_page_notification_message_generated_desc">当应用不在前台时，若生成消息则显示通知</string>
   <string name="setting_display_page_show_message_jumper_desc">在滚动聊天列表时，在右侧显示快速跳转按钮</string>
   <string name="setting_display_page_show_message_jumper_title">消息导航按钮</string>
+  <string name="setting_display_page_message_jumper_position_title">消息导航按钮位置</string>
+  <string name="setting_display_page_message_jumper_position_desc">将消息导航移到左侧</string>
   <string name="setting_display_page_show_model_name_desc">是否在聊天消息中显示模型名称</string>
   <string name="setting_display_page_show_model_name_title">显示模型名称</string>
   <string name="setting_display_page_show_token_usage_desc">显示token用量和消息数量</string>
