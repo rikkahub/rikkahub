@@ -627,9 +627,6 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                             part.metadata?.get("thoughtSignature")?.let {
                                                 put("thoughtSignature", it)
                                             }
-                                        }.also {
-                                            println("#${json.encodeToString(it)}")
-                                            println(part.metadata)
                                         })
                                     }
 
