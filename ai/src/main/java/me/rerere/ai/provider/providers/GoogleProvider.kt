@@ -548,7 +548,10 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 UIMessagePart.ToolCall(
                     toolCallId = "",
                     toolName = jsonObject["functionCall"]!!.jsonObject["name"]!!.jsonPrimitive.content,
-                    arguments = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"])
+                    arguments = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
+                    metadata = buildJsonObject {
+                        put("thoughtSignature", jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull)
+                    }
                 )
             }
 
@@ -621,6 +624,12 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                                 put("name", part.toolName)
                                                 put("args", json.parseToJsonElement(part.arguments))
                                             })
+                                            part.metadata?.get("thoughtSignature")?.let {
+                                                put("thoughtSignature", it)
+                                            }
+                                        }.also {
+                                            println("#${json.encodeToString(it)}")
+                                            println(part.metadata)
                                         })
                                     }
 

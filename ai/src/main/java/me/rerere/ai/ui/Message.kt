@@ -94,11 +94,7 @@ data class UIMessage(
                             val lastToolCall =
                                 acc.lastOrNull { it is UIMessagePart.ToolCall } as? UIMessagePart.ToolCall
                             if (lastToolCall == null || lastToolCall.toolCallId.isBlank()) {
-                                acc + UIMessagePart.ToolCall(
-                                    toolCallId = deltaPart.toolCallId,
-                                    toolName = deltaPart.toolName,
-                                    arguments = deltaPart.arguments
-                                )
+                                acc + deltaPart.copy()
                             } else {
                                 acc.map { part ->
                                     if (part == lastToolCall && part is UIMessagePart.ToolCall) {
@@ -113,11 +109,7 @@ data class UIMessage(
                             } as? UIMessagePart.ToolCall
                             if (existsPart == null) {
                                 // insert
-                                acc + UIMessagePart.ToolCall(
-                                    toolCallId = deltaPart.toolCallId,
-                                    toolName = deltaPart.toolName,
-                                    arguments = deltaPart.arguments
-                                )
+                                acc + deltaPart.copy()
                             } else {
                                 // update
                                 acc.map { part ->
@@ -393,7 +385,8 @@ sealed class UIMessagePart {
             return ToolCall(
                 toolCallId = toolCallId,
                 toolName = toolName + other.toolName,
-                arguments = arguments + other.arguments
+                arguments = arguments + other.arguments,
+                metadata = if(other.metadata != null) other.metadata else metadata,
             )
         }
 
