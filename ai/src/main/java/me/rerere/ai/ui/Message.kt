@@ -56,12 +56,14 @@ data class UIMessage(
                                 if (part is UIMessagePart.Image) {
                                     UIMessagePart.Image(
                                         url = existingImagePart.url + deltaPart.url,
+                                        metadata = deltaPart.metadata,
                                     )
                                 } else part
                             }
                         } else {
                             acc + UIMessagePart.Image(
                                 url = "data:image/png;base64,${deltaPart.url}",
+                                metadata = deltaPart.metadata,
                             )
                         }
                     }

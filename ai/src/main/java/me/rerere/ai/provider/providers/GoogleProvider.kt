@@ -559,10 +559,25 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 val inlineData = jsonObject["inlineData"]!!.jsonObject
                 val mime = inlineData["mimeType"]?.jsonPrimitive?.content ?: "image/png"
                 val data = inlineData["data"]?.jsonPrimitive?.content ?: ""
+                val thought = jsonObject["thought"]?.jsonPrimitive?.booleanOrNull ?: false
+                val thoughtSignature = jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull
                 require(mime.startsWith("image/")) {
                     "Only image mime type is supported"
                 }
-                UIMessagePart.Image(data)
+                // 如果是思考过程中的草稿图，直接忽略
+                if(thought) {
+                    return UIMessagePart.Reasoning(
+                        reasoning = "[Draft Image]\n",
+                        createdAt = Clock.System.now(),
+                        finishedAt = null
+                    )
+                }
+                UIMessagePart.Image(
+                    url = data,
+                    metadata = buildJsonObject {
+                        put("thoughtSignature", thoughtSignature)
+                    }
+                )
             }
 
             else -> error("unknown message part type: $jsonObject")
@@ -592,6 +607,9 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                                     put("mime_type", "image/png")
                                                     put("data", base64Data)
                                                 })
+                                                part.metadata?.get("thoughtSignature")?.jsonPrimitive?.contentOrNull?.let {
+                                                    put("thoughtSignature", it)
+                                                }
                                             })
                                         }
                                     }
