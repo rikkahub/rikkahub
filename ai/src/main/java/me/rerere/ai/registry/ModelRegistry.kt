@@ -19,6 +19,8 @@ object ModelRegistry {
     val GEMINI_2_5_FLASH = ModelMatcher.containsRegex("gemini-2.5-flash") and ModelMatcher.containsRegex("image", negated = true)
     val GEMINI_2_5_PRO = ModelMatcher.containsRegex("gemini-2.5-pro")
     val GEMINI_2_5_IMAGE = ModelMatcher.containsRegex("gemini-2.5-flash-image")
+    val GEMINI_3_PRO_IMAGE = ModelMatcher.containsRegex("gemini-3-pro-image")
+    val GEMINI_NANO_BANANA = ModelMatcher.containsRegex("nano-banana")
     val GEMINI_3_PRO = ModelMatcher.containsRegex("gemini-3-pro")
     val GEMINI_3_FLASH = ModelMatcher.containsRegex("gemini-3-flash")
     val GEMINI_FLASH_LATEST = ModelMatcher.exact("gemini-flash-latest")
@@ -54,10 +56,10 @@ object ModelRegistry {
         GPT4O + GPT_4_1 + GPT_OSS + GPT_5 + OPENAI_O_MODELS + GEMINI_SERIES + CLAUDE_SERIES + QWEN_3 + DOUBAO_1_6 + GROK_4 + KIMI_K2 + STEP_3 + INTERN_S1 + GLM_4_5 + DEEPSEEK_R1 + DEEPSEEK_V3 + DEEPSEEK_V3_1 + DEEPSEEK_V3_2 + GLM_4_6 + MINIMAX_M2
     val REASONING_MODELS =
         GPT_OSS + GPT_5 + OPENAI_O_MODELS + GEMINI_2_5_FLASH + GEMINI_2_5_PRO + GEMINI_3_SERIES + GEMINI_LATEST + CLAUDE_SERIES + QWEN_3 + DOUBAO_1_6 + GROK_4 + KIMI_K2 + STEP_3 + INTERN_S1 + GLM_4_5 + DEEPSEEK_R1 + DEEPSEEK_V3_1 + DEEPSEEK_V3_2 + GLM_4_6 + MINIMAX_M2
-    val CHAT_IMAGE_GEN_MODELS = GEMINI_2_5_IMAGE
+    val CHAT_IMAGE_GEN_MODELS = GEMINI_2_5_IMAGE + GEMINI_3_PRO_IMAGE + GEMINI_NANO_BANANA
 
     val MODEL_INPUT_MODALITIES = ModelData { modelId ->
-        if (VISION_MODELS.match(modelId)) {
+        if (VISION_MODELS.match(modelId) || CHAT_IMAGE_GEN_MODELS.match(modelId)) {
             listOf(Modality.TEXT, Modality.IMAGE)
         } else {
             listOf(Modality.TEXT)
