@@ -9,6 +9,7 @@ import at.bitfire.dav4jvm.okhttp.exception.NotFoundException
 import at.bitfire.dav4jvm.property.webdav.DisplayName
 import at.bitfire.dav4jvm.property.webdav.GetContentLength
 import at.bitfire.dav4jvm.property.webdav.GetLastModified
+import at.bitfire.dav4jvm.property.webdav.WebDAV
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -45,7 +46,7 @@ class WebdavSync(
         withContext(Dispatchers.IO) {
             davCollection.propfind(
                 depth = 1,
-                DisplayName.NAME,
+                WebDAV.DisplayName,
             ) { response, relation ->
                 Log.i(TAG, "testWebdav: $response | $relation")
             }
@@ -70,9 +71,9 @@ class WebdavSync(
             val files = mutableListOf<WebDavBackupItem>()
             collection.propfind(
                 depth = 1,
-                DisplayName.NAME,
-                GetContentLength.NAME,
-                GetLastModified.NAME
+                WebDAV.DisplayName,
+                WebDAV.GetContentLength,
+                WebDAV.GetLastModified
             ) { response, relation ->
                 Log.i(TAG, "listBackupFiles: ${response.properties} ${response.href}")
                 if (relation == Response.HrefRelation.MEMBER) {
@@ -425,7 +426,7 @@ private fun WebDavConfig.requireCollection(path: String? = null): DavCollection 
 
 private suspend fun DavCollection.ensureCollectionExists() = withContext(Dispatchers.IO) {
     try {
-        propfind(depth = 0, DisplayName.NAME) { response, relation ->
+        propfind(depth = 0, WebDAV.DisplayName) { response, relation ->
             Log.i(TAG, "ensureCollectionExists: $response $relation")
         }
     } catch (e: NotFoundException) {
