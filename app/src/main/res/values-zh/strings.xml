@@ -371,12 +371,12 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">消息生成触觉反馈</string>
   <string name="setting_display_page_font_size_preview">这是一个**示例**的聊天文本</string>
   <string name="setting_display_page_font_size_title">聊天字体大小</string>
+  <string name="setting_display_page_message_jumper_position_desc">将消息导航移到左侧</string>
+  <string name="setting_display_page_message_jumper_position_title">消息导航按钮位置</string>
   <string name="setting_display_page_notification_message_generated">生成消息后启用通知</string>
   <string name="setting_display_page_notification_message_generated_desc">当应用不在前台时，若生成消息则显示通知</string>
   <string name="setting_display_page_show_message_jumper_desc">在滚动聊天列表时，在右侧显示快速跳转按钮</string>
   <string name="setting_display_page_show_message_jumper_title">消息导航按钮</string>
-  <string name="setting_display_page_message_jumper_position_title">消息导航按钮位置</string>
-  <string name="setting_display_page_message_jumper_position_desc">将消息导航移到左侧</string>
   <string name="setting_display_page_show_model_name_desc">是否在聊天消息中显示模型名称</string>
   <string name="setting_display_page_show_model_name_title">显示模型名称</string>
   <string name="setting_display_page_show_token_usage_desc">显示token用量和消息数量</string>
@@ -504,6 +504,7 @@
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">API 路径</string>
+  <string name="setting_provider_page_avaliable_models">可用模型</string>
   <string name="setting_provider_page_balance_api_path">余额 API 路径</string>
   <string name="setting_provider_page_balance_info">获取账户余额</string>
   <string name="setting_provider_page_balance_json_key">结果 JSON 键</string>
@@ -512,6 +513,7 @@
   <string name="setting_provider_page_configuration">配置</string>
   <string name="setting_provider_page_configure_provider_override">配置提供商重写</string>
   <string name="setting_provider_page_delete_dialog_text">确定要删除这个提供商吗？此操作无法撤销。</string>
+  <string name="setting_provider_page_deselect_models">取消全选</string>
   <string name="setting_provider_page_disabled">禁用</string>
   <string name="setting_provider_page_edit_model">编辑模型</string>
   <string name="setting_provider_page_embedding_model">嵌入</string>
@@ -559,6 +561,7 @@
   <string name="setting_provider_page_scan_error">错误: %s</string>
   <string name="setting_provider_page_scan_qr_code">扫描二维码</string>
   <string name="setting_provider_page_search_providers">搜索提供商</string>
+  <string name="setting_provider_page_select_all">全选（%1$d）</string>
   <string name="setting_provider_page_select_from_gallery">从相册选择</string>
   <string name="setting_provider_page_service_account_email">服务账户邮箱</string>
   <string name="setting_provider_page_share">分享</string>

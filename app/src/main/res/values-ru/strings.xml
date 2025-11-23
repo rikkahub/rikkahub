@@ -504,6 +504,7 @@
   <string name="setting_provider_page_api_base_url">Базовый URL API</string>
   <string name="setting_provider_page_api_key">Ключ API</string>
   <string name="setting_provider_page_api_path">Путь API</string>
+  <string name="setting_provider_page_avaliable_models">Доступные модели</string>
   <string name="setting_provider_page_balance_api_path">Путь API баланса</string>
   <string name="setting_provider_page_balance_info">Получить баланс аккаунта</string>
   <string name="setting_provider_page_balance_json_key">Ключ результата JSON</string>
@@ -512,6 +513,7 @@
   <string name="setting_provider_page_configuration">Конфигурация</string>
   <string name="setting_provider_page_configure_provider_override">Настроить переопределение поставщика</string>
   <string name="setting_provider_page_delete_dialog_text">Вы уверены, что хотите удалить этого поставщика? Это действие нельзя отменить.</string>
+  <string name="setting_provider_page_deselect_models">Снять выделение со всех</string>
   <string name="setting_provider_page_disabled">Отключено</string>
   <string name="setting_provider_page_edit_model">Редактировать модель</string>
   <string name="setting_provider_page_embedding_model">Встраивание</string>
@@ -559,6 +561,7 @@
   <string name="setting_provider_page_scan_error">Ошибка: %s</string>
   <string name="setting_provider_page_scan_qr_code">Сканировать QR-код</string>
   <string name="setting_provider_page_search_providers">Поиск поставщиков</string>
+  <string name="setting_provider_page_select_all">Выбрать все (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">Выбрать из галереи</string>
   <string name="setting_provider_page_service_account_email">Электронная почта служебной учётной записи</string>
   <string name="setting_provider_page_share">Поделиться</string>

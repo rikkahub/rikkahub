@@ -504,6 +504,7 @@
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">API 路徑</string>
+  <string name="setting_provider_page_avaliable_models">可用模型</string>
   <string name="setting_provider_page_balance_api_path">餘額 API 路徑</string>
   <string name="setting_provider_page_balance_info">取得帳戶餘額</string>
   <string name="setting_provider_page_balance_json_key">結果 JSON 鍵值</string>
@@ -512,6 +513,7 @@
   <string name="setting_provider_page_configuration">配置</string>
   <string name="setting_provider_page_configure_provider_override">配置提供商覆寫</string>
   <string name="setting_provider_page_delete_dialog_text">確定要刪除這個提供商嗎？此操作無法撤銷。</string>
+  <string name="setting_provider_page_deselect_models">取消全選</string>
   <string name="setting_provider_page_disabled">禁用</string>
   <string name="setting_provider_page_edit_model">編輯模型</string>
   <string name="setting_provider_page_embedding_model">嵌入</string>
@@ -559,6 +561,7 @@
   <string name="setting_provider_page_scan_error">錯誤: %s</string>
   <string name="setting_provider_page_scan_qr_code">掃描二維碼</string>
   <string name="setting_provider_page_search_providers">搜尋提供者</string>
+  <string name="setting_provider_page_select_all">全選 (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">從相簿選擇</string>
   <string name="setting_provider_page_service_account_email">服務帳戶郵箱</string>
   <string name="setting_provider_page_share">分享</string>

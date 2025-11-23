@@ -752,4 +752,7 @@
   <string name="setting_display_page_code_block_auto_collapse_desc">Automatically collapse code blocks by default</string>
     <string name="video">Video</string>
   <string name="audio">Audio</string>
+    <string name="setting_provider_page_avaliable_models">Avaliable Models</string>
+  <string name="setting_provider_page_deselect_models">Deselect All</string>
+  <string name="setting_provider_page_select_all">Select All (%1$d)</string>
 </resources>

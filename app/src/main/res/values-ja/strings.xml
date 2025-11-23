@@ -504,6 +504,7 @@
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">APIパス</string>
+  <string name="setting_provider_page_avaliable_models">利用可能なモデル</string>
   <string name="setting_provider_page_balance_api_path">残高APIパス</string>
   <string name="setting_provider_page_balance_info">アカウント残高を取得</string>
   <string name="setting_provider_page_balance_json_key">結果のJsonキー</string>
@@ -512,6 +513,7 @@
   <string name="setting_provider_page_configuration">設定</string>
   <string name="setting_provider_page_configure_provider_override">プロバイダーオーバーライドを構成</string>
   <string name="setting_provider_page_delete_dialog_text">このプロバイダーを削除してもよろしいですか？この操作は元に戻せません。</string>
+  <string name="setting_provider_page_deselect_models">すべて選択解除</string>
   <string name="setting_provider_page_disabled">無効</string>
   <string name="setting_provider_page_edit_model">モデルを編集</string>
   <string name="setting_provider_page_embedding_model">埋め込み</string>
@@ -559,6 +561,7 @@
   <string name="setting_provider_page_scan_error">エラー: %s</string>
   <string name="setting_provider_page_scan_qr_code">QRコードをスキャン</string>
   <string name="setting_provider_page_search_providers">プロバイダーを検索</string>
+  <string name="setting_provider_page_select_all">すべて選択 (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">ギャラリーから選択</string>
   <string name="setting_provider_page_service_account_email">サービスアカウントメール</string>
   <string name="setting_provider_page_share">共有</string>

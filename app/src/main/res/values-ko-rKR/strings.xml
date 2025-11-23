@@ -504,6 +504,7 @@
   <string name="setting_provider_page_api_base_url">API 기본 URL</string>
   <string name="setting_provider_page_api_key">API 키</string>
   <string name="setting_provider_page_api_path">API 경로</string>
+  <string name="setting_provider_page_avaliable_models">사용 가능한 모델</string>
   <string name="setting_provider_page_balance_api_path">잔액 API 경로</string>
   <string name="setting_provider_page_balance_info">계정 잔액 확인</string>
   <string name="setting_provider_page_balance_json_key">결과 Json 키</string>
@@ -512,6 +513,7 @@
   <string name="setting_provider_page_configuration">구성</string>
   <string name="setting_provider_page_configure_provider_override">제공업체 재정의 구성</string>
   <string name="setting_provider_page_delete_dialog_text">정말 이 제공업체를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</string>
+  <string name="setting_provider_page_deselect_models">모두 선택 해제</string>
   <string name="setting_provider_page_disabled">비활성화됨</string>
   <string name="setting_provider_page_edit_model">모델 편집</string>
   <string name="setting_provider_page_embedding_model">임베딩</string>
@@ -559,6 +561,7 @@
   <string name="setting_provider_page_scan_error">오류: %s</string>
   <string name="setting_provider_page_scan_qr_code">QR 코드 스캔</string>
   <string name="setting_provider_page_search_providers">공급자 검색</string>
+  <string name="setting_provider_page_select_all">전체 선택 (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">갤러리에서 선택</string>
   <string name="setting_provider_page_service_account_email">서비스 계정 이메일</string>
   <string name="setting_provider_page_share">공유</string>
