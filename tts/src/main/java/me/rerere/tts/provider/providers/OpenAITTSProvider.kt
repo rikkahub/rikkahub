@@ -21,7 +21,7 @@ private const val TAG = "OpenAITTSProvider"
 
 class OpenAITTSProvider : TTSProvider<TTSProviderSetting.OpenAI> {
     private val httpClient = OkHttpClient.Builder()
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .build()
 
     override fun generateSpeech(
