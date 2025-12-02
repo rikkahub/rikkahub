@@ -181,6 +181,10 @@ data class UIMessage(
         }
     }
 
+    fun hasBase64Part(): Boolean = parts.any {
+        it is UIMessagePart.Image && it.url.startsWith("data:")
+    }
+
     operator fun plus(chunk: MessageChunk): UIMessage {
         return this.appendChunk(chunk)
     }

@@ -41,7 +41,7 @@ class RikkaHubApp : Application() {
         this.createNotificationChannel()
 
         // set cursor window size
-        DatabaseUtil.setCursorWindowSize(16 * 1024 * 1024)
+        DatabaseUtil.setCursorWindowSize(24 * 1024 * 1024)
 
         // delete temp files
         deleteTempFiles()

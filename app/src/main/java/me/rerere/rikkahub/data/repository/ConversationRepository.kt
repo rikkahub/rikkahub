@@ -8,6 +8,7 @@ import androidx.paging.map
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.model.Conversation
@@ -135,6 +136,7 @@ class ConversationRepository(
     }
 
     fun conversationToConversationEntity(conversation: Conversation): ConversationEntity {
+        require(conversation.messageNodes.none { it.messages.any { message -> message.hasBase64Part() } } )
         return ConversationEntity(
             id = conversation.id.toString(),
             title = conversation.title,
