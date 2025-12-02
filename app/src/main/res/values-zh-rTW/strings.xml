@@ -38,6 +38,7 @@
   <string name="assistant_page_context_message_count">上下文訊息數量: %d</string>
   <string name="assistant_page_context_message_desc">控制多少條歷史訊息會被作為上下文發送給模型, 超過此數量的訊息會被忽略，只有最近的N條訊息會被保留，可以節省token</string>
   <string name="assistant_page_context_message_size">上下文訊息數量</string>
+  <string name="assistant_page_context_message_unlimited">無限上下文訊息</string>
   <string name="assistant_page_creative">創造</string>
   <string name="assistant_page_custom_bodies">自定義 Body</string>
   <string name="assistant_page_custom_headers">自定義 Headers</string>

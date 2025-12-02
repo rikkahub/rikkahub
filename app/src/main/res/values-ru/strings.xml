@@ -38,6 +38,7 @@
   <string name="assistant_page_context_message_count">Размер контекстных сообщений: %d</string>
   <string name="assistant_page_context_message_desc">Управляет количеством исторических сообщений, отправляемых модели в качестве контекста. Сообщения, превышающие это число, будут игнорироваться; будут сохранены только последние N сообщений, что позволяет экономить токены</string>
   <string name="assistant_page_context_message_size">Размер контекстного сообщения</string>
+  <string name="assistant_page_context_message_unlimited">Неограниченные контекстные сообщения</string>
   <string name="assistant_page_creative">Творческий</string>
   <string name="assistant_page_custom_bodies">Пользовательский контекст</string>
   <string name="assistant_page_custom_headers">Пользовательские заголовки</string>

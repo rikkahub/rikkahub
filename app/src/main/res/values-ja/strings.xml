@@ -38,6 +38,7 @@
   <string name="assistant_page_context_message_count">コンテキストメッセージサイズ: %d</string>
   <string name="assistant_page_context_message_desc">モデルに送信される履歴メッセージの数を制御します。この数を超えるメッセージは無視され、最新のN個のメッセージのみが保持されます。これによりトークンを節約できます</string>
   <string name="assistant_page_context_message_size">コンテキストメッセージサイズ</string>
+  <string name="assistant_page_context_message_unlimited">無制限のコンテキストメッセージ</string>
   <string name="assistant_page_creative">創造的</string>
   <string name="assistant_page_custom_bodies">カスタムボディ</string>
   <string name="assistant_page_custom_headers">カスタムヘッダー</string>

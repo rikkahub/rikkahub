@@ -38,6 +38,7 @@
   <string name="assistant_page_context_message_count">컨텍스트 메시지 수: %d</string>
   <string name="assistant_page_context_message_desc">과거 메시지 중 몇 개를 모델에 컨텍스트로 보낼지 제어. 이 수를 초과한 메시지는 무시되고 가장 최근 N개 메시지만 유지되어 토큰을 절약할 수 있습니다</string>
   <string name="assistant_page_context_message_size">컨텍스트 메시지 수</string>
+  <string name="assistant_page_context_message_unlimited">무제한 컨텍스트 메시지</string>
   <string name="assistant_page_creative">창의적</string>
   <string name="assistant_page_custom_bodies">사용자 정의 본문</string>
   <string name="assistant_page_custom_headers">사용자 정의 헤더</string>

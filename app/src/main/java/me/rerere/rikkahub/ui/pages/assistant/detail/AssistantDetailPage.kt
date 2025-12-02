@@ -450,15 +450,16 @@ private fun AssistantBasicSettings(
                             )
                         )
                     },
-                    valueRange = 1f..512f,
+                    valueRange = 0f..512f,
                     steps = 0,
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 Text(
-                    text = stringResource(
+                    text = if(assistant.contextMessageSize > 0) stringResource(
                         R.string.assistant_page_context_message_count,
                         assistant.contextMessageSize
-                    ),
+                    ) else stringResource(R.string.assistant_page_context_message_unlimited),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
                 )
