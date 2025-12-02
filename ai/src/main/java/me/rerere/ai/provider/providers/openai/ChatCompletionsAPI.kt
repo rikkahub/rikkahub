@@ -370,11 +370,10 @@ class ChatCompletionsAPI(
     }
 
     private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
-        messages
-            .filter {
-                it.isValidToUpload()
-            }
-            .forEachIndexed { index, message ->
+        val filteredMessages = messages.filter { it.isValidToUpload() }
+        val lastUserMessageIndex = filteredMessages.indexOfLast { it.role == MessageRole.USER }
+
+        filteredMessages.forEachIndexed { index, message ->
                 if (message.role == MessageRole.TOOL) {
                     message.getToolResults().forEach { result ->
                         add(buildJsonObject {
@@ -389,6 +388,14 @@ class ChatCompletionsAPI(
                 add(buildJsonObject {
                     // role
                     put("role", JsonPrimitive(message.role.name.lowercase()))
+
+                    // reasoning
+                    // 只回传最后一条 user 消息之后的思考内容
+                    if (index > lastUserMessageIndex) {
+                        message.parts.filterIsInstance<UIMessagePart.Reasoning>().firstOrNull()?.let { reasoning ->
+                            put("reasoning_content", reasoning.reasoning)
+                        }
+                    }
 
                     // content
                     if (message.parts.isOnlyTextPart()) {
