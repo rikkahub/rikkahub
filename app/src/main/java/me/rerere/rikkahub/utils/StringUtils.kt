@@ -87,3 +87,6 @@ fun Int.formatNumber(): String {
         }
     }
 }
+
+fun Float.toFixed(digits: Int = 0) = "%.${digits}f".format(this)
+fun Double.toFixed(digits: Int = 0) = "%.${digits}f".format(this)

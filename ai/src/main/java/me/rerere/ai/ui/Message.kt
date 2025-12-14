@@ -24,6 +24,7 @@ data class UIMessage(
     val annotations: List<UIMessageAnnotation> = emptyList(),
     val createdAt: LocalDateTime = Clock.System.now()
         .toLocalDateTime(TimeZone.currentSystemDefault()),
+    val finishedAt: LocalDateTime? = null,
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
     val translation: String? = null

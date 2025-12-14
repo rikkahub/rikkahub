@@ -6,6 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -49,6 +51,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
 import java.util.Locale
+import kotlin.time.Clock
 
 private const val TAG = "GenerationHandler"
 
@@ -147,6 +150,10 @@ class GenerationHandler(
                 context = context,
                 model = model,
                 assistant = assistant
+            )
+            messages = messages.slice(0 until messages.lastIndex) + messages.last().copy(
+                finishedAt = Clock.System.now()
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
             )
             emit(GenerationChunk.Messages(messages))
 
@@ -276,12 +283,14 @@ class GenerationHandler(
             }
         )
         if (stream) {
-            aiLoggingManager.addLog(AILogging.Generation(
-                params = params,
-                messages = messages,
-                providerSetting = provider,
-                stream = true
-            ))
+            aiLoggingManager.addLog(
+                AILogging.Generation(
+                    params = params,
+                    messages = messages,
+                    providerSetting = provider,
+                    stream = true
+                )
+            )
             providerImpl.streamText(
                 providerSetting = provider,
                 messages = internalMessages,
@@ -300,12 +309,14 @@ class GenerationHandler(
                 onUpdateMessages(messages)
             }
         } else {
-            aiLoggingManager.addLog(AILogging.Generation(
-                params = params,
-                messages = messages,
-                providerSetting = provider,
-                stream = false
-            ))
+            aiLoggingManager.addLog(
+                AILogging.Generation(
+                    params = params,
+                    messages = messages,
+                    providerSetting = provider,
+                    stream = false
+                )
+            )
             val chunk = providerImpl.generateText(
                 providerSetting = provider,
                 messages = internalMessages,

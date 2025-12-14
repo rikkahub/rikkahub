@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.message
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,10 +18,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ArrowDown
 import com.composables.icons.lucide.ArrowUp
+import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Zap
+import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.utils.formatNumber
+import me.rerere.rikkahub.utils.toFixed
+import java.time.Duration
 
 /**
  * 显示消息的技术统计信息（如 token 使用量）
@@ -35,37 +41,96 @@ fun ChatMessageNerdLine(
 
     ProvideTextStyle(MaterialTheme.typography.labelSmall.copy(color = color)) {
         CompositionLocalProvider(LocalContentColor provides color) {
-            Row(
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                itemVerticalAlignment = Alignment.CenterVertically,
                 modifier = modifier.padding(horizontal = 4.dp),
             ) {
                 val usage = message.usage
                 if (settings.showTokenUsage && usage != null) {
-                    Icon(
-                        imageVector = Lucide.ArrowUp,
-                        contentDescription = "Input",
-                        tint = color,
-                        modifier = Modifier.size(12.dp)
+                    // Input tokens
+                    StatsItem(
+                        icon = {
+                            Icon(
+                                imageVector = Lucide.ArrowUp,
+                                contentDescription = "Input",
+                                tint = color,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        },
+                        content = {
+                            Text(text = "${usage.totalTokens.formatNumber()} tokens")
+                            // Cached tokens
+                            if (usage.cachedTokens > 0) {
+                                Text(
+                                    text = "(${message.usage?.cachedTokens?.formatNumber() ?: "0"} cached)"
+                                )
+                            }
+                        }
                     )
-                    Text(
-                        text = "${usage.totalTokens.formatNumber()} tokens"
+                    // Output tokens
+                    StatsItem(
+                        icon = {
+                            Icon(
+                                imageVector = Lucide.ArrowDown,
+                                contentDescription = "Output",
+                                modifier = Modifier.size(12.dp)
+                            )
+                        },
+                        content = {
+                            Text(text = "${usage.completionTokens.formatNumber()} tokens")
+                        }
                     )
-                    Icon(
-                        imageVector = Lucide.ArrowDown,
-                        contentDescription = "Output",
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Text(
-                        text = "${usage.completionTokens.formatNumber()} tokens"
-                    )
-                    if(usage.cachedTokens > 0) {
-                        Text(
-                            text = "(${message.usage?.cachedTokens?.formatNumber() ?: "0"} cached)"
+                    // TPS
+                    if (message.finishedAt != null) {
+                        val duration = Duration.between(
+                            message.createdAt.toJavaLocalDateTime(),
+                            message.finishedAt!!.toJavaLocalDateTime()
+                        )
+                        val tps = usage.completionTokens.toFloat() / duration.toMillis() * 1000
+                        val seconds = (duration.toMillis() / 1000f).toFixed(1)
+                        StatsItem(
+                            icon = {
+                                Icon(
+                                    imageVector = Lucide.Zap,
+                                    contentDescription = "Speed",
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            },
+                            content = {
+                                Text(text = "${tps.toFixed(1)} tok/s")
+                            }
+                        )
+
+                        StatsItem(
+                            icon = {
+                                Icon(
+                                    imageVector = Lucide.Clock,
+                                    contentDescription = "Duration",
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            },
+                            content = {
+                                Text(text = "${seconds}s")
+                            }
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun StatsItem(
+    icon: @Composable () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        icon()
+        content()
     }
 }
