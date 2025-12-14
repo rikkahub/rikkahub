@@ -497,17 +497,16 @@ private fun MessagePartsBlock(
     // Images
     val images = parts.filterIsInstance<UIMessagePart.Image>()
     if (images.isNotEmpty()) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-
             images.fastForEach {
                 ZoomableAsyncImage(
                     model = it.url,
                     contentDescription = null,
                     modifier = Modifier
                         .clip(MaterialTheme.shapes.medium)
-                        .height(72.dp)
+                        .fillMaxWidth()
                 )
             }
         }
