@@ -108,26 +108,12 @@ fun ChatMessageAssistantAvatar(
                             style = MaterialTheme.typography.titleMedium,
                             maxLines = 1,
                         )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = message.createdAt.toJavaLocalDateTime().toLocalString(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = LocalContentColor.current.copy(alpha = 0.8f),
-                                maxLines = 1,
-                            )
-                            if (settings.displaySetting.showTokenUsage) {
-                                message.usage?.let { usage ->
-                                    Text(
-                                        text = "${usage.totalTokens.formatNumber()} tokens",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = LocalContentColor.current.copy(alpha = 0.8f),
-                                        maxLines = 1,
-                                    )
-                                }
-                            }
-                        }
+                        Text(
+                            text = message.createdAt.toJavaLocalDateTime().toLocalString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LocalContentColor.current.copy(alpha = 0.8f),
+                            maxLines = 1,
+                        )
                     }
                 }
             } else {
@@ -146,25 +132,11 @@ fun ChatMessageAssistantAvatar(
                             text = model.displayName,
                             style = MaterialTheme.typography.titleSmall,
                         )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = message.createdAt.toJavaLocalDateTime().toLocalString(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = LocalContentColor.current.copy(alpha = 0.8f)
-                            )
-                            if (settings.displaySetting.showTokenUsage) {
-                                message.usage?.let { usage ->
-                                    Text(
-                                        text = if (usage.cachedTokens == 0) "${usage.totalTokens.formatNumber()} tokens" else "${usage.totalTokens.formatNumber()} tokens (${usage.cachedTokens.formatNumber()} cached)",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = LocalContentColor.current.copy(alpha = 0.8f),
-                                        maxLines = 1,
-                                    )
-                                }
-                            }
-                        }
+                        Text(
+                            text = message.createdAt.toJavaLocalDateTime().toLocalString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LocalContentColor.current.copy(alpha = 0.8f)
+                        )
                     }
                 }
             }

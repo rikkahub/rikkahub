@@ -175,6 +175,8 @@ fun ChatMessage(
                     onClickCitation = {}
                 )
             }
+
+            ChatMessageNerdLine(message = message)
         }
 
         val showActions = if (lastMessage) {
