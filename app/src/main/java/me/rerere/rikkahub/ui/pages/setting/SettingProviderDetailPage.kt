@@ -929,10 +929,12 @@ private fun AddModelButton(
                     )
                 )
             },
-            onAllModelDeselected = {
+            onAllModelDeselected = { filteredModels ->
                 onUpdateProvider(
                     parentProvider.copyProvider(
-                        models = emptyList()
+                        models = parentProvider.models.filter { model ->
+                            filteredModels.none { filtered -> filtered.modelId == model.modelId }
+                        }
                     )
                 )
             }
@@ -1045,7 +1047,7 @@ private fun ModelPicker(
     onModelSelected: (Model) -> Unit,
     onModelDeselected: (Model) -> Unit,
     onAllModelSelected: (List<Model>) -> Unit,
-    onAllModelDeselected: () -> Unit
+    onAllModelDeselected: (List<Model>) -> Unit
 ) {
     var showModal by remember { mutableStateOf(false) }
     if (showModal) {
@@ -1097,7 +1099,7 @@ private fun ModelPicker(
                             if (unselectedCount > 0) {
                                 onAllModelSelected(filteredModels)
                             } else {
-                                onAllModelDeselected()
+                                onAllModelDeselected(filteredModels)
                             }
                         },
                     ) {
