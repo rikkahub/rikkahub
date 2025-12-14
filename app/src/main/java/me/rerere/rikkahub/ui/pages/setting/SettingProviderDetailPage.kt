@@ -917,14 +917,17 @@ private fun AddModelButton(
             onAllModelSelected = {
                 onUpdateProvider(
                     parentProvider.copyProvider(
-                    models = models + it.map { model ->
-                        model.copy(
-                            inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId),
-                            outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId),
-                            abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
-                        )
-                    }
-                ))
+                        models = parentProvider.models + it.filter { model ->
+                            parentProvider.models.none { existing -> existing.modelId == model.modelId }
+                        }.map { model ->
+                            model.copy(
+                                inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId),
+                                outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId),
+                                abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
+                            )
+                        }
+                    )
+                )
             },
             onAllModelDeselected = {
                 onUpdateProvider(
