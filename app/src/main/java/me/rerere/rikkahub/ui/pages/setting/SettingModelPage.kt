@@ -6,17 +6,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
@@ -74,7 +79,7 @@ fun SettingModelPage(vm: SettingVM = koinViewModel()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = contentPadding + PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
                 DefaultChatModelSetting(settings = settings, vm = vm)
@@ -141,7 +146,8 @@ private fun DefaultTranslationModelSetting(
             IconButton(
                 onClick = {
                     showModal = true
-                }
+                },
+                colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
                 Icon(Lucide.Settings2, null)
             }
@@ -237,7 +243,8 @@ private fun DefaultSuggestionModelSetting(
             IconButton(
                 onClick = {
                     showModal = true
-                }
+                },
+                colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
                 Icon(Lucide.Settings2, null)
             }
@@ -329,7 +336,8 @@ private fun DefaultTitleModelSetting(
             IconButton(
                 onClick = {
                     showModal = true
-                }
+                },
+                colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
                 Icon(Lucide.Settings2, null)
             }
@@ -441,7 +449,8 @@ private fun LearningModePromptSetting(
             IconButton(
                 onClick = {
                     showModal = true
-                }
+                },
+                colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
                 Icon(Lucide.Settings2, null)
             }
@@ -533,7 +542,8 @@ private fun DefaultOcrModelSetting(
             IconButton(
                 onClick = {
                     showModal = true
-                }
+                },
+                colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
                 Icon(Lucide.Settings2, null)
             }
@@ -598,40 +608,44 @@ private fun ModelFeatureCard(
     title: @Composable () -> Unit,
     actions: @Composable RowScope.() -> Unit
 ) {
-    Card(
-        modifier = modifier,
+    OutlinedCard(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     ) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.padding(16.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                Box(
+                    modifier = Modifier
+                        .size(40.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        icon()
-                        ProvideTextStyle(MaterialTheme.typography.titleLarge) {
-                            title()
-                        }
+                    icon()
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    ProvideTextStyle(MaterialTheme.typography.titleMedium) {
+                        title()
                     }
                     ProvideTextStyle(
                         MaterialTheme.typography.bodySmall.copy(
-                            color = LocalContentColor.current.copy(
-                                alpha = 0.7f
-                            )
+                            color = LocalContentColor.current.copy(alpha = 0.6f)
                         )
                     ) {
                         description()
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
