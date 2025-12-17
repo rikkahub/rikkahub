@@ -35,6 +35,8 @@ data class Assistant(
     val localTools: List<LocalToolOption> = emptyList(),
     val background: String? = null,
     val learningMode: Boolean = false,
+    val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
+    val worldBookIds: Set<Uuid> = emptySet(),           // 关联的世界书 ID
 )
 
 @Serializable
@@ -93,20 +95,142 @@ fun String.replaceRegexes(
     }
 }
 
+/**
+ * 注入位置
+ */
+@Serializable
+enum class InjectionPosition {
+    @SerialName("before_system_prompt")
+    BEFORE_SYSTEM_PROMPT,   // 系统提示词之前
+
+    @SerialName("after_system_prompt")
+    AFTER_SYSTEM_PROMPT,    // 系统提示词之后（最常用）
+
+    @SerialName("top_of_chat")
+    TOP_OF_CHAT,            // 对话最开头（第一条用户消息之前）
+
+    @SerialName("bottom_of_chat")
+    BOTTOM_OF_CHAT,         // 最新消息之前（当前用户输入之前）
+}
+
+/**
+ * 提示词注入
+ *
+ * - ModeInjection: 基于模式开关的注入（如学习模式）
+ * - RegexInjection: 基于正则匹配的注入（世界书/Lorebook）
+ */
 @Serializable
 sealed class PromptInjection {
+    abstract val id: Uuid
+    abstract val name: String
+    abstract val enabled: Boolean
+    abstract val priority: Int
+    abstract val position: InjectionPosition
+    abstract val content: String
+
+    /**
+     * 模式注入 - 基于开关状态触发
+     */
     @Serializable
     @SerialName("mode")
     data class ModeInjection(
-        val name: String,
-        val priority: Int,
-        val prompt: String,
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "",
+        override val enabled: Boolean = true,
+        override val priority: Int = 0,
+        override val position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
+        override val content: String = "",
     ) : PromptInjection()
 
+    /**
+     * 正则注入 - 基于内容匹配触发（世界书）
+     */
     @Serializable
     @SerialName("regex")
     data class RegexInjection(
-        val name: String,
-        val regex: String,
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "",
+        override val enabled: Boolean = true,
+        override val priority: Int = 0,
+        override val position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
+        override val content: String = "",
+        val keywords: List<String> = emptyList(),  // 触发关键词
+        val useRegex: Boolean = false,             // 是否使用正则匹配
+        val caseSensitive: Boolean = false,        // 大小写敏感
+        val scanDepth: Int = 5,                    // 扫描最近N条消息
+        val constantActive: Boolean = false,       // 常驻激活（无需匹配）
     ) : PromptInjection()
+}
+
+/**
+ * 世界书 - 组织管理多个 RegexInjection
+ */
+@Serializable
+data class WorldBook(
+    val id: Uuid = Uuid.random(),
+    val name: String = "",
+    val description: String = "",
+    val enabled: Boolean = true,
+    val entries: List<PromptInjection.RegexInjection> = emptyList(),
+)
+
+/**
+ * 检查 RegexInjection 是否被触发
+ *
+ * @param context 要扫描的上下文文本
+ * @return 是否触发
+ */
+fun PromptInjection.RegexInjection.isTriggered(context: String): Boolean {
+    if (!enabled) return false
+    if (constantActive) return true
+    if (keywords.isEmpty()) return false
+
+    return keywords.any { keyword ->
+        if (useRegex) {
+            try {
+                val options = if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
+                Regex(keyword, options).containsMatchIn(context)
+            } catch (e: Exception) {
+                false
+            }
+        } else {
+            if (caseSensitive) {
+                context.contains(keyword)
+            } else {
+                context.contains(keyword, ignoreCase = true)
+            }
+        }
+    }
+}
+
+/**
+ * 从消息列表中提取用于匹配的上下文文本
+ *
+ * @param messages 消息列表
+ * @param scanDepth 扫描深度（最近N条消息）
+ * @return 拼接的文本内容
+ */
+fun extractContextForMatching(
+    messages: List<UIMessage>,
+    scanDepth: Int
+): String {
+    return messages
+        .takeLast(scanDepth)
+        .joinToString("\n") { it.toText() }
+}
+
+/**
+ * 获取所有被触发的注入，按优先级排序
+ *
+ * @param injections 所有注入规则
+ * @param context 上下文文本
+ * @return 被触发的注入列表，按优先级降序排列
+ */
+fun getTriggeredInjections(
+    injections: List<PromptInjection.RegexInjection>,
+    context: String
+): List<PromptInjection.RegexInjection> {
+    return injections
+        .filter { it.isTriggered(context) }
+        .sortedByDescending { it.priority }
 }

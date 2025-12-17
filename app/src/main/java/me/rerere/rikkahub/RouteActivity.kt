@@ -61,6 +61,7 @@ import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.menu.MenuPage
+import me.rerere.rikkahub.ui.pages.prompts.PromptPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
@@ -293,6 +294,10 @@ class RouteActivity : ComponentActivity() {
                     composable<Screen.Debug> {
                         DebugPage()
                     }
+
+                    composable<Screen.Prompts> {
+                        PromptPage()
+                    }
                 }
             }
         }
@@ -365,4 +370,7 @@ sealed interface Screen {
 
     @Serializable
     data object Debug : Screen
+
+    @Serializable
+    data object Prompts : Screen
 }

@@ -356,6 +356,7 @@
   <string name="assistant_page_tab_request">Custom Request</string>
   <string name="assistant_page_tab_mcp">MCP</string>
   <string name="assistant_page_tab_local_tools">Local Tools</string>
+  <string name="assistant_page_tab_injections">Prompt Injections</string>
   <string name="assistant_page_stream_output">Stream Output</string>
   <string name="assistant_page_stream_output_desc">Whether to enable streaming output for messages</string>
   <string name="assistant_page_use_assistant_avatar">Use Assistant Avatar</string>

@@ -79,7 +79,8 @@ fun AssistantDetailPage(id: String) {
         stringResource(R.string.assistant_page_tab_memory),
         stringResource(R.string.assistant_page_tab_request),
         stringResource(R.string.assistant_page_tab_mcp),
-        stringResource(R.string.assistant_page_tab_local_tools)
+        stringResource(R.string.assistant_page_tab_local_tools),
+        stringResource(R.string.assistant_page_tab_injections)
     )
     val pagerState = rememberPagerState { tabs.size }
     Scaffold(
@@ -177,6 +178,14 @@ fun AssistantDetailPage(id: String) {
                         AssistantLocalToolSubPage(
                             assistant = assistant,
                             onUpdate = { onUpdate(it) }
+                        )
+                    }
+
+                    6 -> {
+                        AssistantInjectionsSettings(
+                            assistant = assistant,
+                            onUpdate = { onUpdate(it) },
+                            vm = vm
                         )
                     }
                 }
@@ -608,5 +617,144 @@ private fun AssistantMcpSettings(
         servers = mcpServerConfigs,
         onUpdateAssistant = onUpdate,
     )
+}
+
+@Composable
+private fun AssistantInjectionsSettings(
+    assistant: Assistant,
+    onUpdate: (Assistant) -> Unit,
+    vm: AssistantDetailVM
+) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+            .imePadding(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Mode Injections Section
+        if (settings.modeInjections.isNotEmpty()) {
+            Card {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = "Mode Injections",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                    HorizontalDivider()
+                    settings.modeInjections.forEach { injection ->
+                        FormItem(
+                            modifier = Modifier.padding(8.dp),
+                            label = {
+                                Text(injection.name.ifBlank { "Unnamed Injection" })
+                            },
+                            tail = {
+                                Switch(
+                                    checked = assistant.modeInjectionIds.contains(injection.id),
+                                    onCheckedChange = { checked ->
+                                        val newIds = if (checked) {
+                                            assistant.modeInjectionIds + injection.id
+                                        } else {
+                                            assistant.modeInjectionIds - injection.id
+                                        }
+                                        onUpdate(assistant.copy(modeInjectionIds = newIds))
+                                    }
+                                )
+                            }
+                        )
+                        if (injection != settings.modeInjections.last()) {
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        }
+
+        // World Books Section
+        if (settings.worldBooks.isNotEmpty()) {
+            Card {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = "World Books",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                    HorizontalDivider()
+                    settings.worldBooks.forEach { worldBook ->
+                        FormItem(
+                            modifier = Modifier.padding(8.dp),
+                            label = {
+                                Column {
+                                    Text(worldBook.name.ifBlank { "Unnamed World Book" })
+                                    if (worldBook.description.isNotBlank()) {
+                                        Text(
+                                            text = worldBook.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                            },
+                            tail = {
+                                Switch(
+                                    checked = assistant.worldBookIds.contains(worldBook.id),
+                                    onCheckedChange = { checked ->
+                                        val newIds = if (checked) {
+                                            assistant.worldBookIds + worldBook.id
+                                        } else {
+                                            assistant.worldBookIds - worldBook.id
+                                        }
+                                        onUpdate(assistant.copy(worldBookIds = newIds))
+                                    }
+                                )
+                            }
+                        )
+                        if (worldBook != settings.worldBooks.last()) {
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        }
+
+        // Empty state
+        if (settings.modeInjections.isEmpty() && settings.worldBooks.isEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "No Prompt Injections Available",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = "Create mode injections or world books in Settings > Prompt Injections",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
+                }
+            }
+        }
+    }
 }
 

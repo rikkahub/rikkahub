@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.composables.icons.lucide.BadgeInfo
+import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.Drama
@@ -170,6 +171,16 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     description = { Text(stringResource(R.string.setting_page_assistant_desc)) },
                     icon = { Icon(Lucide.Drama, "Assistant") },
                     link = Screen.Assistant
+                )
+            }
+
+            item {
+                SettingItem(
+                    navController = navController,
+                    title = { Text("提示书") },
+                    description = { Text("设置基于模式或者正则的提示词注入") },
+                    icon = { Icon(Lucide.BookOpen, "Prompts") },
+                    link = Screen.Prompts
                 )
             }
 

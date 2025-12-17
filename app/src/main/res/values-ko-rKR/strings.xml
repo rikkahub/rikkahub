@@ -95,6 +95,7 @@
   <string name="assistant_page_system_prompt">시스템 프롬프트</string>
   <string name="assistant_page_tab_basic">기본 설정</string>
   <string name="assistant_page_tab_local_tools">로컬 도구</string>
+  <string name="assistant_page_tab_injections">프롬프트 인젝션</string>
   <string name="assistant_page_tab_mcp">MCP</string>
   <string name="assistant_page_tab_memory">기억 기능</string>
   <string name="assistant_page_tab_prompt">프롬프트</string>

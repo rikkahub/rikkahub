@@ -95,6 +95,7 @@
   <string name="assistant_page_system_prompt">システムプロンプト</string>
   <string name="assistant_page_tab_basic">基本設定</string>
   <string name="assistant_page_tab_local_tools">ローカルツール</string>
+  <string name="assistant_page_tab_injections">プロンプトインジェクション</string>
   <string name="assistant_page_tab_mcp">MCP</string>
   <string name="assistant_page_tab_memory">記憶</string>
   <string name="assistant_page_tab_prompt">プロンプト</string>
