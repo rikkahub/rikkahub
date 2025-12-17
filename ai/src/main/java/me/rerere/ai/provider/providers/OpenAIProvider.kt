@@ -153,7 +153,6 @@ class OpenAIProvider(
                 put("model", params.model.modelId)
                 put("prompt", params.prompt)
                 put("n", params.numOfImages)
-                put("response_format", "b64_json")
                 put(
                     "size", when (params.aspectRatio) {
                         ImageAspectRatio.SQUARE -> "1024x1024"
