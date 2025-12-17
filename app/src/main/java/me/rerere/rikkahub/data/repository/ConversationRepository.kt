@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.repository
 
 import android.content.Context
+import android.database.sqlite.SQLiteBlobTooBigException
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
@@ -104,7 +105,13 @@ class ConversationRepository(
     }
 
     suspend fun getConversationById(uuid: Uuid): Conversation? {
-        val entity = conversationDAO.getConversationById(uuid.toString())
+        val entity = try {
+            conversationDAO.getConversationById(uuid.toString())
+        } catch (e: SQLiteBlobTooBigException) {
+            e.printStackTrace()
+            conversationDAO.resetConversationNodes(uuid.toString())
+            conversationDAO.getConversationById(uuid.toString())
+        }
         return if (entity != null) {
             conversationEntityToConversation(entity)
         } else null

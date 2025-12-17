@@ -54,6 +54,12 @@ interface ConversationDAO {
     @Delete
     suspend fun delete(conversation: ConversationEntity)
 
+    @Query("UPDATE conversationentity SET nodes = '[]' WHERE id = :id")
+    suspend fun resetConversationNodes(id: String)
+
+    @Query("DELETE FROM conversationentity WHERE id = :id")
+    suspend fun deleteById(id: String)
+
     @Query("DELETE FROM conversationentity")
     suspend fun deleteAll()
 
