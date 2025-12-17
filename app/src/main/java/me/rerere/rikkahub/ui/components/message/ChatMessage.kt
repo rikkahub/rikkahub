@@ -175,8 +175,6 @@ fun ChatMessage(
                     onClickCitation = {}
                 )
             }
-
-            ChatMessageNerdLine(message = message)
         }
 
         val showActions = if (lastMessage) {
@@ -205,6 +203,10 @@ fun ChatMessage(
                     onClearTranslation = onClearTranslation
                 )
             }
+        }
+
+        ProvideTextStyle(textStyle) {
+            ChatMessageNerdLine(message = message)
         }
     }
     if (showActionsSheet) {
