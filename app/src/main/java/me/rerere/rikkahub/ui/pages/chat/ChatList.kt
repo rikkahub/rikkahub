@@ -211,11 +211,14 @@ private fun SharedTransitionScope.ChatListNormal(
             .fillMaxSize(),
     ) {
         // 欢迎界面 - 当对话为空时显示
-        if (conversation.newConversation && conversation.messageNodes.isEmpty()) {
+        AnimatedVisibility(
+            visible = conversation.newConversation && conversation.messageNodes.isEmpty(),
+            modifier = Modifier.padding(innerPadding).zIndex(5f),
+            enter = scaleIn() + fadeIn(),
+            exit = scaleOut() + fadeOut(),
+        ) {
             ChatWelcome(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .zIndex(5f),
+                modifier = Modifier,
                 onClickSuggestion = onClickSuggestion
             )
         }
