@@ -670,7 +670,7 @@ private fun BoxScope.MessageJumper(
             Surface(
                 onClick = {
                     scope.launch {
-                        state.animateScrollToItem(0)
+                        state.scrollToItem(0)
                     }
                 },
                 shape = CircleShape,
@@ -730,7 +730,7 @@ private fun BoxScope.MessageJumper(
             Surface(
                 onClick = {
                     scope.launch {
-                        state.animateScrollToItem(state.layoutInfo.totalItemsCount - 1)
+                        state.scrollToItem(state.layoutInfo.totalItemsCount - 1)
                     }
                 },
                 shape = CircleShape,
