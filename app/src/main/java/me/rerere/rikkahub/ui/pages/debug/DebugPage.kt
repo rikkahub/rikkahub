@@ -187,6 +187,15 @@ private fun MainPage(vm: DebugVM) {
             Text("崩溃")
         }
 
+        Button(
+            onClick = {
+                vm.createOversizedConversation(60)
+                toaster.show("正在创建 30MB 超大对话...")
+            }
+        ) {
+            Text("创建超大对话 (30MB)")
+        }
+
         var markdown by remember { mutableStateOf("") }
         MarkdownBlock(markdown, modifier = Modifier.fillMaxWidth())
         MathBlock(markdown)
