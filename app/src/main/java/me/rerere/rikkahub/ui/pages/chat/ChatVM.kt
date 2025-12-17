@@ -499,6 +499,14 @@ class ChatVM(
         }
     }
 
+    fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
+        viewModelScope.launch {
+            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
+            val updatedConversation = conversationFull.copy(assistantId = targetAssistantId)
+            conversationRepo.updateConversation(updatedConversation)
+        }
+    }
+
     fun translateMessage(message: UIMessage, targetLanguage: Locale) {
         chatService.translateMessage(_conversationId, message, targetLanguage)
     }

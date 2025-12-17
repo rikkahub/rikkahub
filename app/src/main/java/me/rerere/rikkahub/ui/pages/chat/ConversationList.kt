@@ -50,6 +50,7 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
 import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.MoveRight
 import com.composables.icons.lucide.Pin
 import com.composables.icons.lucide.PinOff
 import com.composables.icons.lucide.RefreshCw
@@ -91,7 +92,8 @@ fun ColumnScope.ConversationList(
     onClick: (Conversation) -> Unit = {},
     onDelete: (Conversation) -> Unit = {},
     onRegenerateTitle: (Conversation) -> Unit = {},
-    onPin: (Conversation) -> Unit = {}
+    onPin: (Conversation) -> Unit = {},
+    onMoveToAssistant: (Conversation) -> Unit = {}
 ) {
     val navController = LocalNavController.current
 
@@ -203,6 +205,7 @@ fun ColumnScope.ConversationList(
                         onDelete = onDelete,
                         onRegenerateTitle = onRegenerateTitle,
                         onPin = onPin,
+                        onMoveToAssistant = onMoveToAssistant,
                         modifier = Modifier.animateItem()
                     )
                 }
@@ -272,6 +275,7 @@ private fun ConversationItem(
     onDelete: (Conversation) -> Unit = {},
     onRegenerateTitle: (Conversation) -> Unit = {},
     onPin: (Conversation) -> Unit = {},
+    onMoveToAssistant: (Conversation) -> Unit = {},
     onClick: (Conversation) -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -361,6 +365,19 @@ private fun ConversationItem(
                     },
                     leadingIcon = {
                         Icon(Lucide.RefreshCw, null)
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text(stringResource(R.string.chat_page_move_to_assistant))
+                    },
+                    onClick = {
+                        onMoveToAssistant(conversation)
+                        showDropdownMenu = false
+                    },
+                    leadingIcon = {
+                        Icon(Lucide.MoveRight, null)
                     }
                 )
 

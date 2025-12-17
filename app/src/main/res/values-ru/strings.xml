@@ -40,6 +40,7 @@
   <string name="assistant_page_context_message_size">Размер контекстного сообщения</string>
   <string name="assistant_page_context_message_unlimited">Неограниченные контекстные сообщения</string>
   <string name="assistant_page_creative">Творческий</string>
+  <string name="assistant_page_current_assistant">Текущий ассистент</string>
   <string name="assistant_page_custom_bodies">Пользовательский контекст</string>
   <string name="assistant_page_custom_headers">Пользовательские заголовки</string>
   <string name="assistant_page_default_assistant">Ассистент по умолчанию</string>
@@ -205,6 +206,7 @@
   <string name="chat_page_history">История чата</string>
   <string name="chat_page_learning_mode">Режим обучения</string>
   <string name="chat_page_learning_mode_desc">Поможет вам постепенно усваивать знания</string>
+  <string name="chat_page_move_to_assistant">Перейти к ассистенту</string>
   <string name="chat_page_new_chat">Новый чат</string>
   <string name="chat_page_new_message">Новое сообщение</string>
   <string name="chat_page_nickname_placeholder">Введите никнейм</string>

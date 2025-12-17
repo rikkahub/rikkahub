@@ -756,4 +756,6 @@
   <string name="setting_provider_page_deselect_models">Deselect All</string>
   <string name="setting_provider_page_select_all">Select All (%1$d)</string>
     <string name="assistant_page_context_message_unlimited">Unlimited context messages</string>
+    <string name="chat_page_move_to_assistant">Move to Assistant</string>
+  <string name="assistant_page_current_assistant">Current Assistant</string>
 </resources>

@@ -40,6 +40,7 @@
   <string name="assistant_page_context_message_size">컨텍스트 메시지 수</string>
   <string name="assistant_page_context_message_unlimited">무제한 컨텍스트 메시지</string>
   <string name="assistant_page_creative">창의적</string>
+  <string name="assistant_page_current_assistant">현재 어시스턴트</string>
   <string name="assistant_page_custom_bodies">사용자 정의 본문</string>
   <string name="assistant_page_custom_headers">사용자 정의 헤더</string>
   <string name="assistant_page_default_assistant">기본 어시스턴트</string>
@@ -205,6 +206,7 @@
   <string name="chat_page_history">채팅 기록</string>
   <string name="chat_page_learning_mode">학습 모드</string>
   <string name="chat_page_learning_mode_desc">지식을 단계별로 배울 수 있도록 도와드립니다</string>
+  <string name="chat_page_move_to_assistant">어시스턴트로 이동</string>
   <string name="chat_page_new_chat">새 채팅</string>
   <string name="chat_page_new_message">새 메시지</string>
   <string name="chat_page_nickname_placeholder">이름을 입력하세요</string>

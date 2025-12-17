@@ -40,6 +40,7 @@
   <string name="assistant_page_context_message_size">コンテキストメッセージサイズ</string>
   <string name="assistant_page_context_message_unlimited">無制限のコンテキストメッセージ</string>
   <string name="assistant_page_creative">創造的</string>
+  <string name="assistant_page_current_assistant">現在のアシスタント</string>
   <string name="assistant_page_custom_bodies">カスタムボディ</string>
   <string name="assistant_page_custom_headers">カスタムヘッダー</string>
   <string name="assistant_page_default_assistant">デフォルトアシスタント</string>
@@ -205,6 +206,7 @@
   <string name="chat_page_history">チャット履歴</string>
   <string name="chat_page_learning_mode">学習モード</string>
   <string name="chat_page_learning_mode_desc">知識を段階的に学習できるようにサポートします</string>
+  <string name="chat_page_move_to_assistant">アシスタントに移動</string>
   <string name="chat_page_new_chat">新しいチャット</string>
   <string name="chat_page_new_message">新しいメッセージ</string>
   <string name="chat_page_nickname_placeholder">ニックネームを入力してください</string>

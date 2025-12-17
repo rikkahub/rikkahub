@@ -40,6 +40,7 @@
   <string name="assistant_page_context_message_size">上下文消息数量</string>
   <string name="assistant_page_context_message_unlimited">无限制的上下文消息</string>
   <string name="assistant_page_creative">创造</string>
+  <string name="assistant_page_current_assistant">当前助手</string>
   <string name="assistant_page_custom_bodies">自定义 Body</string>
   <string name="assistant_page_custom_headers">自定义 Headers</string>
   <string name="assistant_page_default_assistant">默认助手</string>
@@ -205,6 +206,7 @@
   <string name="chat_page_history">聊天历史</string>
   <string name="chat_page_learning_mode">学习模式</string>
   <string name="chat_page_learning_mode_desc">帮助你循序渐进地学习知识</string>
+  <string name="chat_page_move_to_assistant">移至助手</string>
   <string name="chat_page_new_chat">新聊天</string>
   <string name="chat_page_new_message">新消息</string>
   <string name="chat_page_nickname_placeholder">请输入昵称</string>
