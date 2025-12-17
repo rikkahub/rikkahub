@@ -1141,15 +1141,13 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                             mime = mime
                         )
                     } else {
+                        toaster.show("不支持的文件类型: $fileName", type = ToastType.Error)
                         null
                     }
                 }
 
                 if (documents.isNotEmpty()) {
                     onAddFiles(documents)
-                } else {
-                    // Show toast for unsupported file types
-                    toaster.show("不支持的文件类型", type = ToastType.Error)
                 }
             }
         }
