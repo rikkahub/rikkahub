@@ -33,6 +33,16 @@
 
   <!-- Chat Page -->
   <string name="chat_page_no_conversations">No conversations</string>
+
+  <!-- Chat Welcome Suggestions -->
+  <string name="chat_welcome_suggestion_writing_title">Help me write</string>
+  <string name="chat_welcome_suggestion_writing_prompt">Help me write an article about</string>
+  <string name="chat_welcome_suggestion_programming_title">Programming assistant</string>
+  <string name="chat_welcome_suggestion_programming_prompt">Please help me write code to</string>
+  <string name="chat_welcome_suggestion_brainstorm_title">Brainstorm</string>
+  <string name="chat_welcome_suggestion_brainstorm_prompt">Help me brainstorm about</string>
+  <string name="chat_welcome_suggestion_explain_title">Explain concept</string>
+  <string name="chat_welcome_suggestion_explain_prompt">Please explain in simple terms</string>
   <string name="chat_page_new_message">New message</string>
   <string name="chat_page_today">Today</string>
   <string name="chat_page_yesterday">Yesterday</string>

@@ -249,6 +249,7 @@ class ChatService(
             val newConversation = Conversation.ofId(
                 id = conversationId,
                 assistantId = assistant.id,
+                newConversation = true
             ).updateCurrentMessages(assistant.presetMessages)
             updateConversation(conversationId, newConversation)
         }

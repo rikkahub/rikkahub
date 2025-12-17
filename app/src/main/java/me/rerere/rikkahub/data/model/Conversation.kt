@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.model
 import android.net.Uri
 import androidx.core.net.toUri
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -11,21 +12,9 @@ import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANT_ID
 import java.time.Instant
 import kotlin.uuid.Uuid
 
-/**
- * 精简版的会话信息，用于列表显示，不包含消息内容以避免 OOM
- */
-data class ConversationSummary(
-    val id: Uuid,
-    val assistantId: Uuid,
-    val title: String,
-    val isPinned: Boolean = false,
-    val createAt: Instant,
-    val updateAt: Instant,
-)
-
 @Serializable
 data class Conversation(
-    val id: Uuid = Uuid.Companion.random(),
+    val id: Uuid = Uuid.random(),
     val assistantId: Uuid,
     val title: String = "",
     val messageNodes: List<MessageNode>,
@@ -36,6 +25,8 @@ data class Conversation(
     val createAt: Instant = Instant.now(),
     @Serializable(with = InstantSerializer::class)
     val updateAt: Instant = Instant.now(),
+    @Transient
+    val newConversation: Boolean = false
 ) {
     val files: List<Uri>
         get() {
@@ -121,10 +112,12 @@ data class Conversation(
             id: Uuid,
             assistantId: Uuid = DEFAULT_ASSISTANT_ID,
             messages: List<MessageNode> = emptyList(),
+            newConversation: Boolean = false
         ) = Conversation(
             id = id,
             assistantId = assistantId,
-            messageNodes = messages
+            messageNodes = messages,
+            newConversation = newConversation,
         )
     }
 }

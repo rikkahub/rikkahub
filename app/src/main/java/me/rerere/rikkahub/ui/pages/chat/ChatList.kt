@@ -71,6 +71,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceAtLeast
+import androidx.compose.ui.zIndex
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
@@ -209,6 +210,16 @@ private fun SharedTransitionScope.ChatListNormal(
         modifier = Modifier
             .fillMaxSize(),
     ) {
+        // 欢迎界面 - 当对话为空时显示
+        if (conversation.newConversation && conversation.messageNodes.isEmpty()) {
+            ChatWelcome(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .zIndex(5f),
+                onClickSuggestion = onClickSuggestion
+            )
+        }
+
         // 自动滚动到底部
         LaunchedEffect(state) {
             snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
@@ -578,7 +589,8 @@ private fun SharedTransitionScope.ChatListPreview(
                 val isUser = message.role == me.rerere.ai.core.MessageRole.USER
                 val originalIndex = conversation.messageNodes.indexOf(node)
                 Column(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
                         .then(
                             if (!isUser) Modifier.padding(end = 24.dp) else Modifier
                         ),
