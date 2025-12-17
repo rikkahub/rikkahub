@@ -222,15 +222,6 @@ private fun AssistantItem(
                 overflow = TextOverflow.Ellipsis
             )
         },
-        supportingContent = {
-            Text(
-                text = assistant.systemPrompt.ifBlank { stringResource(R.string.assistant_page_no_system_prompt) },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-        },
         leadingContent = {
             UIAvatar(
                 name = assistant.name.ifEmpty { defaultAssistantName },
