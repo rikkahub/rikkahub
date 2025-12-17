@@ -195,6 +195,16 @@ private fun SharedTransitionScope.ChatListNormal(
     // 自动跟随键盘滚动
     ImeLazyListAutoScroller(lazyListState = state)
 
+    // 对话大小警告对话框
+    val sizeInfo = rememberConversationSizeInfo(conversation)
+    var showSizeWarningDialog by remember { mutableStateOf(true) }
+    if (sizeInfo.showWarning && showSizeWarningDialog) {
+        ConversationSizeWarningDialog(
+            sizeInfo = sizeInfo,
+            onDismiss = { showSizeWarningDialog = false }
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize(),

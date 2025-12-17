@@ -94,6 +94,7 @@
   <string name="assistant_page_strict">Строгий</string>
   <string name="assistant_page_system_prompt">Системный промпт</string>
   <string name="assistant_page_tab_basic">Основные настройки</string>
+  <string name="assistant_page_tab_injections">Внедрение подсказок</string>
   <string name="assistant_page_tab_local_tools">Локальные инструменты</string>
   <string name="assistant_page_tab_mcp">MCP</string>
   <string name="assistant_page_tab_memory">Память</string>
@@ -218,6 +219,8 @@
   <string name="chat_page_search_placeholder">Поиск чатов</string>
   <string name="chat_page_today">Сегодня</string>
   <string name="chat_page_yesterday">Вчера</string>
+  <string name="chat_size_dialog_content">Текущий размер: %.2f МБ. Это может привести к вылету или зависанию приложения, а также к потере данных этой беседы. Пожалуйста, создайте новый чат как можно скорее, чтобы продолжить общение.</string>
+  <string name="chat_size_dialog_title">Данные этого разговора слишком большие</string>
   <string name="citations_count">%1$d цитирований</string>
   <string name="code_block_collapse">Свернуть</string>
   <string name="code_block_copy">Копировать код</string>

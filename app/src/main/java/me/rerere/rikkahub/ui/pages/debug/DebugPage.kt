@@ -189,7 +189,7 @@ private fun MainPage(vm: DebugVM) {
 
         Button(
             onClick = {
-                vm.createOversizedConversation(60)
+                vm.createOversizedConversation(30)
                 toaster.show("正在创建 30MB 超大对话...")
             }
         ) {

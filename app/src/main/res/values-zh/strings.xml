@@ -94,8 +94,8 @@
   <string name="assistant_page_strict">严谨</string>
   <string name="assistant_page_system_prompt">系统提示词</string>
   <string name="assistant_page_tab_basic">基础设定</string>
-  <string name="assistant_page_tab_local_tools">本地工具</string>
   <string name="assistant_page_tab_injections">提示词注入</string>
+  <string name="assistant_page_tab_local_tools">本地工具</string>
   <string name="assistant_page_tab_mcp">MCP</string>
   <string name="assistant_page_tab_memory">记忆</string>
   <string name="assistant_page_tab_prompt">提示词</string>
@@ -219,6 +219,8 @@
   <string name="chat_page_search_placeholder">搜索聊天记录</string>
   <string name="chat_page_today">今天</string>
   <string name="chat_page_yesterday">昨天</string>
+  <string name="chat_size_dialog_content">当前大小：%.2f MB。这可能导致应用崩溃或卡顿，甚至丢失本次对话数据。请尽快新建对话以继续聊天。</string>
+  <string name="chat_size_dialog_title">此对话数据过大</string>
   <string name="citations_count">%1$d 条引用</string>
   <string name="code_block_collapse">折叠</string>
   <string name="code_block_copy">复制代码</string>
