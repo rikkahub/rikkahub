@@ -4,7 +4,7 @@ enum class ReasoningLevel(
     val budgetTokens: Int,
     val effort: String
 ) {
-    OFF(0, "minimal"),
+    OFF(0, "none"),
     AUTO(-1, "auto"),
     LOW(1024, "low"),
     MEDIUM(16_000, "medium"),
