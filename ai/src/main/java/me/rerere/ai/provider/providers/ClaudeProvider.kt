@@ -43,6 +43,7 @@ import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
+import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -474,7 +475,8 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             promptTokens = jsonObject["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             completionTokens = jsonObject["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             totalTokens = (jsonObject["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0) +
-                (jsonObject["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0)
+                (jsonObject["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0),
+            cachedTokens = jsonObject["cache_read_input_tokens"]?.jsonPrimitiveOrNull?.intOrNull ?: 0,
         )
     }
 }
