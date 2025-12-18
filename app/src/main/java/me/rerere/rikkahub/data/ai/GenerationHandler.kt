@@ -266,9 +266,15 @@ class GenerationHandler(
                     append(tool.systemPrompt(model, messages))
                 }
             }
-            if (system.isNotBlank()) add(UIMessage.system(system))
+            if (system.isNotBlank()) add(UIMessage.system(prompt = system))
             addAll(messages.truncate(truncateIndex).limitContext(assistant.contextMessageSize))
-        }.transforms(transformers, context, model, assistant, settings)
+        }.transforms(
+            transformers = transformers,
+            context = context,
+            model = model,
+            assistant = assistant,
+            settings = settings
+        )
 
         var messages: List<UIMessage> = messages
         val params = TextGenerationParams(
