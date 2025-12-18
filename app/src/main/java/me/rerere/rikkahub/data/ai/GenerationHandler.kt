@@ -117,7 +117,8 @@ class GenerationHandler(
                         transformers = outputTransformers,
                         context = context,
                         model = model,
-                        assistant = assistant
+                        assistant = assistant,
+                        settings = settings
                     )
                     emit(
                         GenerationChunk.Messages(
@@ -125,7 +126,8 @@ class GenerationHandler(
                                 transformers = outputTransformers,
                                 context = context,
                                 model = model,
-                                assistant = assistant
+                                assistant = assistant,
+                                settings = settings
                             )
                         )
                     )
@@ -143,13 +145,15 @@ class GenerationHandler(
                 transformers = outputTransformers,
                 context = context,
                 model = model,
-                assistant = assistant
+                assistant = assistant,
+                settings = settings
             )
             messages = messages.onGenerationFinish(
                 transformers = outputTransformers,
                 context = context,
                 model = model,
-                assistant = assistant
+                assistant = assistant,
+                settings = settings
             )
             messages = messages.slice(0 until messages.lastIndex) + messages.last().copy(
                 finishedAt = Clock.System.now()
@@ -209,7 +213,8 @@ class GenerationHandler(
                         transformers = outputTransformers,
                         context = context,
                         model = model,
-                        assistant = assistant
+                        assistant = assistant,
+                        settings = settings
                     )
                 )
             )
@@ -263,7 +268,7 @@ class GenerationHandler(
             }
             if (system.isNotBlank()) add(UIMessage.system(system))
             addAll(messages.truncate(truncateIndex).limitContext(assistant.contextMessageSize))
-        }.transforms(transformers, context, model, assistant)
+        }.transforms(transformers, context, model, assistant, settings)
 
         var messages: List<UIMessage> = messages
         val params = TextGenerationParams(

@@ -3,12 +3,14 @@ package me.rerere.rikkahub.data.ai.transformers
 import android.content.Context
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 
 class TransformerContext(
     val context: Context,
     val model: Model,
     val assistant: Assistant,
+    val settings: Settings,
 )
 
 interface MessageTransformer {
@@ -58,8 +60,9 @@ suspend fun List<UIMessage>.transforms(
     context: Context,
     model: Model,
     assistant: Assistant,
+    settings: Settings,
 ): List<UIMessage> {
-    val ctx = TransformerContext(context, model, assistant)
+    val ctx = TransformerContext(context, model, assistant, settings)
     return transformers.fold(this) { acc, transformer ->
         transformer.transform(ctx, acc)
     }
@@ -70,8 +73,9 @@ suspend fun List<UIMessage>.visualTransforms(
     context: Context,
     model: Model,
     assistant: Assistant,
+    settings: Settings,
 ): List<UIMessage> {
-    val ctx = TransformerContext(context, model, assistant)
+    val ctx = TransformerContext(context, model, assistant, settings)
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {
             transformer.visualTransform(ctx, acc)
@@ -86,8 +90,9 @@ suspend fun List<UIMessage>.onGenerationFinish(
     context: Context,
     model: Model,
     assistant: Assistant,
+    settings: Settings,
 ): List<UIMessage> {
-    val ctx = TransformerContext(context, model, assistant)
+    val ctx = TransformerContext(context, model, assistant, settings)
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {
             transformer.onGenerationFinish(ctx, acc)

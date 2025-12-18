@@ -68,6 +68,7 @@ fun AssistantDetailPage(id: String) {
     val memories by vm.memories.collectAsStateWithLifecycle()
     val providers by vm.providers.collectAsStateWithLifecycle()
     val tags by vm.tags.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
 
     fun onUpdate(assistant: Assistant) {
         vm.update(assistant)
@@ -141,6 +142,7 @@ fun AssistantDetailPage(id: String) {
                     1 -> {
                         AssistantPromptSubPage(
                             assistant = assistant,
+                            settings = settings,
                             onUpdate = {
                                 onUpdate(it)
                             }

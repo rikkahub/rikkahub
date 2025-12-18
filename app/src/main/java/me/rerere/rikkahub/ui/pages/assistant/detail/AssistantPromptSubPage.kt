@@ -75,6 +75,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.transformers.DefaultPlaceholderProvider
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.TransformerContext
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
@@ -96,6 +97,7 @@ import kotlin.uuid.Uuid
 @Composable
 fun AssistantPromptSubPage(
     assistant: Assistant,
+    settings: Settings,
     onUpdate: (Assistant) -> Unit
 ) {
     val context = LocalContext.current
@@ -278,7 +280,8 @@ fun AssistantPromptSubPage(
                                 ctx = TransformerContext(
                                     context = context,
                                     model = Model(modelId = "gpt-4o", displayName = "GPT-4o"),
-                                    assistant = assistant
+                                    assistant = assistant,
+                                    settings = settings
                                 ),
                                 messages = rawMessages
                             )
