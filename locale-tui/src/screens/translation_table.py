@@ -27,6 +27,7 @@ class TranslationTableScreen(Screen):
         Binding("escape", "go_back", "Back"),
         Binding("t", "translate_missing", "Translate"),
         Binding("d", "toggle_dead_filter", "Dead Filter"),
+        Binding("m", "toggle_missing_filter", "Missing Filter"),
         Binding("slash", "focus_search", "Search"),
         Binding("delete", "delete_entry", "Delete"),
         Binding("s", "save_all", "Save"),
@@ -41,6 +42,7 @@ class TranslationTableScreen(Screen):
         self.entries: list[TranslationEntry] = []
         self.filtered_entries: list[TranslationEntry] = []
         self.show_dead_only = False
+        self.show_missing_only = False
         self.search_query = ""
         self.has_unsaved_changes = False
 
@@ -82,6 +84,9 @@ class TranslationTableScreen(Screen):
 
         # Load data
         self.load_entries()
+
+        # Focus table by default
+        table.focus()
 
     def load_entries(self) -> None:
         """Load all translation entries."""
@@ -126,6 +131,14 @@ class TranslationTableScreen(Screen):
         # Apply dead filter
         if self.show_dead_only:
             self.filtered_entries = [e for e in self.filtered_entries if e.is_dead]
+
+        # Apply missing filter
+        if self.show_missing_only:
+            lang_codes = self.config.get_language_codes()
+            self.filtered_entries = [
+                e for e in self.filtered_entries
+                if e.has_missing_translations(lang_codes)
+            ]
 
         # Apply search
         if self.search_query:
@@ -182,6 +195,8 @@ class TranslationTableScreen(Screen):
         filter_text = []
         if self.show_dead_only:
             filter_text.append("[cyan]Dead Only[/cyan]")
+        if self.show_missing_only:
+            filter_text.append("[cyan]Missing Only[/cyan]")
         if self.search_query:
             filter_text.append(f"[cyan]Search: {self.search_query}[/cyan]")
 
@@ -214,6 +229,13 @@ class TranslationTableScreen(Screen):
         self.apply_filters()
         self.update_status()
         self.notify(f"Dead filter: {'ON' if self.show_dead_only else 'OFF'}")
+
+    def action_toggle_missing_filter(self) -> None:
+        """Toggle missing translation filter."""
+        self.show_missing_only = not self.show_missing_only
+        self.apply_filters()
+        self.update_status()
+        self.notify(f"Missing filter: {'ON' if self.show_missing_only else 'OFF'}")
 
     def action_edit_entry(self) -> None:
         """Edit current selected entry."""

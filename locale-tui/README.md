@@ -18,6 +18,7 @@ Android 语言文件翻译管理 TUI 工具。
 | `Enter` | 选择/编辑 |
 | `t` | AI翻译缺失条目 |
 | `d` | 切换Dead Entry过滤 |
+| `m` | 切换Missing过滤 |
 | `/` | 聚焦搜索框 |
 | `Delete` | 删除条目 |
 | `s` | 保存更改 |
