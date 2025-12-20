@@ -56,6 +56,7 @@ import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
+import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
@@ -86,6 +87,7 @@ private val inputTransformers by lazy {
         PlaceholderTransformer,
         DocumentAsPromptTransformer,
         OcrTransformer,
+        PromptInjectionTransformer,
     )
 }
 
