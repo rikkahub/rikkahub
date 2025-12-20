@@ -1,10 +1,11 @@
 [project]
 name = "locale-tui"
 version = "0.1.0"
-description = "Add your description here"
+description = "Android Locale Manager - 管理和翻译 Android 字符串资源"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
+    "click>=8.3.1",
     "lxml>=6.0.2",
     "openai>=2.14.0",
     "python-dotenv>=1.2.1",
