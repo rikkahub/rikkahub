@@ -214,6 +214,8 @@ class SettingsStore(
         .map { settings ->
             // 去重并清理无效引用
             val validMcpServerIds = settings.mcpServers.map { it.id }.toSet()
+            val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
+            val validWorldBookIds = settings.worldBooks.map { it.id }.toSet()
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
@@ -235,6 +237,14 @@ class SettingsStore(
                         // 过滤掉不存在的 MCP 服务器 ID
                         mcpServers = assistant.mcpServers.filter { serverId ->
                             serverId in validMcpServerIds
+                        }.toSet(),
+                        // 过滤掉不存在的模式注入 ID
+                        modeInjectionIds = assistant.modeInjectionIds.filter { id ->
+                            id in validModeInjectionIds
+                        }.toSet(),
+                        // 过滤掉不存在的世界书 ID
+                        worldBookIds = assistant.worldBookIds.filter { id ->
+                            id in validWorldBookIds
                         }.toSet()
                     )
                 },
