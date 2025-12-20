@@ -205,8 +205,6 @@
   <string name="chat_page_export_share_via">共有方法</string>
   <string name="chat_page_export_success">%1$sにエクスポートしました</string>
   <string name="chat_page_history">チャット履歴</string>
-  <string name="chat_page_learning_mode">学習モード</string>
-  <string name="chat_page_learning_mode_desc">知識を段階的に学習できるようにサポートします</string>
   <string name="chat_page_move_to_assistant">アシスタントに移動</string>
   <string name="chat_page_new_chat">新しいチャット</string>
   <string name="chat_page_new_message">新しいメッセージ</string>
@@ -432,8 +430,6 @@
   <string name="setting_mcp_page_url_label">URL</string>
   <string name="setting_model_page_chat_model">チャットモデル</string>
   <string name="setting_model_page_chat_model_desc">グローバルデフォルトチャットモデル</string>
-  <string name="setting_model_page_learning_mode">学習モードプロンプト</string>
-  <string name="setting_model_page_learning_mode_desc">学習モードで使用するプロンプトを設定します</string>
   <string name="setting_model_page_ocr_model">OCRモデル</string>
   <string name="setting_model_page_ocr_model_desc">画像の光学文字認識に使用されるモデル</string>
   <string name="setting_model_page_ocr_prompt_vars">変数: 画像データ: {images}</string>

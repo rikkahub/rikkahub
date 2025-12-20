@@ -34,7 +34,6 @@ data class Assistant(
     val mcpServers: Set<Uuid> = emptySet(),
     val localTools: List<LocalToolOption> = emptyList(),
     val background: String? = null,
-    val learningMode: Boolean = false,
     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
     val worldBookIds: Set<Uuid> = emptySet(),           // 关联的世界书 ID
 )

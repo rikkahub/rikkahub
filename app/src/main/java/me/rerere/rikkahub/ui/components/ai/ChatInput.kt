@@ -746,29 +746,6 @@ private fun FilesPicker(
         ListItem(
             leadingContent = {
                 Icon(
-                    imageVector = Lucide.GraduationCap,
-                    contentDescription = stringResource(R.string.chat_page_learning_mode),
-                )
-            },
-            headlineContent = {
-                Text(stringResource(R.string.chat_page_learning_mode))
-            },
-            supportingContent = {
-                Text(stringResource(R.string.chat_page_learning_mode_desc))
-            },
-            trailingContent = {
-                Switch(
-                    checked = assistant.learningMode,
-                    onCheckedChange = {
-                        onUpdateAssistant(assistant.copy(learningMode = it))
-                    }
-                )
-            },
-        )
-
-        ListItem(
-            leadingContent = {
-                Icon(
                     imageVector = Lucide.Eraser,
                     contentDescription = stringResource(R.string.chat_page_clear_context),
                 )

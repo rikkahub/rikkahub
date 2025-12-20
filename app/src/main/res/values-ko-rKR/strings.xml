@@ -205,8 +205,6 @@
   <string name="chat_page_export_share_via">공유 방법</string>
   <string name="chat_page_export_success">%1$s(으)로 내보내기 완료</string>
   <string name="chat_page_history">채팅 기록</string>
-  <string name="chat_page_learning_mode">학습 모드</string>
-  <string name="chat_page_learning_mode_desc">지식을 단계별로 배울 수 있도록 도와드립니다</string>
   <string name="chat_page_move_to_assistant">어시스턴트로 이동</string>
   <string name="chat_page_new_chat">새 채팅</string>
   <string name="chat_page_new_message">새 메시지</string>
@@ -432,8 +430,6 @@
   <string name="setting_mcp_page_url_label">URL</string>
   <string name="setting_model_page_chat_model">채팅 모델</string>
   <string name="setting_model_page_chat_model_desc">전역 기본 채팅 모델</string>
-  <string name="setting_model_page_learning_mode">학습 모드 프롬프트</string>
-  <string name="setting_model_page_learning_mode_desc">학습 모드에서 사용할 프롬프트를 설정합니다</string>
   <string name="setting_model_page_ocr_model">OCR 모델</string>
   <string name="setting_model_page_ocr_model_desc">이미지에서 광학 문자 인식에 사용되는 모델</string>
   <string name="setting_model_page_ocr_prompt_vars">변수: 이미지 데이터: {images}</string>

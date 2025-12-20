@@ -205,8 +205,6 @@
   <string name="chat_page_export_share_via">Поделиться через</string>
   <string name="chat_page_export_success">Экспортировано в %1$s</string>
   <string name="chat_page_history">История чата</string>
-  <string name="chat_page_learning_mode">Режим обучения</string>
-  <string name="chat_page_learning_mode_desc">Поможет вам постепенно усваивать знания</string>
   <string name="chat_page_move_to_assistant">Перейти к ассистенту</string>
   <string name="chat_page_new_chat">Новый чат</string>
   <string name="chat_page_new_message">Новое сообщение</string>
@@ -432,8 +430,6 @@
   <string name="setting_mcp_page_url_label">URL</string>
   <string name="setting_model_page_chat_model">Модель чата</string>
   <string name="setting_model_page_chat_model_desc">Глобальная модель чата по умолчанию</string>
-  <string name="setting_model_page_learning_mode">Запрос режима обучения</string>
-  <string name="setting_model_page_learning_mode_desc">Настроить подсказку, используемую в режиме обучения</string>
   <string name="setting_model_page_ocr_model">Модель OCR</string>
   <string name="setting_model_page_ocr_model_desc">Модель, используемая для оптического распознавания текста на изображениях</string>
   <string name="setting_model_page_ocr_prompt_vars">Переменные: Данные изображения: {images}</string>

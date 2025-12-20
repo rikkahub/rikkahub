@@ -205,8 +205,6 @@
   <string name="chat_page_export_share_via">分享方式</string>
   <string name="chat_page_export_success">已导出为%1$s</string>
   <string name="chat_page_history">聊天历史</string>
-  <string name="chat_page_learning_mode">学习模式</string>
-  <string name="chat_page_learning_mode_desc">帮助你循序渐进地学习知识</string>
   <string name="chat_page_move_to_assistant">移至助手</string>
   <string name="chat_page_new_chat">新聊天</string>
   <string name="chat_page_new_message">新消息</string>
@@ -432,8 +430,6 @@
   <string name="setting_mcp_page_url_label">URL</string>
   <string name="setting_model_page_chat_model">聊天模型</string>
   <string name="setting_model_page_chat_model_desc">全局默认的聊天模型</string>
-  <string name="setting_model_page_learning_mode">学习模式提示</string>
-  <string name="setting_model_page_learning_mode_desc">配置用于学习模式的提示</string>
   <string name="setting_model_page_ocr_model">OCR 模型</string>
   <string name="setting_model_page_ocr_model_desc">用于图像光学字符识别的模型</string>
   <string name="setting_model_page_ocr_prompt_vars">变量：图像数据：{images}</string>
