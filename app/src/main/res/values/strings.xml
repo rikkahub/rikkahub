@@ -25,6 +25,7 @@
   <string name="assistant_importer_read_json_failed">Failed to read JSON</string>
   <string name="assistant_importer_unsupported_file_type">Unsupported file type: %s</string>
   <string name="assistant_importer_unsupported_spec">Unsupported spec: %s</string>
+  <string name="assistant_page_actions">Actions</string>
   <string name="assistant_page_add">Add</string>
   <string name="assistant_page_add_body">Add Body</string>
   <string name="assistant_page_add_header">Add Header</string>
@@ -92,6 +93,7 @@
   <string name="assistant_page_remove">Remove</string>
   <string name="assistant_page_remove_background">Remove Background</string>
   <string name="assistant_page_save">Save</string>
+  <string name="assistant_page_search_placeholder">Search assistants</string>
   <string name="assistant_page_select_background">Select Background Image</string>
   <string name="assistant_page_select_from_gallery">Select from Gallery</string>
   <string name="assistant_page_stream_output">Stream Output</string>

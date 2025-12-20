@@ -25,6 +25,7 @@
   <string name="assistant_importer_read_json_failed">JSONの読み取りに失敗しました</string>
   <string name="assistant_importer_unsupported_file_type">サポートされていないファイルタイプ: %s</string>
   <string name="assistant_importer_unsupported_spec">サポートされていない仕様: %s</string>
+  <string name="assistant_page_actions">アクション</string>
   <string name="assistant_page_add">追加</string>
   <string name="assistant_page_add_body">ボディを追加</string>
   <string name="assistant_page_add_header">ヘッダーを追加</string>
@@ -92,6 +93,7 @@
   <string name="assistant_page_remove">削除</string>
   <string name="assistant_page_remove_background">背景を削除</string>
   <string name="assistant_page_save">保存</string>
+  <string name="assistant_page_search_placeholder">アシスタントを検索</string>
   <string name="assistant_page_select_background">背景画像を選択</string>
   <string name="assistant_page_select_from_gallery">ギャラリーから選択</string>
   <string name="assistant_page_stream_output">ストリーミング出力</string>

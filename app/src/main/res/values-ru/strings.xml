@@ -25,6 +25,7 @@
   <string name="assistant_importer_read_json_failed">Не удалось прочитать JSON</string>
   <string name="assistant_importer_unsupported_file_type">Неподдерживаемый тип файла: %s</string>
   <string name="assistant_importer_unsupported_spec">Неподдерживаемая спецификация: %s</string>
+  <string name="assistant_page_actions">Действия</string>
   <string name="assistant_page_add">Добавить</string>
   <string name="assistant_page_add_body">Добавить текст</string>
   <string name="assistant_page_add_header">Добавить заголовок</string>
@@ -92,6 +93,7 @@
   <string name="assistant_page_remove">Удалить</string>
   <string name="assistant_page_remove_background">Убрать фон</string>
   <string name="assistant_page_save">Сохранить</string>
+  <string name="assistant_page_search_placeholder">Поиск ассистентов</string>
   <string name="assistant_page_select_background">Выбрать фоновое изображение</string>
   <string name="assistant_page_select_from_gallery">Выбрать из галереи</string>
   <string name="assistant_page_stream_output">Потоковый вывод</string>

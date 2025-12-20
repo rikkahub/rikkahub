@@ -2,29 +2,27 @@ package me.rerere.rikkahub.ui.pages.assistant
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.items
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -42,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -50,10 +49,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Copy
-import com.composables.icons.lucide.GripHorizontal
+import com.composables.icons.lucide.EllipsisVertical
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Trash2
+import com.composables.icons.lucide.X
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
@@ -64,7 +65,6 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
-import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.EditState
@@ -75,7 +75,6 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
-import sh.calvin.reorderable.rememberReorderableLazyStaggeredGridState
 import kotlin.uuid.Uuid
 import androidx.compose.foundation.lazy.items as lazyItems
 
@@ -87,17 +86,21 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     }
     val navController = LocalNavController.current
 
+    // 搜索关键词状态
+    var searchQuery by remember { mutableStateOf("") }
     // 标签过滤状态
     var selectedTagIds by remember { mutableStateOf(emptySet<Uuid>()) }
+    // 操作菜单状态
+    var actionSheetAssistant by remember { mutableStateOf<Assistant?>(null) }
 
-    // 根据选中的标签过滤助手
-    val filteredAssistants = remember(settings.assistants, selectedTagIds) {
-        if (selectedTagIds.isEmpty()) {
-            settings.assistants
-        } else {
-            settings.assistants.filter { assistant ->
+    // 根据搜索关键词和选中的标签过滤助手
+    val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery) {
+        settings.assistants.filter { assistant ->
+            val matchesSearch = searchQuery.isBlank() ||
+                assistant.name.contains(searchQuery, ignoreCase = true)
+            val matchesTags = selectedTagIds.isEmpty() ||
                 assistant.tags.any { tagId -> tagId in selectedTagIds }
-            }
+            matchesSearch && matchesTags
         }
     }
 
@@ -123,9 +126,9 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 .consumeWindowInsets(it),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val lazyListState = rememberLazyStaggeredGridState()
-            val isFiltering = selectedTagIds.isNotEmpty()
-            val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
+            val lazyListState = rememberLazyListState()
+            val isFiltering = selectedTagIds.isNotEmpty() || searchQuery.isNotBlank()
+            val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
                 if (!isFiltering) {
                     val newAssistants = settings.assistants.toMutableList().apply {
                         add(to.index, removeAt(from.index))
@@ -134,6 +137,28 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 }
             }
             val haptic = LocalHapticFeedback.current
+
+            // 搜索框
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                placeholder = { Text(stringResource(R.string.assistant_page_search_placeholder)) },
+                leadingIcon = {
+                    Icon(Lucide.Search, contentDescription = null)
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotBlank()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Lucide.X, contentDescription = null)
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
 
             // 标签过滤器
             AssistantTagsFilterRow(
@@ -145,17 +170,15 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 }
             )
 
-            LazyVerticalStaggeredGrid(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .imePadding(),
-                contentPadding = PaddingValues(16.dp),
-                verticalItemSpacing = 8.dp,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 state = lazyListState,
-                columns = StaggeredGridCells.Fixed(2)
             ) {
-                items(filteredAssistants, key = { assistant -> assistant.id }) { assistant ->
+                lazyItems(filteredAssistants, key = { assistant -> assistant.id }) { assistant ->
                     ReorderableItem(
                         state = reorderableState, key = assistant.id
                     ) { isDragging ->
@@ -169,30 +192,28 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                             onEdit = {
                                 navController.navigate(Screen.AssistantDetail(id = assistant.id.toString()))
                             },
-                            onDelete = {
-                                vm.removeAssistant(assistant)
-                            },
-                            onCopy = {
-                                vm.copyAssistant(assistant)
+                            onShowActions = {
+                                actionSheetAssistant = assistant
                             },
                             modifier = Modifier
                                 .scale(if (isDragging) 0.95f else 1f)
                                 .fillMaxWidth()
-                                .animateItem(),
-                            dragHandle = {
-                                // 只有在没有过滤时才显示拖拽手柄
-                                if (!isFiltering) {
-                                    Icon(
-                                        imageVector = Lucide.GripHorizontal,
-                                        contentDescription = null,
-                                        modifier = Modifier.longPressDraggableHandle(onDragStarted = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                        }, onDragStopped = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                        })
-                                    )
-                                }
-                            })
+                                .animateItem()
+                                .then(
+                                    if (!isFiltering) {
+                                        Modifier.longPressDraggableHandle(
+                                            onDragStarted = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                            },
+                                            onDragStopped = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                            }
+                                        )
+                                    } else {
+                                        Modifier
+                                    }
+                                )
+                        )
                     }
                 }
             }
@@ -200,6 +221,22 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     }
 
     AssistantCreationSheet(createState)
+
+    // 操作菜单 Bottom Sheet
+    actionSheetAssistant?.let { assistant ->
+        AssistantActionSheet(
+            assistant = assistant,
+            onDismiss = { actionSheetAssistant = null },
+            onCopy = {
+                vm.copyAssistant(assistant)
+                actionSheetAssistant = null
+            },
+            onDelete = {
+                vm.removeAssistant(assistant)
+                actionSheetAssistant = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -342,11 +379,8 @@ private fun AssistantItem(
     modifier: Modifier = Modifier,
     memories: List<AssistantMemory>,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onCopy: () -> Unit,
-    dragHandle: @Composable () -> Unit
+    onShowActions: () -> Unit,
 ) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
     Card(
         modifier = modifier.fillMaxWidth(),
         onClick = onEdit,
@@ -354,106 +388,159 @@ private fun AssistantItem(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                UIAvatar(
-                    name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
-                    value = assistant.avatar,
-                    modifier = Modifier.size(36.dp)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                dragHandle()
-            }
-
-            Text(
-                text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+            UIAvatar(
+                name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
+                value = assistant.avatar,
+                modifier = Modifier.size(48.dp)
             )
 
-            if (assistant.enableMemory) {
-                Tag(type = TagType.SUCCESS) {
-                    Text(stringResource(R.string.assistant_page_memory_count, memories.size))
-                }
-            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
 
-            if (assistant.tags.isNotEmpty()) {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
+                Text(
+                    text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    itemVerticalAlignment = Alignment.CenterVertically,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    assistant.tags.fastForEach { tagId ->
-                        val tag = settings.assistantTags.find { it.id == tagId } ?: return@fastForEach
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                        ) {
+                    if (assistant.enableMemory) {
+                        Tag(type = TagType.SUCCESS) {
+                            Text(stringResource(R.string.assistant_page_memory_count, memories.size))
+                        }
+                    }
+
+                    if (assistant.tags.isNotEmpty()) {
+                        assistant.tags.take(2).fastForEach { tagId ->
+                            val tag = settings.assistantTags.find { it.id == tagId }
+                                ?: return@fastForEach
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                            ) {
+                                Text(
+                                    text = tag.name,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        if (assistant.tags.size > 2) {
                             Text(
-                                text = tag.name,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelMedium,
+                                text = "+${assistant.tags.size - 2}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            IconButton(
+                onClick = onShowActions
             ) {
-                if (assistant.id !in DEFAULT_ASSISTANTS_IDS) {
-                    Tooltip(tooltip = { Text(stringResource(R.string.assistant_page_delete)) }) {
-                        Icon(
-                            imageVector = Lucide.Trash2,
-                            contentDescription = stringResource(R.string.assistant_page_delete),
-                            modifier = Modifier
-                                .onClick {
-                                    showDeleteDialog = true
-                                }
-                                .size(18.dp),
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.65f),
-                        )
-                    }
-                }
-                Tooltip(tooltip = { Text(stringResource(R.string.assistant_page_clone)) }) {
-                    Icon(
-                        imageVector = Lucide.Copy,
-                        contentDescription = stringResource(R.string.assistant_page_clone),
-                        modifier = Modifier
-                            .onClick {
-                                onCopy()
-                            }
-                            .size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f))
-                }
+                Icon(
+                    imageVector = Lucide.EllipsisVertical,
+                    contentDescription = stringResource(R.string.assistant_page_actions)
+                )
             }
         }
     }
+}
+
+@Composable
+private fun AssistantActionSheet(
+    assistant: Assistant,
+    onDismiss: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+        ) {
+            // 助手信息头部
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                UIAvatar(
+                    name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
+                    value = assistant.avatar,
+                    modifier = Modifier.size(40.dp)
+                )
+                Text(
+                    text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // 克隆选项
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.assistant_page_clone)) },
+                leadingContent = {
+                    Icon(
+                        imageVector = Lucide.Copy,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                modifier = Modifier.onClick { onCopy() },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            // 删除选项（仅非默认助手显示）
+            if (assistant.id !in DEFAULT_ASSISTANTS_IDS) {
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            stringResource(R.string.assistant_page_delete),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Lucide.Trash2,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    modifier = Modifier.onClick { showDeleteDialog = true },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            }
+        }
+    }
+
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = {
-                showDeleteDialog = false
-            },
-            title = {
-                Text(stringResource(R.string.assistant_page_delete))
-            },
-            text = {
-                Text(stringResource(R.string.assistant_page_delete_dialog_text))
-            },
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text(stringResource(R.string.assistant_page_delete)) },
+            text = { Text(stringResource(R.string.assistant_page_delete_dialog_text)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -464,10 +551,7 @@ private fun AssistantItem(
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteDialog = false
-                    }) {
+                TextButton(onClick = { showDeleteDialog = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             },

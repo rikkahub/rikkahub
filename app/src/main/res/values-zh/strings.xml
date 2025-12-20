@@ -25,6 +25,7 @@
   <string name="assistant_importer_read_json_failed">读取JSON失败</string>
   <string name="assistant_importer_unsupported_file_type">不支持的文件类型: %s</string>
   <string name="assistant_importer_unsupported_spec">不支持的规格: %s</string>
+  <string name="assistant_page_actions">操作</string>
   <string name="assistant_page_add">添加</string>
   <string name="assistant_page_add_body">添加 Body</string>
   <string name="assistant_page_add_header">添加 Header</string>
@@ -92,6 +93,7 @@
   <string name="assistant_page_remove">移除</string>
   <string name="assistant_page_remove_background">移除背景</string>
   <string name="assistant_page_save">保存</string>
+  <string name="assistant_page_search_placeholder">搜索助手</string>
   <string name="assistant_page_select_background">选择背景图片</string>
   <string name="assistant_page_select_from_gallery">从相册选择</string>
   <string name="assistant_page_stream_output">流式输出</string>

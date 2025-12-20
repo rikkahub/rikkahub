@@ -25,6 +25,7 @@
   <string name="assistant_importer_read_json_failed">JSON 읽기 실패</string>
   <string name="assistant_importer_unsupported_file_type">지원되지 않는 파일 형식: %s</string>
   <string name="assistant_importer_unsupported_spec">지원되지 않는 사양: %s</string>
+  <string name="assistant_page_actions">작업</string>
   <string name="assistant_page_add">추가</string>
   <string name="assistant_page_add_body">본문 추가</string>
   <string name="assistant_page_add_header">헤더 추가</string>
@@ -92,6 +93,7 @@
   <string name="assistant_page_remove">제거</string>
   <string name="assistant_page_remove_background">배경 제거</string>
   <string name="assistant_page_save">저장</string>
+  <string name="assistant_page_search_placeholder">어시스턴트 검색</string>
   <string name="assistant_page_select_background">배경 이미지 선택</string>
   <string name="assistant_page_select_from_gallery">갤러리에서 선택</string>
   <string name="assistant_page_stream_output">스트리밍 출력</string>
