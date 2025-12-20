@@ -14,7 +14,8 @@ class StringsXmlParser:
             return {}
 
         try:
-            tree = etree.parse(str(file_path))
+            with open(file_path, 'r', encoding='utf-8') as f:
+                tree = etree.parse(f)
             root = tree.getroot()
             result = {}
 
@@ -61,7 +62,8 @@ class StringsXmlParser:
             StringsXmlParser.write(file_path, {key: value})
             return
 
-        tree = etree.parse(str(file_path))
+        with open(file_path, 'r', encoding='utf-8') as f:
+            tree = etree.parse(f)
         root = tree.getroot()
 
         # Find existing entry
@@ -88,7 +90,8 @@ class StringsXmlParser:
         if not file_path.exists():
             return False
 
-        tree = etree.parse(str(file_path))
+        with open(file_path, 'r', encoding='utf-8') as f:
+            tree = etree.parse(f)
         root = tree.getroot()
 
         for string_elem in root.findall("string"):

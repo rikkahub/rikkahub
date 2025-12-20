@@ -141,7 +141,7 @@ def add(key: str, value: str, module: str, skip_translate: bool):
                         entry.set_translation(lang_code, translated_value)
 
                         # Save to file
-                        target_file = res_dir / f"values-{lang_code}" / "strings.xml"
+                        target_file = res_dir / lang_code / "strings.xml"
                         StringsXmlParser.update_entry(target_file, key, translated_value)
 
                         click.echo(f" ✓ {translated_value}")
