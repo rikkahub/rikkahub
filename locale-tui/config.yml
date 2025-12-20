@@ -1,0 +1,62 @@
+# locale-tui 配置文件
+
+# 项目根路径 (相对于 locale-tui 目录)
+project_root: ".."
+
+# 模块配置
+modules:
+  - name: "app"
+    res_path: "app/src/main/res"
+    source_patterns:
+      - "app/src/main/java/**/*.kt"
+      - "app/src/main/java/**/*.java"
+  - name: "search"
+    res_path: "search/src/main/res"
+    source_patterns:
+      - "search/src/main/java/**/*.kt"
+      - "search/src/main/java/**/*.java"
+
+# 支持的语言列表
+languages:
+  - code: "values"
+    name: "English"
+    is_source: true
+  - code: "values-zh"
+    name: "Chinese (Simplified)"
+  - code: "values-zh-rTW"
+    name: "Chinese (Traditional)"
+  - code: "values-ja"
+    name: "Japanese"
+  - code: "values-ko-rKR"
+    name: "Korean"
+  - code: "values-ru"
+    name: "Russian"
+
+# AI 翻译配置
+translation:
+  batch_size: 10
+  model: "moonshotai/kimi-k2-0905"
+  prompt_template: |
+    You are a professional translator specializing in mobile app localization.
+
+    Translate the following Android app string resources from English to {target_language}.
+
+    Important guidelines:
+    1. Preserve all Android string placeholders like %1$s, %1$d, %s, %d exactly as they are
+    2. Keep special characters like \n, \', &amp;, etc.
+    3. Maintain the same tone and style (formal/informal) as the source
+    4. For UI text, keep it concise
+    5. Do not translate brand names or technical terms that should remain in English
+
+    Source strings (JSON format):
+    {source_strings}
+
+    Respond with a JSON object mapping the same keys to translated values.
+    Only output the JSON, no other text.
+
+# 显示设置
+display:
+  column_widths:
+    key: 30
+    translation: 25
+  page_size: 50

@@ -1,0 +1,109 @@
+/* Global styles */
+Screen {
+    background: $surface;
+}
+
+/* Status bar */
+#status-bar {
+    height: 1;
+    padding: 0 1;
+    background: $primary-background;
+}
+
+#status-bar > Static {
+    width: 1fr;
+}
+
+/* Search box */
+#search {
+    margin: 1 0;
+}
+
+/* Progress bar */
+#progress {
+    margin: 1 0;
+}
+
+/* Main container */
+#main-container {
+    padding: 1;
+}
+
+#content {
+    height: 100%;
+}
+
+/* Table styles */
+#table {
+    height: 1fr;
+}
+
+DataTable > .datatable--header {
+    background: $primary;
+    color: $text;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: $accent;
+}
+
+/* Module selection screen */
+#title {
+    text-align: center;
+    padding: 1;
+    text-style: bold;
+}
+
+#module-list {
+    height: 1fr;
+    margin: 1 2;
+}
+
+#module-list > ListItem {
+    padding: 1 2;
+}
+
+#module-list > ListItem:hover {
+    background: $accent 30%;
+}
+
+/* Edit modal */
+#edit-modal {
+    width: 80%;
+    height: 80%;
+    background: $surface;
+    border: solid $primary;
+    padding: 1 2;
+}
+
+#modal-title {
+    text-align: center;
+    padding: 1;
+    text-style: bold;
+    border-bottom: solid $primary;
+}
+
+#edit-form {
+    height: 1fr;
+    margin: 1 0;
+}
+
+#edit-form > Label {
+    margin-top: 1;
+    text-style: bold;
+}
+
+#edit-form > Input {
+    margin-bottom: 1;
+}
+
+#button-row {
+    align: center middle;
+    height: auto;
+    padding: 1;
+}
+
+#button-row > Button {
+    margin: 0 1;
+}

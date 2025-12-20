@@ -1,0 +1,14 @@
+[project]
+name = "locale-tui"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "lxml>=6.0.2",
+    "openai>=2.14.0",
+    "python-dotenv>=1.2.1",
+    "pyyaml>=6.0.3",
+    "textual>=6.11.0",
+    "textual-dev>=1.8.0",
+]
