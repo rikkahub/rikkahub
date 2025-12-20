@@ -240,7 +240,7 @@
   <string name="delete">削除</string>
   <string name="donate_page_afdian_desc">🇨🇳ユーザー向け</string>
   <string name="donate_page_donation_methods">寄付方法</string>
-  <string name="donate_page_patreon_desc">グローバルユーザー向け、スポンサー後にDiscord Roleを取得できます</string>
+  <string name="donate_page_kofi_desc">グローバルユーザー向け</string>
   <string name="donate_page_sponsor_list">スポンサーリスト</string>
   <string name="donate_page_title">寄付</string>
   <string name="edit">編集</string>

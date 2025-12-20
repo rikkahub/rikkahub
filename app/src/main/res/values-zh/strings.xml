@@ -240,7 +240,7 @@
   <string name="delete">删除</string>
   <string name="donate_page_afdian_desc">适用于🇨🇳用户</string>
   <string name="donate_page_donation_methods">赞助方式</string>
-  <string name="donate_page_patreon_desc">适用于全球用户, 赞助后可以获得Discord Role</string>
+  <string name="donate_page_kofi_desc">面向全球用户</string>
   <string name="donate_page_sponsor_list">赞助用户列表</string>
   <string name="donate_page_title">赞助</string>
   <string name="edit">编辑</string>

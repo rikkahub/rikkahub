@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.pages.setting
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,9 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
@@ -72,7 +69,7 @@ fun SettingDonatePage() {
                 color = MaterialTheme.colorScheme.primary,
             )
 
-            Patreon()
+            Kofi()
             Afdian()
 
             Text(
@@ -91,13 +88,13 @@ fun SettingDonatePage() {
 }
 
 @Composable
-private fun Patreon() {
+private fun Kofi() {
     val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         onClick = {
-            context.openUrl("https://patreon.com/rikkahub")
+            context.openUrl("https://ko-fi.com/reovodev")
         }
     ) {
         Row(
@@ -105,19 +102,20 @@ private fun Patreon() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Icon(
-                painter = painterResource(R.drawable.patreon),
-                contentDescription = null
+            AsyncImage(
+                model = R.drawable.kofi,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp)
             )
             Column(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = "Patreon",
+                    text = "Kofi",
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = stringResource(R.string.donate_page_patreon_desc),
+                    text = stringResource(R.string.donate_page_kofi_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

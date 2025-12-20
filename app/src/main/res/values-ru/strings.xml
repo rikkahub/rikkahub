@@ -240,7 +240,7 @@
   <string name="delete">Удалить</string>
   <string name="donate_page_afdian_desc">Для пользователей 🇨🇳</string>
   <string name="donate_page_donation_methods">Способы пожертвований</string>
-  <string name="donate_page_patreon_desc">Для пользователей со всего мира — получите роль в Discord после спонсорства</string>
+  <string name="donate_page_kofi_desc">Для пользователей по всему миру</string>
   <string name="donate_page_sponsor_list">Список спонсоров</string>
   <string name="donate_page_title">Поддержать</string>
   <string name="edit">Редактировать</string>
