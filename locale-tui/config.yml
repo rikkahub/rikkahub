@@ -11,6 +11,7 @@ modules:
       - "app/src/main/java/**/*.kt"
       - "app/src/main/java/**/*.java"
       - "app/src/main/AndroidManifest.xml"
+      - "app/src/main/res/xml/*.xml"
   - name: "ai"
     res_path: "ai/src/main/res"
     source_patterns:
