@@ -43,9 +43,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -81,6 +78,7 @@ import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.WorldBook
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -445,22 +443,18 @@ private fun InjectionPositionSelector(
     position: InjectionPosition,
     onSelect: (InjectionPosition) -> Unit
 ) {
-    val positions = InjectionPosition.entries
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        positions.forEachIndexed { index, pos ->
-            SegmentedButton(
-                shape = SegmentedButtonDefaults.itemShape(index, positions.size),
-                selected = position == pos,
-                onClick = { onSelect(pos) },
-                label = { Text(getPositionLabel(pos), maxLines = 1) }
-            )
-        }
-    }
+    Select(
+        options = InjectionPosition.entries,
+        selectedOption = position,
+        onOptionSelected = onSelect,
+        optionToString = { getPositionLabel(it) },
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 private fun getPositionLabel(position: InjectionPosition): String = when (position) {
-    InjectionPosition.BEFORE_SYSTEM_PROMPT -> "系统前"
-    InjectionPosition.AFTER_SYSTEM_PROMPT -> "系统后"
+    InjectionPosition.BEFORE_SYSTEM_PROMPT -> "系统提示词前"
+    InjectionPosition.AFTER_SYSTEM_PROMPT -> "系统提示词后"
     InjectionPosition.TOP_OF_CHAT -> "对话开头"
     InjectionPosition.BOTTOM_OF_CHAT -> "最新消息前"
 }
@@ -992,7 +986,11 @@ private fun RegexInjectionEditDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            val canSave = entry.keywords.isNotEmpty() || entry.constantActive
+            TextButton(
+                onClick = onConfirm,
+                enabled = canSave
+            ) {
                 Text("确定")
             }
         },
