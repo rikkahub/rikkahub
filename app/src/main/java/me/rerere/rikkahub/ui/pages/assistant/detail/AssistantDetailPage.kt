@@ -42,6 +42,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.hooks.heroAnimation
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -162,7 +163,7 @@ private fun AssistantHeader(
             value = assistant.avatar,
             name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
             onUpdate = null,
-            modifier = Modifier.size(100.dp)
+            modifier = Modifier.size(100.dp).heroAnimation("assistant_${assistant.id}")
         )
 
         Text(

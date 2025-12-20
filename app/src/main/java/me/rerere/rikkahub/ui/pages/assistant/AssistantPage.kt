@@ -69,6 +69,7 @@ import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.EditState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
+import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
@@ -180,7 +181,8 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
             ) {
                 lazyItems(filteredAssistants, key = { assistant -> assistant.id }) { assistant ->
                     ReorderableItem(
-                        state = reorderableState, key = assistant.id
+                        state = reorderableState,
+                        key = assistant.id,
                     ) { isDragging ->
                         val memories by vm.getMemories(assistant).collectAsStateWithLifecycle(
                             initialValue = emptyList(),
@@ -398,7 +400,7 @@ private fun AssistantItem(
             UIAvatar(
                 name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
                 value = assistant.avatar,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(48.dp).heroAnimation("assistant_${assistant.id}")
             )
 
             Column(
