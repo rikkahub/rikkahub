@@ -8,6 +8,13 @@
   <string name="about_page_website">Веб-сайт</string>
   <string name="add">Добавить</string>
   <string name="app_name">RikkaHub</string>
+  <string name="assistant_detail_basic_desc">Настройте имя, аватар, модель и параметры</string>
+  <string name="assistant_detail_injections_desc">Настройте режим вставок и мировые книги</string>
+  <string name="assistant_detail_local_tools_desc">Включите локальные инструменты, например движок JavaScript</string>
+  <string name="assistant_detail_mcp_desc">Настройте инструменты MCP-сервера для ассистента</string>
+  <string name="assistant_detail_memory_desc">Управляйте памятью ассистента и ссылками на недавние чаты</string>
+  <string name="assistant_detail_prompt_desc">Задайте системные подсказки, шаблоны сообщений и правила regex</string>
+  <string name="assistant_detail_request_desc">Настройте пользовательские заголовки и параметры тела запроса</string>
   <string name="assistant_importer_import_failed">Импорт не удался</string>
   <string name="assistant_importer_import_tavern_json">Импортировать карточку персонажа Tavern (JSON)</string>
   <string name="assistant_importer_import_tavern_png">Импортировать карту персонажа Tavern (PNG)</string>

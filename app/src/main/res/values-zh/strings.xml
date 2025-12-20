@@ -8,6 +8,13 @@
   <string name="about_page_website">官网</string>
   <string name="add">添加</string>
   <string name="app_name">RikkaHub</string>
+  <string name="assistant_detail_basic_desc">配置名称、头像、模型和参数</string>
+  <string name="assistant_detail_injections_desc">配置模式注入和世界书</string>
+  <string name="assistant_detail_local_tools_desc">启用本地工具（如 JavaScript 引擎）</string>
+  <string name="assistant_detail_mcp_desc">为助手配置 MCP 服务器工具</string>
+  <string name="assistant_detail_memory_desc">管理助手记忆和最近的聊天引用</string>
+  <string name="assistant_detail_prompt_desc">设置系统提示、消息模板和正则规则</string>
+  <string name="assistant_detail_request_desc">配置自定义请求头和正文参数</string>
   <string name="assistant_importer_import_failed">导入失败</string>
   <string name="assistant_importer_import_tavern_json">导入酒馆角色卡 (JSON)</string>
   <string name="assistant_importer_import_tavern_png">导入酒馆角色卡 (PNG)</string>

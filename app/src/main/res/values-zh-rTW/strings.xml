@@ -8,6 +8,13 @@
   <string name="about_page_website">官網</string>
   <string name="add">添加</string>
   <string name="app_name">RikkaHub</string>
+  <string name="assistant_detail_basic_desc">設定名稱、頭像、模型與參數</string>
+  <string name="assistant_detail_injections_desc">設定模式注入與世界書</string>
+  <string name="assistant_detail_local_tools_desc">啟用本機工具如 JavaScript 引擎</string>
+  <string name="assistant_detail_mcp_desc">為助理設定 MCP 伺服器工具</string>
+  <string name="assistant_detail_memory_desc">管理助理記憶體與近期聊天參考</string>
+  <string name="assistant_detail_prompt_desc">設定系統提示、訊息範本與正規表示式規則</string>
+  <string name="assistant_detail_request_desc">設定自訂請求標頭與主體參數</string>
   <string name="assistant_importer_import_failed">匯入失敗</string>
   <string name="assistant_importer_import_tavern_json">匯入酒館角色卡 (JSON)</string>
   <string name="assistant_importer_import_tavern_png">匯入酒館角色卡 (PNG)</string>

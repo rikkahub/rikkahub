@@ -8,6 +8,13 @@
   <string name="about_page_website">ウェブサイト</string>
   <string name="add">追加</string>
   <string name="app_name">RikkaHub</string>
+  <string name="assistant_detail_basic_desc">名前、アバター、モデル、パラメータを設定</string>
+  <string name="assistant_detail_injections_desc">モードインジェクションとワールドブックを設定</string>
+  <string name="assistant_detail_local_tools_desc">JavaScriptエンジンなどのローカルツールを有効化</string>
+  <string name="assistant_detail_mcp_desc">アシスタント用のMCPサーバーツールを設定</string>
+  <string name="assistant_detail_memory_desc">アシスタントメモリと最近のチャット参照を管理</string>
+  <string name="assistant_detail_prompt_desc">システムプロンプト、メッセージテンプレート、正規表現ルールを設定</string>
+  <string name="assistant_detail_request_desc">カスタムリクエストヘッダーとボディパラメータを設定</string>
   <string name="assistant_importer_import_failed">インポートに失敗しました</string>
   <string name="assistant_importer_import_tavern_json">タバーンキャラクターカードをインポート (JSON)</string>
   <string name="assistant_importer_import_tavern_png">タバーンキャラクターカードをインポート (PNG)</string>

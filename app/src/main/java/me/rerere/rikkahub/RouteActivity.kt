@@ -53,7 +53,14 @@ import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
 import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantInjectionsPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
@@ -232,6 +239,41 @@ class RouteActivity : ComponentActivity() {
                         AssistantDetailPage(route.id)
                     }
 
+                    composable<Screen.AssistantBasic> { backStackEntry ->
+                        val route = backStackEntry.toRoute<Screen.AssistantBasic>()
+                        AssistantBasicPage(route.id)
+                    }
+
+                    composable<Screen.AssistantPrompt> { backStackEntry ->
+                        val route = backStackEntry.toRoute<Screen.AssistantPrompt>()
+                        AssistantPromptPage(route.id)
+                    }
+
+                    composable<Screen.AssistantMemory> { backStackEntry ->
+                        val route = backStackEntry.toRoute<Screen.AssistantMemory>()
+                        AssistantMemoryPage(route.id)
+                    }
+
+                    composable<Screen.AssistantRequest> { backStackEntry ->
+                        val route = backStackEntry.toRoute<Screen.AssistantRequest>()
+                        AssistantRequestPage(route.id)
+                    }
+
+                    composable<Screen.AssistantMcp> { backStackEntry ->
+                        val route = backStackEntry.toRoute<Screen.AssistantMcp>()
+                        AssistantMcpPage(route.id)
+                    }
+
+                    composable<Screen.AssistantLocalTool> { backStackEntry ->
+                        val route = backStackEntry.toRoute<Screen.AssistantLocalTool>()
+                        AssistantLocalToolPage(route.id)
+                    }
+
+                    composable<Screen.AssistantInjections> { backStackEntry ->
+                        val route = backStackEntry.toRoute<Screen.AssistantInjections>()
+                        AssistantInjectionsPage(route.id)
+                    }
+
                     composable<Screen.Menu> {
                         MenuPage()
                     }
@@ -327,6 +369,27 @@ sealed interface Screen {
 
     @Serializable
     data class AssistantDetail(val id: String) : Screen
+
+    @Serializable
+    data class AssistantBasic(val id: String) : Screen
+
+    @Serializable
+    data class AssistantPrompt(val id: String) : Screen
+
+    @Serializable
+    data class AssistantMemory(val id: String) : Screen
+
+    @Serializable
+    data class AssistantRequest(val id: String) : Screen
+
+    @Serializable
+    data class AssistantMcp(val id: String) : Screen
+
+    @Serializable
+    data class AssistantLocalTool(val id: String) : Screen
+
+    @Serializable
+    data class AssistantInjections(val id: String) : Screen
 
     @Serializable
     data object Menu : Screen

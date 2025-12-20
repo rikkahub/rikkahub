@@ -15,11 +15,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Plus
@@ -34,12 +38,50 @@ import com.composables.icons.lucide.Trash2
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
+import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-fun AssistantMemorySettings(
+fun AssistantMemoryPage(id: String) {
+    val vm: AssistantDetailVM = koinViewModel(
+        parameters = {
+            parametersOf(id)
+        }
+    )
+    val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val memories by vm.memories.collectAsStateWithLifecycle()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(stringResource(R.string.assistant_page_tab_memory))
+                },
+                navigationIcon = {
+                    BackButton()
+                }
+            )
+        }
+    ) { innerPadding ->
+        AssistantMemoryContent(
+            modifier = Modifier.padding(innerPadding),
+            assistant = assistant,
+            memories = memories,
+            onUpdateAssistant = { vm.update(it) },
+            onDeleteMemory = { vm.deleteMemory(it) },
+            onAddMemory = { vm.addMemory(it) },
+            onUpdateMemory = { vm.updateMemory(it) }
+        )
+    }
+}
+
+@Composable
+private fun AssistantMemoryContent(
+    modifier: Modifier = Modifier,
     assistant: Assistant,
     memories: List<AssistantMemory>,
     onUpdateAssistant: (Assistant) -> Unit,
@@ -99,7 +141,7 @@ fun AssistantMemorySettings(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
             .verticalScroll(rememberScrollState())

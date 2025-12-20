@@ -8,6 +8,13 @@
   <string name="about_page_website">웹사이트</string>
   <string name="add">추가</string>
   <string name="app_name">RikkaHub</string>
+  <string name="assistant_detail_basic_desc">이름, 아바타, 모델 및 매개변수 구성</string>
+  <string name="assistant_detail_injections_desc">모드 삽입 및 월드북 구성</string>
+  <string name="assistant_detail_local_tools_desc">JavaScript 엔진 같은 로컬 도구 활성화</string>
+  <string name="assistant_detail_mcp_desc">어시스턴트용 MCP 서버 도구 구성</string>
+  <string name="assistant_detail_memory_desc">어시스턴트 메모리 및 최근 채팅 참조 관리</string>
+  <string name="assistant_detail_prompt_desc">시스템 프롬프트, 메시지 템플릿 및 정규식 규칙 설정</string>
+  <string name="assistant_detail_request_desc">사용자 지정 요청 헤더 및 본문 매개변수 구성</string>
   <string name="assistant_importer_import_failed">가져오기 실패</string>
   <string name="assistant_importer_import_tavern_json">타번 캐릭터 카드 가져오기 (JSON)</string>
   <string name="assistant_importer_import_tavern_png">타번 캐릭터 카드 가져오기 (PNG)</string>
