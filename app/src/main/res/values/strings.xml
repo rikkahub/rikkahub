@@ -1,3 +1,4 @@
+<?xml version='1.0' encoding='UTF-8'?>
 <resources>
   <string name="app_name">RikkaHub</string>
   <string name="chat_input_placeholder">Chat with AI</string>
@@ -46,8 +47,6 @@
   <string name="chat_page_new_message">New message</string>
   <string name="chat_page_today">Today</string>
   <string name="chat_page_yesterday">Yesterday</string>
-  <string name="chat_page_date_format_same_year">%1$d/%2$d</string>
-  <string name="chat_page_date_format_different_year">%1$d/%2$d/%3$d</string>
   <string name="chat_page_regenerate_title">Regenerate title</string>
   <string name="chat_page_delete">Delete</string>
   <string name="chat_page_history">Chat History</string>
@@ -59,8 +58,6 @@
   <string name="chat_page_edit_title_warning">Please chat first before editing the title</string>
   <string name="chat_page_search_placeholder">Search chats</string>
   <string name="chat_page_clear_context">Clear Context</string>
-  <string name="chat_page_recent">Recent</string>
-
   <!-- Export Chat -->
   <string name="chat_page_export_format">Export Format</string>
   <string name="chat_page_export_markdown">Markdown</string>
@@ -88,7 +85,6 @@
   <string name="setting_page_search_title">Search Service</string>
   <string name="setting_page_search_providers">Search Providers</string>
   <string name="setting_page_search_add_provider">Add Provider</string>
-  <string name="setting_page_search_provider_type">Provider Type</string>
   <string name="setting_page_search_delete_provider">Delete Provider</string>
   <string name="setting_page_search_common_options">Common Options</string>
   <string name="setting_page_search_result_size">Result Size</string>
@@ -136,11 +132,8 @@
 
   <!-- Translator Page -->
   <string name="translator_page_title">Translator</string>
-  <string name="translator_page_input_text">Input Text</string>
   <string name="translator_page_input_placeholder">Enter text to translate...</string>
-  <string name="translator_page_result">Translation Result</string>
   <string name="translator_page_result_placeholder">Translation result will be shown here</string>
-  <string name="translator_page_target_language">Target Language:</string>
   <string name="translator_page_translate">Translate</string>
   <string name="translator_page_cancel">Cancel</string>
 
@@ -164,7 +157,6 @@
   <string name="assistant_page_memory_desc">When memory is enabled, the model will try to actively record your information during conversations and use it in subsequent conversations. This feature requires the model to support tool calls to work properly</string>
   <string name="assistant_page_recent_chats">Reference Recent Chats</string>
   <string name="assistant_page_recent_chats_desc">When enabled, the assistant will reference recent chat history to provide more contextual responses</string>
-  <string name="assistant_page_manage_memory">Manage Memory (%d items)</string>
   <string name="assistant_page_cancel">Cancel</string>
   <string name="assistant_page_save">Save</string>
   <string name="assistant_page_manage_memory_title">Manage Memory</string>
@@ -172,13 +164,10 @@
   <string name="assistant_page_delete_dialog_text">Are you sure you want to delete this assistant? This action cannot be undone.</string>
   <string name="assistant_page_default_assistant">Default Assistant</string>
   <string name="setting_provider_page_delete_dialog_text">Are you sure you want to delete this provider? This action cannot be undone.</string>
-  <string name="assistant_page_temperature_value">Temperature: %s</string>
   <string name="assistant_page_memory_count">Memory: %d</string>
-  <string name="assistant_page_no_system_prompt">No system prompt</string>
   <string name="assistant_page_clone">Clone</string>
   <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_thinking_budget">Thinking Budget</string>
-  <string name="assistant_page_thinking_budget_default">Default</string>
   <string name="assistant_page_max_tokens">Max Tokens</string>
   <string name="assistant_page_max_tokens_desc">Maximum number of tokens to generate. Leave empty for no limit.</string>
   <string name="assistant_page_max_tokens_no_limit">No limit</string>
@@ -214,10 +203,6 @@
   <string name="notification_channel_chat_completed">Chat Completed</string>
 
   <!-- Theme Types -->
-  <string name="setting_page_theme_type_standard">Standard</string>
-  <string name="setting_page_theme_type_medium_contrast">Medium Contrast</string>
-  <string name="setting_page_theme_type_high_contrast">High Contrast</string>
-
   <!-- Theme Names -->
   <string name="theme_name_black">Neutral Black</string>
   <string name="theme_name_sakura">Sakura Pink</string>
@@ -250,7 +235,6 @@
 
   <!-- History Page -->
   <string name="history_page_title">Chat History</string>
-  <string name="history_page_reset_chat">Reset Chat</string>
   <string name="history_page_search_placeholder">Enter keywords to search chat</string>
   <string name="history_page_new_conversation">New Conversation</string>
   <string name="history_page_clear">Clear</string>
@@ -288,16 +272,11 @@
   <string name="avatar_url_confirm">Confirm</string>
 
   <!-- Assistant Picker -->
-  <string name="assistant_picker_expand">Expand</string>
-  <string name="assistant_picker_selected">Selected</string>
-
   <!-- Emoji Picker -->
   <string name="emoji_picker_search_placeholder">Search emojis...</string>
   <string name="emoji_picker_select_skin_tone">Select Skin Tone</string>
 
   <!-- Reasoning -->
-  <string name="reasoning_set_budget">Set reasoning budget (%1$d tokens)</string>
-
   <!-- Chat Page - Nickname Edit -->
   <string name="chat_page_edit_nickname">Edit Nickname</string>
   <string name="chat_page_nickname_placeholder">Please enter nickname</string>
@@ -418,7 +397,6 @@
   <string name="setting_provider_page_enabled">Enabled</string>
   <string name="setting_provider_page_disabled">Disabled</string>
   <string name="setting_provider_page_model_count">%d models</string>
-  <string name="setting_provider_page_share">Share</string>
   <string name="setting_provider_page_models">Models</string>
   <string name="setting_provider_page_configuration">Configuration</string>
   <string name="setting_provider_page_save_success">Save successful</string>
@@ -454,7 +432,6 @@
   <string name="setting_provider_page_scan_qr_code">Scan QR Code</string>
   <string name="setting_provider_page_select_from_gallery">Select from Gallery</string>
   <string name="setting_provider_page_qr_decode_failed">Failed to parse QR code: %s</string>
-  <string name="setting_provider_page_image_read_failed">Unable to read image</string>
   <string name="setting_provider_page_no_qr_found">No valid QR code found</string>
   <string name="setting_provider_page_image_qr_decode_failed">Failed to parse QR code from image: %s</string>
   <string name="setting_provider_page_enable">Enable</string>
@@ -485,8 +462,6 @@
   <string name="setting_tts_page_title">Text-to-Speech</string>
   <string name="setting_tts_page_add_provider">Add TTS Provider</string>
   <string name="setting_tts_page_add">Add</string>
-  <string name="setting_tts_page_enabled">Enabled</string>
-  <string name="setting_tts_page_disabled">Disabled</string>
   <string name="setting_tts_page_provider_type">Provider Type</string>
   <string name="setting_tts_page_provider_type_description">Select the TTS provider type</string>
   <string name="setting_tts_page_name">Name</string>
@@ -508,10 +483,7 @@
   <string name="setting_tts_page_speech_rate_description">Control the speed of speech (0.1 - 3.0, 1.0 is normal)</string>
   <string name="setting_tts_page_pitch">Pitch</string>
   <string name="setting_tts_page_pitch_description">Control the pitch of speech (0.1 - 2.0, 1.0 is normal)</string>
-  <string name="setting_tts_page_language">Language</string>
-  <string name="setting_tts_page_language_description">Language code for TTS (e.g., en-US, zh-CN, ja-JP)</string>
   <string name="setting_tts_page_edit_provider">Edit Provider</string>
-  <string name="setting_tts_page_select">Select</string>
   <string name="setting_tts_page_selected">Selected</string>
   <string name="setting_tts_page_default_name">System TTS</string>
       <string name="setting_tts_page_test_text">Hello, this is a text-to-speech test.</string>
@@ -520,9 +492,6 @@
   <string name="setting_tts_page_provider_system">System TTS</string>
   <string name="setting_tts_page_add_provider_content_description">Add TTS Provider</string>
   <string name="setting_tts_page_more_options_content_description">More options</string>
-  <string name="setting_tts_page_default_openai_name">OpenAI TTS</string>
-  <string name="setting_tts_page_default_gemini_name">Gemini TTS</string>
-  <string name="setting_tts_page_default_system_name">System TTS</string>
   <string name="setting_tts_page_api_key_placeholder_openai">sk-...</string>
   <string name="setting_tts_page_api_key_placeholder_gemini">AIza...</string>
   <string name="setting_tts_page_base_url_placeholder">https://api.openai.com/v1</string>
@@ -533,8 +502,6 @@
   <string name="setting_tts_page_voice_id_description">Voice ID for speech synthesis</string>
   <string name="setting_tts_page_emotion">Emotion</string>
   <string name="setting_tts_page_emotion_description">Emotion style for speech synthesis</string>
-  <string name="setting_tts_page_emotion_placeholder">happy</string>
-
   <!-- Chat Message Tool Calls -->
   <string name="chat_message_tool_create_memory">Created memory</string>
   <string name="chat_message_tool_edit_memory">Updated memory</string>
@@ -563,8 +530,6 @@
   <string name="backup_page_backup_now">Backup Now</string>
   <string name="backup_page_backing_up">Backing up...</string>
   <string name="backup_page_webdav_backup_files">WebDAV Backup Files</string>
-  <string name="backup_page_last_modified">Last Modified</string>
-  <string name="backup_page_size">Size</string>
   <string name="backup_page_delete">Delete</string>
   <string name="backup_page_restore_now">Restore</string>
   <string name="backup_page_restoring">Restoring...</string>
@@ -624,9 +589,7 @@
   <string name="translation_text">Translation</string>
   <string name="expand_translation">Expand Translation</string>
   <string name="collapse_translation">Collapse Translation</string>
-  <string name="translation_model_not_configured">Translation model not configured</string>
   <string name="translation_clear">Clear Translation</string>
-  <string name="unknown_language">Unknown Language</string>
   <string name="translating">Translating...</string>
 
   <!-- Language Names with Emojis -->

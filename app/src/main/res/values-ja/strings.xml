@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <resources>
   <string name="about_page_github">Github</string>
   <string name="about_page_license">ライセンス</string>
@@ -55,7 +55,6 @@
   <string name="assistant_page_invalid_json">無効なJSON: %s</string>
   <string name="assistant_page_local_tools_javascript_engine_desc">QuickJSエンジンでJavaScriptコードを実行し、計算とスクリプト処理を行います</string>
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScriptエンジン</string>
-  <string name="assistant_page_manage_memory">記憶を管理 (%d項目)</string>
   <string name="assistant_page_manage_memory_title">記憶を管理</string>
   <string name="assistant_page_max_tokens">最大トークン数</string>
   <string name="assistant_page_max_tokens_desc">生成する最大トークン数。空白にすると制限なし。</string>
@@ -68,7 +67,6 @@
   <string name="assistant_page_message_template">チャットコンテンツテンプレート</string>
   <string name="assistant_page_message_template_desc">チャットメッセージがLLMに送信される前のコンテンツ形式を制御します。通常は変更する必要がありません</string>
   <string name="assistant_page_name">アシスタント名</string>
-  <string name="assistant_page_no_system_prompt">システムプロンプトなし</string>
   <string name="assistant_page_preset_messages">プリセットチャットメッセージ</string>
   <string name="assistant_page_preset_messages_desc">初期会話メッセージを設定</string>
   <string name="assistant_page_quick_message_content">内容</string>
@@ -102,7 +100,6 @@
   <string name="assistant_page_tab_request">カスタムリクエスト</string>
   <string name="assistant_page_tags">タグ</string>
   <string name="assistant_page_temperature">温度</string>
-  <string name="assistant_page_temperature_value">温度: %s</string>
   <string name="assistant_page_template_preview">プレビュー:</string>
   <string name="assistant_page_template_variable_date">日付</string>
   <string name="assistant_page_template_variable_message">内容</string>
@@ -110,15 +107,12 @@
   <string name="assistant_page_template_variable_time">時間</string>
   <string name="assistant_page_template_variables_label">変数:</string>
   <string name="assistant_page_thinking_budget">思考バジェット</string>
-  <string name="assistant_page_thinking_budget_default">デフォルト</string>
   <string name="assistant_page_title">アシスタント設定</string>
   <string name="assistant_page_top_p">Top P</string>
   <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_top_p_warning">何をしているのか理解している場合を除き、この値を変更しないでください</string>
   <string name="assistant_page_use_assistant_avatar">アシスタントアバターを使用</string>
   <string name="assistant_page_use_assistant_avatar_desc">チャットでモデルアバターと名前ではなくアシスタントアバターと名前を使用</string>
-  <string name="assistant_picker_expand">展開</string>
-  <string name="assistant_picker_selected">選択済み</string>
   <string name="audio">音声</string>
   <string name="avatar_cancel">キャンセル</string>
   <string name="avatar_change_avatar">アバターを変更</string>
@@ -149,7 +143,6 @@
   <string name="backup_page_import_from_chatbox">ChatBoxからインポート</string>
   <string name="backup_page_import_from_other_app">他のアプリからインポート</string>
   <string name="backup_page_importing">インポート中...</string>
-  <string name="backup_page_last_modified">最終更新日時</string>
   <string name="backup_page_loading_failed">バックアップファイルの読み込み失敗: %s</string>
   <string name="backup_page_local_backup_export">ファイルにエクスポート</string>
   <string name="backup_page_local_backup_import">ファイルからインポート</string>
@@ -162,7 +155,6 @@
   <string name="backup_page_restore_now">復元</string>
   <string name="backup_page_restore_success">復元成功</string>
   <string name="backup_page_restoring">復元中...</string>
-  <string name="backup_page_size">サイズ</string>
   <string name="backup_page_test_connection">接続テスト</string>
   <string name="backup_page_title">バックアップと復元</string>
   <string name="backup_page_unknown_error">不明なエラー</string>
@@ -190,8 +182,6 @@
   <string name="chat_message_tool_search_web">ウェブ検索: %1$s</string>
   <string name="chat_page_cancel">キャンセル</string>
   <string name="chat_page_clear_context">コンテキストをクリア</string>
-  <string name="chat_page_date_format_different_year">%1$d年%2$d月%3$d日</string>
-  <string name="chat_page_date_format_same_year">%1$d月%2$d日</string>
   <string name="chat_page_delete">削除</string>
   <string name="chat_page_edit_nickname">ニックネームを編集</string>
   <string name="chat_page_edit_title">タイトルを編集</string>
@@ -210,7 +200,6 @@
   <string name="chat_page_new_message">新しいメッセージ</string>
   <string name="chat_page_nickname_placeholder">ニックネームを入力してください</string>
   <string name="chat_page_no_conversations">会話がありません</string>
-  <string name="chat_page_recent">最近</string>
   <string name="chat_page_regenerate_title">タイトルを再生成</string>
   <string name="chat_page_save">保存</string>
   <string name="chat_page_scroll_to_bottom">一番下へスクロール</string>
@@ -260,7 +249,6 @@
   <string name="history_page_delete_all_conversations">すべての会話を削除</string>
   <string name="history_page_new_conversation">新しい会話</string>
   <string name="history_page_pin">ピン留め</string>
-  <string name="history_page_reset_chat">チャットをリセット</string>
   <string name="history_page_search">検索</string>
   <string name="history_page_search_placeholder">キーワードを入力してチャットを検索</string>
   <string name="history_page_title">チャット履歴</string>
@@ -357,7 +345,6 @@
   <string name="reasoning_medium_desc">モデルはより多くの推論を使用して質問に答えます。</string>
   <string name="reasoning_off">オフ</string>
   <string name="reasoning_off_desc">推論機能を無効にし、モデルは直接質問に答えます。</string>
-  <string name="reasoning_set_budget">推論予算を設定 (%1$d トークン)</string>
   <string name="regenerate">再生成</string>
   <string name="render_with_webview">WebViewで表示</string>
   <string name="search_ability_scrape">スクレイピング</string>
@@ -488,7 +475,6 @@
   <string name="setting_page_search_add_provider">プロバイダー追加</string>
   <string name="setting_page_search_common_options">共通オプション</string>
   <string name="setting_page_search_delete_provider">プロバイダー削除</string>
-  <string name="setting_page_search_provider_type">プロバイダータイプ</string>
   <string name="setting_page_search_providers">検索プロバイダー</string>
   <string name="setting_page_search_result_size">結果数</string>
   <string name="setting_page_search_service">検索サービス</string>
@@ -498,9 +484,6 @@
   <string name="setting_page_share_desc">このアプリを友達と共有</string>
   <string name="setting_page_share_text">RikkaHub - オープンソースAndroid AIアシスタント\n\nウェブサイト: https://rikka-ai.com/</string>
   <string name="setting_page_theme_setting">テーマ設定</string>
-  <string name="setting_page_theme_type_high_contrast">高コントラスト</string>
-  <string name="setting_page_theme_type_medium_contrast">中コントラスト</string>
-  <string name="setting_page_theme_type_standard">標準</string>
   <string name="setting_page_tts_service">音声サービス</string>
   <string name="setting_page_tts_service_desc">音声合成サービスプロバイダーを設定</string>
   <string name="setting_provider_page_abilities">能力</string>
@@ -534,7 +517,6 @@
   <string name="setting_provider_page_image">画像</string>
   <string name="setting_provider_page_image_model">画像</string>
   <string name="setting_provider_page_image_qr_decode_failed">画像からのQRコード解析に失敗しました：%s</string>
-  <string name="setting_provider_page_image_read_failed">画像を読み取れません</string>
   <string name="setting_provider_page_import_dialog_message">インポート方法を選択してください：</string>
   <string name="setting_provider_page_import_dialog_title">プロバイダー設定をインポート</string>
   <string name="setting_provider_page_import_success">インポートに成功しました</string>
@@ -574,7 +556,6 @@
   <string name="setting_provider_page_select_all">すべて選択 (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">ギャラリーから選択</string>
   <string name="setting_provider_page_service_account_email">サービスアカウントメール</string>
-  <string name="setting_provider_page_share">共有</string>
   <string name="setting_provider_page_test">テスト</string>
   <string name="setting_provider_page_test_connection">接続テスト</string>
   <string name="setting_provider_page_test_success">テスト成功</string>
@@ -592,18 +573,10 @@
   <string name="setting_tts_page_base_url">ベースURL</string>
   <string name="setting_tts_page_base_url_description">APIベースURLエンドポイント</string>
   <string name="setting_tts_page_base_url_placeholder">https://api.openai.com/v1</string>
-  <string name="setting_tts_page_default_gemini_name">Gemini TTS</string>
   <string name="setting_tts_page_default_name">システムTTS</string>
-  <string name="setting_tts_page_default_openai_name">OpenAI TTS</string>
-  <string name="setting_tts_page_default_system_name">システムTTS</string>
-  <string name="setting_tts_page_disabled">無効</string>
   <string name="setting_tts_page_edit_provider">プロバイダーを編集</string>
   <string name="setting_tts_page_emotion">感情</string>
   <string name="setting_tts_page_emotion_description">音声合成の感情スタイル</string>
-  <string name="setting_tts_page_emotion_placeholder">嬉しい</string>
-  <string name="setting_tts_page_enabled">有効</string>
-  <string name="setting_tts_page_language">言語</string>
-  <string name="setting_tts_page_language_description">TTS言語コード (例: en-US, zh-CN, ja-JP)</string>
   <string name="setting_tts_page_model">モデル</string>
   <string name="setting_tts_page_model_description">使用するTTSモデル</string>
   <string name="setting_tts_page_model_placeholder_gemini">gemini-2.5-flash-preview-tts</string>
@@ -619,7 +592,6 @@
   <string name="setting_tts_page_provider_system">システムTTS</string>
   <string name="setting_tts_page_provider_type">プロバイダーの種類</string>
   <string name="setting_tts_page_provider_type_description">TTSプロバイダーの種類を選択</string>
-  <string name="setting_tts_page_select">選択</string>
   <string name="setting_tts_page_selected">選択済み</string>
   <string name="setting_tts_page_speech_rate">音声速度</string>
   <string name="setting_tts_page_speech_rate_description">音声の再生速度を制御 (0.1 - 3.0、1.0が標準)</string>
@@ -660,18 +632,13 @@
   <string name="translating">翻訳中...</string>
   <string name="translation_clear">翻訳をクリア</string>
   <string name="translation_language_selection_title">翻訳言語を選択</string>
-  <string name="translation_model_not_configured">翻訳モデルが設定されていません</string>
   <string name="translation_text">訳文</string>
   <string name="translator_page_cancel">キャンセル</string>
   <string name="translator_page_input_placeholder">翻訳するテキストを入力してください...</string>
-  <string name="translator_page_input_text">入力テキスト</string>
-  <string name="translator_page_result">翻訳結果</string>
   <string name="translator_page_result_placeholder">翻訳結果がここに表示されます</string>
-  <string name="translator_page_target_language">対象言語:</string>
   <string name="translator_page_title">翻訳</string>
   <string name="translator_page_translate">翻訳</string>
   <string name="tts">音声</string>
-  <string name="unknown_language">不明な言語</string>
   <string name="unpin_chat">チャットのピン留めを解除</string>
   <string name="upload_file">ファイルをアップロード</string>
   <string name="use_web_search">ウェブ検索を</string>

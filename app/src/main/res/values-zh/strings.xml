@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <resources>
   <string name="about_page_github">Github</string>
   <string name="about_page_license">License</string>
@@ -55,7 +55,6 @@
   <string name="assistant_page_invalid_json">无效的 JSON: %s</string>
   <string name="assistant_page_local_tools_javascript_engine_desc">使用 QuickJS 引擎执行 JavaScript 代码，进行计算和脚本处理</string>
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScript 引擎</string>
-  <string name="assistant_page_manage_memory">管理记忆 (%d条)</string>
   <string name="assistant_page_manage_memory_title">管理记忆</string>
   <string name="assistant_page_max_tokens">最大Token数</string>
   <string name="assistant_page_max_tokens_desc">最大生成Token数量。留空表示无限制。</string>
@@ -68,7 +67,6 @@
   <string name="assistant_page_message_template">聊天内容模板</string>
   <string name="assistant_page_message_template_desc">控制聊天消息在发送给LLM之前的内容格式，通常不需要修改</string>
   <string name="assistant_page_name">助手名称</string>
-  <string name="assistant_page_no_system_prompt">无系统提示词</string>
   <string name="assistant_page_preset_messages">预设聊天消息</string>
   <string name="assistant_page_preset_messages_desc">设置对话初始消息</string>
   <string name="assistant_page_quick_message_content">内容</string>
@@ -102,7 +100,6 @@
   <string name="assistant_page_tab_request">自定义请求</string>
   <string name="assistant_page_tags">标签</string>
   <string name="assistant_page_temperature">温度</string>
-  <string name="assistant_page_temperature_value">温度: %s</string>
   <string name="assistant_page_template_preview">预览:</string>
   <string name="assistant_page_template_variable_date">日期</string>
   <string name="assistant_page_template_variable_message">内容</string>
@@ -110,15 +107,12 @@
   <string name="assistant_page_template_variable_time">时间</string>
   <string name="assistant_page_template_variables_label">变量:</string>
   <string name="assistant_page_thinking_budget">思考预算</string>
-  <string name="assistant_page_thinking_budget_default">默认</string>
   <string name="assistant_page_title">助手设置</string>
   <string name="assistant_page_top_p">Top P</string>
   <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_top_p_warning">请不要修改此值, 除非你知道自己在做什么</string>
   <string name="assistant_page_use_assistant_avatar">使用助手头像</string>
   <string name="assistant_page_use_assistant_avatar_desc">在聊天中使用助手头像和名字而不是模型头像和名字</string>
-  <string name="assistant_picker_expand">展开</string>
-  <string name="assistant_picker_selected">已选择</string>
   <string name="audio">音频</string>
   <string name="avatar_cancel">取消</string>
   <string name="avatar_change_avatar">更换头像</string>
@@ -149,7 +143,6 @@
   <string name="backup_page_import_from_chatbox">从ChatBox导入</string>
   <string name="backup_page_import_from_other_app">从其他APP导入</string>
   <string name="backup_page_importing">正在恢复...</string>
-  <string name="backup_page_last_modified">最后修改时间</string>
   <string name="backup_page_loading_failed">加载备份文件失败: %s</string>
   <string name="backup_page_local_backup_export">导出为文件</string>
   <string name="backup_page_local_backup_import">备份文件导入</string>
@@ -162,7 +155,6 @@
   <string name="backup_page_restore_now">恢复</string>
   <string name="backup_page_restore_success">恢复成功</string>
   <string name="backup_page_restoring">恢复中...</string>
-  <string name="backup_page_size">大小</string>
   <string name="backup_page_test_connection">测试连接</string>
   <string name="backup_page_title">备份与恢复</string>
   <string name="backup_page_unknown_error">未知错误</string>
@@ -190,8 +182,6 @@
   <string name="chat_message_tool_search_web">搜索网页: %1$s</string>
   <string name="chat_page_cancel">取消</string>
   <string name="chat_page_clear_context">清空上下文</string>
-  <string name="chat_page_date_format_different_year">%1$d年%2$d月%3$d日</string>
-  <string name="chat_page_date_format_same_year">%1$d月%2$d日</string>
   <string name="chat_page_delete">删除</string>
   <string name="chat_page_edit_nickname">编辑昵称</string>
   <string name="chat_page_edit_title">编辑标题</string>
@@ -210,7 +200,6 @@
   <string name="chat_page_new_message">新消息</string>
   <string name="chat_page_nickname_placeholder">请输入昵称</string>
   <string name="chat_page_no_conversations">没有对话记录</string>
-  <string name="chat_page_recent">最近</string>
   <string name="chat_page_regenerate_title">重新生成标题</string>
   <string name="chat_page_save">保存</string>
   <string name="chat_page_scroll_to_bottom">滚动到底部</string>
@@ -260,7 +249,6 @@
   <string name="history_page_delete_all_conversations">删除全部对话</string>
   <string name="history_page_new_conversation">新对话</string>
   <string name="history_page_pin">置顶</string>
-  <string name="history_page_reset_chat">重置聊天</string>
   <string name="history_page_search">搜索</string>
   <string name="history_page_search_placeholder">输入关键词搜索聊天</string>
   <string name="history_page_title">聊天历史</string>
@@ -357,7 +345,6 @@
   <string name="reasoning_medium_desc">模型将使用更多推理来回答问题。</string>
   <string name="reasoning_off">关闭</string>
   <string name="reasoning_off_desc">关闭推理功能，模型将直接回答问题。</string>
-  <string name="reasoning_set_budget">设置推理预算 (%1$d tokens)</string>
   <string name="regenerate">重新生成</string>
   <string name="render_with_webview">网页视图渲染</string>
   <string name="search_ability_scrape">抓取</string>
@@ -488,7 +475,6 @@
   <string name="setting_page_search_add_provider">添加提供商</string>
   <string name="setting_page_search_common_options">通用选项</string>
   <string name="setting_page_search_delete_provider">删除提供商</string>
-  <string name="setting_page_search_provider_type">提供商类型</string>
   <string name="setting_page_search_providers">搜索提供商</string>
   <string name="setting_page_search_result_size">结果数量</string>
   <string name="setting_page_search_service">搜索服务</string>
@@ -498,9 +484,6 @@
   <string name="setting_page_share_desc">分享本APP给朋友</string>
   <string name="setting_page_share_text">RikkaHub - 开源安卓AI助手\n\n官网: https://rikka-ai.com/</string>
   <string name="setting_page_theme_setting">主题设置</string>
-  <string name="setting_page_theme_type_high_contrast">高对比</string>
-  <string name="setting_page_theme_type_medium_contrast">中对比</string>
-  <string name="setting_page_theme_type_standard">标准</string>
   <string name="setting_page_tts_service">语音服务</string>
   <string name="setting_page_tts_service_desc">配置语音合成服务提供商</string>
   <string name="setting_provider_page_abilities">能力</string>
@@ -534,7 +517,6 @@
   <string name="setting_provider_page_image">图片</string>
   <string name="setting_provider_page_image_model">图像</string>
   <string name="setting_provider_page_image_qr_decode_failed">解析图片中的二维码失败：%s</string>
-  <string name="setting_provider_page_image_read_failed">无法读取图片</string>
   <string name="setting_provider_page_import_dialog_message">请选择导入方式：</string>
   <string name="setting_provider_page_import_dialog_title">导入供应商配置</string>
   <string name="setting_provider_page_import_success">导入成功</string>
@@ -574,7 +556,6 @@
   <string name="setting_provider_page_select_all">全选（%1$d）</string>
   <string name="setting_provider_page_select_from_gallery">从相册选择</string>
   <string name="setting_provider_page_service_account_email">服务账户邮箱</string>
-  <string name="setting_provider_page_share">分享</string>
   <string name="setting_provider_page_test">测试</string>
   <string name="setting_provider_page_test_connection">测试连接</string>
   <string name="setting_provider_page_test_success">测试成功</string>
@@ -592,18 +573,10 @@
   <string name="setting_tts_page_base_url">基础URL</string>
   <string name="setting_tts_page_base_url_description">API基础URL端点</string>
   <string name="setting_tts_page_base_url_placeholder">https://api.openai.com/v1</string>
-  <string name="setting_tts_page_default_gemini_name">Gemini TTS</string>
   <string name="setting_tts_page_default_name">系统TTS</string>
-  <string name="setting_tts_page_default_openai_name">OpenAI TTS</string>
-  <string name="setting_tts_page_default_system_name">系统TTS</string>
-  <string name="setting_tts_page_disabled">禁用</string>
   <string name="setting_tts_page_edit_provider">编辑提供商</string>
   <string name="setting_tts_page_emotion">情感</string>
   <string name="setting_tts_page_emotion_description">语音合成的情感风格</string>
-  <string name="setting_tts_page_emotion_placeholder">开心</string>
-  <string name="setting_tts_page_enabled">启用</string>
-  <string name="setting_tts_page_language">语言</string>
-  <string name="setting_tts_page_language_description">TTS语言代码 (例如 en-US, zh-CN, ja-JP)</string>
   <string name="setting_tts_page_model">模型</string>
   <string name="setting_tts_page_model_description">要使用的TTS模型</string>
   <string name="setting_tts_page_model_placeholder_gemini">gemini-2.5-flash-preview-tts</string>
@@ -619,7 +592,6 @@
   <string name="setting_tts_page_provider_system">系统TTS</string>
   <string name="setting_tts_page_provider_type">提供商类型</string>
   <string name="setting_tts_page_provider_type_description">选择TTS提供商类型</string>
-  <string name="setting_tts_page_select">选择</string>
   <string name="setting_tts_page_selected">已选择</string>
   <string name="setting_tts_page_speech_rate">语音速度</string>
   <string name="setting_tts_page_speech_rate_description">控制语音播放速度 (0.1 - 3.0，1.0为正常速度)</string>
@@ -660,18 +632,13 @@
   <string name="translating">翻译中...</string>
   <string name="translation_clear">清空翻译</string>
   <string name="translation_language_selection_title">选择翻译语言</string>
-  <string name="translation_model_not_configured">未配置翻译模型</string>
   <string name="translation_text">译文</string>
   <string name="translator_page_cancel">取消</string>
   <string name="translator_page_input_placeholder">请输入要翻译的文本...</string>
-  <string name="translator_page_input_text">输入文本</string>
-  <string name="translator_page_result">翻译结果</string>
   <string name="translator_page_result_placeholder">翻译结果将显示在这里</string>
-  <string name="translator_page_target_language">目标语言:</string>
   <string name="translator_page_title">翻译</string>
   <string name="translator_page_translate">翻译</string>
   <string name="tts">语音</string>
-  <string name="unknown_language">未知语言</string>
   <string name="unpin_chat">取消置顶聊天</string>
   <string name="upload_file">上传文件</string>
   <string name="use_web_search">网络搜索</string>

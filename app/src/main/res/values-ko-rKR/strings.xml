@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <resources>
   <string name="about_page_github">Github</string>
   <string name="about_page_license">라이선스</string>
@@ -55,7 +55,6 @@
   <string name="assistant_page_invalid_json">잘못된 JSON: %s</string>
   <string name="assistant_page_local_tools_javascript_engine_desc">QuickJS 엔진으로 자바스크립트 코드를 실행하여 계산 및 스크립팅 수행</string>
   <string name="assistant_page_local_tools_javascript_engine_title">자바스크립트 엔진</string>
-  <string name="assistant_page_manage_memory">기억 관리 (%d개 항목)</string>
   <string name="assistant_page_manage_memory_title">기억 관리</string>
   <string name="assistant_page_max_tokens">최대 토큰</string>
   <string name="assistant_page_max_tokens_desc">생성할 최대 토큰 수. 제한 없음은 비워두세요.</string>
@@ -68,7 +67,6 @@
   <string name="assistant_page_message_template">메시지 내용 템플릿</string>
   <string name="assistant_page_message_template_desc">LLM에 전송되기 전 채팅 메시지 형식을 제어. 일반적으로 수정할 필요 없음</string>
   <string name="assistant_page_name">어시스턴트 이름</string>
-  <string name="assistant_page_no_system_prompt">시스템 프롬프트 없음</string>
   <string name="assistant_page_preset_messages">사전 설정된 채팅 메시지</string>
   <string name="assistant_page_preset_messages_desc">초기 대화 메시지 설정</string>
   <string name="assistant_page_quick_message_content">내용</string>
@@ -102,7 +100,6 @@
   <string name="assistant_page_tab_request">사용자 요청</string>
   <string name="assistant_page_tags">태그</string>
   <string name="assistant_page_temperature">온도</string>
-  <string name="assistant_page_temperature_value">온도: %s</string>
   <string name="assistant_page_template_preview">미리보기:</string>
   <string name="assistant_page_template_variable_date">날짜</string>
   <string name="assistant_page_template_variable_message">내용</string>
@@ -110,15 +107,12 @@
   <string name="assistant_page_template_variable_time">시간</string>
   <string name="assistant_page_template_variables_label">변수:</string>
   <string name="assistant_page_thinking_budget">사고 예산</string>
-  <string name="assistant_page_thinking_budget_default">기본값</string>
   <string name="assistant_page_title">어시스턴트 설정</string>
   <string name="assistant_page_top_p">Top P</string>
   <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_top_p_warning">무엇을 하는지 아닌 이상 이 값을 수정하지 마세요</string>
   <string name="assistant_page_use_assistant_avatar">어시스턴트 아바타 사용</string>
   <string name="assistant_page_use_assistant_avatar_desc">채팅에서 어시스턴트 아바타 및 이름을 모델의 것 대신 사용</string>
-  <string name="assistant_picker_expand">확장</string>
-  <string name="assistant_picker_selected">선택됨</string>
   <string name="audio">오디오</string>
   <string name="avatar_cancel">취소</string>
   <string name="avatar_change_avatar">아바타 변경</string>
@@ -149,7 +143,6 @@
   <string name="backup_page_import_from_chatbox">ChatBox에서 가져오기</string>
   <string name="backup_page_import_from_other_app">다른 앱에서 가져오기</string>
   <string name="backup_page_importing">가져오는 중...</string>
-  <string name="backup_page_last_modified">최종 수정일</string>
   <string name="backup_page_loading_failed">백업 파일 로드 실패: %s</string>
   <string name="backup_page_local_backup_export">파일로 내보내기</string>
   <string name="backup_page_local_backup_import">파일에서 가져오기</string>
@@ -162,7 +155,6 @@
   <string name="backup_page_restore_now">복원</string>
   <string name="backup_page_restore_success">복원 성공</string>
   <string name="backup_page_restoring">복원 중...</string>
-  <string name="backup_page_size">크기</string>
   <string name="backup_page_test_connection">연결 테스트</string>
   <string name="backup_page_title">백업 및 복원</string>
   <string name="backup_page_unknown_error">알 수 없는 오류</string>
@@ -190,8 +182,6 @@
   <string name="chat_message_tool_search_web">웹 검색: %1$s</string>
   <string name="chat_page_cancel">취소</string>
   <string name="chat_page_clear_context">컨텍스트 초기화</string>
-  <string name="chat_page_date_format_different_year">%1$d/%2$d/%3$d</string>
-  <string name="chat_page_date_format_same_year">%1$d/%2$d</string>
   <string name="chat_page_delete">삭제</string>
   <string name="chat_page_edit_nickname">이름 편집</string>
   <string name="chat_page_edit_title">제목 편집</string>
@@ -210,7 +200,6 @@
   <string name="chat_page_new_message">새 메시지</string>
   <string name="chat_page_nickname_placeholder">이름을 입력하세요</string>
   <string name="chat_page_no_conversations">대화 없음</string>
-  <string name="chat_page_recent">최근</string>
   <string name="chat_page_regenerate_title">제목 다시 생성</string>
   <string name="chat_page_save">저장</string>
   <string name="chat_page_scroll_to_bottom">맨 아래로 스크롤</string>
@@ -260,7 +249,6 @@
   <string name="history_page_delete_all_conversations">모든 대화 삭제</string>
   <string name="history_page_new_conversation">새 대화</string>
   <string name="history_page_pin">고정</string>
-  <string name="history_page_reset_chat">채팅 초기화</string>
   <string name="history_page_search">검색</string>
   <string name="history_page_search_placeholder">키워드를 입력하여 채팅 검색</string>
   <string name="history_page_title">채팅 기록</string>
@@ -357,7 +345,6 @@
   <string name="reasoning_medium_desc">모델이 더 많은 사고를 사용하여 답변합니다</string>
   <string name="reasoning_off">꺼짐</string>
   <string name="reasoning_off_desc">사고 기능 끄기, 모델이 질문에 직접 응답합니다</string>
-  <string name="reasoning_set_budget">사고 예산 설정(%1$d 토큰)</string>
   <string name="regenerate">다시 생성</string>
   <string name="render_with_webview">WebView로 렌더링</string>
   <string name="search_ability_scrape">스크래핑</string>
@@ -488,7 +475,6 @@
   <string name="setting_page_search_add_provider">제공업체 추가</string>
   <string name="setting_page_search_common_options">일반 옵션</string>
   <string name="setting_page_search_delete_provider">제공업체 삭제</string>
-  <string name="setting_page_search_provider_type">제공업체 유형</string>
   <string name="setting_page_search_providers">검색 제공업체</string>
   <string name="setting_page_search_result_size">결과 크기</string>
   <string name="setting_page_search_service">검색 서비스</string>
@@ -498,9 +484,6 @@
   <string name="setting_page_share_desc">앱을 친구들과 공유하기</string>
   <string name="setting_page_share_text">RikkaHub - 오픈소스 Android AI 어시스턴트\n\n웹사이트: https://rikka-ai.com/</string>
   <string name="setting_page_theme_setting">테마 설정</string>
-  <string name="setting_page_theme_type_high_contrast">높은 대비</string>
-  <string name="setting_page_theme_type_medium_contrast">중간 대비</string>
-  <string name="setting_page_theme_type_standard">표준</string>
   <string name="setting_page_tts_service">텍스트-음성 서비스</string>
   <string name="setting_page_tts_service_desc">텍스트-음성 서비스 제공업체 구성</string>
   <string name="setting_provider_page_abilities">기능</string>
@@ -534,7 +517,6 @@
   <string name="setting_provider_page_image">이미지</string>
   <string name="setting_provider_page_image_model">이미지</string>
   <string name="setting_provider_page_image_qr_decode_failed">이미지에서 QR 코드 파싱 실패: %s</string>
-  <string name="setting_provider_page_image_read_failed">이미지를 읽을 수 없습니다</string>
   <string name="setting_provider_page_import_dialog_message">가져오기 방법을 선택하세요:</string>
   <string name="setting_provider_page_import_dialog_title">제공업체 구성 가져오기</string>
   <string name="setting_provider_page_import_success">가져오기 성공</string>
@@ -574,7 +556,6 @@
   <string name="setting_provider_page_select_all">전체 선택 (%1$d)</string>
   <string name="setting_provider_page_select_from_gallery">갤러리에서 선택</string>
   <string name="setting_provider_page_service_account_email">서비스 계정 이메일</string>
-  <string name="setting_provider_page_share">공유</string>
   <string name="setting_provider_page_test">테스트</string>
   <string name="setting_provider_page_test_connection">연결 테스트</string>
   <string name="setting_provider_page_test_success">테스트 성공</string>
@@ -592,18 +573,10 @@
   <string name="setting_tts_page_base_url">기본 URL</string>
   <string name="setting_tts_page_base_url_description">API 기본 URL 엔드포인트</string>
   <string name="setting_tts_page_base_url_placeholder">https://api.openai.com/v1</string>
-  <string name="setting_tts_page_default_gemini_name">Gemini TTS</string>
   <string name="setting_tts_page_default_name">시스템 TTS</string>
-  <string name="setting_tts_page_default_openai_name">OpenAI TTS</string>
-  <string name="setting_tts_page_default_system_name">시스템 TTS</string>
-  <string name="setting_tts_page_disabled">비활성화됨</string>
   <string name="setting_tts_page_edit_provider">제공업체 편집</string>
   <string name="setting_tts_page_emotion">감정</string>
   <string name="setting_tts_page_emotion_description">음성 합성 감정 스타일</string>
-  <string name="setting_tts_page_emotion_placeholder">기쁨</string>
-  <string name="setting_tts_page_enabled">활성화됨</string>
-  <string name="setting_tts_page_language">언어</string>
-  <string name="setting_tts_page_language_description">TTS용 언어 코드 (예: en-US, zh-CN, ja-JP)</string>
   <string name="setting_tts_page_model">모델</string>
   <string name="setting_tts_page_model_description">사용할 TTS 모델</string>
   <string name="setting_tts_page_model_placeholder_gemini">gemini-2.5-flash-preview-tts</string>
@@ -619,7 +592,6 @@
   <string name="setting_tts_page_provider_system">시스템 TTS</string>
   <string name="setting_tts_page_provider_type">제공업체 유형</string>
   <string name="setting_tts_page_provider_type_description">TTS 제공업체 유형 선택</string>
-  <string name="setting_tts_page_select">선택</string>
   <string name="setting_tts_page_selected">선택됨</string>
   <string name="setting_tts_page_speech_rate">말하기 속도</string>
   <string name="setting_tts_page_speech_rate_description">말하기 속도 제어 (0.1 - 3.0, 1.0은 일반)</string>
@@ -660,18 +632,13 @@
   <string name="translating">번역 중...</string>
   <string name="translation_clear">번역 지우기</string>
   <string name="translation_language_selection_title">번역 언어 선택</string>
-  <string name="translation_model_not_configured">번역 모델이 구성되지 않음</string>
   <string name="translation_text">번역</string>
   <string name="translator_page_cancel">취소</string>
   <string name="translator_page_input_placeholder">번역할 텍스트를 입력하세요...</string>
-  <string name="translator_page_input_text">입력 텍스트</string>
-  <string name="translator_page_result">번역 결과</string>
   <string name="translator_page_result_placeholder">번역 결과가 여기에 표시됩니다</string>
-  <string name="translator_page_target_language">목표 언어:</string>
   <string name="translator_page_title">번역기</string>
   <string name="translator_page_translate">번역</string>
   <string name="tts">TTS</string>
-  <string name="unknown_language">알 수 없는 언어</string>
   <string name="unpin_chat">채팅 고정 해제</string>
   <string name="upload_file">파일 업로드</string>
   <string name="use_web_search">웹 검색 사용</string>
