@@ -156,6 +156,70 @@ def add(key: str, value: str, module: str, skip_translate: bool):
 
 
 @cli.command()
+@click.argument("key")
+@click.argument("value")
+@click.option(
+    "--lang",
+    "-l",
+    default=None,
+    help="语言代码（例如：values, values-zh, values-ja），默认为源语言",
+)
+@click.option(
+    "--module",
+    "-m",
+    default=None,
+    help="模块名称（默认使用配置文件中的第一个模块）",
+)
+def set(key: str, value: str, lang: str, module: str):
+    """手动设置指定语言的条目值
+
+    \b
+    示例：
+        locale-tui set hello_world "你好，世界！" -l values-zh
+        locale-tui set greeting "Welcome" -l values
+        locale-tui set test_key "テスト" -l values-ja -m app
+    """
+    config = load_config()
+
+    # Select module
+    if module:
+        selected_module = next((m for m in config.modules if m.name == module), None)
+        if not selected_module:
+            click.echo(f"错误：未找到模块 '{module}'", err=True)
+            click.echo(f"可用模块：{', '.join(m.name for m in config.modules)}", err=True)
+            sys.exit(1)
+    else:
+        if not config.modules:
+            click.echo("错误：配置文件中未定义模块", err=True)
+            sys.exit(1)
+        selected_module = config.modules[0]
+
+    # Resolve language directory
+    if lang is None:
+        lang = "values"  # Default to source language
+
+    # Resolve res directory
+    res_dir = config.project_root / selected_module.res_path
+    if not res_dir.exists():
+        click.echo(f"错误：资源目录不存在 {res_dir}", err=True)
+        sys.exit(1)
+
+    # Target file
+    target_file = res_dir / lang / "strings.xml"
+    lang_name = config.get_language_name(lang) if lang != "values" else "源语言"
+
+    click.echo(f"设置 {lang_name} 的条目: {key} = {value}")
+    click.echo(f"目标文件: {target_file.relative_to(config.project_root)}")
+
+    try:
+        StringsXmlParser.update_entry(target_file, key, value)
+        click.echo(f"✓ 设置成功")
+    except Exception as e:
+        click.echo(f"错误：设置失败 - {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
 @click.option(
     "--module",
     "-m",

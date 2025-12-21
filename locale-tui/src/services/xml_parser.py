@@ -80,9 +80,16 @@ class StringsXmlParser:
             string_elem.set("name", key)
             string_elem.text = value
 
+        # Clean up whitespace and format
+        etree.indent(root, space="    ")
+
         tree.write(
             str(file_path), encoding="utf-8", xml_declaration=True, pretty_print=True
         )
+
+        # Add newline at end of file
+        with open(file_path, 'a', encoding='utf-8') as f:
+            f.write('\n')
 
     @staticmethod
     def delete_entry(file_path: Path, key: str) -> bool:

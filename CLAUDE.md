@@ -106,8 +106,29 @@ uv run --directory locale-tui src/main.py add test_key "Test" --skip-translate  
 4. Displays translation progress and results for each language
 5. The input value should only be English
 
+**Set Command Usage:**
+
+```bash
+# Manually set a string value for a specific language
+uv run --directory locale-tui src/main.py set <key> <value> [OPTIONS]
+
+# Examples:
+uv run --directory locale-tui src/main.py set hello_world "你好，世界！" -l values-zh      # Set Chinese translation
+uv run --directory locale-tui src/main.py set greeting "Welcome" -l values              # Set source language
+uv run --directory locale-tui src/main.py set test_key "テスト" -l values-ja -m app       # Set Japanese with module
+```
+
+**Options:**
+- `--lang, -l`: Specify language code (e.g., values, values-zh, values-ja), defaults to source language (values)
+- `--module, -m`: Specify module name (defaults to first module in config)
+
+**Behavior:**
+1. Manually sets a key-value pair for a specific language without auto-translation
+2. Useful for correcting or overriding auto-translated values
+3. Creates the language directory and file if they don't exist
+
 **Other Commands:**
-- ` uv run --directory locale-tui src/main.py list-keys [-m module]`: List all string resource keys
+- `uv run --directory locale-tui src/main.py list-keys [-m module]`: List all string resource keys
 
 See `locale-tui/CLAUDE.md` for detailed documentation.
 
