@@ -60,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,6 +74,7 @@ import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
@@ -95,14 +97,14 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
         topBar = {
             TopAppBar(
                 navigationIcon = { BackButton() },
-                title = { Text("提示词注入") }
+                title = { Text(stringResource(R.string.prompt_page_title)) }
             )
         },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
                     selected = pagerState.currentPage == 0,
-                    label = { Text("模式注入") },
+                    label = { Text(stringResource(R.string.prompt_page_mode_injection_tab)) },
                     icon = { Icon(Lucide.Wand, null) },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(0) }
@@ -110,7 +112,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 )
                 NavigationBarItem(
                     selected = pagerState.currentPage == 1,
-                    label = { Text("Lorebook") },
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_tab)) },
                     icon = { Icon(Lucide.Book, null) },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(1) }
@@ -184,12 +186,12 @@ private fun ModeInjectionTab(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "暂无模式注入",
+                            text = stringResource(R.string.prompt_page_mode_injection_empty),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "点击下方按钮添加",
+                            text = stringResource(R.string.prompt_page_empty_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -234,7 +236,7 @@ private fun ModeInjectionTab(
                     AnimatedVisibility(expanded) {
                         Row {
                             Spacer(modifier = Modifier.size(8.dp))
-                            Text("添加模式注入")
+                            Text(stringResource(R.string.prompt_page_add_mode_injection))
                         }
                     }
                 }
@@ -283,7 +285,7 @@ private fun ModeInjectionCard(
                         swipeState.reset()
                     }
                 }) {
-                    Icon(Lucide.Trash2, "删除")
+                    Icon(Lucide.Trash2, stringResource(R.string.prompt_page_delete))
                 }
             }
         },
@@ -303,7 +305,7 @@ private fun ModeInjectionCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = injection.name.ifEmpty { "未命名" },
+                        text = injection.name.ifEmpty { stringResource(R.string.prompt_page_unnamed) },
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -317,18 +319,18 @@ private fun ModeInjectionCard(
                         )
                         AssistChip(
                             onClick = {},
-                            label = { Text("优先级: ${injection.priority}") }
+                            label = { Text(stringResource(R.string.prompt_page_priority_format, injection.priority)) }
                         )
                         if (!injection.enabled) {
                             AssistChip(
                                 onClick = {},
-                                label = { Text("已禁用") }
+                                label = { Text(stringResource(R.string.prompt_page_disabled)) }
                             )
                         }
                     }
                 }
                 IconButton(onClick = onEdit) {
-                    Icon(Lucide.Settings2, "编辑")
+                    Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
                 }
             }
         }
@@ -368,7 +370,7 @@ private fun ModeInjectionEditSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "编辑模式注入",
+                text = stringResource(R.string.prompt_page_edit_mode_injection),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
@@ -382,12 +384,12 @@ private fun ModeInjectionEditSheet(
                 OutlinedTextField(
                     value = injection.name,
                     onValueChange = { onEdit(injection.copy(name = it)) },
-                    label = { Text("名称") },
+                    label = { Text(stringResource(R.string.prompt_page_name)) },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 FormItem(
-                    label = { Text("启用") },
+                    label = { Text(stringResource(R.string.prompt_page_enabled)) },
                     tail = {
                         Switch(
                             checked = injection.enabled,
@@ -401,12 +403,15 @@ private fun ModeInjectionEditSheet(
                     onValueChange = {
                         it.toIntOrNull()?.let { p -> onEdit(injection.copy(priority = p)) }
                     },
-                    label = { Text("优先级") },
+                    label = { Text(stringResource(R.string.prompt_page_priority_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
 
-                Text("注入位置", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    stringResource(R.string.prompt_page_injection_position),
+                    style = MaterialTheme.typography.titleSmall
+                )
                 InjectionPositionSelector(
                     position = injection.position,
                     onSelect = { onEdit(injection.copy(position = it)) }
@@ -415,7 +420,7 @@ private fun ModeInjectionEditSheet(
                 OutlinedTextField(
                     value = injection.content,
                     onValueChange = { onEdit(injection.copy(content = it)) },
-                    label = { Text("注入内容") },
+                    label = { Text(stringResource(R.string.prompt_page_injection_content)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(200.dp),
@@ -428,10 +433,10 @@ private fun ModeInjectionEditSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("取消")
+                    Text(stringResource(R.string.prompt_page_cancel))
                 }
                 TextButton(onClick = onConfirm) {
-                    Text("确定")
+                    Text(stringResource(R.string.prompt_page_confirm))
                 }
             }
         }
@@ -452,11 +457,12 @@ private fun InjectionPositionSelector(
     )
 }
 
+@Composable
 private fun getPositionLabel(position: InjectionPosition): String = when (position) {
-    InjectionPosition.BEFORE_SYSTEM_PROMPT -> "系统提示词前"
-    InjectionPosition.AFTER_SYSTEM_PROMPT -> "系统提示词后"
-    InjectionPosition.TOP_OF_CHAT -> "对话开头"
-    InjectionPosition.BOTTOM_OF_CHAT -> "最新消息前"
+    InjectionPosition.BEFORE_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_before_system)
+    InjectionPosition.AFTER_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_after_system)
+    InjectionPosition.TOP_OF_CHAT -> stringResource(R.string.prompt_page_position_top_of_chat)
+    InjectionPosition.BOTTOM_OF_CHAT -> stringResource(R.string.prompt_page_position_bottom_of_chat)
 }
 
 // ==================== Lorebook Tab ====================
@@ -506,12 +512,12 @@ private fun LorebookTab(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "暂无 Lorebook",
+                            text = stringResource(R.string.prompt_page_lorebook_empty),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "点击下方按钮添加",
+                            text = stringResource(R.string.prompt_page_empty_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -556,7 +562,7 @@ private fun LorebookTab(
                     AnimatedVisibility(expanded) {
                         Row {
                             Spacer(modifier = Modifier.size(8.dp))
-                            Text("添加 Lorebook")
+                            Text(stringResource(R.string.prompt_page_add_lorebook))
                         }
                     }
                 }
@@ -605,7 +611,7 @@ private fun LorebookCard(
                         swipeState.reset()
                     }
                 }) {
-                    Icon(Lucide.Trash2, "删除")
+                    Icon(Lucide.Trash2, stringResource(R.string.prompt_page_delete))
                 }
             }
         },
@@ -625,7 +631,7 @@ private fun LorebookCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = book.name.ifEmpty { "未命名 Lorebook" },
+                        text = book.name.ifEmpty { stringResource(R.string.prompt_page_unnamed_lorebook) },
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -644,18 +650,25 @@ private fun LorebookCard(
                     ) {
                         AssistChip(
                             onClick = {},
-                            label = { Text("${book.entries.size} 条目") }
+                            label = {
+                                Text(
+                                    stringResource(
+                                        R.string.prompt_page_entries_count_format,
+                                        book.entries.size
+                                    )
+                                )
+                            }
                         )
                         if (!book.enabled) {
                             AssistChip(
                                 onClick = {},
-                                label = { Text("已禁用") }
+                                label = { Text(stringResource(R.string.prompt_page_disabled)) }
                             )
                         }
                     }
                 }
                 IconButton(onClick = onEdit) {
-                    Icon(Lucide.Settings2, "编辑")
+                    Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
                 }
             }
         }
@@ -703,7 +716,7 @@ private fun LorebookEditSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "编辑 Lorebook",
+                text = stringResource(R.string.prompt_page_edit_lorebook),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
@@ -717,19 +730,19 @@ private fun LorebookEditSheet(
                 OutlinedTextField(
                     value = book.name,
                     onValueChange = { onEdit(book.copy(name = it)) },
-                    label = { Text("名称") },
+                    label = { Text(stringResource(R.string.prompt_page_name)) },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
                     value = book.description,
                     onValueChange = { onEdit(book.copy(description = it)) },
-                    label = { Text("描述") },
+                    label = { Text(stringResource(R.string.prompt_page_description)) },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 FormItem(
-                    label = { Text("启用") },
+                    label = { Text(stringResource(R.string.prompt_page_enabled)) },
                     tail = {
                         Switch(
                             checked = book.enabled,
@@ -744,11 +757,14 @@ private fun LorebookEditSheet(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("条目 (${book.entries.size})", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        stringResource(R.string.prompt_page_entries_format, book.entries.size),
+                        style = MaterialTheme.typography.titleSmall
+                    )
                     IconButton(onClick = {
                         entryEditState.open(PromptInjection.RegexInjection())
                     }) {
-                        Icon(Lucide.Plus, "添加条目")
+                        Icon(Lucide.Plus, stringResource(R.string.prompt_page_add_entry))
                     }
                 }
 
@@ -768,10 +784,10 @@ private fun LorebookEditSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("取消")
+                    Text(stringResource(R.string.prompt_page_cancel))
                 }
                 TextButton(onClick = onConfirm) {
-                    Text("确定")
+                    Text(stringResource(R.string.prompt_page_confirm))
                 }
             }
         }
@@ -808,12 +824,12 @@ private fun RegexInjectionEntryCard(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = entry.name.ifEmpty { "未命名条目" },
+                    text = entry.name.ifEmpty { stringResource(R.string.prompt_page_unnamed_entry) },
                     style = MaterialTheme.typography.bodyMedium
                 )
                 if (entry.keywords.isNotEmpty()) {
                     Text(
-                        text = "关键词: ${entry.keywords.joinToString(", ")}",
+                        text = stringResource(R.string.prompt_page_keywords_format, entry.keywords.joinToString(", ")),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -822,10 +838,10 @@ private fun RegexInjectionEntryCard(
                 }
             }
             IconButton(onClick = onEdit) {
-                Icon(Lucide.Settings2, "编辑")
+                Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
             }
             IconButton(onClick = onDelete) {
-                Icon(Lucide.Trash2, "删除")
+                Icon(Lucide.Trash2, stringResource(R.string.prompt_page_delete))
             }
         }
     }
@@ -843,7 +859,7 @@ private fun RegexInjectionEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑条目") },
+        title = { Text(stringResource(R.string.prompt_page_edit_entry)) },
         text = {
             Column(
                 modifier = Modifier
@@ -855,12 +871,12 @@ private fun RegexInjectionEditDialog(
                 OutlinedTextField(
                     value = entry.name,
                     onValueChange = { onEdit(entry.copy(name = it)) },
-                    label = { Text("名称") },
+                    label = { Text(stringResource(R.string.prompt_page_name)) },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 FormItem(
-                    label = { Text("启用") },
+                    label = { Text(stringResource(R.string.prompt_page_enabled)) },
                     tail = {
                         Switch(
                             checked = entry.enabled,
@@ -874,19 +890,22 @@ private fun RegexInjectionEditDialog(
                     onValueChange = {
                         it.toIntOrNull()?.let { p -> onEdit(entry.copy(priority = p)) }
                     },
-                    label = { Text("优先级") },
+                    label = { Text(stringResource(R.string.prompt_page_priority_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
 
-                Text("注入位置", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    stringResource(R.string.prompt_page_injection_position),
+                    style = MaterialTheme.typography.titleSmall
+                )
                 InjectionPositionSelector(
                     position = entry.position,
                     onSelect = { onEdit(entry.copy(position = it)) }
                 )
 
                 // 关键词
-                Text("关键词", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.prompt_page_keywords_label), style = MaterialTheme.typography.titleSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -917,7 +936,7 @@ private fun RegexInjectionEditDialog(
                     OutlinedTextField(
                         value = newKeyword,
                         onValueChange = { newKeyword = it },
-                        label = { Text("新关键词") },
+                        label = { Text(stringResource(R.string.prompt_page_new_keyword)) },
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
@@ -929,12 +948,12 @@ private fun RegexInjectionEditDialog(
                             }
                         }
                     ) {
-                        Icon(Lucide.Plus, "添加")
+                        Icon(Lucide.Plus, stringResource(R.string.prompt_page_add))
                     }
                 }
 
                 FormItem(
-                    label = { Text("使用正则表达式") },
+                    label = { Text(stringResource(R.string.prompt_page_use_regex)) },
                     tail = {
                         Switch(
                             checked = entry.useRegex,
@@ -944,7 +963,7 @@ private fun RegexInjectionEditDialog(
                 )
 
                 FormItem(
-                    label = { Text("大小写敏感") },
+                    label = { Text(stringResource(R.string.prompt_page_case_sensitive)) },
                     tail = {
                         Switch(
                             checked = entry.caseSensitive,
@@ -954,8 +973,8 @@ private fun RegexInjectionEditDialog(
                 )
 
                 FormItem(
-                    label = { Text("常驻激活") },
-                    description = { Text("无需匹配关键词即触发") },
+                    label = { Text(stringResource(R.string.prompt_page_constant_active)) },
+                    description = { Text(stringResource(R.string.prompt_page_constant_active_desc)) },
                     tail = {
                         Switch(
                             checked = entry.constantActive,
@@ -969,7 +988,7 @@ private fun RegexInjectionEditDialog(
                     onValueChange = {
                         it.toIntOrNull()?.let { d -> onEdit(entry.copy(scanDepth = d)) }
                     },
-                    label = { Text("扫描深度 (消息数)") },
+                    label = { Text(stringResource(R.string.prompt_page_scan_depth)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
@@ -977,7 +996,7 @@ private fun RegexInjectionEditDialog(
                 OutlinedTextField(
                     value = entry.content,
                     onValueChange = { onEdit(entry.copy(content = it)) },
-                    label = { Text("注入内容") },
+                    label = { Text(stringResource(R.string.prompt_page_injection_content)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(150.dp),
@@ -991,12 +1010,12 @@ private fun RegexInjectionEditDialog(
                 onClick = onConfirm,
                 enabled = canSave
             ) {
-                Text("确定")
+                Text(stringResource(R.string.prompt_page_confirm))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(R.string.prompt_page_cancel))
             }
         }
     )
