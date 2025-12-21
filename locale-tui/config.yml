@@ -55,7 +55,7 @@ languages:
 # AI 翻译配置
 translation:
   batch_size: 10
-  model: "moonshotai/kimi-k2-0905"
+  model: "Kimi-K2-0905"
   prompt_template: |
     You are a professional translator specializing in mobile app localization.
 
