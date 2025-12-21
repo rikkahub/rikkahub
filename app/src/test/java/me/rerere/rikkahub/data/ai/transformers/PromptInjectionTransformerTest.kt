@@ -6,7 +6,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
-import me.rerere.rikkahub.data.model.WorldBook
+import me.rerere.rikkahub.data.model.Lorebook
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,10 +17,10 @@ class PromptInjectionTransformerTest {
     // region Helper functions
     private fun createAssistant(
         modeInjectionIds: Set<Uuid> = emptySet(),
-        worldBookIds: Set<Uuid> = emptySet()
+        lorebookIds: Set<Uuid> = emptySet()
     ) = Assistant(
         modeInjectionIds = modeInjectionIds,
-        worldBookIds = worldBookIds
+        lorebookIds = lorebookIds
     )
 
     private fun createModeInjection(
@@ -65,12 +65,12 @@ class PromptInjectionTransformerTest {
         constantActive = constantActive
     )
 
-    private fun createWorldBook(
+    private fun createLorebook(
         id: Uuid = Uuid.random(),
-        name: String = "Test WorldBook",
+        name: String = "Test Lorebook",
         enabled: Boolean = true,
         entries: List<PromptInjection.RegexInjection> = emptyList()
-    ) = WorldBook(
+    ) = Lorebook(
         id = id,
         name = name,
         enabled = enabled,
@@ -97,7 +97,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(),
             modeInjections = emptyList(),
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(messages, result)
@@ -121,7 +121,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
             modeInjections = listOf(injection),
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(messages, result)
@@ -140,7 +140,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(), // No linked injections
             modeInjections = listOf(injection),
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(messages, result)
@@ -166,7 +166,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
             modeInjections = listOf(injection),
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(2, result.size)
@@ -195,7 +195,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
             modeInjections = listOf(injection),
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(2, result.size)
@@ -222,7 +222,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
             modeInjections = listOf(injection),
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(3, result.size)
@@ -251,7 +251,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
             modeInjections = listOf(injection),
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(4, result.size)
@@ -284,7 +284,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
             modeInjections = listOf(injection),
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(5, result.size)
@@ -317,7 +317,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(modeInjectionIds = setOf(id1, id2, id3)),
             modeInjections = injections,
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         val systemText = getMessageText(result[0])
@@ -328,16 +328,16 @@ class PromptInjectionTransformerTest {
     }
     // endregion
 
-    // region WorldBook tests
+    // region Lorebook tests
     @Test
-    fun `world book with keyword match should trigger injection`() {
-        val worldBookId = Uuid.random()
+    fun `lorebook with keyword match should trigger injection`() {
+        val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
             keywords = listOf("magic"),
             content = "Magic system explanation"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(regexInjection)
         )
 
@@ -348,9 +348,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         val systemText = getMessageText(result[0])
@@ -358,14 +358,14 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `world book without keyword match should not trigger injection`() {
-        val worldBookId = Uuid.random()
+    fun `lorebook without keyword match should not trigger injection`() {
+        val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
             keywords = listOf("magic"),
             content = "Should not appear"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(regexInjection)
         )
 
@@ -376,9 +376,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         assertEquals(2, result.size)
@@ -387,15 +387,15 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `world book with constantActive should always trigger`() {
-        val worldBookId = Uuid.random()
+    fun `lorebook with constantActive should always trigger`() {
+        val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
             keywords = emptyList(),
             constantActive = true,
             content = "Always active content"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(regexInjection)
         )
 
@@ -406,9 +406,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         val systemText = getMessageText(result[0])
@@ -416,15 +416,15 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `world book with case insensitive match should trigger`() {
-        val worldBookId = Uuid.random()
+    fun `lorebook with case insensitive match should trigger`() {
+        val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
             keywords = listOf("MAGIC"),
             caseSensitive = false,
             content = "Case insensitive match"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(regexInjection)
         )
 
@@ -435,9 +435,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         val systemText = getMessageText(result[0])
@@ -445,15 +445,15 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `world book with case sensitive match should not trigger on different case`() {
-        val worldBookId = Uuid.random()
+    fun `lorebook with case sensitive match should not trigger on different case`() {
+        val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
             keywords = listOf("MAGIC"),
             caseSensitive = true,
             content = "Should not appear"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(regexInjection)
         )
 
@@ -464,9 +464,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         assertEquals(2, result.size)
@@ -475,15 +475,15 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `world book with regex pattern should match`() {
-        val worldBookId = Uuid.random()
+    fun `lorebook with regex pattern should match`() {
+        val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
             keywords = listOf("mag.*spell"),
             useRegex = true,
             content = "Regex match content"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(regexInjection)
         )
 
@@ -494,9 +494,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         val systemText = getMessageText(result[0])
@@ -505,14 +505,14 @@ class PromptInjectionTransformerTest {
 
     @Test
     fun `scanDepth should limit message scanning range`() {
-        val worldBookId = Uuid.random()
+        val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
             keywords = listOf("old keyword"),
             scanDepth = 2, // 只扫描最近2条消息
             content = "Should not appear"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(regexInjection)
         )
 
@@ -527,9 +527,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         // 关键词在第1条用户消息中，但 scanDepth=2 只扫描最后2条
@@ -541,14 +541,14 @@ class PromptInjectionTransformerTest {
 
     @Test
     fun `scanDepth should trigger when keyword is within range`() {
-        val worldBookId = Uuid.random()
+        val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
             keywords = listOf("latest"),
             scanDepth = 2,
             content = "Triggered content"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(regexInjection)
         )
 
@@ -561,9 +561,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         val systemText = getMessageText(result[0])
@@ -572,7 +572,7 @@ class PromptInjectionTransformerTest {
 
     @Test
     fun `different entries should use their own scanDepth`() {
-        val worldBookId = Uuid.random()
+        val lorebookId = Uuid.random()
         val shallowEntry = createRegexInjection(
             keywords = listOf("old keyword"),
             scanDepth = 1, // 只扫描最后1条
@@ -583,8 +583,8 @@ class PromptInjectionTransformerTest {
             scanDepth = 10, // 扫描最后10条
             content = "Deep scan content"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(shallowEntry, deepEntry)
         )
 
@@ -599,9 +599,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         val systemText = getMessageText(result[0])
@@ -613,13 +613,13 @@ class PromptInjectionTransformerTest {
 
     @Test
     fun `disabled world book should not trigger`() {
-        val worldBookId = Uuid.random()
+        val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
             keywords = listOf("magic"),
             content = "Should not appear"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             enabled = false,
             entries = listOf(regexInjection)
         )
@@ -631,9 +631,9 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(worldBookIds = setOf(worldBookId)),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
             modeInjections = emptyList(),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         assertEquals(2, result.size)
@@ -676,7 +676,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(modeInjectionIds = setOf(id1, id2, id3)),
             modeInjections = injections,
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(3, result.size)
@@ -690,7 +690,7 @@ class PromptInjectionTransformerTest {
     @Test
     fun `combined mode injection and world book should both apply`() {
         val modeId = Uuid.random()
-        val worldBookId = Uuid.random()
+        val lorebookId = Uuid.random()
 
         val modeInjection = createModeInjection(
             id = modeId,
@@ -701,8 +701,8 @@ class PromptInjectionTransformerTest {
             keywords = listOf("hello"),
             content = "WorldBook content"
         )
-        val worldBook = createWorldBook(
-            id = worldBookId,
+        val lorebook = createLorebook(
+            id = lorebookId,
             entries = listOf(regexInjection)
         )
 
@@ -718,7 +718,7 @@ class PromptInjectionTransformerTest {
                 worldBookIds = setOf(worldBookId)
             ),
             modeInjections = listOf(modeInjection),
-            worldBooks = listOf(worldBook)
+            lorebooks = listOf(lorebook)
         )
 
         val systemText = getMessageText(result[0])
@@ -734,7 +734,7 @@ class PromptInjectionTransformerTest {
             messages = listOf(UIMessage.user("Hello")),
             assistant = createAssistant(),
             modeInjections = listOf(createModeInjection()),
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertTrue(result.isEmpty())
@@ -754,7 +754,7 @@ class PromptInjectionTransformerTest {
             messages = listOf(UIMessage.user("Hello")),
             assistant = createAssistant(modeInjectionIds = setOf(id1, id2)),
             modeInjections = injections,
-            worldBooks = emptyList()
+            lorebooks = emptyList()
         )
 
         assertEquals(1, result.size)

@@ -29,7 +29,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Tag
-import me.rerere.rikkahub.data.model.WorldBook
+import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.ui.theme.PresetThemes
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.toMutableStateFlow
@@ -104,7 +104,7 @@ class SettingsStore(
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
-        val WORLD_BOOKS = stringPreferencesKey("world_books")
+        val LOREBOOKS = stringPreferencesKey("lorebooks")
     }
 
     private val dataStore = context.settingsStore
@@ -168,7 +168,7 @@ class SettingsStore(
                 modeInjections = preferences[MODE_INJECTIONS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
-                worldBooks = preferences[WORLD_BOOKS]?.let {
+                lorebooks = preferences[LOREBOOKS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
             )
@@ -212,7 +212,7 @@ class SettingsStore(
             // 去重并清理无效引用
             val validMcpServerIds = settings.mcpServers.map { it.id }.toSet()
             val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
-            val validWorldBookIds = settings.worldBooks.map { it.id }.toSet()
+            val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
@@ -239,9 +239,9 @@ class SettingsStore(
                         modeInjectionIds = assistant.modeInjectionIds.filter { id ->
                             id in validModeInjectionIds
                         }.toSet(),
-                        // 过滤掉不存在的世界书 ID
-                        worldBookIds = assistant.worldBookIds.filter { id ->
-                            id in validWorldBookIds
+                        // 过滤掉不存在的 Lorebook ID
+                        lorebookIds = assistant.lorebookIds.filter { id ->
+                            id in validLorebookIds
                         }.toSet()
                     )
                 },
@@ -301,7 +301,7 @@ class SettingsStore(
                 preferences[SELECTED_TTS_PROVIDER] = it.toString()
             } ?: preferences.remove(SELECTED_TTS_PROVIDER)
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
-            preferences[WORLD_BOOKS] = JsonInstant.encodeToString(settings.worldBooks)
+            preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
         }
     }
 
@@ -348,7 +348,7 @@ data class Settings(
     val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val modeInjections: List<PromptInjection.ModeInjection> = emptyList(),
-    val worldBooks: List<WorldBook> = emptyList(),
+    val lorebooks: List<Lorebook> = emptyList(),
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

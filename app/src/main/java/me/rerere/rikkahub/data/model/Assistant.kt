@@ -35,7 +35,7 @@ data class Assistant(
     val localTools: List<LocalToolOption> = emptyList(),
     val background: String? = null,
     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
-    val worldBookIds: Set<Uuid> = emptySet(),           // 关联的世界书 ID
+    val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
 )
 
 @Serializable
@@ -116,7 +116,7 @@ enum class InjectionPosition {
  * 提示词注入
  *
  * - ModeInjection: 基于模式开关的注入（如学习模式）
- * - RegexInjection: 基于正则匹配的注入（世界书/Lorebook）
+ * - RegexInjection: 基于正则匹配的注入（Lorebook）
  */
 @Serializable
 sealed class PromptInjection {
@@ -162,10 +162,10 @@ sealed class PromptInjection {
 }
 
 /**
- * 世界书 - 组织管理多个 RegexInjection
+ * Lorebook - 组织管理多个 RegexInjection
  */
 @Serializable
-data class WorldBook(
+data class Lorebook(
     val id: Uuid = Uuid.random(),
     val name: String = "",
     val description: String = "",

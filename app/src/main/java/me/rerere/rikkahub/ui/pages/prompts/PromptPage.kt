@@ -75,7 +75,7 @@ import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
-import me.rerere.rikkahub.data.model.WorldBook
+import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
@@ -110,7 +110,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 )
                 NavigationBarItem(
                     selected = pagerState.currentPage == 1,
-                    label = { Text("世界书") },
+                    label = { Text("Lorebook") },
                     icon = { Icon(Lucide.Book, null) },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(1) }
@@ -130,9 +130,9 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                     modeInjections = settings.modeInjections,
                     onUpdate = { vm.updateSettings(settings.copy(modeInjections = it)) }
                 )
-                1 -> WorldBookTab(
-                    worldBooks = settings.worldBooks,
-                    onUpdate = { vm.updateSettings(settings.copy(worldBooks = it)) }
+                1 -> LorebookTab(
+                    lorebooks = settings.lorebooks,
+                    onUpdate = { vm.updateSettings(settings.copy(lorebooks = it)) }
                 )
             }
         }
@@ -459,27 +459,27 @@ private fun getPositionLabel(position: InjectionPosition): String = when (positi
     InjectionPosition.BOTTOM_OF_CHAT -> "最新消息前"
 }
 
-// ==================== World Book Tab ====================
+// ==================== Lorebook Tab ====================
 
 @Composable
-private fun WorldBookTab(
-    worldBooks: List<WorldBook>,
-    onUpdate: (List<WorldBook>) -> Unit
+private fun LorebookTab(
+    lorebooks: List<Lorebook>,
+    onUpdate: (List<Lorebook>) -> Unit
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val newList = worldBooks.toMutableList()
+        val newList = lorebooks.toMutableList()
         val item = newList.removeAt(from.index)
         newList.add(to.index, item)
         onUpdate(newList)
     }
-    val editState = useEditState<WorldBook> { edited ->
-        val index = worldBooks.indexOfFirst { it.id == edited.id }
+    val editState = useEditState<Lorebook> { edited ->
+        val index = lorebooks.indexOfFirst { it.id == edited.id }
         if (index >= 0) {
-            onUpdate(worldBooks.toMutableList().apply { set(index, edited) })
+            onUpdate(lorebooks.toMutableList().apply { set(index, edited) })
         } else {
-            onUpdate(worldBooks + edited)
+            onUpdate(lorebooks + edited)
         }
     }
 
@@ -496,7 +496,7 @@ private fun WorldBookTab(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             state = lazyListState
         ) {
-            if (worldBooks.isEmpty()) {
+            if (lorebooks.isEmpty()) {
                 item {
                     Column(
                         modifier = Modifier
@@ -506,7 +506,7 @@ private fun WorldBookTab(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "暂无世界书",
+                            text = "暂无 Lorebook",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -518,12 +518,12 @@ private fun WorldBookTab(
                     }
                 }
             } else {
-                items(worldBooks, key = { it.id }) { book ->
+                items(lorebooks, key = { it.id }) { book ->
                     ReorderableItem(
                         state = reorderableState,
                         key = book.id
                     ) { isDragging ->
-                        WorldBookCard(
+                        LorebookCard(
                             book = book,
                             modifier = Modifier
                                 .longPressDraggableHandle()
@@ -534,7 +534,7 @@ private fun WorldBookTab(
                                     }
                                 },
                             onEdit = { editState.open(book) },
-                            onDelete = { onUpdate(worldBooks - book) }
+                            onDelete = { onUpdate(lorebooks - book) }
                         )
                     }
                 }
@@ -547,7 +547,7 @@ private fun WorldBookTab(
                 .align(Alignment.BottomCenter)
                 .offset(y = -ScreenOffset)
         ) {
-            Button(onClick = { editState.open(WorldBook()) }) {
+            Button(onClick = { editState.open(Lorebook()) }) {
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
@@ -556,7 +556,7 @@ private fun WorldBookTab(
                     AnimatedVisibility(expanded) {
                         Row {
                             Spacer(modifier = Modifier.size(8.dp))
-                            Text("添加世界书")
+                            Text("添加 Lorebook")
                         }
                     }
                 }
@@ -566,7 +566,7 @@ private fun WorldBookTab(
 
     if (editState.isEditing) {
         editState.currentState?.let { state ->
-            WorldBookEditSheet(
+            LorebookEditSheet(
                 book = state,
                 onDismiss = { editState.dismiss() },
                 onConfirm = { editState.confirm() },
@@ -577,8 +577,8 @@ private fun WorldBookTab(
 }
 
 @Composable
-private fun WorldBookCard(
-    book: WorldBook,
+private fun LorebookCard(
+    book: Lorebook,
     modifier: Modifier = Modifier,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -625,7 +625,7 @@ private fun WorldBookCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = book.name.ifEmpty { "未命名世界书" },
+                        text = book.name.ifEmpty { "未命名 Lorebook" },
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -663,11 +663,11 @@ private fun WorldBookCard(
 }
 
 @Composable
-private fun WorldBookEditSheet(
-    book: WorldBook,
+private fun LorebookEditSheet(
+    book: Lorebook,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
-    onEdit: (WorldBook) -> Unit
+    onEdit: (Lorebook) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -703,7 +703,7 @@ private fun WorldBookEditSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "编辑世界书",
+                text = "编辑 Lorebook",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )

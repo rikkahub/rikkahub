@@ -6,14 +6,14 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
-import me.rerere.rikkahub.data.model.WorldBook
+import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.isTriggered
 
 /**
  * 提示词注入转换器
  *
- * 根据 Assistant 关联的 ModeInjection 和 WorldBook 进行提示词注入
+ * 根据 Assistant 关联的 ModeInjection 和 Lorebook 进行提示词注入
  */
 object PromptInjectionTransformer : InputMessageTransformer {
     override suspend fun transform(
@@ -24,7 +24,7 @@ object PromptInjectionTransformer : InputMessageTransformer {
             messages = messages,
             assistant = ctx.assistant,
             modeInjections = ctx.settings.modeInjections,
-            worldBooks = ctx.settings.worldBooks
+            lorebooks = ctx.settings.lorebooks
         )
     }
 }
@@ -36,14 +36,14 @@ internal fun transformMessages(
     messages: List<UIMessage>,
     assistant: Assistant,
     modeInjections: List<PromptInjection.ModeInjection>,
-    worldBooks: List<WorldBook>
+    lorebooks: List<Lorebook>
 ): List<UIMessage> {
     // 收集所有需要注入的内容
     val injections = collectInjections(
         messages = messages,
         assistant = assistant,
         modeInjections = modeInjections,
-        worldBooks = worldBooks
+        lorebooks = lorebooks
     )
 
     if (injections.isEmpty()) {
@@ -66,7 +66,7 @@ internal fun collectInjections(
     messages: List<UIMessage>,
     assistant: Assistant,
     modeInjections: List<PromptInjection.ModeInjection>,
-    worldBooks: List<WorldBook>
+    lorebooks: List<Lorebook>
 ): List<PromptInjection> {
     val injections = mutableListOf<PromptInjection>()
 
@@ -75,16 +75,16 @@ internal fun collectInjections(
         .filter { it.enabled && assistant.modeInjectionIds.contains(it.id) }
         .forEach { injections.add(it) }
 
-    // 2. 获取关联的 WorldBook 中被触发的 RegexInjection
-    val enabledWorldBooks = worldBooks.filter {
-        it.enabled && assistant.worldBookIds.contains(it.id)
+    // 2. 获取关联的 Lorebook 中被触发的 RegexInjection
+    val enabledLorebooks = lorebooks.filter {
+        it.enabled && assistant.lorebookIds.contains(it.id)
     }
-    if (enabledWorldBooks.isNotEmpty()) {
+    if (enabledLorebooks.isNotEmpty()) {
         // 提取上下文用于匹配（只取非 SYSTEM 消息）
         val nonSystemMessages = messages.filter { it.role != MessageRole.SYSTEM }
 
-        enabledWorldBooks.forEach { worldBook ->
-            worldBook.entries
+        enabledLorebooks.forEach { lorebook ->
+            lorebook.entries
                 .filter { entry ->
                     val context = extractContextForMatching(nonSystemMessages, entry.scanDepth)
                     entry.isTriggered(context)

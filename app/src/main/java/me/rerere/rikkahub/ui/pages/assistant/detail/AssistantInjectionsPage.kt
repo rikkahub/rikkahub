@@ -118,8 +118,8 @@ internal fun AssistantInjectionsContent(
             }
         }
 
-        // World Books Section
-        if (settings.worldBooks.isNotEmpty()) {
+        // Lorebooks Section
+        if (settings.lorebooks.isNotEmpty()) {
             Card {
                 Column(
                     modifier = Modifier
@@ -127,20 +127,20 @@ internal fun AssistantInjectionsContent(
                         .padding(8.dp)
                 ) {
                     Text(
-                        text = "World Books",
+                        text = "Lorebooks",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(8.dp)
                     )
                     HorizontalDivider()
-                    settings.worldBooks.forEach { worldBook ->
+                    settings.lorebooks.forEach { lorebook ->
                         FormItem(
                             modifier = Modifier.padding(8.dp),
                             label = {
                                 Column {
-                                    Text(worldBook.name.ifBlank { "Unnamed World Book" })
-                                    if (worldBook.description.isNotBlank()) {
+                                    Text(lorebook.name.ifBlank { "Unnamed Lorebook" })
+                                    if (lorebook.description.isNotBlank()) {
                                         Text(
-                                            text = worldBook.description,
+                                            text = lorebook.description,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
@@ -149,19 +149,19 @@ internal fun AssistantInjectionsContent(
                             },
                             tail = {
                                 Switch(
-                                    checked = assistant.worldBookIds.contains(worldBook.id),
+                                    checked = assistant.lorebookIds.contains(lorebook.id),
                                     onCheckedChange = { checked ->
                                         val newIds = if (checked) {
-                                            assistant.worldBookIds + worldBook.id
+                                            assistant.lorebookIds + lorebook.id
                                         } else {
-                                            assistant.worldBookIds - worldBook.id
+                                            assistant.lorebookIds - lorebook.id
                                         }
-                                        onUpdate(assistant.copy(worldBookIds = newIds))
+                                        onUpdate(assistant.copy(lorebookIds = newIds))
                                     }
                                 )
                             }
                         )
-                        if (worldBook != settings.worldBooks.last()) {
+                        if (lorebook != settings.lorebooks.last()) {
                             HorizontalDivider()
                         }
                     }
@@ -170,7 +170,7 @@ internal fun AssistantInjectionsContent(
         }
 
         // Empty state
-        if (settings.modeInjections.isEmpty() && settings.worldBooks.isEmpty()) {
+        if (settings.modeInjections.isEmpty() && settings.lorebooks.isEmpty()) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -189,7 +189,7 @@ internal fun AssistantInjectionsContent(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     Text(
-                        text = "Create mode injections or world books in Settings > Prompt Injections",
+                        text = "Create mode injections or lorebooks in Settings > Prompt Injections",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                     )

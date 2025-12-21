@@ -38,7 +38,7 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 
 ### Concepts
 
-- **Assistant**: An assistant configuration with system prompts, model parameters, and conversation isolation. Each assistant maintains its own settings including temperature, context size, custom headers, tools, memory options, regex transformations, and prompt injections (mode/world book). Assistants provide isolated chat environments with specific behaviors and capabilities. (app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt)
+- **Assistant**: An assistant configuration with system prompts, model parameters, and conversation isolation. Each assistant maintains its own settings including temperature, context size, custom headers, tools, memory options, regex transformations, and prompt injections (mode/lorebook). Assistants provide isolated chat environments with specific behaviors and capabilities. (app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt)
 
 - **Conversation**: A persistent conversation thread between the user and an assistant. Each conversation maintains a list of MessageNodes in a tree structure to support message branching, along with metadata like title, creation time, and pin status. Conversations can be truncated at a specific index and maintain chat suggestions. (app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt)
 

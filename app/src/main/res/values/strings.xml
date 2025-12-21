@@ -9,7 +9,7 @@
   <string name="add">Add</string>
   <string name="app_name">RikkaHub</string>
   <string name="assistant_detail_basic_desc">Configure name, avatar, model, and parameters</string>
-  <string name="assistant_detail_injections_desc">Configure mode injections and world books</string>
+  <string name="assistant_detail_injections_desc">Configure mode injections and lorebooks</string>
   <string name="assistant_detail_local_tools_desc">Enable local tools like JavaScript engine</string>
   <string name="assistant_detail_mcp_desc">Configure MCP server tools for the assistant</string>
   <string name="assistant_detail_memory_desc">Manage assistant memory and recent chat references</string>

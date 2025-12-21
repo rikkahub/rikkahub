@@ -7,7 +7,7 @@ import kotlinx.serialization.json.encodeToJsonElement
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.PromptInjection
-import me.rerere.rikkahub.data.model.WorldBook
+import me.rerere.rikkahub.data.model.Lorebook
 import kotlin.uuid.Uuid
 
 interface ExportSerializer<T> {
