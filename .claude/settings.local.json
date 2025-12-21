@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(./gradlew:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(uv run --directory locale-tui src/main.py add:*)"
     ],
     "deny": []
   }

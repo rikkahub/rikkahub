@@ -87,12 +87,12 @@ The `locale-tui` tool provides CLI and TUI interfaces for managing string resour
 
 ```bash
 # Add a new string resource with automatic translation
-cd locale-tui && uv run src/main.py add <key> <value> [OPTIONS]
+uv run --directory locale-tui src/main.py add <key> <value> [OPTIONS]
 
 # Examples:
-cd locale-tui && uv run src/main.py add hello_world "Hello, World!"           # Add and auto-translate
-cd locale-tui && uv run src/main.py add greeting "Welcome" -m app             # Specify module
-cd locale-tui && uv run src/main.py add test_key "Test" --skip-translate      # Skip translation
+uv run --directory locale-tui src/main.py add hello_world "Hello, World!"           # Add and auto-translate
+uv run --directory locale-tui src/main.py add greeting "Welcome" -m app             # Specify module
+uv run --directory locale-tui src/main.py add test_key "Test" --skip-translate      # Skip translation
 ```
 
 **Options:**
@@ -104,10 +104,10 @@ cd locale-tui && uv run src/main.py add test_key "Test" --skip-translate      # 
 2. By default, automatically translates to all configured target languages using OpenAI API
 3. Saves translations to respective language directories (values-zh, values-ja, etc.)
 4. Displays translation progress and results for each language
+5. The input value should only be English
 
 **Other Commands:**
-- `cd locale-tui && uv run src/main.py list-keys [-m module]`: List all string resource keys
-- `cd locale-tui && uv run src/main.py`: Launch interactive TUI interface
+- ` uv run --directory locale-tui src/main.py list-keys [-m module]`: List all string resource keys
 
 See `locale-tui/CLAUDE.md` for detailed documentation.
 
