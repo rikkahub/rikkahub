@@ -109,6 +109,13 @@ fun AssistantDetailPage(id: String) {
                 )
 
                 SettingCard(
+                    icon = Lucide.Syringe,
+                    title = stringResource(R.string.assistant_page_tab_injections),
+                    description = stringResource(R.string.assistant_detail_injections_desc),
+                    onClick = { navController.navigate(Screen.AssistantInjections(id)) }
+                )
+
+                SettingCard(
                     icon = Lucide.Brain,
                     title = stringResource(R.string.assistant_page_tab_memory),
                     description = stringResource(R.string.assistant_detail_memory_desc),
@@ -136,13 +143,6 @@ fun AssistantDetailPage(id: String) {
                     onClick = { navController.navigate(Screen.AssistantLocalTool(id)) }
                 )
 
-                SettingCard(
-                    icon = Lucide.Syringe,
-                    title = stringResource(R.string.assistant_page_tab_injections),
-                    description = stringResource(R.string.assistant_detail_injections_desc),
-                    onClick = { navController.navigate(Screen.AssistantInjections(id)) }
-                )
-
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
@@ -163,7 +163,9 @@ private fun AssistantHeader(
             value = assistant.avatar,
             name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
             onUpdate = null,
-            modifier = Modifier.size(100.dp).heroAnimation("assistant_${assistant.id}")
+            modifier = Modifier
+                .size(100.dp)
+                .heroAnimation("assistant_${assistant.id}")
         )
 
         Text(
