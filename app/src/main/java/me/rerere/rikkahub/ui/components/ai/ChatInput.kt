@@ -54,7 +54,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -90,6 +92,7 @@ import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Camera
+import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Eraser
 import com.composables.icons.lucide.FileAudio
 import com.composables.icons.lucide.Files
@@ -119,6 +122,8 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.InjectionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
@@ -699,6 +704,8 @@ private fun FilesPicker(
 ) {
     val settings = LocalSettings.current
     val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
+    var showInjectionSheet by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -743,6 +750,36 @@ private fun FilesPicker(
             modifier = Modifier.fillMaxWidth()
         )
 
+        // Prompt Injections
+        if (settings.modeInjections.isNotEmpty() || settings.lorebooks.isNotEmpty()) {
+            val activeCount = assistant.modeInjectionIds.size + assistant.lorebookIds.size
+            ListItem(
+                leadingContent = {
+                    Icon(
+                        imageVector = Lucide.BookOpen,
+                        contentDescription = stringResource(R.string.chat_page_prompt_injections),
+                    )
+                },
+                headlineContent = {
+                    Text(stringResource(R.string.chat_page_prompt_injections))
+                },
+                trailingContent = {
+                    if (activeCount > 0) {
+                        Text(
+                            text = activeCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.large)
+                    .clickable {
+                        showInjectionSheet = true
+                    },
+            )
+        }
+
         ListItem(
             leadingContent = {
                 Icon(
@@ -776,6 +813,16 @@ private fun FilesPicker(
                         onClearContext()
                     }
                 ),
+        )
+    }
+
+    // Injection Bottom Sheet
+    if (showInjectionSheet) {
+        InjectionQuickConfigSheet(
+            assistant = assistant,
+            settings = settings,
+            onUpdateAssistant = onUpdateAssistant,
+            onDismiss = { showInjectionSheet = false }
         )
     }
 }
@@ -1177,6 +1224,37 @@ private fun BigIconTextButton(
         }
         ProvideTextStyle(MaterialTheme.typography.bodySmall) {
             text()
+        }
+    }
+}
+
+@Composable
+private fun InjectionQuickConfigSheet(
+    assistant: Assistant,
+    settings: Settings,
+    onUpdateAssistant: (Assistant) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.75f)
+                .padding(horizontal = 16.dp),
+        ) {
+            InjectionSelector(
+                assistant = assistant,
+                settings = settings,
+                onUpdate = onUpdateAssistant,
+                modifier = Modifier.weight(1f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

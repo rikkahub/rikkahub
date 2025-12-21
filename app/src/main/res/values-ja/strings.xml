@@ -699,5 +699,13 @@
   <string name="prompt_page_scan_depth">スキャン深度（メッセージ）</string>
   <string name="setting_page_prompts_title">プロンプトインジェクション</string>
   <string name="setting_page_prompts_desc">モードまたは正規表現ベースのプロンプトインジェクションを設定</string>
+  <string name="chat_page_prompt_injections">プロンプトインジェクション</string>
+  <string name="injection_selector_unnamed">名前なし</string>
+  <string name="injection_selector_unnamed_lorebook">名前なしのルアーブック</string>
+  <string name="injection_selector_empty_title">プロンプトインジェクションがありません</string>
+  <string name="injection_selector_empty_hint">設定でモードインジェクションまたはロアブックを作成</string>
+  <string name="injection_selector_mode_injections">モードインジェクション</string>
+  <string name="injection_selector_lorebooks">ロアブックス</string>
+  <string name="injection_selector_mode_injections_empty">利用可能なモードインジェクションがありません</string>
+  <string name="injection_selector_lorebooks_empty">利用可能なロアブックがありません</string>
 </resources>
-

@@ -699,5 +699,14 @@
   <string name="prompt_page_scan_depth">扫描深度 (消息数)</string>
   <string name="setting_page_prompts_title">提示注入</string>
   <string name="setting_page_prompts_desc">配置基于模式或正则表达式的提示注入</string>
+  <string name="chat_page_prompt_injections">提示注入</string>
+  <string name="injection_selector_unnamed">未命名</string>
+  <string name="injection_selector_unnamed_lorebook">未命名Lorebook</string>
+  <string name="injection_selector_empty_title">无可用的提示注入</string>
+  <string name="injection_selector_empty_hint">在设置中创建模式注入或lorebooks</string>
+  <string name="injection_selector_mode_injections">模式注入</string>
+  <string name="injection_selector_lorebooks">世界书</string>
+  <string name="injection_selector_mode_injections_empty">无可用的模式注入</string>
+  <string name="injection_selector_lorebooks_empty">无可用的lorebooks</string>
 </resources>
 

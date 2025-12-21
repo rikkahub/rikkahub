@@ -699,5 +699,13 @@
   <string name="prompt_page_scan_depth">Глубина сканирования (сообщения)</string>
   <string name="setting_page_prompts_title">Внедрение подсказок</string>
   <string name="setting_page_prompts_desc">Настройте внедрение подсказок на основе режима или регулярных выражений</string>
+  <string name="chat_page_prompt_injections">Внедрение подсказок</string>
+  <string name="injection_selector_unnamed">Без имени</string>
+  <string name="injection_selector_unnamed_lorebook">Безымянная книга знаний</string>
+  <string name="injection_selector_empty_title">Нет доступных внедрений подсказок</string>
+  <string name="injection_selector_empty_hint">Создайте режимы инъекций или лорбук в Настройках</string>
+  <string name="injection_selector_mode_injections">Режим инъекций</string>
+  <string name="injection_selector_lorebooks">Лорбуки</string>
+  <string name="injection_selector_mode_injections_empty">Нет доступных внедрений режима</string>
+  <string name="injection_selector_lorebooks_empty">Нет доступных книг знаний</string>
 </resources>
-

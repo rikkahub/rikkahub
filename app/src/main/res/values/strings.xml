@@ -699,5 +699,13 @@
   <string name="prompt_page_scan_depth">Scan Depth (Messages)</string>
   <string name="setting_page_prompts_title">Prompt Injections</string>
   <string name="setting_page_prompts_desc">Configure mode or regex-based prompt injections</string>
+  <string name="chat_page_prompt_injections">Prompt Injections</string>
+  <string name="injection_selector_unnamed">Unnamed</string>
+  <string name="injection_selector_unnamed_lorebook">Unnamed Lorebook</string>
+  <string name="injection_selector_empty_title">No Prompt Injections Available</string>
+  <string name="injection_selector_empty_hint">Create mode injections or lorebooks in Settings</string>
+  <string name="injection_selector_mode_injections">Mode Injections</string>
+  <string name="injection_selector_lorebooks">Lorebooks</string>
+  <string name="injection_selector_mode_injections_empty">No mode injections available</string>
+  <string name="injection_selector_lorebooks_empty">No lorebooks available</string>
 </resources>
-

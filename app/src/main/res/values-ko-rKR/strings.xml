@@ -699,5 +699,14 @@
   <string name="prompt_page_scan_depth">스캔 깊이(메시지)</string>
   <string name="setting_page_prompts_title">프롬프트 인젝션</string>
   <string name="setting_page_prompts_desc">모드 또는 정규식 기반 프롬프트 인젝션 구성</string>
+  <string name="chat_page_prompt_injections">프롬프트 인젝션</string>
+  <string name="injection_selector_unnamed">이름 없음</string>
+  <string name="injection_selector_unnamed_lorebook">이름 없는 롤북</string>
+  <string name="injection_selector_empty_title">사용 가능한 프롬프트 삽입이 없습니다</string>
+  <string name="injection_selector_empty_hint">설정에서 Create mode injections 또는 lorebooks를 만드세요</string>
+  <string name="injection_selector_mode_injections">모드 인젝션</string>
+  <string name="injection_selector_lorebooks">세계책</string>
+  <string name="injection_selector_mode_injections_empty">사용 가능한 모드 인젝션이 없습니다</string>
+  <string name="injection_selector_lorebooks_empty">사용 가능한 러북이 없습니다</string>
 </resources>
 
