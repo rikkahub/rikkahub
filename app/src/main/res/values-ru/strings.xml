@@ -697,5 +697,7 @@
   <string name="prompt_page_constant_active">Всегда активно</string>
   <string name="prompt_page_constant_active_desc">Срабатывание без совпадения ключевых слов</string>
   <string name="prompt_page_scan_depth">Глубина сканирования (сообщения)</string>
+  <string name="setting_page_prompts_title">Внедрение подсказок</string>
+  <string name="setting_page_prompts_desc">Настройте внедрение подсказок на основе режима или регулярных выражений</string>
 </resources>
 

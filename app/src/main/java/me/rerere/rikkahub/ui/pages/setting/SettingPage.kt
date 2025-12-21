@@ -177,8 +177,8 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
             item {
                 SettingItem(
                     navController = navController,
-                    title = { Text("提示书") },
-                    description = { Text("设置基于模式或者正则的提示词注入") },
+                    title = { Text(stringResource(R.string.setting_page_prompts_title)) },
+                    description = { Text(stringResource(R.string.setting_page_prompts_desc)) },
                     icon = { Icon(Lucide.BookOpen, "Prompts") },
                     link = Screen.Prompts
                 )

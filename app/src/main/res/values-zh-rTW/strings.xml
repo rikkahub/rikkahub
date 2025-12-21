@@ -697,5 +697,7 @@
   <string name="prompt_page_constant_active">持續啟用</string>
   <string name="prompt_page_constant_active_desc">無需關鍵字配對即可觸發</string>
   <string name="prompt_page_scan_depth">掃描深度（訊息）</string>
+  <string name="setting_page_prompts_title">Prompt注入</string>
+  <string name="setting_page_prompts_desc">設定基於模式或正規表達式的提示注入</string>
 </resources>
 

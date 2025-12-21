@@ -697,5 +697,7 @@
   <string name="prompt_page_constant_active">常驻激活</string>
   <string name="prompt_page_constant_active_desc">无需匹配关键词即触发</string>
   <string name="prompt_page_scan_depth">扫描深度 (消息数)</string>
+  <string name="setting_page_prompts_title">提示注入</string>
+  <string name="setting_page_prompts_desc">配置基于模式或正则表达式的提示注入</string>
 </resources>
 

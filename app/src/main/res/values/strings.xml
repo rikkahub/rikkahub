@@ -697,5 +697,7 @@
   <string name="prompt_page_constant_active">Always Active</string>
   <string name="prompt_page_constant_active_desc">Trigger without keyword matching</string>
   <string name="prompt_page_scan_depth">Scan Depth (Messages)</string>
+  <string name="setting_page_prompts_title">Prompt Injections</string>
+  <string name="setting_page_prompts_desc">Configure mode or regex-based prompt injections</string>
 </resources>
 
