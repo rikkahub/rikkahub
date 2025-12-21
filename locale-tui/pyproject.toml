@@ -13,3 +13,7 @@ dependencies = [
     "textual>=6.11.0",
     "textual-dev>=1.8.0",
 ]
+
+[project.scripts]
+locale-tui = "src.main:main"
+

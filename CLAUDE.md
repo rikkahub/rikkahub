@@ -79,6 +79,38 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 - If the user explicitly requests localization, all languages should be supported.
 - English(en) is the default language. Chinese(zh), Japanese(ja), and Traditional Chinese(zh-rTW), Korean(ko-rKR) are supported.
 
+#### locale-tui Tool
+
+The `locale-tui` tool provides CLI and TUI interfaces for managing string resources with AI-powered translation.
+
+**Add Command Usage:**
+
+```bash
+# Add a new string resource with automatic translation
+cd locale-tui && uv run src/main.py add <key> <value> [OPTIONS]
+
+# Examples:
+cd locale-tui && uv run src/main.py add hello_world "Hello, World!"           # Add and auto-translate
+cd locale-tui && uv run src/main.py add greeting "Welcome" -m app             # Specify module
+cd locale-tui && uv run src/main.py add test_key "Test" --skip-translate      # Skip translation
+```
+
+**Options:**
+- `--module, -m`: Specify module name (defaults to first module in config)
+- `--skip-translate`: Skip automatic translation, only add to source language
+
+**Behavior:**
+1. Adds key-value pair to source language `strings.xml` (values/strings.xml)
+2. By default, automatically translates to all configured target languages using OpenAI API
+3. Saves translations to respective language directories (values-zh, values-ja, etc.)
+4. Displays translation progress and results for each language
+
+**Other Commands:**
+- `cd locale-tui && uv run src/main.py list-keys [-m module]`: List all string resource keys
+- `cd locale-tui && uv run src/main.py`: Launch interactive TUI interface
+
+See `locale-tui/CLAUDE.md` for detailed documentation.
+
 ### Database
 
 - Room database with migration support
