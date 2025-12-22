@@ -37,9 +37,7 @@ fun FormItem(
             modifier = modifier.weight(1f)
         ) {
             ProvideTextStyle(
-                value = MaterialTheme.typography.labelMedium.copy(
-                    color = MaterialTheme.colorScheme.secondary
-                )
+                value = MaterialTheme.typography.titleMedium
             ) {
                 label()
             }
