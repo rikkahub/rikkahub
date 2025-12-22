@@ -32,6 +32,7 @@ import me.rerere.rikkahub.utils.createChatFilesByContents
 
 @Composable
 fun BackgroundPicker(
+    modifier: Modifier = Modifier,
     background: String?,
     onUpdate: (String?) -> Unit
 ) {
@@ -51,58 +52,56 @@ fun BackgroundPicker(
         }
     }
 
-    Card {
-        FormItem(
-            modifier = Modifier.padding(16.dp),
-            label = {
-                Text(stringResource(R.string.assistant_page_chat_background))
+    FormItem(
+        modifier = modifier,
+        label = {
+            Text(stringResource(R.string.assistant_page_chat_background))
+        },
+        description = {
+            Text(stringResource(R.string.assistant_page_chat_background_desc))
+        }
+    ) {
+        Button(
+            onClick = {
+                showPickOption = true
             },
-            description = {
-                Text(stringResource(R.string.assistant_page_chat_background_desc))
-            }
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Button(
-                onClick = {
-                    showPickOption = true
-                },
-                modifier = Modifier.fillMaxWidth()
+            Text(
+                text = if (background != null) {
+                    stringResource(R.string.assistant_page_change_background)
+                } else {
+                    stringResource(R.string.assistant_page_select_background)
+                }
+            )
+        }
+
+        if (background != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (background != null) {
-                        stringResource(R.string.assistant_page_change_background)
-                    } else {
-                        stringResource(R.string.assistant_page_select_background)
-                    }
+                    text = stringResource(R.string.assistant_page_background_set),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
                 )
-            }
-
-            if (background != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                TextButton(
+                    onClick = {
+                        onUpdate(null)
+                    }
                 ) {
-                    Text(
-                        text = stringResource(R.string.assistant_page_background_set),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(
-                        onClick = {
-                            onUpdate(null)
-                        }
-                    ) {
-                        Text(stringResource(R.string.assistant_page_remove))
-                    }
+                    Text(stringResource(R.string.assistant_page_remove))
                 }
-
-                AsyncImage(
-                    model = background,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
+
+            AsyncImage(
+                model = background,
+                contentDescription = null,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 

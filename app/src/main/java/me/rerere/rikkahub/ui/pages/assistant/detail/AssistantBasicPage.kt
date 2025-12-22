@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -119,7 +120,11 @@ internal fun AssistantBasicContent(
             )
         }
 
-        Card {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
             FormItem(
                 label = {
                     Text(stringResource(R.string.assistant_page_name))
@@ -181,7 +186,11 @@ internal fun AssistantBasicContent(
             )
         }
 
-        Card {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
@@ -439,15 +448,22 @@ internal fun AssistantBasicContent(
             }
         }
 
-        BackgroundPicker(
-            background = assistant.background,
-            onUpdate = { background ->
-                onUpdate(
-                    assistant.copy(
-                        background = background
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
+            BackgroundPicker(
+                modifier = Modifier.padding(8.dp),
+                background = assistant.background,
+                onUpdate = { background ->
+                    onUpdate(
+                        assistant.copy(
+                            background = background
+                        )
                     )
-                )
-            }
-        )
+                }
+            )
+        }
     }
 }
