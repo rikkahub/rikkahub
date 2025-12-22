@@ -250,7 +250,7 @@ class RouteActivity : ComponentActivity() {
                         AssistantDetailPage(route.id)
                     }
 
-                    composable<Screen.AssistantBasic> { backStackEntry ->
+                    composableWrapper<Screen.AssistantBasic> { backStackEntry ->
                         val route = backStackEntry.toRoute<Screen.AssistantBasic>()
                         AssistantBasicPage(route.id)
                     }
