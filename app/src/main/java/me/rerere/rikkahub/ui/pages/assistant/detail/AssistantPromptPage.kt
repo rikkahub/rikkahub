@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -152,7 +153,11 @@ private fun AssistantPromptContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Card {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
@@ -235,7 +240,11 @@ private fun AssistantPromptContent(
             }
         }
 
-        Card {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
@@ -351,7 +360,11 @@ private fun AssistantPromptContent(
             }
         }
 
-        Card {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
@@ -451,7 +464,11 @@ private fun AssistantPromptContent(
             }
         }
 
-        Card {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
@@ -542,7 +559,11 @@ private fun AssistantPromptContent(
             }
         }
 
-        Card {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
