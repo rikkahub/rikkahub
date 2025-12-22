@@ -87,9 +87,38 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
     }
     val newProvider = type.primaryConstructor!!.callBy(emptyMap())
     return when (newProvider) {
-        is ProviderSetting.OpenAI -> newProvider.copy(apiKey = apiKey)
-        is ProviderSetting.Google -> newProvider.copy(apiKey = apiKey)
-        is ProviderSetting.Claude -> newProvider.copy(apiKey = apiKey)
+        is ProviderSetting.OpenAI -> newProvider.copy(
+            id = this.id,
+            enabled = this.enabled,
+            name = this.name,
+            models = this.models,
+            proxy = this.proxy,
+            balanceOption = this.balanceOption,
+            builtIn = this.builtIn,
+            apiKey = apiKey
+        )
+
+        is ProviderSetting.Google -> newProvider.copy(
+            id = this.id,
+            enabled = this.enabled,
+            name = this.name,
+            models = this.models,
+            proxy = this.proxy,
+            balanceOption = this.balanceOption,
+            builtIn = this.builtIn,
+            apiKey = apiKey
+        )
+
+        is ProviderSetting.Claude -> newProvider.copy(
+            id = this.id,
+            enabled = this.enabled,
+            name = this.name,
+            models = this.models,
+            proxy = this.proxy,
+            balanceOption = this.balanceOption,
+            builtIn = this.builtIn,
+            apiKey = apiKey
+        )
     }
 }
 
