@@ -201,7 +201,7 @@ private fun ColumnScope.ProviderConfigureOpenAI(
             onCheckedChange = {
                 onEdit(provider.copy(useResponseApi = it))
 
-                if(it && provider.baseUrl.toHttpUrlOrNull()?.host != "api.openai.com") {
+                if (it && provider.baseUrl.toHttpUrlOrNull()?.host != "api.openai.com") {
                     toaster.show(
                         message = responseAPIWarning,
                         type = ToastType.Warning
@@ -251,7 +251,8 @@ private fun ColumnScope.ProviderConfigureClaude(
         label = {
             Text(stringResource(id = R.string.setting_provider_page_api_key))
         },
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
     )
 
     OutlinedTextField(
