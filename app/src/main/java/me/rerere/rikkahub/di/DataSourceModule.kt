@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.Migration_6_7
+import me.rerere.rikkahub.data.db.Migration_11_12
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.WebdavSync
 import okhttp3.MediaType.Companion.toMediaType
@@ -34,7 +35,7 @@ val dataSourceModule = module {
 
     single {
         Room.databaseBuilder(get(), AppDatabase::class.java, "rikka_hub")
-            .addMigrations(Migration_6_7)
+            .addMigrations(Migration_6_7, Migration_11_12)
             .build()
     }
 
@@ -62,6 +63,10 @@ val dataSourceModule = module {
 
     single {
         get<AppDatabase>().genMediaDao()
+    }
+
+    single {
+        get<AppDatabase>().messageNodeDao()
     }
 
     single { McpManager(settingsStore = get(), appScope = get()) }

@@ -9,9 +9,11 @@ import androidx.paging.map
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
+import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
+import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
@@ -22,6 +24,7 @@ import kotlin.uuid.Uuid
 class ConversationRepository(
     private val context: Context,
     private val conversationDAO: ConversationDAO,
+    private val messageNodeDAO: MessageNodeDAO,
 ) {
     companion object {
         private const val PAGE_SIZE = 20
@@ -32,7 +35,10 @@ class ConversationRepository(
         return conversationDAO.getRecentConversationsOfAssistant(
             assistantId = assistantId.toString(),
             limit = limit
-        ).map { conversationEntityToConversation(it) }
+        ).map { entity ->
+            val nodes = loadMessageNodes(entity.id)
+            conversationEntityToConversation(entity, nodes)
+        }
     }
 
     fun getConversationsOfAssistant(assistantId: Uuid): Flow<List<Conversation>> {
@@ -40,7 +46,8 @@ class ConversationRepository(
             .getConversationsOfAssistant(assistantId.toString())
             .map { flow ->
                 flow.map { entity ->
-                    conversationEntityToConversation(entity)
+                    // 列表视图不需要完整的 nodes，使用空列表
+                    conversationEntityToConversation(entity, emptyList())
                 }
             }
     }
@@ -63,7 +70,7 @@ class ConversationRepository(
             .searchConversations(titleKeyword)
             .map { flow ->
                 flow.map { entity ->
-                    conversationEntityToConversation(entity)
+                    conversationEntityToConversation(entity, emptyList())
                 }
             }
     }
@@ -86,34 +93,35 @@ class ConversationRepository(
             .searchConversationsOfAssistant(assistantId.toString(), titleKeyword)
             .map { flow ->
                 flow.map { entity ->
-                    conversationEntityToConversation(entity)
+                    conversationEntityToConversation(entity, emptyList())
                 }
             }
     }
 
-    fun searchConversationsOfAssistantPaging(assistantId: Uuid, titleKeyword: String): Flow<PagingData<Conversation>> = Pager(
-        config = PagingConfig(
-            pageSize = PAGE_SIZE,
-            initialLoadSize = INITIAL_LOAD_SIZE,
-            enablePlaceholders = false
-        ),
-        pagingSourceFactory = { conversationDAO.searchConversationsOfAssistantPaging(assistantId.toString(), titleKeyword) }
-    ).flow.map { pagingData ->
-        pagingData.map { entity ->
-            conversationSummaryToConversation(entity)
+    fun searchConversationsOfAssistantPaging(assistantId: Uuid, titleKeyword: String): Flow<PagingData<Conversation>> =
+        Pager(
+            config = PagingConfig(
+                pageSize = PAGE_SIZE,
+                initialLoadSize = INITIAL_LOAD_SIZE,
+                enablePlaceholders = false
+            ),
+            pagingSourceFactory = {
+                conversationDAO.searchConversationsOfAssistantPaging(
+                    assistantId.toString(),
+                    titleKeyword
+                )
+            }
+        ).flow.map { pagingData ->
+            pagingData.map { entity ->
+                conversationSummaryToConversation(entity)
+            }
         }
-    }
 
     suspend fun getConversationById(uuid: Uuid): Conversation? {
-        val entity = try {
-            conversationDAO.getConversationById(uuid.toString())
-        } catch (e: SQLiteBlobTooBigException) {
-            e.printStackTrace()
-            conversationDAO.resetConversationNodes(uuid.toString())
-            conversationDAO.getConversationById(uuid.toString())
-        }
+        val entity = conversationDAO.getConversationById(uuid.toString())
         return if (entity != null) {
-            conversationEntityToConversation(entity)
+            val nodes = loadMessageNodes(entity.id)
+            conversationEntityToConversation(entity, nodes)
         } else null
     }
 
@@ -121,15 +129,20 @@ class ConversationRepository(
         conversationDAO.insert(
             conversationToConversationEntity(conversation)
         )
+        saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
     }
 
     suspend fun updateConversation(conversation: Conversation) {
         conversationDAO.update(
             conversationToConversationEntity(conversation)
         )
+        // 删除旧的节点，插入新的节点
+        messageNodeDAO.deleteByConversation(conversation.id.toString())
+        saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
+        // message_node 会通过 CASCADE 自动删除
         conversationDAO.delete(
             conversationToConversationEntity(conversation)
         )
@@ -143,11 +156,11 @@ class ConversationRepository(
     }
 
     fun conversationToConversationEntity(conversation: Conversation): ConversationEntity {
-        require(conversation.messageNodes.none { it.messages.any { message -> message.hasBase64Part() } } )
+        require(conversation.messageNodes.none { it.messages.any { message -> message.hasBase64Part() } })
         return ConversationEntity(
             id = conversation.id.toString(),
             title = conversation.title,
-            nodes = JsonInstant.encodeToString(conversation.messageNodes),
+            nodes = "[]",  // nodes 现在存储在单独的表中
             createAt = conversation.createAt.toEpochMilli(),
             updateAt = conversation.updateAt.toEpochMilli(),
             assistantId = conversation.assistantId.toString(),
@@ -157,14 +170,14 @@ class ConversationRepository(
         )
     }
 
-    fun conversationEntityToConversation(conversationEntity: ConversationEntity): Conversation {
-        val messageNodes = JsonInstant
-            .decodeFromString<List<MessageNode>>(conversationEntity.nodes)
-            .filter { it.messages.isNotEmpty() }
+    fun conversationEntityToConversation(
+        conversationEntity: ConversationEntity,
+        messageNodes: List<MessageNode>
+    ): Conversation {
         return Conversation(
             id = Uuid.parse(conversationEntity.id),
             title = conversationEntity.title,
-            messageNodes = messageNodes,
+            messageNodes = messageNodes.filter { it.messages.isNotEmpty() },
             createAt = Instant.ofEpochMilli(conversationEntity.createAt),
             updateAt = Instant.ofEpochMilli(conversationEntity.updateAt),
             assistantId = Uuid.parse(conversationEntity.assistantId),
@@ -179,7 +192,7 @@ class ConversationRepository(
             .getPinnedConversations()
             .map { flow ->
                 flow.map { entity ->
-                    conversationEntityToConversation(entity)
+                    conversationEntityToConversation(entity, emptyList())
                 }
             }
     }
@@ -201,6 +214,29 @@ class ConversationRepository(
             updateAt = Instant.ofEpochMilli(entity.updateAt),
             messageNodes = emptyList(),
         )
+    }
+
+    private suspend fun loadMessageNodes(conversationId: String): List<MessageNode> {
+        return messageNodeDAO.getNodesOfConversation(conversationId).map { entity ->
+            MessageNode(
+                id = Uuid.parse(entity.id),
+                messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages),
+                selectIndex = entity.selectIndex
+            )
+        }
+    }
+
+    private suspend fun saveMessageNodes(conversationId: String, nodes: List<MessageNode>) {
+        val entities = nodes.mapIndexed { index, node ->
+            MessageNodeEntity(
+                id = node.id.toString(),
+                conversationId = conversationId,
+                nodeIndex = index,
+                messages = JsonInstant.encodeToString(node.messages),
+                selectIndex = node.selectIndex
+            )
+        }
+        messageNodeDAO.insertAll(entities)
     }
 }
 

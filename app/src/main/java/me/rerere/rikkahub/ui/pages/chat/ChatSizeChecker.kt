@@ -18,7 +18,7 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
 
 // 对话大小警告阈值
-const val CONVERSATION_SIZE_WARNING_THRESHOLD = 12 * 1024 * 1024 // 12MB
+const val CONVERSATION_SIZE_WARNING_THRESHOLD = 20 * 1024 * 1024 // 20MB
 const val CONVERSATION_SIZE_DANGER_THRESHOLD = 24 * 1024 * 1024 // 24MB
 
 /**

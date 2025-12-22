@@ -15,17 +15,20 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.GenMediaDAO
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
+import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
+import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
+import kotlin.uuid.Uuid
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
 
 private const val TAG = "AppDatabase"
 
 @Database(
-    entities = [ConversationEntity::class, MemoryEntity::class, GenMediaEntity::class],
-    version = 11,
+    entities = [ConversationEntity::class, MemoryEntity::class, GenMediaEntity::class, MessageNodeEntity::class],
+    version = 12,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -45,6 +48,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDAO
 
     abstract fun genMediaDao(): GenMediaDAO
+
+    abstract fun messageNodeDao(): MessageNodeDAO
 }
 
 object TokenUsageConverter {
@@ -150,3 +155,62 @@ val Migration_6_7 = object : Migration(6, 7) {
 
 @DeleteColumn(tableName = "ConversationEntity", columnName = "usage")
 class Migration_8_9 : AutoMigrationSpec
+
+val Migration_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        Log.i(TAG, "migrate: start migrate from 11 to 12 (extracting message nodes to separate table)")
+        db.beginTransaction()
+        try {
+            // 1. 创建 message_node 表
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS message_node (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    node_index INTEGER NOT NULL,
+                    messages TEXT NOT NULL,
+                    select_index INTEGER NOT NULL,
+                    FOREIGN KEY (conversation_id) REFERENCES ConversationEntity(id) ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_message_node_conversation_id ON message_node(conversation_id)")
+
+            // 2. 从 conversationentity.nodes 迁移数据到 message_node
+            val cursor = db.query("SELECT id, nodes FROM conversationentity")
+            var migratedCount = 0
+            var nodeCount = 0
+
+            while (cursor.moveToNext()) {
+                val conversationId = cursor.getString(0)
+                val nodesJson = cursor.getString(1)
+
+                try {
+                    val nodes = JsonInstant.decodeFromString<List<MessageNode>>(nodesJson)
+                    nodes.forEachIndexed { index, node ->
+                        val nodeId = node.id.toString()
+                        val messagesJson = JsonInstant.encodeToString(node.messages)
+                        db.execSQL(
+                            "INSERT INTO message_node (id, conversation_id, node_index, messages, select_index) VALUES (?, ?, ?, ?, ?)",
+                            arrayOf(nodeId, conversationId, index, messagesJson, node.selectIndex)
+                        )
+                        nodeCount++
+                    }
+                    migratedCount++
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to migrate nodes for conversation $conversationId: ${e.message}")
+                }
+            }
+            cursor.close()
+
+            // 3. 清空旧的 nodes 列（保留列结构以保持兼容性）
+            db.execSQL("UPDATE conversationentity SET nodes = '[]'")
+
+            db.setTransactionSuccessful()
+            Log.i(TAG, "migrate: migrate from 11 to 12 success ($migratedCount conversations, $nodeCount nodes)")
+        } finally {
+            db.endTransaction()
+        }
+    }
+}
+
