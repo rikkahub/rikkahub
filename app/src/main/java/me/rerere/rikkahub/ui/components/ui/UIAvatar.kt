@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Pencil
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.hooks.rememberAvatarShape
@@ -100,52 +103,75 @@ fun UIAvatar(
         }
     }
 
-    Surface(
-        shape = rememberAvatarShape(loading),
-        modifier = modifier.size(32.dp),
-        onClick = {
-            onClick?.invoke()
-            if (onUpdate != null) showPickOption = true
-        },
-        tonalElevation = 4.dp,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxSize()
+    Box(modifier = modifier.size(32.dp)) {
+        Surface(
+            shape = rememberAvatarShape(loading),
+            modifier = Modifier.fillMaxSize(),
+            onClick = {
+                onClick?.invoke()
+                if (onUpdate != null) showPickOption = true
+            },
+            tonalElevation = 4.dp,
+            color = MaterialTheme.colorScheme.secondaryContainer,
         ) {
-            when (value) {
-                is Avatar.Image -> {
-                    AsyncImage(
-                        model = value.url,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                    )
-                }
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                when (value) {
+                    is Avatar.Image -> {
+                        AsyncImage(
+                            model = value.url,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
 
-                is Avatar.Emoji -> {
-                    Text(
-                        text = value.content,
-                        autoSize = TextAutoSize.StepBased(
-                            minFontSize = 15.sp,
-                            maxFontSize = 30.sp,
-                        ),
-                        lineHeight = 1.em,
-                        modifier = Modifier.padding(2.dp)
-                    )
-                }
+                    is Avatar.Emoji -> {
+                        Text(
+                            text = value.content,
+                            autoSize = TextAutoSize.StepBased(
+                                minFontSize = 15.sp,
+                                maxFontSize = 30.sp,
+                            ),
+                            lineHeight = 1.em,
+                            modifier = Modifier.padding(2.dp)
+                        )
+                    }
 
-                is Avatar.Dummy -> {
-                    Text(
-                        text = name
-                            .ifBlank { stringResource(R.string.user_default_name) }
-                            .takeIf { it.isNotEmpty() }
-                            ?.firstOrNull()?.toString()?.uppercase() ?: "A",
-                        fontSize = 20.sp,
-                        lineHeight = 1.em
-                    )
+                    is Avatar.Dummy -> {
+                        Text(
+                            text = name
+                                .ifBlank { stringResource(R.string.user_default_name) }
+                                .takeIf { it.isNotEmpty() }
+                                ?.firstOrNull()?.toString()?.uppercase() ?: "A",
+                            fontSize = 20.sp,
+                            lineHeight = 1.em
+                        )
+                    }
                 }
+            }
+        }
+
+        // Show edit icon when editable
+        if (onUpdate != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(14.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.tertiaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Lucide.Pencil,
+                    contentDescription = "Edit",
+                    modifier = Modifier
+                        .size(10.dp)
+                        .padding(1.dp),
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                )
             }
         }
     }
