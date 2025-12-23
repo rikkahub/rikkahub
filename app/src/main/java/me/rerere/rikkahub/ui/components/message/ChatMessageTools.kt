@@ -43,6 +43,7 @@ import com.composables.icons.lucide.BookDashed
 import com.composables.icons.lucide.BookHeart
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Wrench
 import kotlinx.coroutines.launch
@@ -102,7 +103,7 @@ fun ToolCallItem(
                     imageVector = when (toolName) {
                         "create_memory", "edit_memory" -> Lucide.BookHeart
                         "delete_memory" -> Lucide.BookDashed
-                        "search_web" -> Lucide.Earth
+                        "search_web" -> Lucide.Search
                         "scrape_web" -> Lucide.Earth
                         else -> Lucide.Wrench
                     },
