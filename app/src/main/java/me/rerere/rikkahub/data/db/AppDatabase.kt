@@ -186,7 +186,8 @@ val Migration_11_12 = object : Migration(11, 12) {
                 val nodesJson = cursor.getString(1)
                 val nodes = JsonInstant.decodeFromString<List<MessageNode>>(nodesJson)
                 nodes.forEachIndexed { index, node ->
-                    val nodeId = node.id.toString()
+                    // 为每个节点生成新的 UUID，避免主键冲突
+                    val nodeId = Uuid.random().toString()
                     val messagesJson = JsonInstant.encodeToString(node.messages)
                     db.execSQL(
                         "INSERT INTO message_node (id, conversation_id, node_index, messages, select_index) VALUES (?, ?, ?, ?, ?)",
