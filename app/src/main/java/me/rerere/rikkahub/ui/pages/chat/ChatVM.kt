@@ -343,6 +343,7 @@ class ChatVM(
             0, conversation.value.messageNodes.indexOf(node) + 1
         ).map { messageNode ->
             messageNode.copy(
+                id = Uuid.random(),  // 生成新的节点 ID
                 messages = messageNode.messages.map { msg ->
                     msg.copy(
                         parts = msg.parts.map { part ->
