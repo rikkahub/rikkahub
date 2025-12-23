@@ -708,4 +708,7 @@
   <string name="injection_selector_lorebooks">Lorebooks</string>
   <string name="injection_selector_mode_injections_empty">No mode injections available</string>
   <string name="injection_selector_lorebooks_empty">No lorebooks available</string>
+  <string name="setting_display_page_show_line_numbers_title">Show Line Numbers</string>
+  <string name="setting_display_page_show_line_numbers_desc">Display line numbers in code blocks</string>
 </resources>
+

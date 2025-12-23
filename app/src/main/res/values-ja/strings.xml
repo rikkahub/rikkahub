@@ -708,4 +708,7 @@
   <string name="injection_selector_lorebooks">ロアブックス</string>
   <string name="injection_selector_mode_injections_empty">利用可能なモードインジェクションがありません</string>
   <string name="injection_selector_lorebooks_empty">利用可能なロアブックがありません</string>
+  <string name="setting_display_page_show_line_numbers_title">行番号を表示</string>
+  <string name="setting_display_page_show_line_numbers_desc">コードブロックに行番号を表示</string>
 </resources>
+

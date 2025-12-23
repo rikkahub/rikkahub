@@ -708,5 +708,7 @@
   <string name="injection_selector_lorebooks">世界書</string>
   <string name="injection_selector_mode_injections_empty">無可用的模式注入</string>
   <string name="injection_selector_lorebooks_empty">沒有可用的背景書</string>
+  <string name="setting_display_page_show_line_numbers_title">顯示行號</string>
+  <string name="setting_display_page_show_line_numbers_desc">在程式碼區塊中顯示行號</string>
 </resources>
 

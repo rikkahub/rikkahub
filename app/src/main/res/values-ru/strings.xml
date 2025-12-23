@@ -708,4 +708,7 @@
   <string name="injection_selector_lorebooks">Лорбуки</string>
   <string name="injection_selector_mode_injections_empty">Нет доступных внедрений режима</string>
   <string name="injection_selector_lorebooks_empty">Нет доступных книг знаний</string>
+  <string name="setting_display_page_show_line_numbers_title">Показывать номера строк</string>
+  <string name="setting_display_page_show_line_numbers_desc">Отображать номера строк в блоках кода</string>
 </resources>
+
