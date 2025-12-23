@@ -184,22 +184,17 @@ val Migration_11_12 = object : Migration(11, 12) {
             while (cursor.moveToNext()) {
                 val conversationId = cursor.getString(0)
                 val nodesJson = cursor.getString(1)
-
-                try {
-                    val nodes = JsonInstant.decodeFromString<List<MessageNode>>(nodesJson)
-                    nodes.forEachIndexed { index, node ->
-                        val nodeId = node.id.toString()
-                        val messagesJson = JsonInstant.encodeToString(node.messages)
-                        db.execSQL(
-                            "INSERT INTO message_node (id, conversation_id, node_index, messages, select_index) VALUES (?, ?, ?, ?, ?)",
-                            arrayOf(nodeId, conversationId, index, messagesJson, node.selectIndex)
-                        )
-                        nodeCount++
-                    }
-                    migratedCount++
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to migrate nodes for conversation $conversationId: ${e.message}")
+                val nodes = JsonInstant.decodeFromString<List<MessageNode>>(nodesJson)
+                nodes.forEachIndexed { index, node ->
+                    val nodeId = node.id.toString()
+                    val messagesJson = JsonInstant.encodeToString(node.messages)
+                    db.execSQL(
+                        "INSERT INTO message_node (id, conversation_id, node_index, messages, select_index) VALUES (?, ?, ?, ?, ?)",
+                        arrayOf(nodeId, conversationId, index, messagesJson, node.selectIndex)
+                    )
+                    nodeCount++
                 }
+                migratedCount++
             }
             cursor.close()
 
