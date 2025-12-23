@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -213,9 +214,11 @@ private fun SharedTransitionScope.ChatListNormal(
         // 欢迎界面 - 当对话为空时显示
         AnimatedVisibility(
             visible = conversation.newConversation && conversation.messageNodes.isEmpty(),
-            modifier = Modifier.padding(innerPadding).zIndex(5f),
+            modifier = Modifier
+                .padding(innerPadding)
+                .zIndex(5f),
             enter = scaleIn() + fadeIn(),
-            exit = scaleOut() + fadeOut(),
+            exit = fadeOut(animationSpec = tween(50)),
         ) {
             ChatWelcome(
                 modifier = Modifier,
