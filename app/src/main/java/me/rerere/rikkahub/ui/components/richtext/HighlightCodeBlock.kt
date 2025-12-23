@@ -6,6 +6,7 @@ import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -58,6 +59,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import me.rerere.highlight.HighlightText
+import me.rerere.highlight.HighlightTextColorPalette
 import me.rerere.highlight.Highlighter
 import me.rerere.highlight.LocalHighlighter
 import me.rerere.highlight.buildHighlightText
@@ -150,85 +152,23 @@ fun HighlightCodeBlock(
 
         // 如果显示行号且自动换行，需要逐行渲染以保持对齐
         if (showLineNumbers && autoWrap) {
-            val lineNumberWidth = remember(displayLines.size) {
-                displayLines.size.toString().length
-            }
-            SelectionContainer {
-                Column {
-                    displayLines.forEachIndexed { index, line ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = (index + 1).toString().padStart(lineNumberWidth, ' '),
-                                fontSize = textStyle.fontSize,
-                                lineHeight = textStyle.lineHeight,
-                                fontFamily = JetbrainsMono,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                softWrap = false,
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                            HighlightText(
-                                code = line,
-                                language = language,
-                                fontSize = textStyle.fontSize,
-                                lineHeight = textStyle.lineHeight,
-                                colors = colorPalette,
-                                overflow = TextOverflow.Visible,
-                                softWrap = true,
-                                fontFamily = JetbrainsMono,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
-            }
+            CodeBlockWithLineNumbersWrapped(
+                displayLines = displayLines,
+                language = language,
+                textStyle = textStyle,
+                colorPalette = colorPalette,
+            )
         } else {
-            Row(
-                modifier = Modifier.then(
-                    if (autoWrap) {
-                        Modifier
-                    } else {
-                        Modifier.horizontalScroll(scrollState)
-                    }
-                )
-            ) {
-                // 行号列
-                if (showLineNumbers) {
-                    val lineNumberWidth = remember(displayLines.size) {
-                        displayLines.size.toString().length
-                    }
-                    Column(
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        displayLines.forEachIndexed { index, _ ->
-                            Text(
-                                text = (index + 1).toString().padStart(lineNumberWidth, ' '),
-                                fontSize = textStyle.fontSize,
-                                lineHeight = textStyle.lineHeight,
-                                fontFamily = JetbrainsMono,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                softWrap = false,
-                            )
-                        }
-                    }
-                }
-
-                // 代码列
-                SelectionContainer {
-                    HighlightText(
-                        code = displayCode,
-                        language = language,
-                        modifier = Modifier.animateContentSize(),
-                        fontSize = textStyle.fontSize,
-                        lineHeight = textStyle.lineHeight,
-                        colors = colorPalette,
-                        overflow = TextOverflow.Visible,
-                        softWrap = autoWrap,
-                        fontFamily = JetbrainsMono
-                    )
-                }
-            }
+            CodeBlockDefault(
+                displayCode = displayCode,
+                displayLines = displayLines,
+                language = language,
+                textStyle = textStyle,
+                colorPalette = colorPalette,
+                autoWrap = autoWrap,
+                showLineNumbers = showLineNumbers,
+                scrollState = scrollState,
+            )
         }
 
         Spacer(Modifier.height(4.dp))
@@ -265,6 +205,106 @@ fun HighlightCodeBlock(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CodeBlockWithLineNumbersWrapped(
+    displayLines: List<String>,
+    language: String,
+    textStyle: TextStyle,
+    colorPalette: HighlightTextColorPalette,
+) {
+    val lineNumberWidth = remember(displayLines.size) {
+        displayLines.size.toString().length
+    }
+    SelectionContainer {
+        Column {
+            displayLines.forEachIndexed { index, line ->
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = (index + 1).toString().padStart(lineNumberWidth, ' '),
+                        fontSize = textStyle.fontSize,
+                        lineHeight = textStyle.lineHeight,
+                        fontFamily = JetbrainsMono,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        softWrap = false,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    HighlightText(
+                        code = line,
+                        language = language,
+                        fontSize = textStyle.fontSize,
+                        lineHeight = textStyle.lineHeight,
+                        colors = colorPalette,
+                        overflow = TextOverflow.Visible,
+                        softWrap = true,
+                        fontFamily = JetbrainsMono,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CodeBlockDefault(
+    displayCode: String,
+    displayLines: List<String>,
+    language: String,
+    textStyle: TextStyle,
+    colorPalette: HighlightTextColorPalette,
+    autoWrap: Boolean,
+    showLineNumbers: Boolean,
+    scrollState: ScrollState,
+) {
+    Row(
+        modifier = Modifier.then(
+            if (autoWrap) {
+                Modifier
+            } else {
+                Modifier.horizontalScroll(scrollState)
+            }
+        )
+    ) {
+        // 行号列
+        if (showLineNumbers) {
+            val lineNumberWidth = remember(displayLines.size) {
+                displayLines.size.toString().length
+            }
+            Column(
+                modifier = Modifier.padding(end = 8.dp)
+            ) {
+                displayLines.forEachIndexed { index, _ ->
+                    Text(
+                        text = (index + 1).toString().padStart(lineNumberWidth, ' '),
+                        fontSize = textStyle.fontSize,
+                        lineHeight = textStyle.lineHeight,
+                        fontFamily = JetbrainsMono,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        softWrap = false,
+                    )
+                }
+            }
+        }
+
+        // 代码列
+        SelectionContainer {
+            HighlightText(
+                code = displayCode,
+                language = language,
+                modifier = Modifier.animateContentSize(),
+                fontSize = textStyle.fontSize,
+                lineHeight = textStyle.lineHeight,
+                colors = colorPalette,
+                overflow = TextOverflow.Visible,
+                softWrap = autoWrap,
+                fontFamily = JetbrainsMono
+            )
         }
     }
 }
