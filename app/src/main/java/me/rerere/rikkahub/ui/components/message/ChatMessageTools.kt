@@ -69,6 +69,25 @@ import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import org.koin.compose.koinInject
 
+private object ToolNames {
+    const val CREATE_MEMORY = "create_memory"
+    const val EDIT_MEMORY = "edit_memory"
+    const val DELETE_MEMORY = "delete_memory"
+    const val SEARCH_WEB = "search_web"
+    const val SCRAPE_WEB = "scrape_web"
+}
+
+private fun getToolIcon(toolName: String) = when (toolName) {
+    ToolNames.CREATE_MEMORY, ToolNames.EDIT_MEMORY -> Lucide.BookHeart
+    ToolNames.DELETE_MEMORY -> Lucide.BookDashed
+    ToolNames.SEARCH_WEB -> Lucide.Search
+    ToolNames.SCRAPE_WEB -> Lucide.Earth
+    else -> Lucide.Wrench
+}
+
+private fun JsonElement?.getStringContent(key: String): String? =
+    this?.jsonObject?.get(key)?.jsonPrimitiveOrNull?.contentOrNull
+
 @Composable
 fun ToolCallItem(
     toolName: String,
@@ -100,13 +119,7 @@ fun ToolCallItem(
                 )
             } else {
                 Icon(
-                    imageVector = when (toolName) {
-                        "create_memory", "edit_memory" -> Lucide.BookHeart
-                        "delete_memory" -> Lucide.BookDashed
-                        "search_web" -> Lucide.Search
-                        "scrape_web" -> Lucide.Earth
-                        else -> Lucide.Wrench
-                    },
+                    imageVector = getToolIcon(toolName),
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                     tint = LocalContentColor.current.copy(alpha = 0.7f)
@@ -117,15 +130,15 @@ fun ToolCallItem(
             ) {
                 Text(
                     text = when (toolName) {
-                        "create_memory" -> stringResource(R.string.chat_message_tool_create_memory)
-                        "edit_memory" -> stringResource(R.string.chat_message_tool_edit_memory)
-                        "delete_memory" -> stringResource(R.string.chat_message_tool_delete_memory)
-                        "search_web" -> stringResource(
+                        ToolNames.CREATE_MEMORY -> stringResource(R.string.chat_message_tool_create_memory)
+                        ToolNames.EDIT_MEMORY -> stringResource(R.string.chat_message_tool_edit_memory)
+                        ToolNames.DELETE_MEMORY -> stringResource(R.string.chat_message_tool_delete_memory)
+                        ToolNames.SEARCH_WEB -> stringResource(
                             R.string.chat_message_tool_search_web,
-                            arguments.jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull
-                                ?: ""
+                            arguments.getStringContent("query") ?: ""
                         )
-                        "scrape_web" -> stringResource(R.string.chat_message_tool_scrape_web)
+
+                        ToolNames.SCRAPE_WEB -> stringResource(R.string.chat_message_tool_scrape_web)
                         else -> stringResource(
                             R.string.chat_message_tool_call_generic,
                             toolName
@@ -135,11 +148,10 @@ fun ToolCallItem(
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.shimmer(isLoading = loading),
                 )
-                if (toolName == "create_memory" || toolName == "edit_memory") {
-                    val content = content?.jsonObject["content"]?.jsonPrimitiveOrNull?.contentOrNull
-                    if (content != null) {
+                if (toolName == ToolNames.CREATE_MEMORY || toolName == ToolNames.EDIT_MEMORY) {
+                    content.getStringContent("content")?.let { memoryContent ->
                         Text(
-                            text = content,
+                            text = memoryContent,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.shimmer(isLoading = loading),
@@ -148,9 +160,8 @@ fun ToolCallItem(
                         )
                     }
                 }
-                if (toolName == "search_web") {
-                    val answer = content?.jsonObject["answer"]?.jsonPrimitiveOrNull?.contentOrNull
-                    if (answer != null) {
+                if (toolName == ToolNames.SEARCH_WEB) {
+                    content.getStringContent("answer")?.let { answer ->
                         Text(
                             text = answer,
                             style = MaterialTheme.typography.labelSmall,
@@ -160,16 +171,14 @@ fun ToolCallItem(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    val items = content?.jsonObject["items"]?.jsonArray ?: emptyList()
+                    val items = content?.jsonObject?.get("items")?.jsonArray ?: emptyList()
                     if (items.isNotEmpty()) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             FaviconRow(
-                                urls = items.mapNotNull {
-                                    it.jsonObject["url"]?.jsonPrimitiveOrNull?.contentOrNull
-                                },
+                                urls = items.mapNotNull { it.getStringContent("url") },
                                 size = 18.dp,
                             )
                             Text(
@@ -180,8 +189,8 @@ fun ToolCallItem(
                         }
                     }
                 }
-                if(toolName == "scrape_web") {
-                    val url = arguments.jsonObject["url"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+                if (toolName == ToolNames.SCRAPE_WEB) {
+                    val url = arguments.getStringContent("url") ?: ""
                     Text(
                         text = url,
                         style = MaterialTheme.typography.labelSmall,
@@ -215,221 +224,238 @@ private fun ToolCallPreviewSheet(
     val scope = rememberCoroutineScope()
 
     // Check if this is a memory creation/update operation
-    val isMemoryOperation = toolName in listOf("create_memory", "edit_memory")
+    val isMemoryOperation = toolName in listOf(ToolNames.CREATE_MEMORY, ToolNames.EDIT_MEMORY)
     val memoryId = (content as? JsonObject)?.get("id")?.jsonPrimitiveOrNull?.intOrNull
 
     ModalBottomSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        onDismissRequest = {
-            onDismissRequest()
-        },
+        onDismissRequest = onDismissRequest,
         content = {
-            Column(
-                modifier = Modifier
-                    .fillMaxHeight(0.8f)
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                when (toolName) {
-                    "search_web" -> {
-                        Text(
-                            stringResource(
-                                R.string.chat_message_tool_search_prefix,
-                                arguments.jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
-                            )
+            when (toolName) {
+                ToolNames.SEARCH_WEB -> SearchWebPreview(
+                    arguments = arguments,
+                    content = content,
+                    navController = navController
+                )
+
+                ToolNames.SCRAPE_WEB -> ScrapeWebPreview(content = content)
+                else -> GenericToolPreview(
+                    toolName = toolName,
+                    arguments = arguments,
+                    content = content,
+                    isMemoryOperation = isMemoryOperation,
+                    memoryId = memoryId,
+                    memoryRepo = memoryRepo,
+                    scope = scope,
+                    onDismissRequest = onDismissRequest
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun SearchWebPreview(
+    arguments: JsonElement,
+    content: JsonElement,
+    navController: androidx.navigation.NavController
+) {
+    val items = content.jsonObject["items"]?.jsonArray ?: emptyList()
+    val answer = content.getStringContent("answer")
+    val query = arguments.getStringContent("query") ?: ""
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxHeight(0.8f)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Text(stringResource(R.string.chat_message_tool_search_prefix, query))
+        }
+
+        if (answer != null) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    MarkdownBlock(
+                        content = answer,
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
+        if (items.isNotEmpty()) {
+            items(items) { item ->
+                val url = item.getStringContent("url") ?: return@items
+                val title = item.getStringContent("title") ?: return@items
+                val text = item.getStringContent("text") ?: return@items
+
+                Card(
+                    onClick = { navController.navigate(Screen.WebView(url = url)) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp, horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Favicon(
+                            url = url,
+                            modifier = Modifier.size(24.dp)
                         )
-                        val items = content.jsonObject["items"]?.jsonArray ?: emptyList()
-                        val answer = content.jsonObject["answer"]?.jsonPrimitive?.contentOrNull
-                        if (items.isNotEmpty()) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (answer != null) {
-                                    item {
-                                        Card(
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                                            )
-                                        ) {
-                                            MarkdownBlock(
-                                                content = answer,
-                                                modifier = Modifier
-                                                    .padding(16.dp)
-                                                    .fillMaxWidth(),
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
-                                        }
-                                    }
-                                }
-
-                                items(items) {
-                                    val url =
-                                        it.jsonObject["url"]?.jsonPrimitive?.content ?: return@items
-                                    val title =
-                                        it.jsonObject["title"]?.jsonPrimitive?.content
-                                            ?: return@items
-                                    val text =
-                                        it.jsonObject["text"]?.jsonPrimitive?.content
-                                            ?: return@items
-                                    Card(
-                                        onClick = {
-                                            navController.navigate(Screen.WebView(url = url))
-                                        },
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        )
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 8.dp, horizontal = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Favicon(
-                                                url = url,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                            Column {
-                                                Text(
-                                                    text = title,
-                                                    maxLines = 1
-                                                )
-                                                Text(
-                                                    text = text,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                                Text(
-                                                    text = url,
-                                                    maxLines = 1,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurface.copy(
-                                                        alpha = 0.6f
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            HighlightText(
-                                code = JsonInstantPretty.encodeToString(content),
-                                language = "json",
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-
-                    "scrape_web" -> {
-                        val urls = content.jsonObject["urls"]?.jsonArray ?: emptyList()
-                        Text(
-                            text = stringResource(
-                                R.string.chat_message_tool_scrape_prefix,
-                                urls.joinToString(", ") { it.jsonObject["url"]?.jsonPrimitiveOrNull?.contentOrNull ?: "" }),
-                        )
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            items(urls) { url ->
-                                val urlObject = url.jsonObject
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    Text(
-                                        text = urlObject["url"]?.jsonPrimitive?.content ?: "",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Card {
-                                        MarkdownBlock(
-                                            content = urlObject["content"]?.jsonPrimitive?.content ?: "",
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(
-                                                    8.dp
-                                                )
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    else -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Column {
+                            Text(text = title, maxLines = 1)
                             Text(
-                                text = stringResource(R.string.chat_message_tool_call_title),
-                                style = MaterialTheme.typography.headlineSmall,
-                                textAlign = TextAlign.Center
+                                text = text,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall
                             )
-
-                            // 如果是memory操作，允许用户快速删除
-                            if (isMemoryOperation && memoryId != null) {
-                                IconButton(
-                                    onClick = {
-                                        scope.launch {
-                                            try {
-                                                memoryRepo.deleteMemory(memoryId)
-                                                onDismissRequest()
-                                            } catch (e: Exception) {
-                                                // Handle error if needed
-                                            }
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        Lucide.Trash2,
-                                        contentDescription = "Delete memory"
-                                    )
-                                }
-                            }
-                        }
-                        FormItem(
-                            label = {
-                                Text(
-                                    stringResource(
-                                        R.string.chat_message_tool_call_label,
-                                        toolName
-                                    )
-                                )
-                            }
-                        ) {
-                            HighlightCodeBlock(
-                                code = JsonInstantPretty.encodeToString(arguments),
-                                language = "json",
-                                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
-                            )
-                        }
-                        FormItem(
-                            label = {
-                                Text(stringResource(R.string.chat_message_tool_call_result))
-                            }
-                        ) {
-                            HighlightCodeBlock(
-                                code = JsonInstantPretty.encodeToString(content),
-                                language = "json",
-                                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+                            Text(
+                                text = url,
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     }
                 }
             }
-        },
-    )
+        } else {
+            item {
+                HighlightText(
+                    code = JsonInstantPretty.encodeToString(content),
+                    language = "json",
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScrapeWebPreview(content: JsonElement) {
+    val urls = content.jsonObject["urls"]?.jsonArray ?: emptyList()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxHeight(0.8f)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Text(
+                text = stringResource(
+                    R.string.chat_message_tool_scrape_prefix,
+                    urls.joinToString(", ") { it.getStringContent("url") ?: "" }
+                )
+            )
+        }
+
+        items(urls) { url ->
+            val urlObject = url.jsonObject
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = urlObject["url"]?.jsonPrimitive?.content ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Card {
+                    MarkdownBlock(
+                        content = urlObject["content"]?.jsonPrimitive?.content ?: "",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GenericToolPreview(
+    toolName: String,
+    arguments: JsonElement,
+    content: JsonElement,
+    isMemoryOperation: Boolean,
+    memoryId: Int?,
+    memoryRepo: MemoryRepository,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onDismissRequest: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight(0.8f)
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.chat_message_tool_call_title),
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center
+            )
+
+            // 如果是memory操作，允许用户快速删除
+            if (isMemoryOperation && memoryId != null) {
+                IconButton(
+                    onClick = {
+                        scope.launch {
+                            memoryRepo.deleteMemory(memoryId)
+                            onDismissRequest()
+                        }
+                    }
+                ) {
+                    Icon(
+                        Lucide.Trash2,
+                        contentDescription = "Delete memory"
+                    )
+                }
+            }
+        }
+        FormItem(
+            label = {
+                Text(stringResource(R.string.chat_message_tool_call_label, toolName))
+            }
+        ) {
+            HighlightCodeBlock(
+                code = JsonInstantPretty.encodeToString(arguments),
+                language = "json",
+                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+            )
+        }
+        FormItem(
+            label = {
+                Text(stringResource(R.string.chat_message_tool_call_result))
+            }
+        ) {
+            HighlightCodeBlock(
+                code = JsonInstantPretty.encodeToString(content),
+                language = "json",
+                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+            )
+        }
+    }
 }
