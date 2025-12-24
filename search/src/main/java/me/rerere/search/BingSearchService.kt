@@ -47,7 +47,7 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
             val locale = Locale.getDefault()
             val acceptLanguage = "${locale.language}-${locale.country},${locale.language}"
             val doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.15 (KHTML, like Gecko) Chrome/24.0.1295.0 Safari/537.15")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
                 .header(
                     "Accept",
                     "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
