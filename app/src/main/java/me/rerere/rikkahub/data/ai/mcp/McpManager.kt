@@ -1,12 +1,21 @@
 package me.rerere.rikkahub.data.ai.mcp
 
 import android.util.Log
-import io.modelcontextprotocol.kotlin.sdk.CallToolRequest
-import io.modelcontextprotocol.kotlin.sdk.Implementation
-import io.modelcontextprotocol.kotlin.sdk.Tool
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.sse.*
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.util.StringValues
 import io.modelcontextprotocol.kotlin.sdk.client.Client
+import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
+import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.RequestOptions
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
+import io.modelcontextprotocol.kotlin.sdk.types.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,8 +32,6 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.ai.mcp.transport.SseClientTransport
-import me.rerere.rikkahub.data.ai.mcp.transport.StreamableHttpClientTransport
 import me.rerere.rikkahub.utils.checkDifferent
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -44,6 +51,19 @@ class McpManager(
         .followSslRedirects(true)
         .followRedirects(true)
         .build()
+
+    private val client = HttpClient(OkHttp) {
+        engine {
+            preconfigured = okHttpClient
+        }
+        install(ContentNegotiation) {
+            json(Json {
+                prettyPrint = true
+                isLenient = true
+            })
+        }
+        install(SSE)
+    }
 
     private val clients: MutableMap<McpServerConfig, Client> = mutableMapOf()
     val syncingStatus = MutableStateFlow<Map<Uuid, McpStatus>>(mapOf())
@@ -109,15 +129,13 @@ class McpManager(
         if (client.transport == null) client.connect(getTransport(config))
         val result = client.callTool(
             request = CallToolRequest(
-                name = tool.name,
-                arguments = args,
+                params = CallToolRequestParams(
+                    name = tool.name,
+                    arguments = args,
+                ),
             ),
             options = RequestOptions(timeout = 60.seconds),
-            compatibility = true
         )
-        require(result != null) {
-            "Result is null"
-        }
         return McpJson.encodeToJsonElement(result.content)
     }
 
@@ -125,16 +143,28 @@ class McpManager(
         is McpServerConfig.SseTransportServer -> {
             SseClientTransport(
                 urlString = config.url,
-                client = okHttpClient,
-                headers = config.commonOptions.headers,
+                client = client,
+                requestBuilder = {
+                    headers.appendAll(StringValues.build {
+                        config.commonOptions.headers.forEach {
+                            append(it.first, it.second)
+                        }
+                    })
+                },
             )
         }
 
         is McpServerConfig.StreamableHTTPServer -> {
             StreamableHttpClientTransport(
                 url = config.url,
-                client = okHttpClient,
-                headers = config.commonOptions.headers.toMap(),
+                client = client,
+                requestBuilder = {
+                    headers.appendAll(StringValues.build {
+                        config.commonOptions.headers.forEach {
+                            append(it.first, it.second)
+                        }
+                    })
+                }
             )
         }
     }
@@ -271,6 +301,6 @@ internal val McpJson: Json by lazy {
     }
 }
 
-private fun Tool.Input.toSchema(): InputSchema {
-    return InputSchema.Obj(properties = this.properties, required = this.required)
+private fun ToolSchema.toSchema(): InputSchema {
+    return InputSchema.Obj(properties = this.properties ?: JsonObject(emptyMap()), required = this.required)
 }
