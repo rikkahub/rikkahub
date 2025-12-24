@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.db.migrations
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
+import android.util.Log
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -410,6 +411,144 @@ class Migration_11_12_Test {
 
         assertTrue("Index on conversation_id should exist", cursor.count > 0)
         cursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate11To12_handlesVeryLargeConversations() {
+        // 准备一个超大对话和一个普通对话
+        val largeConversationId = Uuid.random().toString()
+        val normalConversationId = Uuid.random().toString()
+
+        // 创建一个包含大量消息节点的超大对话（模拟 SQLiteBlobTooBigException 场景）
+        val largeNodes = buildList {
+            repeat(5000) { i ->
+                add(
+                    MessageNode(
+                        id = Uuid.random(),
+                        messages = listOf(
+                            UIMessage(
+                                role = MessageRole.USER,
+                                parts = listOf(
+                                    UIMessagePart.Text(
+                                        "Message $i with some content to increase size " + "x".repeat(
+                                            100
+                                        )
+                                    )
+                                )
+                            ),
+                            UIMessage(
+                                role = MessageRole.ASSISTANT,
+                                parts = listOf(
+                                    UIMessagePart.Text(
+                                        "Response $i with some content to increase size " + "y".repeat(
+                                            100
+                                        )
+                                    )
+                                ),
+                                modelId = Uuid.random()
+                            )
+                        ),
+                        selectIndex = 0
+                    )
+                )
+            }
+        }
+
+        val normalNodes = listOf(
+            MessageNode(
+                id = Uuid.random(),
+                messages = listOf(
+                    UIMessage(
+                        role = MessageRole.USER,
+                        parts = listOf(UIMessagePart.Text("Normal conversation message"))
+                    )
+                ),
+                selectIndex = 0
+            )
+        )
+
+        // 创建版本 11 的数据库并插入数据
+        helper.createDatabase(TEST_DB, 11).apply {
+            // 插入超大对话
+            val largeValues = ContentValues().apply {
+                put("id", largeConversationId)
+                put("assistant_id", Uuid.random().toString())
+                put("title", "Very Large Conversation")
+                put("nodes", JsonInstant.encodeToString(largeNodes))
+                put("truncate_index", -1)
+                put("suggestions", "[]")
+                put("is_pinned", 0)
+                put("create_at", Instant.now().toEpochMilli())
+                put("update_at", Instant.now().toEpochMilli())
+            }
+            insert("conversationentity", SQLiteDatabase.CONFLICT_NONE, largeValues)
+
+            // 插入普通对话
+            val normalValues = ContentValues().apply {
+                put("id", normalConversationId)
+                put("assistant_id", Uuid.random().toString())
+                put("title", "Normal Conversation")
+                put("nodes", JsonInstant.encodeToString(normalNodes))
+                put("truncate_index", -1)
+                put("suggestions", "[]")
+                put("is_pinned", 0)
+                put("create_at", Instant.now().toEpochMilli())
+                put("update_at", Instant.now().toEpochMilli())
+            }
+            insert("conversationentity", SQLiteDatabase.CONFLICT_NONE, normalValues)
+            close()
+        }
+
+        // 运行迁移 - 应该不会失败，即使超大对话无法处理
+        val db = helper.runMigrationsAndValidate(TEST_DB, 12, true, Migration_11_12)
+
+        // 验证超大对话的消息节点（可能被跳过或成功迁移，取决于实际 blob 大小）
+        val largeCursor = db.query(
+            "SELECT * FROM message_node WHERE conversation_id = ?",
+            arrayOf(largeConversationId)
+        )
+        val largeNodesMigrated = largeCursor.count
+        largeCursor.close()
+
+        // 验证普通对话应该成功迁移
+        val normalCursor = db.query(
+            "SELECT * FROM message_node WHERE conversation_id = ?",
+            arrayOf(normalConversationId)
+        )
+        assertEquals("Normal conversation should be migrated successfully", 1, normalCursor.count)
+        normalCursor.close()
+
+        // 验证两个对话记录都还存在
+        val conversationsCursor = db.query("SELECT id FROM conversationentity")
+        assertEquals("Both conversations should still exist", 2, conversationsCursor.count)
+        conversationsCursor.close()
+
+        // 如果超大对话被跳过，其 nodes 字段应该仍然保留原始数据
+        // 如果成功迁移，nodes 字段应该被清空为 "[]"
+        val largeConvCursor = db.query(
+            "SELECT nodes FROM conversationentity WHERE id = ?",
+            arrayOf(largeConversationId)
+        )
+        assertTrue(largeConvCursor.moveToFirst())
+        val largeConvNodes = largeConvCursor.getString(0)
+        largeConvCursor.close()
+
+        // 验证普通对话的 nodes 应该被清空
+        val normalConvCursor = db.query(
+            "SELECT nodes FROM conversationentity WHERE id = ?",
+            arrayOf(normalConversationId)
+        )
+        assertTrue(normalConvCursor.moveToFirst())
+        val normalConvNodes = normalConvCursor.getString(0)
+        assertEquals("Normal conversation nodes should be cleared", "[]", normalConvNodes)
+        normalConvCursor.close()
+
+        Log.i(
+            "Migration_11_12_Test",
+            "Large conversation migration result: $largeNodesMigrated nodes migrated, nodes field: ${if (largeConvNodes == "[]") "cleared" else "preserved"}"
+        )
+
         db.close()
     }
 }
