@@ -3,8 +3,6 @@ package me.rerere.rikkahub.ui.pages.chat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -121,46 +119,44 @@ fun ChatList(
     onClearTranslation: (UIMessage) -> Unit = {},
     onJumpToMessage: (Int) -> Unit = {},
 ) {
-    SharedTransitionLayout {
-        AnimatedContent(
-            targetState = previewMode,
-            label = "ChatListMode",
-            transitionSpec = {
-                (fadeIn() + scaleIn(initialScale = 0.8f) togetherWith fadeOut() + scaleOut(targetScale = 0.8f))
-            }
-        ) { target ->
-            if (target) {
-                ChatListPreview(
-                    innerPadding = innerPadding,
-                    conversation = conversation,
-                    settings = settings,
-                    onJumpToMessage = onJumpToMessage,
-                    animatedVisibilityScope = this@AnimatedContent,
-                )
-            } else {
-                ChatListNormal(
-                    innerPadding = innerPadding,
-                    conversation = conversation,
-                    state = state,
-                    loading = loading,
-                    settings = settings,
-                    onRegenerate = onRegenerate,
-                    onEdit = onEdit,
-                    onForkMessage = onForkMessage,
-                    onDelete = onDelete,
-                    onUpdateMessage = onUpdateMessage,
-                    onClickSuggestion = onClickSuggestion,
-                    onTranslate = onTranslate,
-                    onClearTranslation = onClearTranslation,
-                    animatedVisibilityScope = this@AnimatedContent,
-                )
-            }
+    AnimatedContent(
+        targetState = previewMode,
+        label = "ChatListMode",
+        transitionSpec = {
+            (fadeIn() + scaleIn(initialScale = 0.8f) togetherWith fadeOut() + scaleOut(targetScale = 0.8f))
+        }
+    ) { target ->
+        if (target) {
+            ChatListPreview(
+                innerPadding = innerPadding,
+                conversation = conversation,
+                settings = settings,
+                onJumpToMessage = onJumpToMessage,
+                animatedVisibilityScope = this@AnimatedContent,
+            )
+        } else {
+            ChatListNormal(
+                innerPadding = innerPadding,
+                conversation = conversation,
+                state = state,
+                loading = loading,
+                settings = settings,
+                onRegenerate = onRegenerate,
+                onEdit = onEdit,
+                onForkMessage = onForkMessage,
+                onDelete = onDelete,
+                onUpdateMessage = onUpdateMessage,
+                onClickSuggestion = onClickSuggestion,
+                onTranslate = onTranslate,
+                onClearTranslation = onClearTranslation,
+                animatedVisibilityScope = this@AnimatedContent,
+            )
         }
     }
 }
 
 @Composable
-private fun SharedTransitionScope.ChatListNormal(
+private fun ChatListNormal(
     innerPadding: PaddingValues,
     conversation: Conversation,
     state: LazyListState,
@@ -257,10 +253,6 @@ private fun SharedTransitionScope.ChatListNormal(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
-                .sharedBounds(
-                    sharedContentState = rememberSharedContentState(key = "conversation_list"),
-                    animatedVisibilityScope = animatedVisibilityScope
-                )
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
@@ -519,7 +511,7 @@ private fun buildHighlightedText(
 }
 
 @Composable
-private fun SharedTransitionScope.ChatListPreview(
+private fun ChatListPreview(
     innerPadding: PaddingValues,
     conversation: Conversation,
     settings: Settings,
@@ -580,10 +572,6 @@ private fun SharedTransitionScope.ChatListPreview(
             contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
-                .sharedBounds(
-                    sharedContentState = rememberSharedContentState(key = "conversation_list"),
-                    animatedVisibilityScope = animatedVisibilityScope
-                )
                 .fillMaxWidth()
                 .weight(1f),
         ) {
