@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.db.migrations
 
+import android.database.sqlite.SQLiteBlobTooBigException
 import android.util.Log
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -30,33 +31,55 @@ val Migration_11_12 = object : Migration(11, 12) {
             db.execSQL("CREATE INDEX IF NOT EXISTS index_message_node_conversation_id ON message_node(conversation_id)")
 
             // 2. 从 conversationentity.nodes 迁移数据到 message_node
-            val cursor = db.query("SELECT id, nodes FROM conversationentity")
+            val cursor = db.query("SELECT id FROM conversationentity")
             var migratedCount = 0
             var nodeCount = 0
+            var skippedCount = 0
 
             while (cursor.moveToNext()) {
                 val conversationId = cursor.getString(0)
-                val nodesJson = cursor.getString(1)
-                val nodes = JsonInstant.decodeFromString<List<MessageNode>>(nodesJson)
-                nodes.forEachIndexed { index, node ->
-                    // 为每个节点生成新的 UUID，避免主键冲突
-                    val nodeId = Uuid.random().toString()
-                    val messagesJson = JsonInstant.encodeToString(node.messages)
-                    db.execSQL(
-                        "INSERT INTO message_node (id, conversation_id, node_index, messages, select_index) VALUES (?, ?, ?, ?, ?)",
-                        arrayOf(nodeId, conversationId, index, messagesJson, node.selectIndex)
+                try {
+                    val nodeCursor = db.query(
+                        "SELECT nodes FROM conversationentity WHERE id = ?",
+                        arrayOf(conversationId)
                     )
-                    nodeCount++
+                    try {
+                        if (!nodeCursor.moveToFirst()) {
+                            continue
+                        }
+                        val nodesJson = nodeCursor.getString(0)
+                        val nodes = JsonInstant.decodeFromString<List<MessageNode>>(nodesJson)
+                        nodes.forEachIndexed { index, node ->
+                            // 为每个节点生成新的 UUID，避免主键冲突
+                            val nodeId = Uuid.random().toString()
+                            val messagesJson = JsonInstant.encodeToString(node.messages)
+                            db.execSQL(
+                                "INSERT INTO message_node (id, conversation_id, node_index, messages, select_index) VALUES (?, ?, ?, ?, ?)",
+                                arrayOf(nodeId, conversationId, index, messagesJson, node.selectIndex)
+                            )
+                            nodeCount++
+                        }
+                        db.execSQL(
+                            "UPDATE conversationentity SET nodes = '[]' WHERE id = ?",
+                            arrayOf(conversationId)
+                        )
+                        migratedCount++
+                    } finally {
+                        nodeCursor.close()
+                    }
+                } catch (e: SQLiteBlobTooBigException) {
+                    skippedCount++
+                    Log.w(TAG, "migrate: skip conversation $conversationId due to large nodes blob", e)
+                    continue
                 }
-                migratedCount++
             }
             cursor.close()
 
-            // 3. 清空旧的 nodes 列（保留列结构以保持兼容性）
-            db.execSQL("UPDATE conversationentity SET nodes = '[]'")
-
             db.setTransactionSuccessful()
-            Log.i(TAG, "migrate: migrate from 11 to 12 success ($migratedCount conversations, $nodeCount nodes)")
+            Log.i(
+                TAG,
+                "migrate: migrate from 11 to 12 success ($migratedCount conversations, $nodeCount nodes, $skippedCount skipped)"
+            )
         } finally {
             db.endTransaction()
         }
