@@ -6,10 +6,12 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.map
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
@@ -25,6 +27,7 @@ class ConversationRepository(
     private val context: Context,
     private val conversationDAO: ConversationDAO,
     private val messageNodeDAO: MessageNodeDAO,
+    private val database: AppDatabase,
 ) {
     companion object {
         private const val PAGE_SIZE = 20
@@ -126,26 +129,32 @@ class ConversationRepository(
     }
 
     suspend fun insertConversation(conversation: Conversation) {
-        conversationDAO.insert(
-            conversationToConversationEntity(conversation)
-        )
-        saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+        database.withTransaction {
+            conversationDAO.insert(
+                conversationToConversationEntity(conversation)
+            )
+            saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+        }
     }
 
     suspend fun updateConversation(conversation: Conversation) {
-        conversationDAO.update(
-            conversationToConversationEntity(conversation)
-        )
-        // 删除旧的节点，插入新的节点
-        messageNodeDAO.deleteByConversation(conversation.id.toString())
-        saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+        database.withTransaction {
+            conversationDAO.update(
+                conversationToConversationEntity(conversation)
+            )
+            // 删除旧的节点，插入新的节点
+            messageNodeDAO.deleteByConversation(conversation.id.toString())
+            saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+        }
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
-        // message_node 会通过 CASCADE 自动删除
-        conversationDAO.delete(
-            conversationToConversationEntity(conversation)
-        )
+        database.withTransaction {
+            // message_node 会通过 CASCADE 自动删除
+            conversationDAO.delete(
+                conversationToConversationEntity(conversation)
+            )
+        }
         context.deleteChatFiles(conversation.files)
     }
 
@@ -217,12 +226,25 @@ class ConversationRepository(
     }
 
     private suspend fun loadMessageNodes(conversationId: String): List<MessageNode> {
-        return messageNodeDAO.getNodesOfConversation(conversationId).map { entity ->
-            MessageNode(
-                id = Uuid.parse(entity.id),
-                messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages),
-                selectIndex = entity.selectIndex
-            )
+        return database.withTransaction {
+            val nodes = mutableListOf<MessageNode>()
+            var offset = 0
+            val pageSize = 1
+            while (true) {
+                val page = messageNodeDAO.getNodesOfConversationPaged(conversationId, pageSize, offset)
+                if (page.isEmpty()) break
+                page.forEach { entity ->
+                    nodes.add(
+                        MessageNode(
+                            id = Uuid.parse(entity.id),
+                            messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages),
+                            selectIndex = entity.selectIndex
+                        )
+                    )
+                }
+                offset += page.size
+            }
+            nodes
         }
     }
 
