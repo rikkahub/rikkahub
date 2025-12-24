@@ -322,7 +322,7 @@ class ChatCompletionsAPI(
                     "api.siliconflow.cn" -> {
                         // https://docs.siliconflow.cn/cn/userguide/capabilities/reasoning#3-1-api-%E5%8F%82%E6%95%B0
                         val modelId = params.model.modelId
-                        if(modelId.contains("DeepSeek-V3.1") || modelId.contains("GLM-4.5") || modelId.contains("Qwen3-8B")) {
+                        if (modelId.contains("DeepSeek-") || modelId.contains("GLM-") || modelId.contains("Qwen3-8B")) {
                             put("enable_thinking", level.isEnabled)
                         }
                     }
