@@ -66,3 +66,25 @@ object AssistantSerializer : ExportSerializer<Assistant> {
         }
     }
 }
+
+object ModeInjectionSerializer : ExportSerializer<PromptInjection.ModeInjection> {
+    override val type = "mode_injection"
+
+    override fun export(data: PromptInjection.ModeInjection): ExportData {
+        return ExportData(
+            type = type,
+            data = ExportSerializer.DefaultJson.encodeToJsonElement(data)
+        )
+    }
+
+    override fun import(exportData: ExportData): Result<PromptInjection.ModeInjection> {
+        if (exportData.type != type) {
+            return Result.failure(IllegalArgumentException("Type mismatch: expected $type, got ${exportData.type}"))
+        }
+        return runCatching {
+            ExportSerializer.DefaultJson
+                .decodeFromJsonElement<PromptInjection.ModeInjection>(exportData.data)
+                .copy(id = Uuid.random())
+        }
+    }
+}
