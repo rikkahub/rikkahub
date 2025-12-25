@@ -119,7 +119,7 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                 actions = {
                     IconButton(
                         onClick = {
-                            creationState.open(McpServerConfig.SseTransportServer())
+                            creationState.open(McpServerConfig.StreamableHTTPServer())
                         }
                     ) {
                         Icon(Lucide.Plus, null)
@@ -472,12 +472,12 @@ private fun McpCommonOptionsConfigure(
             }
         ) {
             val transportTypes = listOf(
-                "SSE",
-                "Streamable HTTP"
+                "Streamable HTTP",
+                "SSE"
             )
             val currentTypeIndex = when (config) {
-                is McpServerConfig.SseTransportServer -> 0
-                is McpServerConfig.StreamableHTTPServer -> 1
+                is McpServerConfig.StreamableHTTPServer -> 0
+                is McpServerConfig.SseTransportServer -> 1
             }
 
             SingleChoiceSegmentedButtonRow(
@@ -489,7 +489,7 @@ private fun McpCommonOptionsConfigure(
                         onClick = {
                             if (index != currentTypeIndex) {
                                 val newConfig = when (index) {
-                                    0 -> McpServerConfig.SseTransportServer(
+                                    0 -> McpServerConfig.StreamableHTTPServer(
                                         id = config.id,
                                         commonOptions = config.commonOptions,
                                         url = when (config) {
@@ -498,7 +498,7 @@ private fun McpCommonOptionsConfigure(
                                         }
                                     )
 
-                                    1 -> McpServerConfig.StreamableHTTPServer(
+                                    1 -> McpServerConfig.SseTransportServer(
                                         id = config.id,
                                         commonOptions = config.commonOptions,
                                         url = when (config) {

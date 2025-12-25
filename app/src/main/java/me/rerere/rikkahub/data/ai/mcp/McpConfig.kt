@@ -47,7 +47,7 @@ sealed class McpServerConfig {
     @SerialName("streamable_http")
     data class StreamableHTTPServer(
         override val id: Uuid = Uuid.random(),
-        override val commonOptions: McpCommonOptions,
+        override val commonOptions: McpCommonOptions = McpCommonOptions(),
         val url: String = "",
     ) : McpServerConfig() {
         override fun clone(id: Uuid, commonOptions: McpCommonOptions): McpServerConfig {
