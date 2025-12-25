@@ -710,5 +710,13 @@
   <string name="injection_selector_lorebooks_empty">사용 가능한 러북이 없습니다</string>
   <string name="setting_display_page_show_line_numbers_title">줄 번호 표시</string>
   <string name="setting_display_page_show_line_numbers_desc">코드 블록에 줄 번호 표시</string>
+  <string name="export_title">내보내기</string>
+  <string name="export_to_file">파일로 내보내기</string>
+  <string name="export_to_file_desc">JSON 파일로 저장</string>
+  <string name="export_share">공유</string>
+  <string name="export_share_desc">다른 앱으로 공유</string>
+  <string name="export_cancel">취소</string>
+  <string name="export_import_success">가져오기 완료</string>
+  <string name="export_import_failed">가져오기 실패: %s</string>
 </resources>
 

@@ -710,5 +710,13 @@
   <string name="injection_selector_lorebooks_empty">无可用的lorebooks</string>
   <string name="setting_display_page_show_line_numbers_title">显示行号</string>
   <string name="setting_display_page_show_line_numbers_desc">在代码块中显示行号</string>
+  <string name="export_title">导出</string>
+  <string name="export_to_file">导出到文件</string>
+  <string name="export_to_file_desc">保存为JSON文件</string>
+  <string name="export_share">分享</string>
+  <string name="export_share_desc">通过其他应用分享</string>
+  <string name="export_cancel">取消</string>
+  <string name="export_import_success">导入成功</string>
+  <string name="export_import_failed">导入失败：%s</string>
 </resources>
 

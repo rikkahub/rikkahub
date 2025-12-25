@@ -710,5 +710,13 @@
   <string name="injection_selector_lorebooks_empty">沒有可用的背景書</string>
   <string name="setting_display_page_show_line_numbers_title">顯示行號</string>
   <string name="setting_display_page_show_line_numbers_desc">在程式碼區塊中顯示行號</string>
+  <string name="export_title">匯出</string>
+  <string name="export_to_file">匯出至檔案</string>
+  <string name="export_to_file_desc">另存為 JSON 檔案</string>
+  <string name="export_share">分享</string>
+  <string name="export_share_desc">透過其他應用程式分享</string>
+  <string name="export_cancel">取消</string>
+  <string name="export_import_success">匯入成功</string>
+  <string name="export_import_failed">匯入失敗：%s</string>
 </resources>
 

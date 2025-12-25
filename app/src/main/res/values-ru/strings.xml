@@ -710,5 +710,13 @@
   <string name="injection_selector_lorebooks_empty">Нет доступных книг знаний</string>
   <string name="setting_display_page_show_line_numbers_title">Показывать номера строк</string>
   <string name="setting_display_page_show_line_numbers_desc">Отображать номера строк в блоках кода</string>
+  <string name="export_title">Экспорт</string>
+  <string name="export_to_file">Экспорт в файл</string>
+  <string name="export_to_file_desc">Сохранить как файл JSON</string>
+  <string name="export_share">Поделиться</string>
+  <string name="export_share_desc">Поделиться через другие приложения</string>
+  <string name="export_cancel">Отмена</string>
+  <string name="export_import_success">Импорт выполнен успешно</string>
+  <string name="export_import_failed">Ошибка импорта: %s</string>
 </resources>
 

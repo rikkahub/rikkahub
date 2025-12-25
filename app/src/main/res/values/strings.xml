@@ -710,5 +710,13 @@
   <string name="injection_selector_lorebooks_empty">No lorebooks available</string>
   <string name="setting_display_page_show_line_numbers_title">Show Line Numbers</string>
   <string name="setting_display_page_show_line_numbers_desc">Display line numbers in code blocks</string>
+  <string name="export_title">Export</string>
+  <string name="export_to_file">Export to file</string>
+  <string name="export_to_file_desc">Save as JSON file</string>
+  <string name="export_share">Share</string>
+  <string name="export_share_desc">Share via other apps</string>
+  <string name="export_cancel">Cancel</string>
+  <string name="export_import_success">Imported successfully</string>
+  <string name="export_import_failed">Import failed: %s</string>
 </resources>
 

@@ -710,5 +710,13 @@
   <string name="injection_selector_lorebooks_empty">利用可能なロアブックがありません</string>
   <string name="setting_display_page_show_line_numbers_title">行番号を表示</string>
   <string name="setting_display_page_show_line_numbers_desc">コードブロックに行番号を表示</string>
+  <string name="export_title">エクスポート</string>
+  <string name="export_to_file">ファイルにエクスポート</string>
+  <string name="export_to_file_desc">JSONファイルとして保存</string>
+  <string name="export_share">共有</string>
+  <string name="export_share_desc">他のアプリで共有</string>
+  <string name="export_cancel">キャンセル</string>
+  <string name="export_import_success">インポートが完了しました</string>
+  <string name="export_import_failed">インポートに失敗しました: %s</string>
 </resources>
 
