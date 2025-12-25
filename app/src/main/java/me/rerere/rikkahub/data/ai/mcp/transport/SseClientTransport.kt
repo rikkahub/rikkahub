@@ -1,202 +1,197 @@
-//package me.rerere.rikkahub.data.ai.mcp.transport
-//
-//import android.util.Log
-//import io.ktor.http.URLBuilder
-//import io.ktor.http.path
-//import io.ktor.http.takeFrom
-//import io.modelcontextprotocol.kotlin.sdk.JSONRPCMessage
-//import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
-//import kotlinx.coroutines.CompletableDeferred
-//import kotlinx.coroutines.CoroutineScope
-//import kotlinx.coroutines.Dispatchers
-//import kotlinx.coroutines.ExperimentalCoroutinesApi
-//import kotlinx.coroutines.Job
-//import kotlinx.coroutines.SupervisorJob
-//import kotlinx.coroutines.cancelAndJoin
-//import kotlinx.coroutines.launch
-//import kotlinx.coroutines.withTimeout
-//import me.rerere.common.http.await
-//import me.rerere.rikkahub.BuildConfig
-//import me.rerere.rikkahub.data.ai.mcp.McpJson
-//import okhttp3.Headers
-//import okhttp3.MediaType.Companion.toMediaType
-//import okhttp3.OkHttpClient
-//import okhttp3.Request
-//import okhttp3.RequestBody.Companion.toRequestBody
-//import okhttp3.Response
-//import okhttp3.sse.EventSource
-//import okhttp3.sse.EventSourceListener
-//import okhttp3.sse.EventSources
-//import kotlin.concurrent.atomics.AtomicBoolean
-//import kotlin.concurrent.atomics.ExperimentalAtomicApi
-//
-//private const val TAG = "SseClientTransport"
-//
-//@OptIn(ExperimentalAtomicApi::class)
-//internal class SseClientTransport(
-//    private val client: OkHttpClient,
-//    private val urlString: String,
-//    private val headers: List<Pair<String, String>>,
-//) : AbstractTransport() {
-//    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-//    private val eventSourceFactory = EventSources.createFactory(client)
-//    private val initialized: AtomicBoolean = AtomicBoolean(false)
-//    private var session: EventSource? = null
-//    private val endpoint = CompletableDeferred<String>()
-//
-//    private var job: Job? = null
-//
-//    private val baseUrl by lazy {
-//        URLBuilder()
-//            .takeFrom(urlString)
-//            .apply {
-//                path() // set path to empty
-//                parameters.clear() //  clear parameters
-//            }
-//            .build()
-//            .toString()
-//            .trimEnd('/')
-//    }
-//
-//    override suspend fun start() {
-//        if (!initialized.compareAndSet(false, true)) {
-//            error(
-//                "SSEClientTransport already started! " +
-//                    "If using Client class, note that connect() calls start() automatically.",
-//            )
-//        }
-//
-//        session = eventSourceFactory.newEventSource(
-//            request = Request.Builder()
-//                .url(urlString)
-//                .headers(
-//                    Headers.Builder()
-//                        .apply {
-//                            for ((key, value) in headers) {
-//                                add(key, value)
-//                            }
-//                        }
-//                        .build()
-//                )
-//                .addHeader("Accept", "text/event-stream")
-//                .addHeader("User-Agent", "RikkaHub/${BuildConfig.VERSION_NAME}")
-//                .build(),
-//            listener = object : EventSourceListener() {
-//                override fun onOpen(eventSource: EventSource, response: Response) {
-//                    super.onOpen(eventSource, response)
-//                    Log.i(TAG, "onOpen: $urlString")
-//                }
-//
-//                override fun onClosed(eventSource: EventSource) {
-//                    super.onClosed(eventSource)
-//                    Log.i(TAG, "onClosed: $urlString")
-//                }
-//
-//                override fun onFailure(
-//                    eventSource: EventSource,
-//                    t: Throwable?,
-//                    response: Response?
-//                ) {
-//                    super.onFailure(eventSource, t, response)
-//                    t?.printStackTrace()
-//                    Log.i(TAG, "onFailure: $urlString / $t / $baseUrl")
-//                    endpoint.completeExceptionally(t ?: Exception("SSE Failure"))
-//                    _onError(t ?: Exception("SSE Failure"))
-//                    _onClose()
-//                }
-//
-//                override fun onEvent(
-//                    eventSource: EventSource,
-//                    id: String?,
-//                    type: String?,
-//                    data: String
-//                ) {
-//                    Log.i(TAG, "onEvent($baseUrl):  #$id($type) - $data")
-//                    when (type) {
-//                        "error" -> {
-//                            val e = IllegalStateException("SSE error: $data")
-//                            _onError(e)
-//                        }
-//
-//                        "open" -> {
-//                            // The connection is open, but we need to wait for the endpoint to be received.
-//                        }
-//
-//                        "endpoint" -> {
-//                            val endpointData =
-//                                if (data.startsWith("http://") || data.startsWith("https://")) {
-//                                    // 绝对路径，直接使用
-//                                    data
-//                                } else {
-//                                    // 相对路径，加上baseUrl
-//                                    baseUrl + if (data.startsWith("/")) data else "/$data"
-//                                }
-//                            Log.i(TAG, "onEvent: endpoint: $endpointData")
-//                            endpoint.complete(endpointData)
-//                        }
-//
-//                        else -> {
-//                            scope.launch {
-//                                try {
-//                                    val message = McpJson.decodeFromString<JSONRPCMessage>(data)
-//                                    _onMessage(message)
-//                                } catch (e: Exception) {
-//                                    _onError(e)
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        )
-//        withTimeout(30000) {
-//            endpoint.await()
-//            Log.i(TAG, "start: Connected to endpoint ${endpoint.getCompleted()}")
-//        }
-//    }
-//
-//    @OptIn(ExperimentalCoroutinesApi::class)
-//    override suspend fun send(message: JSONRPCMessage) {
-//        if (!endpoint.isCompleted) {
-//            error("Not connected")
-//        }
-//
-//        Log.i(TAG, "send: POSTing to endpoint ${endpoint.getCompleted()} - $message")
-//
-//        try {
-//            val request = Request.Builder()
-//                .url(endpoint.getCompleted())
-//                .apply {
-//                    for ((key, value) in headers) {
-//                        addHeader(key, value)
-//                    }
-//                }
-//                .post(
-//                    McpJson.encodeToString(message).toRequestBody(
-//                        contentType = "application/json".toMediaType(),
-//                    )
-//                )
-//                .build()
-//            val response = client.newCall(request).await()
-//            if (!response.isSuccessful) {
-//                val text = response.body.string()
-//                error("Error POSTing to endpoint ${endpoint.getCompleted()} (HTTP ${response.code}): $text")
-//            } else {
-//                Log.i(TAG, "send: POST to endpoint ${endpoint.getCompleted()} successful")
-//            }
-//        } catch (e: Exception) {
-//            _onError(e)
-//            throw e
-//        }
-//    }
-//
-//    override suspend fun close() {
-//        if (!initialized.load()) {
-//            error("SSEClientTransport is not initialized!")
-//        }
-//
-//        session?.cancel()
-//        _onClose()
-//        job?.cancelAndJoin()
-//    }
-//}
+package me.rerere.rikkahub.data.ai.mcp.transport
+
+import android.util.Log
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.sse.ClientSSESession
+import io.ktor.client.plugins.sse.sseSession
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.Url
+import io.ktor.http.append
+import io.ktor.http.isSuccess
+import io.ktor.http.protocolWithAuthority
+import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
+import io.modelcontextprotocol.kotlin.sdk.shared.TransportSendOptions
+import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCMessage
+import io.modelcontextprotocol.kotlin.sdk.types.McpJson
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.serialization.SerializationException
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration
+
+private const val TAG = "SseClientTransport"
+
+@OptIn(ExperimentalAtomicApi::class)
+class SseClientTransport(
+    private val client: HttpClient,
+    private val urlString: String?,
+    private val reconnectionTime: Duration? = null,
+    private val requestBuilder: HttpRequestBuilder.() -> Unit = {},
+) : AbstractTransport() {
+
+    private val initialized: AtomicBoolean = AtomicBoolean(false)
+    private val endpoint = CompletableDeferred<String>()
+
+    private lateinit var session: ClientSSESession
+    private lateinit var scope: CoroutineScope
+    private var job: Job? = null
+
+    private val baseUrl: String by lazy {
+        session.call.request.url.let { url ->
+            val path = url.encodedPath
+            when {
+                path.isEmpty() -> url.protocolWithAuthority
+                path.endsWith("/") -> url.protocolWithAuthority + path.removeSuffix("/")
+                else -> url.protocolWithAuthority + path.take(path.lastIndexOf("/"))
+            }
+        }
+    }
+
+    override suspend fun start() {
+        check(initialized.compareAndSet(expectedValue = false, newValue = true)) {
+            "SSEClientTransport already started! If using Client class, note that connect() calls start() automatically."
+        }
+
+        try {
+            session = urlString?.let {
+                client.sseSession(
+                    urlString = it,
+                    reconnectionTime = reconnectionTime,
+                    block = requestBuilder,
+                )
+            } ?: client.sseSession(
+                reconnectionTime = reconnectionTime,
+                block = requestBuilder,
+            )
+            scope = CoroutineScope(session.coroutineContext + SupervisorJob())
+
+            job = scope.launch(CoroutineName("SseMcpClientTransport.connect#${hashCode()}")) {
+                collectMessages()
+            }
+
+            endpoint.await()
+        } catch (e: Exception) {
+            closeResources()
+            initialized.store(false)
+            throw e
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override suspend fun send(message: JSONRPCMessage, options: TransportSendOptions?) {
+        check(initialized.load()) { "SseClientTransport is not initialized!" }
+        check(job?.isActive == true) { "SseClientTransport is closed!" }
+        check(endpoint.isCompleted) { "Not connected!" }
+
+        try {
+            val response = client.post(endpoint.getCompleted()) {
+                requestBuilder()
+                headers.append(HttpHeaders.ContentType, ContentType.Application.Json)
+                setBody(McpJson.encodeToString(message))
+            }
+
+            if (!response.status.isSuccess()) {
+                val text = response.bodyAsText()
+                error("Error POSTing to endpoint (HTTP ${response.status}): $text")
+            }
+
+            Log.d(TAG, "Client successfully sent message via SSE $endpoint")
+        } catch (e: Throwable) {
+            _onError(e)
+            throw e
+        }
+    }
+
+    override suspend fun close() {
+        check(initialized.load()) { "SseClientTransport is not initialized!" }
+        closeResources()
+    }
+
+    private suspend fun CoroutineScope.collectMessages() {
+        try {
+            session.incoming.collect { event ->
+                ensureActive()
+
+                when (event.event) {
+                    "error" -> {
+                        val error = IllegalStateException("SSE error: ${event.data}")
+                        _onError(error)
+                        throw error
+                    }
+
+                    "open" -> {
+                        // The connection is open, but we need to wait for the endpoint to be received.
+                    }
+
+                    "endpoint" -> handleEndpoint(event.data.orEmpty())
+
+                    else -> handleMessage(event.data.orEmpty())
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            _onError(e)
+            throw e
+        } finally {
+            closeResources()
+        }
+    }
+
+    private fun handleEndpoint(eventData: String) {
+        try {
+            val endpointUrl = if (eventData.startsWith("/")) {
+                // Absolute path: use protocolWithAuthority + eventData
+                Url(session.call.request.url.protocolWithAuthority + eventData)
+            } else {
+                // Relative path: use baseUrl + "/" + eventData
+                Url("$baseUrl/$eventData")
+            }
+            endpoint.complete(endpointUrl.toString())
+            Log.d(TAG, "Client connected to endpoint: $endpointUrl")
+        } catch (e: Throwable) {
+            _onError(e)
+            endpoint.completeExceptionally(e)
+            throw e
+        }
+    }
+
+    private suspend fun handleMessage(data: String) {
+        try {
+            val message = McpJson.decodeFromString<JSONRPCMessage>(data)
+            _onMessage(message)
+        } catch (e: SerializationException) {
+            _onError(e)
+        }
+    }
+
+    private suspend fun closeResources() {
+        if (!initialized.compareAndSet(expectedValue = true, newValue = false)) return
+
+        job?.cancelAndJoin()
+        try {
+            if (::session.isInitialized) session.cancel()
+            if (::scope.isInitialized) scope.cancel()
+            endpoint.cancel()
+        } catch (e: Throwable) {
+            _onError(e)
+        }
+
+        _onClose()
+    }
+}
