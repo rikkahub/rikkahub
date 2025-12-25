@@ -229,7 +229,7 @@ class ConversationRepository(
         return database.withTransaction {
             val nodes = mutableListOf<MessageNode>()
             var offset = 0
-            val pageSize = 1
+            val pageSize = 64
             while (true) {
                 val page = messageNodeDAO.getNodesOfConversationPaged(conversationId, pageSize, offset)
                 if (page.isEmpty()) break
