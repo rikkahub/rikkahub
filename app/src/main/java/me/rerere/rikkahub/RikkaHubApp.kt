@@ -2,6 +2,7 @@ package me.rerere.rikkahub
 
 import android.app.Application
 import android.util.Log
+import androidx.compose.foundation.ComposeFoundationFlags
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
@@ -54,6 +55,9 @@ class RikkaHubApp : Application() {
             setDefaultsAsync(R.xml.remote_config_defaults)
             fetchAndActivate()
         }
+
+        // https://issuetracker.google.com/issues/469669851
+        ComposeFoundationFlags.isPausableCompositionInPrefetchEnabled = false
     }
 
     private fun deleteTempFiles() {
