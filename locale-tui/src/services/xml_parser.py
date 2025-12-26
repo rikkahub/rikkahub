@@ -50,6 +50,7 @@ class StringsXmlParser:
         # Ensure directory exists
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
+        etree.indent(root, space="  ")
         tree = etree.ElementTree(root)
         tree.write(
             str(file_path), encoding="utf-8", xml_declaration=True, pretty_print=True
@@ -81,7 +82,7 @@ class StringsXmlParser:
             string_elem.text = value
 
         # Clean up whitespace and format
-        etree.indent(root, space="    ")
+        etree.indent(root, space="  ")
 
         tree.write(
             str(file_path), encoding="utf-8", xml_declaration=True, pretty_print=True
@@ -104,6 +105,7 @@ class StringsXmlParser:
         for string_elem in root.findall("string"):
             if string_elem.get("name") == key:
                 root.remove(string_elem)
+                etree.indent(root, space="  ")
                 tree.write(
                     str(file_path),
                     encoding="utf-8",
