@@ -32,11 +32,14 @@ class ExporterState<T>(
     val value: String
         get() = serializer.exportToJson(data)
 
-    fun exportToFile(fileName: String = "${serializer.type}.json") {
+    val fileName: String
+        get() = serializer.getExportFileName(data)
+
+    fun exportToFile(fileName: String = this.fileName) {
         createDocumentLauncher.launch(fileName)
     }
 
-    fun exportAndShare(fileName: String = "${serializer.type}.json") {
+    fun exportAndShare(fileName: String = this.fileName) {
         scope.launch {
             val file = withContext(Dispatchers.IO) {
                 val cacheDir = File(context.cacheDir, "export")

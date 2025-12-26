@@ -28,6 +28,9 @@ interface ExportSerializer<T> {
     fun export(data: T): ExportData
     fun import(context: Context, uri: Uri): Result<T>
 
+    // 获取导出文件名
+    fun getExportFileName(data: T): String = "${type}.json"
+
     // 便捷方法：直接导出为 JSON 字符串
     fun exportToJson(data: T, json: Json = DefaultJson): String {
         return json.encodeToString(ExportData.serializer(), export(data))
@@ -62,6 +65,10 @@ interface ExportSerializer<T> {
 object ModeInjectionSerializer : ExportSerializer<PromptInjection.ModeInjection> {
     override val type = "mode_injection"
 
+    override fun getExportFileName(data: PromptInjection.ModeInjection): String {
+        return "${data.name.ifEmpty { type }}.json"
+    }
+
     override fun export(data: PromptInjection.ModeInjection): ExportData {
         return ExportData(
             type = type,
@@ -94,6 +101,10 @@ object ModeInjectionSerializer : ExportSerializer<PromptInjection.ModeInjection>
 
 object LorebookSerializer : ExportSerializer<Lorebook> {
     override val type = "lorebook"
+
+    override fun getExportFileName(data: Lorebook): String {
+        return "${data.name.ifEmpty { type }}.json"
+    }
 
     override fun export(data: Lorebook): ExportData {
         return ExportData(
