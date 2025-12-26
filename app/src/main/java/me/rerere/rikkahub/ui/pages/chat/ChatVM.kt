@@ -43,6 +43,7 @@ import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.utils.UiState
@@ -196,13 +197,17 @@ class ChatVM(
         settings.getCurrentChatModel()
     }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    // 错误流 (从ChatService获取)
-    val errorFlow: SharedFlow<Throwable> = chatService.errorFlow
+    // 错误状态
+    val errors: StateFlow<List<ChatError>> = chatService.errors
 
-    // 生成完成 (从ChatService获取)
+    fun dismissError(id: Uuid) = chatService.dismissError(id)
+
+    fun clearAllErrors() = chatService.clearAllErrors()
+
+    // 生成完成
     val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow
 
-    // MCP管理器 (从ChatService获取)
+    // MCP管理器
     val mcpManager = chatService.mcpManager
 
     // 更新设置

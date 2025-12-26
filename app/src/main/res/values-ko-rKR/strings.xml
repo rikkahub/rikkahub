@@ -191,7 +191,9 @@
   <string name="chat_message_tool_search_web">웹 검색: %1$s</string>
   <string name="chat_page_cancel">취소</string>
   <string name="chat_page_clear_context">컨텍스트 초기화</string>
+  <string name="chat_page_clear_all_errors">모두 지우기</string>
   <string name="chat_page_delete">삭제</string>
+  <string name="chat_page_dismiss_error">오류 닫기</string>
   <string name="chat_page_edit_nickname">이름 편집</string>
   <string name="chat_page_edit_title">제목 편집</string>
   <string name="chat_page_edit_title_warning">제목을 편집하려면 먼저 채팅하세요</string>

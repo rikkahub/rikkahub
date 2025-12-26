@@ -191,7 +191,9 @@
   <string name="chat_message_tool_search_web">搜尋網頁: %1$s</string>
   <string name="chat_page_cancel">取消</string>
   <string name="chat_page_clear_context">清空上下文</string>
+  <string name="chat_page_clear_all_errors">清除全部</string>
   <string name="chat_page_delete">刪除</string>
+  <string name="chat_page_dismiss_error">關閉錯誤</string>
   <string name="chat_page_edit_nickname">編輯暱稱</string>
   <string name="chat_page_edit_title">編輯標題</string>
   <string name="chat_page_edit_title_warning">請先聊天再編輯標題吧</string>

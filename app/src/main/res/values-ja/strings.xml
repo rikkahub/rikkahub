@@ -191,7 +191,9 @@
   <string name="chat_message_tool_search_web">ウェブ検索: %1$s</string>
   <string name="chat_page_cancel">キャンセル</string>
   <string name="chat_page_clear_context">コンテキストをクリア</string>
+  <string name="chat_page_clear_all_errors">すべてクリア</string>
   <string name="chat_page_delete">削除</string>
+  <string name="chat_page_dismiss_error">エラーを閉じる</string>
   <string name="chat_page_edit_nickname">ニックネームを編集</string>
   <string name="chat_page_edit_title">タイトルを編集</string>
   <string name="chat_page_edit_title_warning">まずチャットしてからタイトルを編集してください</string>

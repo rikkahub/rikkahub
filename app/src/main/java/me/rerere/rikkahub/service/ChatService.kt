@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
@@ -82,6 +83,12 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
 
+data class ChatError(
+    val id: Uuid = Uuid.random(),
+    val error: Throwable,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 private val inputTransformers by lazy {
     listOf(
         PlaceholderTransformer,
@@ -122,9 +129,21 @@ class ChatService(
     private val generationJobs: StateFlow<Map<Uuid, Job?>> = _generationJobs
         .asStateFlow()
 
-    // 错误流
-    private val _errorFlow = MutableSharedFlow<Throwable>()
-    val errorFlow: SharedFlow<Throwable> = _errorFlow.asSharedFlow()
+    // 错误状态
+    private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
+    val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
+
+    fun addError(error: Throwable) {
+        _errors.update { it + ChatError(error = error) }
+    }
+
+    fun dismissError(id: Uuid) {
+        _errors.update { list -> list.filter { it.id != id } }
+    }
+
+    fun clearAllErrors() {
+        _errors.value = emptyList()
+    }
 
     // 生成完成流
     private val _generationDoneFlow = MutableSharedFlow<Uuid>()
@@ -283,7 +302,7 @@ class ChatService(
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
                 e.printStackTrace()
-                _errorFlow.emit(e)
+                addError(e)
             }
         }
         setGenerationJob(conversationId, job)
@@ -330,7 +349,7 @@ class ChatService(
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
-                _errorFlow.emit(e)
+                addError(e)
             }
         }
 
@@ -362,7 +381,7 @@ class ChatService(
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
                 if (settings.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
-                    _errorFlow.emit(IllegalStateException(context.getString(R.string.tools_warning)))
+                    addError(IllegalStateException(context.getString(R.string.tools_warning)))
                 }
             }
 
@@ -431,7 +450,7 @@ class ChatService(
             }
         }.onFailure {
             it.printStackTrace()
-            _errorFlow.emit(it)
+            addError(it)
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
         }.onSuccess {
@@ -817,7 +836,7 @@ class ChatService(
             } catch (e: Exception) {
                 // Clear translation field on error
                 clearTranslationField(conversationId, message.id)
-                _errorFlow.emit(e)
+                addError(e)
             }
         }
     }
