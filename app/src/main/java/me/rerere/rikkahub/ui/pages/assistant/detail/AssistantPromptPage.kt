@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -15,11 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,12 +27,9 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,13 +37,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -62,11 +53,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
-import com.composables.icons.lucide.Fullscreen
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
@@ -91,6 +80,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
+import me.rerere.rikkahub.ui.components.ui.TextArea
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.insertAtCursor
@@ -140,10 +130,7 @@ private fun AssistantPromptContent(
     onUpdate: (Assistant) -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val templateTransformer = koinInject<TemplateTransformer>()
-    var isFocused by remember { mutableStateOf(false) }
-    var isFullScreen by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -158,11 +145,9 @@ private fun AssistantPromptContent(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             )
         ) {
-            FormItem(
+            Column(
                 modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_system_prompt))
-                },
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val systemPromptValue = rememberTextFieldState(
                     initialText = assistant.systemPrompt,
@@ -176,45 +161,13 @@ private fun AssistantPromptContent(
                         )
                     }
                 }
-                OutlinedTextField(
-                    state = systemPromptValue,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged {
-                            isFocused = it.isFocused
-                        },
-                    trailingIcon = {
-                        if (isFocused) {
-                            IconButton(
-                                onClick = {
-                                    isFullScreen = !isFullScreen
-                                }
-                            ) {
-                                Icon(Lucide.Fullscreen, null)
-                            }
-                        }
-                    },
-                    lineLimits = TextFieldLineLimits.MultiLine(
-                        minHeightInLines = 5,
-                        maxHeightInLines = 10,
-                    ),
-                    textStyle = MaterialTheme.typography.bodySmall,
-                )
 
-                if (isFullScreen) {
-                    FullScreenSystemPromptEditor(
-                        systemPrompt = assistant.systemPrompt,
-                        onUpdate = { newSystemPrompt ->
-                            onUpdate(
-                                assistant.copy(
-                                    systemPrompt = newSystemPrompt
-                                )
-                            )
-                        }
-                    ) {
-                        isFullScreen = false
-                    }
-                }
+                TextArea(
+                    state = systemPromptValue,
+                    label = stringResource(R.string.assistant_page_system_prompt),
+                    minLines = 5,
+                    maxLines = 10
+                )
 
                 Column {
                     Text(
@@ -811,73 +764,6 @@ private fun AssistantRegexCard(
                         Icon(Lucide.Trash2, null)
                         Text(stringResource(R.string.delete))
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FullScreenSystemPromptEditor(
-    systemPrompt: String,
-    onUpdate: (String) -> Unit,
-    onDone: () -> Unit
-) {
-    var editingText by remember(systemPrompt) { mutableStateOf(systemPrompt) }
-
-    BasicAlertDialog(
-        onDismissRequest = {
-            onDone()
-        },
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.Bottom
-        ) {
-            Surface(
-                modifier = Modifier
-                    .widthIn(max = 800.dp)
-                    .fillMaxHeight(0.9f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .fillMaxSize(),
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row {
-                        TextButton(
-                            onClick = {
-                                onUpdate(editingText)
-                                onDone()
-                            }
-                        ) {
-                            Text(stringResource(R.string.assistant_page_save))
-                        }
-                    }
-                    TextField(
-                        value = editingText,
-                        onValueChange = { editingText = it },
-                        modifier = Modifier
-                            .imePadding()
-                            .fillMaxSize(),
-                        shape = RoundedCornerShape(16.dp),
-                        placeholder = {
-                            Text(stringResource(R.string.assistant_page_system_prompt))
-                        },
-                        colors = TextFieldDefaults.colors().copy(
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                        ),
-                    )
                 }
             }
         }
