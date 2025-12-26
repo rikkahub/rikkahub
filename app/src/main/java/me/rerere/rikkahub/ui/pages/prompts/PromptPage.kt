@@ -79,6 +79,7 @@ import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.export.LorebookSerializer
 import me.rerere.rikkahub.data.export.ModeInjectionSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
@@ -516,6 +517,8 @@ private fun LorebookTab(
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
     val lazyListState = rememberLazyListState()
+    val toaster = LocalToaster.current
+    val currentLorebooks by rememberUpdatedState(lorebooks)
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
         val newList = lorebooks.toMutableList()
         val item = newList.removeAt(from.index)
@@ -528,6 +531,16 @@ private fun LorebookTab(
             onUpdate(lorebooks.toMutableList().apply { set(index, edited) })
         } else {
             onUpdate(lorebooks + edited)
+        }
+    }
+    val importSuccessMsg = stringResource(R.string.export_import_success)
+    val importFailedMsg = stringResource(R.string.export_import_failed)
+    val importer = rememberImporter(LorebookSerializer) { result ->
+        result.onSuccess { imported ->
+            onUpdate(currentLorebooks + imported)
+            toaster.show(importSuccessMsg)
+        }.onFailure { error ->
+            toaster.show(importFailedMsg.format(error.message))
         }
     }
 
@@ -593,7 +606,12 @@ private fun LorebookTab(
             expanded = expanded,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .offset(y = -ScreenOffset)
+                .offset(y = -ScreenOffset),
+            leadingContent = {
+                IconButton(onClick = { importer.importFromFile() }) {
+                    Icon(Lucide.Import, null)
+                }
+            },
         ) {
             Button(onClick = { editState.open(Lorebook()) }) {
                 Row(
@@ -633,6 +651,8 @@ private fun LorebookCard(
 ) {
     val swipeState = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
+    var showExportDialog by remember { mutableStateOf(false) }
+    val exporter = rememberExporter(book, LorebookSerializer)
 
     SwipeToDismissBox(
         state = swipeState,
@@ -709,11 +729,21 @@ private fun LorebookCard(
                         }
                     }
                 }
+                IconButton(onClick = { showExportDialog = true }) {
+                    Icon(Lucide.Share2, stringResource(R.string.export_title))
+                }
                 IconButton(onClick = onEdit) {
                     Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
                 }
             }
         }
+    }
+
+    if (showExportDialog) {
+        ExportDialog(
+            exporter = exporter,
+            onDismiss = { showExportDialog = false }
+        )
     }
 }
 

@@ -88,3 +88,30 @@ object ModeInjectionSerializer : ExportSerializer<PromptInjection.ModeInjection>
         }
     }
 }
+
+object LorebookSerializer : ExportSerializer<Lorebook> {
+    override val type = "lorebook"
+
+    override fun export(data: Lorebook): ExportData {
+        return ExportData(
+            type = type,
+            data = ExportSerializer.DefaultJson.encodeToJsonElement(data)
+        )
+    }
+
+    override fun import(exportData: ExportData): Result<Lorebook> {
+        if (exportData.type != type) {
+            return Result.failure(IllegalArgumentException("Type mismatch: expected $type, got ${exportData.type}"))
+        }
+        return runCatching {
+            ExportSerializer.DefaultJson
+                .decodeFromJsonElement<Lorebook>(exportData.data)
+                .copy(
+                    id = Uuid.random(),
+                    entries = ExportSerializer.DefaultJson
+                        .decodeFromJsonElement<Lorebook>(exportData.data)
+                        .entries.map { it.copy(id = Uuid.random()) }
+                )
+        }
+    }
+}
