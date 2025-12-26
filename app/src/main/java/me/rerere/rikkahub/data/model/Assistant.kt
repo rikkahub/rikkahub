@@ -162,7 +162,7 @@ sealed class PromptInjection {
         val keywords: List<String> = emptyList(),  // 触发关键词
         val useRegex: Boolean = false,             // 是否使用正则匹配
         val caseSensitive: Boolean = false,        // 大小写敏感
-        val scanDepth: Int = 5,                    // 扫描最近N条消息
+        val scanDepth: Int = 4,                    // 扫描最近N条消息
         val constantActive: Boolean = false,       // 常驻激活（无需匹配）
     ) : PromptInjection()
 }
