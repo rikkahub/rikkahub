@@ -119,9 +119,8 @@ fun ErrorCard(
             ) {
                 Text(
                     text = error.error.message ?: "Unknown error",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onErrorContainer,
-                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
