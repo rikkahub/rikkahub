@@ -177,5 +177,19 @@ internal fun applyInjections(
         result.add(insertIndex, UIMessage.system(bottomContent))
     }
 
+    // 处理 AT_DEPTH：在指定深度位置插入（从最新消息往前数）
+    // 按 injectDepth 分组，相同深度的合并，按深度从大到小处理（避免索引变化问题）
+    val atDepthInjections = byPosition[InjectionPosition.AT_DEPTH]
+    if (!atDepthInjections.isNullOrEmpty()) {
+        val byDepth = atDepthInjections.groupBy { it.injectDepth }
+        byDepth.keys.sortedDescending().forEach { depth ->
+            val content = byDepth[depth]?.joinToString("\n") { it.content } ?: return@forEach
+            // 计算插入位置：result.size - depth，但要确保在有效范围内
+            // depth=1 表示在最后一条消息之前，depth=2 表示在倒数第二条之前...
+            val insertIndex = (result.size - depth).coerceIn(0, result.size)
+            result.add(insertIndex, UIMessage.system(content))
+        }
+    }
+
     return result
 }

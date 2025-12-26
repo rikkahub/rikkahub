@@ -460,6 +460,18 @@ private fun ModeInjectionEditSheet(
                     onSelect = { onEdit(injection.copy(position = it)) }
                 )
 
+                AnimatedVisibility(visible = injection.position == InjectionPosition.AT_DEPTH) {
+                    OutlinedTextField(
+                        value = injection.injectDepth.toString(),
+                        onValueChange = {
+                            it.toIntOrNull()?.let { d -> onEdit(injection.copy(injectDepth = d)) }
+                        },
+                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                }
+
                 OutlinedTextField(
                     value = injection.content,
                     onValueChange = { onEdit(injection.copy(content = it)) },
@@ -506,6 +518,7 @@ private fun getPositionLabel(position: InjectionPosition): String = when (positi
     InjectionPosition.AFTER_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_after_system)
     InjectionPosition.TOP_OF_CHAT -> stringResource(R.string.prompt_page_position_top_of_chat)
     InjectionPosition.BOTTOM_OF_CHAT -> stringResource(R.string.prompt_page_position_bottom_of_chat)
+    InjectionPosition.AT_DEPTH -> stringResource(R.string.prompt_page_position_at_depth)
 }
 
 // ==================== Lorebook Tab ====================
@@ -984,6 +997,18 @@ private fun RegexInjectionEditDialog(
                     position = entry.position,
                     onSelect = { onEdit(entry.copy(position = it)) }
                 )
+
+                AnimatedVisibility(visible = entry.position == InjectionPosition.AT_DEPTH) {
+                    OutlinedTextField(
+                        value = entry.injectDepth.toString(),
+                        onValueChange = {
+                            it.toIntOrNull()?.let { d -> onEdit(entry.copy(injectDepth = d)) }
+                        },
+                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                }
 
                 // 关键词
                 Text(stringResource(R.string.prompt_page_keywords_label), style = MaterialTheme.typography.titleSmall)

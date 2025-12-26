@@ -723,5 +723,7 @@
   <string name="text_area_fullscreen_edit">Полноэкранное редактирование</string>
   <string name="text_area_import_from_file">Импорт из файла</string>
   <string name="text_area_save">Сохранить</string>
+  <string name="prompt_page_position_at_depth">На глубине</string>
+  <string name="prompt_page_inject_depth">Глубина инъекции</string>
 </resources>
 

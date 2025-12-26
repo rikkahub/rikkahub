@@ -29,14 +29,16 @@ class PromptInjectionTransformerTest {
         enabled: Boolean = true,
         priority: Int = 0,
         position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
-        content: String = "Injected content"
+        content: String = "Injected content",
+        injectDepth: Int = 4
     ) = PromptInjection.ModeInjection(
         id = id,
         name = name,
         enabled = enabled,
         priority = priority,
         position = position,
-        content = content
+        content = content,
+        injectDepth = injectDepth
     )
 
     private fun createRegexInjection(
@@ -46,6 +48,7 @@ class PromptInjectionTransformerTest {
         priority: Int = 0,
         position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
         content: String = "Regex injected content",
+        injectDepth: Int = 4,
         keywords: List<String> = listOf("trigger"),
         useRegex: Boolean = false,
         caseSensitive: Boolean = false,
@@ -58,6 +61,7 @@ class PromptInjectionTransformerTest {
         priority = priority,
         position = position,
         content = content,
+        injectDepth = injectDepth,
         keywords = keywords,
         useRegex = useRegex,
         caseSensitive = caseSensitive,
@@ -292,6 +296,182 @@ class PromptInjectionTransformerTest {
         assertEquals("Bottom of chat content", getMessageText(result[3]))
         assertEquals(MessageRole.USER, result[4].role)
         assertEquals("How are you?", getMessageText(result[4]))
+    }
+    // endregion
+
+    // region AT_DEPTH tests
+    @Test
+    fun `mode injection with AT_DEPTH should insert at specified depth from end`() {
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            position = InjectionPosition.AT_DEPTH,
+            injectDepth = 2,
+            content = "At depth 2 content"
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Message 1"),
+            UIMessage.assistant("Response 1"),
+            UIMessage.user("Message 2"),
+            UIMessage.assistant("Response 2")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList()
+        )
+
+        // depth=2 means insert before the 2nd message from the end
+        // Original: [System, User1, Asst1, User2, Asst2] (5 messages)
+        // Insert at index 5-2=3, so: [System, User1, Asst1, Injected, User2, Asst2]
+        assertEquals(6, result.size)
+        assertEquals(MessageRole.SYSTEM, result[3].role)
+        assertEquals("At depth 2 content", getMessageText(result[3]))
+        assertEquals(MessageRole.USER, result[4].role)
+        assertEquals("Message 2", getMessageText(result[4]))
+    }
+
+    @Test
+    fun `AT_DEPTH with depth 1 should insert before last message`() {
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            position = InjectionPosition.AT_DEPTH,
+            injectDepth = 1,
+            content = "Before last"
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            UIMessage.assistant("Hi!")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList()
+        )
+
+        assertEquals(4, result.size)
+        assertEquals("Before last", getMessageText(result[2]))
+        assertEquals("Hi!", getMessageText(result[3]))
+    }
+
+    @Test
+    fun `AT_DEPTH with depth larger than message count should insert at beginning`() {
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            position = InjectionPosition.AT_DEPTH,
+            injectDepth = 100,
+            content = "Large depth content"
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList()
+        )
+
+        assertEquals(3, result.size)
+        assertEquals("Large depth content", getMessageText(result[0]))
+    }
+
+    @Test
+    fun `multiple AT_DEPTH injections with different depths should all apply`() {
+        val id1 = Uuid.random()
+        val id2 = Uuid.random()
+
+        val injections = listOf(
+            createModeInjection(
+                id = id1,
+                position = InjectionPosition.AT_DEPTH,
+                injectDepth = 1,
+                content = "Depth 1"
+            ),
+            createModeInjection(
+                id = id2,
+                position = InjectionPosition.AT_DEPTH,
+                injectDepth = 3,
+                content = "Depth 3"
+            )
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Message 1"),
+            UIMessage.assistant("Response 1"),
+            UIMessage.user("Message 2"),
+            UIMessage.assistant("Response 2")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(id1, id2)),
+            modeInjections = injections,
+            lorebooks = emptyList()
+        )
+
+        // Both should be inserted
+        assertEquals(7, result.size)
+        assertTrue(result.any { getMessageText(it) == "Depth 1" })
+        assertTrue(result.any { getMessageText(it) == "Depth 3" })
+    }
+
+    @Test
+    fun `multiple AT_DEPTH injections with same depth should be merged`() {
+        val id1 = Uuid.random()
+        val id2 = Uuid.random()
+
+        val injections = listOf(
+            createModeInjection(
+                id = id1,
+                position = InjectionPosition.AT_DEPTH,
+                injectDepth = 2,
+                priority = 10,
+                content = "Higher priority"
+            ),
+            createModeInjection(
+                id = id2,
+                position = InjectionPosition.AT_DEPTH,
+                injectDepth = 2,
+                priority = 5,
+                content = "Lower priority"
+            )
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            UIMessage.assistant("Hi!")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(id1, id2)),
+            modeInjections = injections,
+            lorebooks = emptyList()
+        )
+
+        // Same depth injections should be merged into one message
+        assertEquals(4, result.size)
+        val injectedText = getMessageText(result[1])
+        assertTrue(injectedText.contains("Higher priority"))
+        assertTrue(injectedText.contains("Lower priority"))
+        // Higher priority should come first
+        assertTrue(injectedText.indexOf("Higher priority") < injectedText.indexOf("Lower priority"))
     }
     // endregion
 
@@ -715,7 +895,7 @@ class PromptInjectionTransformerTest {
             messages = messages,
             assistant = createAssistant(
                 modeInjectionIds = setOf(modeId),
-                worldBookIds = setOf(worldBookId)
+                lorebookIds = setOf(lorebookId)
             ),
             modeInjections = listOf(modeInjection),
             lorebooks = listOf(lorebook)

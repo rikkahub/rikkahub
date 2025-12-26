@@ -725,5 +725,7 @@
   <string name="text_area_fullscreen_edit">Fullscreen edit</string>
   <string name="text_area_import_from_file">Import from file</string>
   <string name="text_area_save">Save</string>
+  <string name="prompt_page_position_at_depth">At Depth</string>
+  <string name="prompt_page_inject_depth">Inject Depth</string>
 </resources>
 

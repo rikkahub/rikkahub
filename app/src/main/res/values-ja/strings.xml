@@ -725,5 +725,7 @@
   <string name="text_area_fullscreen_edit">全画面編集</string>
   <string name="text_area_import_from_file">ファイルからインポート</string>
   <string name="text_area_save">保存</string>
+  <string name="prompt_page_position_at_depth">深度</string>
+  <string name="prompt_page_inject_depth">深度を注入</string>
 </resources>
 

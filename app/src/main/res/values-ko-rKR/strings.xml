@@ -725,5 +725,7 @@
   <string name="text_area_fullscreen_edit">전체 화면 편집</string>
   <string name="text_area_import_from_file">파일에서 가져오기</string>
   <string name="text_area_save">저장</string>
+  <string name="prompt_page_position_at_depth">심도에서</string>
+  <string name="prompt_page_inject_depth">깊이 주입</string>
 </resources>
 

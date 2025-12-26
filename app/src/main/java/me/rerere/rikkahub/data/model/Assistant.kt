@@ -110,6 +110,9 @@ enum class InjectionPosition {
 
     @SerialName("bottom_of_chat")
     BOTTOM_OF_CHAT,         // 最新消息之前（当前用户输入之前）
+
+    @SerialName("at_depth")
+    AT_DEPTH,               // 在指定深度位置插入（从最新消息往前数）
 }
 
 /**
@@ -126,6 +129,7 @@ sealed class PromptInjection {
     abstract val priority: Int
     abstract val position: InjectionPosition
     abstract val content: String
+    abstract val injectDepth: Int  // 当 position 为 AT_DEPTH 时使用，表示从最新消息往前数的位置
 
     /**
      * 模式注入 - 基于开关状态触发
@@ -139,6 +143,7 @@ sealed class PromptInjection {
         override val priority: Int = 0,
         override val position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
         override val content: String = "",
+        override val injectDepth: Int = 4,
     ) : PromptInjection()
 
     /**
@@ -153,6 +158,7 @@ sealed class PromptInjection {
         override val priority: Int = 0,
         override val position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
         override val content: String = "",
+        override val injectDepth: Int = 4,
         val keywords: List<String> = emptyList(),  // 触发关键词
         val useRegex: Boolean = false,             // 是否使用正则匹配
         val caseSensitive: Boolean = false,        // 大小写敏感
