@@ -105,10 +105,6 @@ class ImporterState<T>(
     private val openDocumentLauncher: ManagedActivityResultLauncher<Array<String>, Uri?>,
     private val onResult: (Result<T>) -> Unit,
 ) {
-    fun importJson(json: String): Result<T> {
-        return serializer.importFromJson(json)
-    }
-
     fun importFromFile() {
         openDocumentLauncher.launch(arrayOf("application/json"))
     }
@@ -116,13 +112,7 @@ class ImporterState<T>(
     internal fun handleUri(uri: Uri) {
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val json = context.contentResolver.openInputStream(uri)
-                        ?.bufferedReader()
-                        ?.use { it.readText() }
-                        ?: error("Failed to read file")
-                    serializer.importFromJson(json).getOrThrow()
-                }
+                serializer.import(context, uri)
             }
             onResult(result)
         }
