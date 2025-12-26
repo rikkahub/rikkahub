@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.export
 
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -9,6 +10,13 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import kotlin.uuid.Uuid
+
+@Serializable
+data class ExportData(
+    val version: Int = 1,
+    val type: String,
+    val data: JsonElement
+)
 
 interface ExportSerializer<T> {
     val type: String
@@ -36,33 +44,6 @@ interface ExportSerializer<T> {
             ignoreUnknownKeys = true
             encodeDefaults = true
             prettyPrint = false
-        }
-    }
-}
-
-object AssistantSerializer : ExportSerializer<Assistant> {
-    override val type = "assistant"
-
-    override fun export(data: Assistant): ExportData {
-        return ExportData(
-            type = type,
-            data = ExportSerializer.DefaultJson
-                .encodeToJsonElement(data.copy(
-
-                ))
-        )
-    }
-
-    override fun import(exportData: ExportData): Result<Assistant> {
-        if (exportData.type != type) {
-            return Result.failure(IllegalArgumentException("Type mismatch: expected $type, got ${exportData.type}"))
-        }
-        return runCatching {
-            ExportSerializer.DefaultJson
-                .decodeFromJsonElement<Assistant>(exportData.data)
-                .copy(
-                    id = Uuid.random(),
-                )
         }
     }
 }
