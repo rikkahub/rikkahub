@@ -90,7 +90,6 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.OpenAI -> newProvider.copy(
             id = this.id,
             enabled = this.enabled,
-            name = this.name,
             models = this.models,
             proxy = this.proxy,
             balanceOption = this.balanceOption,
@@ -101,7 +100,6 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Google -> newProvider.copy(
             id = this.id,
             enabled = this.enabled,
-            name = this.name,
             models = this.models,
             proxy = this.proxy,
             balanceOption = this.balanceOption,
@@ -112,7 +110,6 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Claude -> newProvider.copy(
             id = this.id,
             enabled = this.enabled,
-            name = this.name,
             models = this.models,
             proxy = this.proxy,
             balanceOption = this.balanceOption,
