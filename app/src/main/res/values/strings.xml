@@ -720,5 +720,10 @@
   <string name="export_cancel">Cancel</string>
   <string name="export_import_success">Imported successfully</string>
   <string name="export_import_failed">Import failed: %s</string>
+  <string name="text_area_import_success">File imported successfully</string>
+  <string name="text_area_import_failed">Failed to import file</string>
+  <string name="text_area_fullscreen_edit">Fullscreen edit</string>
+  <string name="text_area_import_from_file">Import from file</string>
+  <string name="text_area_save">Save</string>
 </resources>
 

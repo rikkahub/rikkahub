@@ -720,5 +720,10 @@
   <string name="export_cancel">취소</string>
   <string name="export_import_success">가져오기 완료</string>
   <string name="export_import_failed">가져오기 실패: %s</string>
+  <string name="text_area_import_success">파일이 성공적으로 가져왔습니다</string>
+  <string name="text_area_import_failed">파일을 가져올 수 없습니다</string>
+  <string name="text_area_fullscreen_edit">전체 화면 편집</string>
+  <string name="text_area_import_from_file">파일에서 가져오기</string>
+  <string name="text_area_save">저장</string>
 </resources>
 

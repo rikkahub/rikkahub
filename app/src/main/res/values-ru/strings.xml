@@ -718,5 +718,10 @@
   <string name="export_cancel">Отмена</string>
   <string name="export_import_success">Импорт выполнен успешно</string>
   <string name="export_import_failed">Ошибка импорта: %s</string>
+  <string name="text_area_import_success">Файл успешно импортирован</string>
+  <string name="text_area_import_failed">Не удалось импортировать файл</string>
+  <string name="text_area_fullscreen_edit">Полноэкранное редактирование</string>
+  <string name="text_area_import_from_file">Импорт из файла</string>
+  <string name="text_area_save">Сохранить</string>
 </resources>
 
