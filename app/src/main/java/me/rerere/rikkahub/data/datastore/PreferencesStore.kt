@@ -248,7 +248,9 @@ class SettingsStore(
                 ttsProviders = settings.ttsProviders.distinctBy { it.id },
                 favoriteModels = settings.favoriteModels.filter { uuid ->
                     settings.providers.flatMap { it.models }.any { it.id == uuid }
-                }
+                },
+                modeInjections = settings.modeInjections.distinctBy { it.id },
+                lorebooks = settings.lorebooks.distinctBy { it.id },
             )
         }
         .onEach {
