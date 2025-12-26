@@ -166,7 +166,7 @@ internal fun applyInjections(
         // 重新计算索引（因为可能插入了系统消息）
         val insertIndex = result.indexOfFirst { it.role == MessageRole.USER }
             .takeIf { it >= 0 } ?: result.size
-        result.add(insertIndex, UIMessage.system(topContent))
+        result.add(insertIndex, UIMessage.user(wrapSystemTag(topContent)))
     }
 
     // 处理 BOTTOM_OF_CHAT：在最后一条消息之前插入
@@ -174,7 +174,7 @@ internal fun applyInjections(
         ?.joinToString("\n") { it.content }
     if (!bottomContent.isNullOrEmpty()) {
         val insertIndex = (result.size - 1).coerceAtLeast(0)
-        result.add(insertIndex, UIMessage.system(bottomContent))
+        result.add(insertIndex, UIMessage.user(wrapSystemTag(bottomContent)))
     }
 
     // 处理 AT_DEPTH：在指定深度位置插入（从最新消息往前数）
@@ -187,9 +187,16 @@ internal fun applyInjections(
             // 计算插入位置：result.size - depth，但要确保在有效范围内
             // depth=1 表示在最后一条消息之前，depth=2 表示在倒数第二条之前...
             val insertIndex = (result.size - depth).coerceIn(0, result.size)
-            result.add(insertIndex, UIMessage.system(content))
+            result.add(insertIndex, UIMessage.user(wrapSystemTag(content)))
         }
     }
 
     return result
+}
+
+/**
+ * 用 <system> 标签包裹内容
+ */
+private fun wrapSystemTag(content: String): String {
+    return "<system>\n$content\n</system>"
 }
