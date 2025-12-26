@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.export
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -10,6 +11,8 @@ import kotlinx.serialization.json.encodeToJsonElement
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.utils.toLocalString
+import java.time.LocalDateTime
 import kotlin.uuid.Uuid
 
 @Serializable
@@ -36,6 +39,15 @@ interface ExportSerializer<T> {
             ?.bufferedReader()
             ?.use { it.readText() }
             ?: error("Failed to read file")
+    }
+
+    fun getUriFileName(context: Context, uri: Uri): String? {
+        return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1) cursor.getString(nameIndex) else null
+            } else null
+        }
     }
 
     companion object {
@@ -96,7 +108,7 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
             // 首先尝试解析为自己的格式
             tryImportNative(json)
             // 然后尝试解析为 SillyTavern 格式
-                ?: tryImportSillyTavern(json)
+                ?: tryImportSillyTavern(json, getUriFileName(context, uri)?.removeSuffix(".json"))
                 ?: throw IllegalArgumentException("Unsupported format")
         }
     }
@@ -119,7 +131,7 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
         }.getOrNull()
     }
 
-    private fun tryImportSillyTavern(json: String): Lorebook? {
+    private fun tryImportSillyTavern(json: String, fileName: String?): Lorebook? {
         return runCatching {
             val stLorebook = ExportSerializer.DefaultJson.decodeFromString(
                 SillyTavernLorebook.serializer(),
@@ -127,8 +139,8 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
             )
             Lorebook(
                 id = Uuid.random(),
-                name = stLorebook.name.orEmpty(),
-                description = stLorebook.description.orEmpty(),
+                name = fileName ?: LocalDateTime.now().toLocalString(),
+                description = "",
                 enabled = true,
                 entries = stLorebook.entries.values.map { entry ->
                     PromptInjection.RegexInjection(
@@ -136,12 +148,13 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
                         name = entry.comment.orEmpty().ifEmpty { entry.key.firstOrNull().orEmpty() },
                         enabled = !entry.disable,
                         priority = entry.order,
-                        position = mapSillyTavernPosition(entry.position, entry.depth),
+                        position = mapSillyTavernPosition(entry.position),
+                        injectDepth = entry.depth,
                         content = entry.content,
                         keywords = entry.key,
                         useRegex = false, // SillyTavern 格式不支持 useRegex
                         caseSensitive = entry.caseSensitive ?: false,
-                        scanDepth = entry.scanDepth ?: 5, // scanDepth 为 null 时使用默认值 5
+                        scanDepth = entry.scanDepth ?: 4,
                         constantActive = entry.constant,
                     )
                 }
@@ -149,31 +162,20 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
         }.getOrNull()
     }
 
-    private fun mapSillyTavernPosition(position: Int, depth: Int): InjectionPosition {
+    private fun mapSillyTavernPosition(position: Int): InjectionPosition {
         return when (position) {
             0 -> InjectionPosition.BEFORE_SYSTEM_PROMPT
             1 -> InjectionPosition.AFTER_SYSTEM_PROMPT
             2 -> InjectionPosition.TOP_OF_CHAT
             3 -> InjectionPosition.TOP_OF_CHAT // After Examples -> 聊天历史开头
-            4 -> {
-                // @Depth 模式：根据 depth 决定插入位置
-                // depth 小（0-2）靠近底部影响大，depth 大靠近顶部影响小
-                if (depth <= 2) InjectionPosition.BOTTOM_OF_CHAT
-                else InjectionPosition.TOP_OF_CHAT
-            }
-
+            4 -> InjectionPosition.AT_DEPTH    // @Depth 模式
             else -> InjectionPosition.AFTER_SYSTEM_PROMPT
         }
     }
 }
 
-/**
- * SillyTavern Lorebook 格式
- */
 @Serializable
 private data class SillyTavernLorebook(
-    val name: String? = null,
-    val description: String? = null,
     val entries: Map<String, SillyTavernEntry> = emptyMap(),
 )
 
