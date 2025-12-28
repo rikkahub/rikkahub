@@ -8,6 +8,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.document.DocxParser
 import me.rerere.document.PdfParser
+import me.rerere.document.PptxParser
 import java.io.File
 
 object DocumentAsPromptTransformer : InputMessageTransformer {
@@ -26,6 +27,9 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
                                 val content = when (document.mime) {
                                     "application/pdf" -> parsePdfAsText(file)
                                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> parseDocxAsText(
+                                        file
+                                    )
+                                    "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> parsePptxAsText(
                                         file
                                     )
 
@@ -54,5 +58,9 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
 
     private fun parseDocxAsText(file: File): String {
         return DocxParser.parse(file)
+    }
+
+    private fun parsePptxAsText(file: File): String {
+        return PptxParser.parse(file)
     }
 }
