@@ -135,6 +135,7 @@ class ChatService(
     val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
 
     fun addError(error: Throwable) {
+        if (error is CancellationException) return
         _errors.update { it + ChatError(error = error) }
     }
 
@@ -301,9 +302,6 @@ class ChatService(
                 }
 
                 _generationDoneFlow.emit(conversationId)
-            } catch (e: CancellationException) {
-                // 正常取消，不需要处理
-                throw e
             } catch (e: Exception) {
                 e.printStackTrace()
                 addError(e)
@@ -352,9 +350,6 @@ class ChatService(
                 }
 
                 _generationDoneFlow.emit(conversationId)
-            } catch (e: CancellationException) {
-                // 正常取消，不需要处理
-                throw e
             } catch (e: Exception) {
                 addError(e)
             }
