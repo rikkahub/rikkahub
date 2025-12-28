@@ -727,5 +727,7 @@
   <string name="text_area_save">저장</string>
   <string name="prompt_page_position_at_depth">심도에서</string>
   <string name="prompt_page_inject_depth">깊이 주입</string>
+  <string name="setting_page_request_logs">요청 로그</string>
+  <string name="setting_page_request_logs_desc">HTTP 요청 로그 보기</string>
 </resources>
 

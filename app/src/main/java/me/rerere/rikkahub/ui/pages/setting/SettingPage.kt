@@ -51,6 +51,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircleWarning
 import com.composables.icons.lucide.Monitor
 import com.composables.icons.lucide.Palette
+import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.SunMoon
 import com.composables.icons.lucide.Terminal
@@ -318,6 +319,16 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     onClick = {
                         context.openUrl("https://docs.rikka-ai.com/docs/basic/get-started")
                     }
+                )
+            }
+
+            item {
+                SettingItem(
+                    navController = navController,
+                    title = { Text(stringResource(R.string.setting_page_request_logs)) },
+                    description = { Text(stringResource(R.string.setting_page_request_logs_desc)) },
+                    icon = { Icon(Lucide.ScrollText, stringResource(R.string.setting_page_request_logs)) },
+                    link = Screen.Log
                 )
             }
 

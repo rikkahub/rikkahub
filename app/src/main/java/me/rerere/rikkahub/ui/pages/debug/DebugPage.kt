@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.debug
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -105,7 +106,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
             ) { page ->
                 when (page) {
                     0 -> MainPage(vm)
-                    1 -> LoggingPage()
+                    1 -> Box {}
                 }
             }
         }
@@ -204,22 +205,5 @@ private fun MainPage(vm: DebugVM) {
             onValueChange = { markdown = it },
             modifier = Modifier.fillMaxWidth()
         )
-    }
-}
-
-@Composable
-private fun LoggingPage() {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        contentPadding = PaddingValues(16.dp),
-    ) {
-        items(Logging.getRecentLogs()) {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = JetbrainsMono,
-            )
-        }
     }
 }

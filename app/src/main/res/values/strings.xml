@@ -727,5 +727,7 @@
   <string name="text_area_save">Save</string>
   <string name="prompt_page_position_at_depth">At Depth</string>
   <string name="prompt_page_inject_depth">Inject Depth</string>
+  <string name="setting_page_request_logs">Request Logs</string>
+  <string name="setting_page_request_logs_desc">View HTTP request logs</string>
 </resources>
 

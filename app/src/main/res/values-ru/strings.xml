@@ -725,5 +725,7 @@
   <string name="text_area_save">Сохранить</string>
   <string name="prompt_page_position_at_depth">На глубине</string>
   <string name="prompt_page_inject_depth">Глубина инъекции</string>
+  <string name="setting_page_request_logs">Журналы запросов</string>
+  <string name="setting_page_request_logs_desc">Просмотр журналов HTTP-запросов</string>
 </resources>
 

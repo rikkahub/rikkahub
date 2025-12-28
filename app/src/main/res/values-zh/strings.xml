@@ -727,5 +727,7 @@
   <string name="text_area_save">保存</string>
   <string name="prompt_page_position_at_depth">在深度</string>
   <string name="prompt_page_inject_depth">注入深度</string>
+  <string name="setting_page_request_logs">请求日志</string>
+  <string name="setting_page_request_logs_desc">查看 HTTP 请求日志</string>
 </resources>
 

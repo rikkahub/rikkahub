@@ -727,5 +727,7 @@
   <string name="text_area_save">保存</string>
   <string name="prompt_page_position_at_depth">深度</string>
   <string name="prompt_page_inject_depth">深度を注入</string>
+  <string name="setting_page_request_logs">リクエストログ</string>
+  <string name="setting_page_request_logs_desc">HTTPリクエストログを表示</string>
 </resources>
 
