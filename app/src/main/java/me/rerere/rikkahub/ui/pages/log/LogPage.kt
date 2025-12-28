@@ -89,7 +89,7 @@ private fun UnifiedLogList(logs: List<LogEntry>, modifier: Modifier = Modifier) 
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(16.dp)
     ) {
-        items(sortedLogs, key = { it.timestamp }, contentType = { it.javaClass.simpleName }) { log ->
+        items(sortedLogs, key = { it.id }, contentType = { it.javaClass.simpleName }) { log ->
             when (log) {
                 is LogEntry.RequestLog -> RequestLogCard(
                     log = log,

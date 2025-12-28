@@ -1,16 +1,19 @@
 package me.rerere.common.android
 
 import kotlinx.serialization.Serializable
+import kotlin.uuid.Uuid
 
 private const val MAX_RECENT_LOGS = 100
 
 @Serializable
 sealed class LogEntry {
+    abstract val id: Uuid
     abstract val timestamp: Long
     abstract val tag: String
 
     @Serializable
     data class TextLog(
+        override val id: Uuid = Uuid.random(),
         override val timestamp: Long = System.currentTimeMillis(),
         override val tag: String,
         val message: String
@@ -18,6 +21,7 @@ sealed class LogEntry {
 
     @Serializable
     data class RequestLog(
+        override val id: Uuid = Uuid.random(),
         override val timestamp: Long = System.currentTimeMillis(),
         override val tag: String,
         val url: String,
