@@ -46,7 +46,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogPage() {
     var logs by remember { mutableStateOf(Logging.getRecentLogs()) }
@@ -78,7 +77,6 @@ fun LogPage() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun UnifiedLogList(logs: List<LogEntry>, modifier: Modifier = Modifier) {
     var selectedLog by remember { mutableStateOf<LogEntry.RequestLog?>(null) }
@@ -91,7 +89,7 @@ private fun UnifiedLogList(logs: List<LogEntry>, modifier: Modifier = Modifier) 
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(16.dp)
     ) {
-        items(sortedLogs, key = { it.timestamp }) { log ->
+        items(sortedLogs, key = { it.timestamp }, contentType = { it.javaClass.simpleName }) { log ->
             when (log) {
                 is LogEntry.RequestLog -> RequestLogCard(
                     log = log,
