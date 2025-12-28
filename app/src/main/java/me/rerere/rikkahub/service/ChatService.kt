@@ -13,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -300,6 +301,9 @@ class ChatService(
                 }
 
                 _generationDoneFlow.emit(conversationId)
+            } catch (e: CancellationException) {
+                // 正常取消，不需要处理
+                throw e
             } catch (e: Exception) {
                 e.printStackTrace()
                 addError(e)
@@ -348,6 +352,9 @@ class ChatService(
                 }
 
                 _generationDoneFlow.emit(conversationId)
+            } catch (e: CancellationException) {
+                // 正常取消，不需要处理
+                throw e
             } catch (e: Exception) {
                 addError(e)
             }
