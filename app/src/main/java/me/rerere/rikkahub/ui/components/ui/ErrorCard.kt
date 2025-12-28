@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +32,7 @@ import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.service.ChatError
@@ -99,6 +101,12 @@ fun ErrorCard(
 ) {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
+
+    // 5 秒后自动消失
+    LaunchedEffect(error.id) {
+        delay(5000)
+        onDismiss()
+    }
 
     Surface(
         modifier = modifier.fillMaxWidth(),
