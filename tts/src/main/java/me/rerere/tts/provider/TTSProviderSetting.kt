@@ -98,6 +98,28 @@ sealed class TTSProviderSetting {
         }
     }
 
+    @Serializable
+    @SerialName("qwen")
+    data class Qwen(
+        override var id: Uuid = Uuid.random(),
+        override var name: String = "Qwen TTS",
+        val apiKey: String = "",
+        val baseUrl: String = "https://dashscope.aliyuncs.com/api/v1",
+        val model: String = "qwen3-tts-flash",
+        val voice: String = "Cherry",
+        val languageType: String = "Auto"
+    ) : TTSProviderSetting() {
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+        ): TTSProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -105,6 +127,7 @@ sealed class TTSProviderSetting {
                 Gemini::class,
                 SystemTTS::class,
                 MiniMax::class,
+                Qwen::class,
             )
         }
     }
