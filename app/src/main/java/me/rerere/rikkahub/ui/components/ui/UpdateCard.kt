@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -10,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -29,6 +31,7 @@ import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -73,9 +76,10 @@ fun UpdateCard(vm: ChatVM) {
     }
     state.onSuccess { info ->
         var showDetail by remember { mutableStateOf(false) }
+        var dismissed by remember { mutableStateOf(false) }
         val current = remember { Version(BuildConfig.VERSION_NAME) }
         val latest = remember(info) { Version(info.version) }
-        if (latest > current) {
+        if (latest > current && !dismissed) {
             Card(
                 onClick = {
                     showDetail = true
@@ -87,11 +91,25 @@ fun UpdateCard(vm: ChatVM) {
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "发现新版本 ${info.version}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "发现新版本 ${info.version}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { dismissed = true }) {
+                            Icon(
+                                Lucide.X,
+                                contentDescription = "关闭",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     MarkdownBlock(
                         content = info.changelog,
                         style = MaterialTheme.typography.bodySmall,
