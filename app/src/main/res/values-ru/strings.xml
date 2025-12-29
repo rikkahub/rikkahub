@@ -217,14 +217,6 @@
   <string name="chat_page_yesterday">Вчера</string>
   <string name="chat_size_dialog_content">Текущий размер: %.2f МБ. Это может привести к вылету или зависанию приложения, а также к потере данных этой беседы. Пожалуйста, создайте новый чат как можно скорее, чтобы продолжить общение.</string>
   <string name="chat_size_dialog_title">Данные этого разговора слишком большие</string>
-  <string name="chat_welcome_suggestion_brainstorm_prompt">Помоги мне придумать идеи о</string>
-  <string name="chat_welcome_suggestion_brainstorm_title">Мозговой штурм</string>
-  <string name="chat_welcome_suggestion_explain_prompt">Пожалуйста, объясните простыми словами</string>
-  <string name="chat_welcome_suggestion_explain_title">Объяснить понятие</string>
-  <string name="chat_welcome_suggestion_programming_prompt">Пожалуйста, помогите мне написать код для</string>
-  <string name="chat_welcome_suggestion_programming_title">Помощник по программированию</string>
-  <string name="chat_welcome_suggestion_writing_prompt">Помоги мне написать статью о</string>
-  <string name="chat_welcome_suggestion_writing_title">Помоги мне написать</string>
   <string name="citations_count">%1$d цитирований</string>
   <string name="code_block_collapse">Свернуть</string>
   <string name="code_block_copy">Копировать код</string>
@@ -728,4 +720,3 @@
   <string name="setting_page_request_logs">Журналы запросов</string>
   <string name="setting_page_request_logs_desc">Просмотр журналов HTTP-запросов</string>
 </resources>
-

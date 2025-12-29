@@ -219,14 +219,6 @@
   <string name="chat_page_yesterday">昨日</string>
   <string name="chat_size_dialog_content">現在のサイズ: %.2f MBです。これによりアプリがクラッシュしたり動作が遅くなったり、この会話データが失われる可能性があります。チャットを続けるには、できるだけ早く新しい会話を作成してください。</string>
   <string name="chat_size_dialog_title">この会話データは大きすぎます</string>
-  <string name="chat_welcome_suggestion_brainstorm_prompt">アイデア出しを手伝って</string>
-  <string name="chat_welcome_suggestion_brainstorm_title">ブレインストーミング</string>
-  <string name="chat_welcome_suggestion_explain_prompt">簡単な言葉で説明してください</string>
-  <string name="chat_welcome_suggestion_explain_title">概念を説明</string>
-  <string name="chat_welcome_suggestion_programming_prompt">コードを書くのを手伝ってください</string>
-  <string name="chat_welcome_suggestion_programming_title">プログラミングアシスタント</string>
-  <string name="chat_welcome_suggestion_writing_prompt">「についての記事を書くのを手伝って」</string>
-  <string name="chat_welcome_suggestion_writing_title">文章を書くのを手伝って</string>
   <string name="citations_count">%1$d 件の引用</string>
   <string name="code_block_collapse">折りたたむ</string>
   <string name="code_block_copy">コードをコピー</string>
@@ -730,4 +722,3 @@
   <string name="setting_page_request_logs">リクエストログ</string>
   <string name="setting_page_request_logs_desc">HTTPリクエストログを表示</string>
 </resources>
-

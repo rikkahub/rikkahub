@@ -219,14 +219,6 @@
   <string name="chat_page_yesterday">어제</string>
   <string name="chat_size_dialog_content">현재 크기: %.2fMB. 이로 인해 앱이 강제 종료되거나 느려질 수 있으며, 대화 데이터가 손실될 수도 있습니다. 계속 대화하려면 새 대화를 만들어 주세요.</string>
   <string name="chat_size_dialog_title">이 대화 데이터가 너무 큽니다</string>
-  <string name="chat_welcome_suggestion_brainstorm_prompt">아이디어 브레인스토밍 도와줘</string>
-  <string name="chat_welcome_suggestion_brainstorm_title">브레인스토밍</string>
-  <string name="chat_welcome_suggestion_explain_prompt">간단한 말로 설명해 주세요</string>
-  <string name="chat_welcome_suggestion_explain_title">개념 설명</string>
-  <string name="chat_welcome_suggestion_programming_prompt">코드를 작성해 주세요</string>
-  <string name="chat_welcome_suggestion_programming_title">프로그래밍 도우미</string>
-  <string name="chat_welcome_suggestion_writing_prompt">"도와줘서 기사를 작성해요"</string>
-  <string name="chat_welcome_suggestion_writing_title">쓰기 도와주기</string>
   <string name="citations_count">%1$d 출처</string>
   <string name="code_block_collapse">접기</string>
   <string name="code_block_copy">코드 복사</string>
@@ -730,4 +722,3 @@
   <string name="setting_page_request_logs">요청 로그</string>
   <string name="setting_page_request_logs_desc">HTTP 요청 로그 보기</string>
 </resources>
-

@@ -219,14 +219,6 @@
   <string name="chat_page_yesterday">Yesterday</string>
   <string name="chat_size_dialog_content">Current size: %.2f MB. This may cause the application to crash or lag, or even lose this conversation data. Please create a new conversation as soon as possible to continue chatting.</string>
   <string name="chat_size_dialog_title">This conversation data is too large</string>
-  <string name="chat_welcome_suggestion_brainstorm_prompt">Help me brainstorm about</string>
-  <string name="chat_welcome_suggestion_brainstorm_title">Brainstorm</string>
-  <string name="chat_welcome_suggestion_explain_prompt">Please explain in simple terms</string>
-  <string name="chat_welcome_suggestion_explain_title">Explain concept</string>
-  <string name="chat_welcome_suggestion_programming_prompt">Please help me write code to</string>
-  <string name="chat_welcome_suggestion_programming_title">Programming assistant</string>
-  <string name="chat_welcome_suggestion_writing_prompt">Help me write an article about</string>
-  <string name="chat_welcome_suggestion_writing_title">Help me write</string>
   <string name="citations_count">%1$d Citations</string>
   <string name="code_block_collapse">Collapse</string>
   <string name="code_block_copy">Copy Code</string>
@@ -730,4 +722,3 @@
   <string name="setting_page_request_logs">Request Logs</string>
   <string name="setting_page_request_logs_desc">View HTTP request logs</string>
 </resources>
-

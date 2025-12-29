@@ -219,14 +219,6 @@
   <string name="chat_page_yesterday">昨天</string>
   <string name="chat_size_dialog_content">当前大小：%.2f MB。这可能导致应用崩溃或卡顿，甚至丢失本次对话数据。请尽快新建对话以继续聊天。</string>
   <string name="chat_size_dialog_title">此对话数据过大</string>
-  <string name="chat_welcome_suggestion_brainstorm_prompt">帮我一起头脑风暴关于</string>
-  <string name="chat_welcome_suggestion_brainstorm_title">头脑风暴</string>
-  <string name="chat_welcome_suggestion_explain_prompt">请用简单的语言解释</string>
-  <string name="chat_welcome_suggestion_explain_title">解释概念</string>
-  <string name="chat_welcome_suggestion_programming_prompt">请帮我编写代码来</string>
-  <string name="chat_welcome_suggestion_programming_title">编程助手</string>
-  <string name="chat_welcome_suggestion_writing_prompt">帮我写一篇文章，主题是</string>
-  <string name="chat_welcome_suggestion_writing_title">帮我写作</string>
   <string name="citations_count">%1$d 条引用</string>
   <string name="code_block_collapse">折叠</string>
   <string name="code_block_copy">复制代码</string>
@@ -730,4 +722,3 @@
   <string name="setting_page_request_logs">请求日志</string>
   <string name="setting_page_request_logs_desc">查看 HTTP 请求日志</string>
 </resources>
-
