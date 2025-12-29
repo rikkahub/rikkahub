@@ -218,21 +218,6 @@ private fun ChatListNormal(
         modifier = Modifier
             .fillMaxSize(),
     ) {
-        // 欢迎界面 - 当对话为空时显示
-        AnimatedVisibility(
-            visible = conversation.newConversation && conversation.messageNodes.isEmpty(),
-            modifier = Modifier
-                .padding(innerPadding)
-                .zIndex(5f),
-            enter = scaleIn() + fadeIn(),
-            exit = fadeOut(animationSpec = tween(50)),
-        ) {
-            ChatWelcome(
-                modifier = Modifier,
-                onClickSuggestion = onClickSuggestion
-            )
-        }
-
         // 自动滚动到底部
         LaunchedEffect(state) {
             snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
