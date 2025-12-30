@@ -149,13 +149,19 @@ class ConversationRepository(
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
+        // 获取完整的 Conversation（包含 messageNodes）以正确清理文件
+        val fullConversation = if (conversation.messageNodes.isEmpty()) {
+            getConversationById(conversation.id) ?: conversation
+        } else {
+            conversation
+        }
         database.withTransaction {
             // message_node 会通过 CASCADE 自动删除
             conversationDAO.delete(
                 conversationToConversationEntity(conversation)
             )
         }
-        context.deleteChatFiles(conversation.files)
+        context.deleteChatFiles(fullConversation.files)
     }
 
     suspend fun deleteConversationOfAssistant(assistantId: Uuid) {

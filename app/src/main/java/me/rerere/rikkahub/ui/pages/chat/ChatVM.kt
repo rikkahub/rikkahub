@@ -494,8 +494,7 @@ class ChatVM(
 
     fun deleteConversation(conversation: Conversation) {
         viewModelScope.launch {
-            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
-            conversationRepo.deleteConversation(conversationFull)
+            conversationRepo.deleteConversation(conversation)
         }
     }
 
