@@ -4,12 +4,16 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class S3Config(
-    val endpoint: String,
-    val accessKeyId: String,
-    val secretAccessKey: String,
-    val bucket: String,
+    val endpoint: String = "",
+    val accessKeyId: String = "",
+    val secretAccessKey: String = "",
+    val bucket: String = "",
     val region: String = "auto",
     val pathStyle: Boolean = true,
+    val items: List<BackupItem> = listOf(
+        BackupItem.DATABASE,
+        BackupItem.FILES
+    ),
 ) {
     val host: String
         get() = endpoint
@@ -27,5 +31,11 @@ data class S3Config(
             val scheme = if (isHttps) "https://" else "http://"
             "$scheme$bucket.$host"
         }
+    }
+
+    @Serializable
+    enum class BackupItem {
+        DATABASE,
+        FILES,
     }
 }
