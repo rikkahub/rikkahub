@@ -60,7 +60,7 @@ fun SettingAboutPage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
     val navController = LocalNavController.current
-    val emojiOptions = remember { listOf("🎉", "✨", "🌟", "💫", "🎊", "🥳", "\uD83C\uDDE8\uD83C\uDDF3") }
+    val emojiOptions = remember { listOf("🎉", "✨", "🌟", "💫", "🎊", "🥳", "🇨🇳", "🤗", "🤡", "🌏", "🍉") }
     var logoCenterPx by remember { mutableStateOf(Offset.Zero) }
     Scaffold(
         topBar = {
