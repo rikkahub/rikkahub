@@ -721,4 +721,12 @@
   <string name="prompt_page_inject_depth">深度を注入</string>
   <string name="setting_page_request_logs">リクエストログ</string>
   <string name="setting_page_request_logs_desc">HTTPリクエストログを表示</string>
+  <string name="backup_page_s3_endpoint">エンドポイント</string>
+  <string name="backup_page_s3_access_key_id">アクセスキーID</string>
+  <string name="backup_page_s3_secret_access_key">シークレットアクセスキー</string>
+  <string name="backup_page_s3_bucket">バケット</string>
+  <string name="backup_page_s3_region">リージョン</string>
+  <string name="backup_page_s3_backup_files">S3バックアップファイル</string>
+  <string name="backup_page_s3_backup">S3バックアップ</string>
 </resources>
+

@@ -67,7 +67,7 @@ fun BackupPage(vm: BackupVM = koinViewModel()) {
                         Icon(Lucide.Cloud, null)
                     },
                     label = {
-                        Text("S3 Backup")
+                        Text(stringResource(R.string.backup_page_s3_backup))
                     },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(1) }

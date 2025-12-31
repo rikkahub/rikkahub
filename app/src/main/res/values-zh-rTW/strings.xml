@@ -721,4 +721,12 @@
   <string name="prompt_page_inject_depth">注入深度</string>
   <string name="setting_page_request_logs">請求記錄</string>
   <string name="setting_page_request_logs_desc">檢視 HTTP 要求記錄</string>
+  <string name="backup_page_s3_endpoint">端點</string>
+  <string name="backup_page_s3_access_key_id">存取金鑰 ID</string>
+  <string name="backup_page_s3_secret_access_key">私密存取金鑰</string>
+  <string name="backup_page_s3_bucket">Bucket</string>
+  <string name="backup_page_s3_region">區域</string>
+  <string name="backup_page_s3_backup_files">S3 備份檔案</string>
+  <string name="backup_page_s3_backup">S3 備份</string>
 </resources>
+

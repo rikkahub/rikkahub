@@ -99,7 +99,7 @@ fun S3Tab(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FormItem(
-                    label = { Text("Endpoint") }
+                    label = { Text(stringResource(R.string.backup_page_s3_endpoint)) }
                 ) {
                     OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
@@ -110,7 +110,7 @@ fun S3Tab(
                     )
                 }
                 FormItem(
-                    label = { Text("Access Key ID") }
+                    label = { Text(stringResource(R.string.backup_page_s3_access_key_id)) }
                 ) {
                     OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
@@ -120,7 +120,7 @@ fun S3Tab(
                     )
                 }
                 FormItem(
-                    label = { Text("Secret Access Key") }
+                    label = { Text(stringResource(R.string.backup_page_s3_secret_access_key)) }
                 ) {
                     var passwordVisible by remember { mutableStateOf(false) }
                     OutlinedTextField(
@@ -141,7 +141,7 @@ fun S3Tab(
                     )
                 }
                 FormItem(
-                    label = { Text("Bucket") }
+                    label = { Text(stringResource(R.string.backup_page_s3_bucket)) }
                 ) {
                     OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
@@ -152,7 +152,7 @@ fun S3Tab(
                     )
                 }
                 FormItem(
-                    label = { Text("Region") }
+                    label = { Text(stringResource(R.string.backup_page_s3_region)) }
                 ) {
                     OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
@@ -294,7 +294,7 @@ fun S3Tab(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "S3 Backup Files",
+                    stringResource(R.string.backup_page_s3_backup_files),
                     modifier = Modifier.fillMaxWidth()
                 )
                 val backupItems by vm.s3BackupItems.collectAsStateWithLifecycle()

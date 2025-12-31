@@ -721,4 +721,12 @@
   <string name="prompt_page_inject_depth">깊이 주입</string>
   <string name="setting_page_request_logs">요청 로그</string>
   <string name="setting_page_request_logs_desc">HTTP 요청 로그 보기</string>
+  <string name="backup_page_s3_endpoint">엔드포인트</string>
+  <string name="backup_page_s3_access_key_id">액세스 키 ID</string>
+  <string name="backup_page_s3_secret_access_key">비밀 액세스 키</string>
+  <string name="backup_page_s3_bucket">버킷</string>
+  <string name="backup_page_s3_region">리전</string>
+  <string name="backup_page_s3_backup_files">S3 백업 파일</string>
+  <string name="backup_page_s3_backup">S3 백업</string>
 </resources>
+

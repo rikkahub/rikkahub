@@ -721,4 +721,12 @@
   <string name="prompt_page_inject_depth">注入深度</string>
   <string name="setting_page_request_logs">请求日志</string>
   <string name="setting_page_request_logs_desc">查看 HTTP 请求日志</string>
+  <string name="backup_page_s3_endpoint">端点</string>
+  <string name="backup_page_s3_access_key_id">访问密钥 ID</string>
+  <string name="backup_page_s3_secret_access_key">秘密访问密钥</string>
+  <string name="backup_page_s3_bucket">Bucket</string>
+  <string name="backup_page_s3_region">区域</string>
+  <string name="backup_page_s3_backup_files">S3备份文件</string>
+  <string name="backup_page_s3_backup">S3备份</string>
 </resources>
+
