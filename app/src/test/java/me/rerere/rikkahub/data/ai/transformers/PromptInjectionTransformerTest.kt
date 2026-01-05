@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.transformers
 
+import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -89,6 +90,33 @@ class PromptInjectionTransformerTest {
 
     private fun wrapSystemTag(content: String): String {
         return "<system>\n$content\n</system>"
+    }
+
+    private fun createAssistantWithToolCall(toolCallId: String, toolName: String): UIMessage {
+        return UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.ToolCall(
+                    toolCallId = toolCallId,
+                    toolName = toolName,
+                    arguments = "{}"
+                )
+            )
+        )
+    }
+
+    private fun createToolResultMessage(toolCallId: String, toolName: String): UIMessage {
+        return UIMessage(
+            role = MessageRole.TOOL,
+            parts = listOf(
+                UIMessagePart.ToolResult(
+                    toolCallId = toolCallId,
+                    toolName = toolName,
+                    content = JsonPrimitive("result"),
+                    arguments = JsonPrimitive("{}")
+                )
+            )
+        )
     }
     // endregion
 
@@ -979,6 +1007,215 @@ class PromptInjectionTransformerTest {
         assertEquals(3, result.size)
         assertEquals(MessageRole.SYSTEM, result[0].role)
         assertEquals("Before content", getMessageText(result[0]))
+    }
+    // endregion
+
+    // region Tool call chain preservation tests
+    @Test
+    fun `BOTTOM_OF_CHAT should not break tool call chain`() {
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            position = InjectionPosition.BOTTOM_OF_CHAT,
+            content = "Bottom injection"
+        )
+
+        // 消息序列: SYSTEM -> USER -> ASSISTANT(ToolCall) -> TOOL(ToolResult)
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Call a tool"),
+            createAssistantWithToolCall("call_123", "test_tool"),
+            createToolResultMessage("call_123", "test_tool")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList()
+        )
+
+        // 注入应该在 ASSISTANT(ToolCall) 之前，而不是在 ToolCall 和 ToolResult 之间
+        assertEquals(5, result.size)
+
+        // 验证工具调用链没有被破坏
+        val toolCallIndex = result.indexOfFirst { it.getToolCalls().isNotEmpty() }
+        val toolResultIndex = result.indexOfFirst { it.getToolResults().isNotEmpty() }
+
+        // ToolResult 应该紧跟在 ToolCall 后面
+        assertEquals(toolCallIndex + 1, toolResultIndex)
+
+        // 注入的消息应该在 ToolCall 之前
+        val injectedIndex = result.indexOfFirst { getMessageText(it).contains("Bottom injection") }
+        assertTrue(injectedIndex < toolCallIndex)
+    }
+
+    @Test
+    fun `AT_DEPTH should not break tool call chain`() {
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            position = InjectionPosition.AT_DEPTH,
+            injectDepth = 1, // 尝试在最后一条消息之前插入
+            content = "Depth injection"
+        )
+
+        // 消息序列: SYSTEM -> USER -> ASSISTANT(ToolCall) -> TOOL(ToolResult)
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Call a tool"),
+            createAssistantWithToolCall("call_456", "test_tool"),
+            createToolResultMessage("call_456", "test_tool")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList()
+        )
+
+        assertEquals(5, result.size)
+
+        // 验证工具调用链没有被破坏
+        val toolCallIndex = result.indexOfFirst { it.getToolCalls().isNotEmpty() }
+        val toolResultIndex = result.indexOfFirst { it.getToolResults().isNotEmpty() }
+        assertEquals(toolCallIndex + 1, toolResultIndex)
+    }
+
+    @Test
+    fun `multiple tool calls should all be preserved`() {
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            position = InjectionPosition.AT_DEPTH,
+            injectDepth = 2,
+            content = "Depth injection"
+        )
+
+        // 消息序列: SYSTEM -> USER -> ASSISTANT(ToolCall1) -> TOOL(ToolResult1) -> ASSISTANT(ToolCall2) -> TOOL(ToolResult2)
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Call tools"),
+            createAssistantWithToolCall("call_1", "tool_1"),
+            createToolResultMessage("call_1", "tool_1"),
+            createAssistantWithToolCall("call_2", "tool_2"),
+            createToolResultMessage("call_2", "tool_2")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList()
+        )
+
+        // 验证两个工具调用链都没有被破坏
+        val toolCalls = result.mapIndexedNotNull { index, msg ->
+            if (msg.getToolCalls().isNotEmpty()) index else null
+        }
+        val toolResults = result.mapIndexedNotNull { index, msg ->
+            if (msg.getToolResults().isNotEmpty()) index else null
+        }
+
+        assertEquals(2, toolCalls.size)
+        assertEquals(2, toolResults.size)
+
+        // 每个 ToolCall 后面紧跟着对应的 ToolResult
+        toolCalls.forEachIndexed { i, callIndex ->
+            assertEquals(callIndex + 1, toolResults[i])
+        }
+    }
+
+    @Test
+    fun `findSafeInsertIndex should return safe position before tool call chain`() {
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            createAssistantWithToolCall("call_1", "tool"),
+            createToolResultMessage("call_1", "tool")
+        )
+
+        // 尝试在索引 3 (ToolResult 位置) 插入
+        val safeIndex = findSafeInsertIndex(messages, 3)
+        // 应该返回 2 (ToolCall 之前)
+        assertEquals(2, safeIndex)
+    }
+
+    @Test
+    fun `findSafeInsertIndex should handle consecutive tool call chains`() {
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            createAssistantWithToolCall("call_1", "tool1"),
+            createToolResultMessage("call_1", "tool1"),
+            createAssistantWithToolCall("call_2", "tool2"),
+            createToolResultMessage("call_2", "tool2")
+        )
+
+        // 尝试在索引 5 (最后一个 ToolResult) 插入
+        val safeIndex = findSafeInsertIndex(messages, 5)
+        // 应该返回 4 (第二个 ToolCall 之前)
+        assertEquals(4, safeIndex)
+
+        // 尝试在索引 3 (第一个 ToolResult) 插入
+        val safeIndex2 = findSafeInsertIndex(messages, 3)
+        // 应该返回 2 (第一个 ToolCall 之前)
+        assertEquals(2, safeIndex2)
+    }
+
+    @Test
+    fun `findSafeInsertIndex should return original index when not in tool chain`() {
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            UIMessage.assistant("Hi!"),
+            UIMessage.user("How are you?")
+        )
+
+        // 没有工具调用，应该返回原索引
+        assertEquals(3, findSafeInsertIndex(messages, 3))
+        assertEquals(2, findSafeInsertIndex(messages, 2))
+        assertEquals(0, findSafeInsertIndex(messages, 0))
+    }
+
+    @Test
+    fun `injection after completed tool chain should work normally`() {
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            position = InjectionPosition.BOTTOM_OF_CHAT,
+            content = "Bottom injection"
+        )
+
+        // 消息序列: SYSTEM -> USER -> ASSISTANT(ToolCall) -> TOOL(ToolResult) -> ASSISTANT(final response) -> USER
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Call a tool"),
+            createAssistantWithToolCall("call_1", "tool"),
+            createToolResultMessage("call_1", "tool"),
+            UIMessage.assistant("Here's the result"),
+            UIMessage.user("Thanks!")
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList()
+        )
+
+        assertEquals(7, result.size)
+
+        // 注入应该在最后一条用户消息之前
+        val injectedIndex = result.indexOfFirst { getMessageText(it).contains("Bottom injection") }
+        val lastUserIndex = result.indexOfLast { it.role == MessageRole.USER && getMessageText(it) == "Thanks!" }
+        assertEquals(lastUserIndex - 1, injectedIndex)
+
+        // 工具调用链仍然完整
+        val toolCallIndex = result.indexOfFirst { it.getToolCalls().isNotEmpty() }
+        val toolResultIndex = result.indexOfFirst { it.getToolResults().isNotEmpty() }
+        assertEquals(toolCallIndex + 1, toolResultIndex)
     }
     // endregion
 }

@@ -164,8 +164,9 @@ internal fun applyInjections(
         ?.joinToString("\n") { it.content }
     if (!topContent.isNullOrEmpty()) {
         // 重新计算索引（因为可能插入了系统消息）
-        val insertIndex = result.indexOfFirst { it.role == MessageRole.USER }
+        var insertIndex = result.indexOfFirst { it.role == MessageRole.USER }
             .takeIf { it >= 0 } ?: result.size
+        insertIndex = findSafeInsertIndex(result, insertIndex)
         result.add(insertIndex, UIMessage.user(wrapSystemTag(topContent)))
     }
 
@@ -173,7 +174,8 @@ internal fun applyInjections(
     val bottomContent = byPosition[InjectionPosition.BOTTOM_OF_CHAT]
         ?.joinToString("\n") { it.content }
     if (!bottomContent.isNullOrEmpty()) {
-        val insertIndex = (result.size - 1).coerceAtLeast(0)
+        var insertIndex = (result.size - 1).coerceAtLeast(0)
+        insertIndex = findSafeInsertIndex(result, insertIndex)
         result.add(insertIndex, UIMessage.user(wrapSystemTag(bottomContent)))
     }
 
@@ -186,12 +188,45 @@ internal fun applyInjections(
             val content = byDepth[depth]?.joinToString("\n") { it.content } ?: return@forEach
             // 计算插入位置：result.size - depth，但要确保在有效范围内
             // depth=1 表示在最后一条消息之前，depth=2 表示在倒数第二条之前...
-            val insertIndex = (result.size - depth).coerceIn(0, result.size)
+            var insertIndex = (result.size - depth).coerceIn(0, result.size)
+            insertIndex = findSafeInsertIndex(result, insertIndex)
             result.add(insertIndex, UIMessage.user(wrapSystemTag(content)))
         }
     }
 
     return result
+}
+
+/**
+ * 查找安全的插入位置，避免破坏工具调用链
+ *
+ * 工具调用链的结构：ASSISTANT(ToolCall) -> TOOL(ToolResult)
+ * 不能在这两者之间插入消息
+ */
+internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): Int {
+    var index = targetIndex.coerceIn(0, messages.size)
+
+    // 向前查找，直到找到一个安全的位置
+    while (index > 0) {
+        val prevMessage = messages.getOrNull(index - 1)
+        val currentMessage = messages.getOrNull(index)
+
+        // 检查是否在工具调用链中间
+        // 如果前一条是包含 ToolCall 的消息，当前是包含 ToolResult 的 TOOL 消息
+        val isPrevToolCall = prevMessage?.getToolCalls()?.isNotEmpty() == true
+        val isCurrentToolResult = currentMessage?.role == MessageRole.TOOL &&
+            currentMessage.getToolResults().isNotEmpty()
+
+        if (isPrevToolCall && isCurrentToolResult) {
+            // 在工具调用链中间，需要继续往前找
+            index--
+        } else {
+            // 找到安全位置
+            break
+        }
+    }
+
+    return index
 }
 
 /**
