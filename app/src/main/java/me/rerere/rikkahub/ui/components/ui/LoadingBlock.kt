@@ -47,7 +47,6 @@ enum class GridAnimationMode {
 @Composable
 fun GlowGridLoading(
     modifier: Modifier = Modifier,
-    size: Dp = 120.dp,
     activeColor: Color = MaterialTheme.colorScheme.primary,
     baseColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
     mode: GridAnimationMode = GridAnimationMode.Diagonal,
@@ -58,8 +57,8 @@ fun GlowGridLoading(
 
     Column(
         modifier = modifier
-            .size(size)
-            .padding(size * 0.1f),
+            .size(20.dp)
+            .padding(4.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
