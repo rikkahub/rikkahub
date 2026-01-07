@@ -3,10 +3,11 @@ package me.rerere.ai.util
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.util.Base64OutputStream
 import androidx.core.net.toUri
 import me.rerere.ai.ui.UIMessagePart
+import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 
 private val supportedTypes = setOf(
     "image/jpeg",
@@ -14,8 +15,6 @@ private val supportedTypes = setOf(
     "image/gif",
     "image/webp",
 )
-
-private const val TAG = "FileEncoder"
 
 fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<String> = runCatching {
     when {
@@ -26,21 +25,20 @@ fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<String>
             if (!file.exists()) {
                 throw IllegalArgumentException("File does not exist: ${this.url}")
             }
-            if (!file.isSupportedType()) {
-                convertToJpeg(file) // 转换为 JPEG 格式
-                println("File converted to WebP format: ${file.absolutePath}")
+            val mimeType = file.guessMimeType().getOrThrow()
+            if (mimeType in supportedTypes) {
+                // 支持的格式，直接流式编码
+                val encoded = file.encodeToBase64Streaming()
+                if (withPrefix) "data:$mimeType;base64,$encoded" else encoded
+            } else {
+                // 不支持的格式（如 HEIC），转换为 JPEG
+                val encoded = file.convertAndEncodeToJpeg()
+                if (withPrefix) "data:image/jpeg;base64,$encoded" else encoded
             }
-            if (file.guessMimeType().getOrNull() != "image/webp") {
-                convertToJpeg(file) // 尝试转换为 WebP 格式
-                println("File converted to WebP format: ${file.absolutePath}")
-            }
-            val bytes = file.readBytes()
-            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            if (withPrefix) "data:${file.guessMimeType().getOrThrow()};base64,$encoded" else encoded
         }
 
         this.url.startsWith("data:") -> url
-        this.url.startsWith("http:") -> url
+        this.url.startsWith("http") -> url
         else -> throw IllegalArgumentException("Unsupported URL format: $url")
     }
 }
@@ -54,8 +52,7 @@ fun UIMessagePart.Video.encodeBase64(withPrefix: Boolean = true): Result<String>
             if (!file.exists()) {
                 throw IllegalArgumentException("File does not exist: ${this.url}")
             }
-            val bytes = file.readBytes()
-            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val encoded = file.encodeToBase64Streaming()
             if (withPrefix) "data:video/mp4;base64,$encoded" else encoded
         }
 
@@ -72,8 +69,7 @@ fun UIMessagePart.Audio.encodeBase64(withPrefix: Boolean = true): Result<String>
             if (!file.exists()) {
                 throw IllegalArgumentException("File does not exist: ${this.url}")
             }
-            val bytes = file.readBytes()
-            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val encoded = file.encodeToBase64Streaming()
             if (withPrefix) "data:audio/mp3;base64,$encoded" else encoded
         }
 
@@ -81,16 +77,53 @@ fun UIMessagePart.Audio.encodeBase64(withPrefix: Boolean = true): Result<String>
     }
 }
 
-private fun convertToJpeg(file: File) = runCatching {
-    val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-    FileOutputStream(file).use { outputStream ->
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+private fun File.encodeToBase64Streaming(): String {
+    val byteArrayOutputStream = ByteArrayOutputStream()
+    Base64OutputStream(byteArrayOutputStream, Base64.NO_WRAP).use { base64Stream ->
+        inputStream().use { input ->
+            input.copyTo(base64Stream, bufferSize = 8 * 1024)
+        }
+    }
+    return byteArrayOutputStream.toString(Charsets.ISO_8859_1.name())
+}
+
+private fun File.convertAndEncodeToJpeg(maxDimension: Int = 2048, quality: Int = 85): String {
+    // 第一次解码：只读尺寸
+    val options = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    BitmapFactory.decodeFile(absolutePath, options)
+
+    // 计算降采样率
+    options.inSampleSize = calculateInSampleSize(options, maxDimension, maxDimension)
+    options.inJustDecodeBounds = false
+
+    // 第二次解码：按降采样率解码
+    val bitmap = BitmapFactory.decodeFile(absolutePath, options)
+        ?: throw IllegalArgumentException("Failed to decode image: $absolutePath")
+
+    return try {
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        Base64OutputStream(byteArrayOutputStream, Base64.NO_WRAP).use { base64Stream ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, base64Stream)
+        }
+        byteArrayOutputStream.toString(Charsets.ISO_8859_1.name())
+    } finally {
+        bitmap.recycle()
     }
 }
 
-private fun File.isSupportedType(): Boolean {
-    val mimeType = guessMimeType().getOrNull() ?: return false
-    return mimeType in supportedTypes
+private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+    val (height, width) = options.outHeight to options.outWidth
+    var inSampleSize = 1
+    if (height > reqHeight || width > reqWidth) {
+        val halfHeight = height / 2
+        val halfWidth = width / 2
+        while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+            inSampleSize *= 2
+        }
+    }
+    return inSampleSize
 }
 
 private fun File.guessMimeType(): Result<String> = runCatching {
@@ -98,9 +131,6 @@ private fun File.guessMimeType(): Result<String> = runCatching {
         val bytes = ByteArray(16)
         val read = input.read(bytes)
         if (read < 12) error("File too short to determine MIME type")
-
-        // 打印前16个字节（可选）
-        println("guessMimeType bytes = ${bytes.joinToString(",")}")
 
         // 判断 HEIC 格式：包含 "ftypheic"
         if (bytes.copyOfRange(4, 12).toString(Charsets.US_ASCII) == "ftypheic") {
