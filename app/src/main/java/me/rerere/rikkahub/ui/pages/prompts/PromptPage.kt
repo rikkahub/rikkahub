@@ -84,6 +84,7 @@ import me.rerere.rikkahub.data.export.ModeInjectionSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
 import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.InjectionRole
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -472,6 +473,15 @@ private fun ModeInjectionEditSheet(
                     )
                 }
 
+                Text(
+                    stringResource(R.string.prompt_page_injection_role),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                InjectionRoleSelector(
+                    role = injection.role,
+                    onSelect = { onEdit(injection.copy(role = it)) }
+                )
+
                 OutlinedTextField(
                     value = injection.content,
                     onValueChange = { onEdit(injection.copy(content = it)) },
@@ -519,6 +529,26 @@ private fun getPositionLabel(position: InjectionPosition): String = when (positi
     InjectionPosition.TOP_OF_CHAT -> stringResource(R.string.prompt_page_position_top_of_chat)
     InjectionPosition.BOTTOM_OF_CHAT -> stringResource(R.string.prompt_page_position_bottom_of_chat)
     InjectionPosition.AT_DEPTH -> stringResource(R.string.prompt_page_position_at_depth)
+}
+
+@Composable
+private fun InjectionRoleSelector(
+    role: InjectionRole,
+    onSelect: (InjectionRole) -> Unit
+) {
+    Select(
+        options = InjectionRole.entries,
+        selectedOption = role,
+        onOptionSelected = onSelect,
+        optionToString = { getRoleLabel(it) },
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun getRoleLabel(role: InjectionRole): String = when (role) {
+    InjectionRole.USER -> stringResource(R.string.prompt_page_role_user)
+    InjectionRole.ASSISTANT -> stringResource(R.string.prompt_page_role_assistant)
 }
 
 // ==================== Lorebook Tab ====================
@@ -1097,6 +1127,15 @@ private fun RegexInjectionEditDialog(
                     label = { Text(stringResource(R.string.prompt_page_scan_depth)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+
+                Text(
+                    stringResource(R.string.prompt_page_injection_role),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                InjectionRoleSelector(
+                    role = entry.role,
+                    onSelect = { onEdit(entry.copy(role = it)) }
                 )
 
                 OutlinedTextField(
