@@ -105,9 +105,13 @@ class SseClientTransport(
                 setBody(McpJson.encodeToString(message))
             }
 
+            // Always consume the response body to properly release the connection
+            // Without this, the unconsumed response can cause connection pool issues
+            // that terminate the SSE stream sharing the same HttpClient
+            val bodyText = response.bodyAsText()
+
             if (!response.status.isSuccess()) {
-                val text = response.bodyAsText()
-                error("Error POSTing to endpoint (HTTP ${response.status}): $text")
+                error("Error POSTing to endpoint (HTTP ${response.status}): $bodyText")
             }
 
             Log.d(TAG, "Client successfully sent message via SSE $endpoint")
