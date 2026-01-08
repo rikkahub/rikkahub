@@ -51,6 +51,19 @@ jobs:
                     "current_key": "AIzaSyDummyKeyForBuildOnly000000000"
                   }
                 ]
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000001",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub.debug"
+                  }
+                },
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDummyKeyForBuildOnly000000000"
+                  }
+                ]
               }
             ],
             "configuration_version": "1"
