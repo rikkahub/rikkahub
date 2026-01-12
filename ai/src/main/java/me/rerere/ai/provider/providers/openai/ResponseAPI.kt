@@ -267,12 +267,12 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
 
                                     is UIMessagePart.Image -> {
                                         add(buildJsonObject {
-                                            part.encodeBase64().onSuccess {
+                                            part.encodeBase64().onSuccess { encodedImage ->
                                                 put(
                                                     "type",
                                                     if (message.role == MessageRole.USER) "input_image" else "output_image"
                                                 )
-                                                put("image_url", it)
+                                                put("image_url", encodedImage.base64)
                                             }.onFailure {
                                                 it.printStackTrace()
                                                 println("encode image failed: ${part.url}")

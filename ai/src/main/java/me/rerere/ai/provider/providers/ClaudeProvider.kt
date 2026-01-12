@@ -350,18 +350,12 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
                                 is UIMessagePart.Image -> {
                                     add(buildJsonObject {
-                                        part.encodeBase64().onSuccess { base64Data ->
+                                        part.encodeBase64(withPrefix = false).onSuccess { encodedImage ->
                                             put("type", "image")
                                             put("source", buildJsonObject {
                                                 put("type", "base64")
-                                                put(
-                                                    "media_type",
-                                                    "image/jpeg"
-                                                ) // 默认为 jpeg，可能需要根据实际情况调整
-                                                put(
-                                                    "data",
-                                                    base64Data.substringAfter(",")
-                                                ) // 移除 data:image/jpeg;base64, 前缀
+                                                put("media_type", encodedImage.mimeType)
+                                                put("data", encodedImage.base64)
                                             })
                                         }.onFailure {
                                             it.printStackTrace()

@@ -16,7 +16,12 @@ private val supportedTypes = setOf(
     "image/webp",
 )
 
-fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<String> = runCatching {
+data class EncodedImage(
+    val base64: String,
+    val mimeType: String
+)
+
+fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<EncodedImage> = runCatching {
     when {
         this.url.startsWith("file://") -> {
             val filePath =
@@ -29,16 +34,29 @@ fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<String>
             if (mimeType in supportedTypes) {
                 // 支持的格式，直接流式编码
                 val encoded = file.encodeToBase64Streaming()
-                if (withPrefix) "data:$mimeType;base64,$encoded" else encoded
+                EncodedImage(
+                    base64 = if (withPrefix) "data:$mimeType;base64,$encoded" else encoded,
+                    mimeType = mimeType
+                )
             } else {
                 // 不支持的格式（如 HEIC），转换为 JPEG
                 val encoded = file.convertAndEncodeToJpeg()
-                if (withPrefix) "data:image/jpeg;base64,$encoded" else encoded
+                EncodedImage(
+                    base64 = if (withPrefix) "data:image/jpeg;base64,$encoded" else encoded,
+                    mimeType = "image/jpeg"
+                )
             }
         }
 
-        this.url.startsWith("data:") -> url
-        this.url.startsWith("http") -> url
+        this.url.startsWith("data:") -> {
+            // 从 data URL 提取 mime type
+            val mimeType = url.substringAfter("data:").substringBefore(";")
+            EncodedImage(base64 = url, mimeType = mimeType)
+        }
+        this.url.startsWith("http") -> {
+            // HTTP URL 无法确定 mime type，默认使用 image/png
+            EncodedImage(base64 = url, mimeType = "image/png")
+        }
         else -> throw IllegalArgumentException("Unsupported URL format: $url")
     }
 }

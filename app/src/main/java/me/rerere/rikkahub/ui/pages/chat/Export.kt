@@ -252,7 +252,7 @@ private fun exportToMarkdown(
                     }
 
                     is UIMessagePart.Image -> {
-                        append("![Image](${part.encodeBase64().getOrNull()})")
+                        append("![Image](${part.encodeBase64().getOrNull()?.base64})")
                         appendLine()
                     }
 

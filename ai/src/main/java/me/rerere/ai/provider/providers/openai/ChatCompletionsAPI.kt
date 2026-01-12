@@ -418,10 +418,10 @@ class ChatCompletionsAPI(
 
                                     is UIMessagePart.Image -> {
                                         add(buildJsonObject {
-                                            part.encodeBase64().onSuccess {
+                                            part.encodeBase64().onSuccess { encodedImage ->
                                                 put("type", "image_url")
                                                 put("image_url", buildJsonObject {
-                                                    put("url", it)
+                                                    put("url", encodedImage.base64)
                                                 })
                                             }.onFailure {
                                                 it.printStackTrace()
