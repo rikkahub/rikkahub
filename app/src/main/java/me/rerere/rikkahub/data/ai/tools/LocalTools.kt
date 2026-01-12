@@ -29,7 +29,8 @@ class LocalTools(private val context: Context) {
                 Execute JavaScript code using QuickJS engine (ES2020).
                 The result is the value of the last expression in the code.
                 For calculations with decimals, use toFixed() to control precision.
-                No DOM, Node.js APIs, or console output available.
+                Console output (log/info/warn/error) is captured and returned in 'logs' field.
+                No DOM or Node.js APIs available.
                 Example: '1 + 2' returns 3; 'const x = 5; x * 2' returns 10.
             """.trimIndent().replace("\n", " "),
             parameters = {
@@ -43,10 +44,31 @@ class LocalTools(private val context: Context) {
                 )
             },
             execute = {
+                val logs = arrayListOf<String>()
                 val context = QuickJSContext.create()
+                context.setConsole(object : QuickJSContext.Console {
+                    override fun log(info: String?) {
+                        logs.add("[LOG] $info")
+                    }
+
+                    override fun info(info: String?) {
+                        logs.add("[INFO] $info")
+                    }
+
+                    override fun warn(info: String?) {
+                        logs.add("[WARN] $info")
+                    }
+
+                    override fun error(info: String?) {
+                        logs.add("[ERROR] $info")
+                    }
+                })
                 val code = it.jsonObject["code"]?.jsonPrimitive?.contentOrNull
                 val result = context.evaluate(code)
                 buildJsonObject {
+                    if (logs.isNotEmpty()) {
+                        put("logs", JsonPrimitive(logs.joinToString("\n")))
+                    }
                     put(
                         "result", when (result) {
                             is QuickJSObject -> JsonPrimitive(result.stringify())
