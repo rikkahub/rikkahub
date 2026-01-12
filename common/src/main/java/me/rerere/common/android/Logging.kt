@@ -47,25 +47,35 @@ object Logging {
     }
 
     private fun addLog(entry: LogEntry) {
-        recentLogs.add(0, entry)
-        if (recentLogs.size > MAX_RECENT_LOGS) {
-            recentLogs.removeLastOrNull()
+        synchronized(recentLogs) {
+            recentLogs.add(0, entry)
+            if (recentLogs.size > MAX_RECENT_LOGS) {
+                recentLogs.removeLastOrNull()
+            }
         }
     }
 
     fun getRecentLogs(): List<LogEntry> {
-        return recentLogs.toList()
+        synchronized(recentLogs) {
+            return recentLogs.toList()
+        }
     }
 
     fun getTextLogs(): List<LogEntry.TextLog> {
-        return recentLogs.filterIsInstance<LogEntry.TextLog>()
+        synchronized(recentLogs) {
+            return recentLogs.filterIsInstance<LogEntry.TextLog>()
+        }
     }
 
     fun getRequestLogs(): List<LogEntry.RequestLog> {
-        return recentLogs.filterIsInstance<LogEntry.RequestLog>()
+        synchronized(recentLogs) {
+            return recentLogs.filterIsInstance<LogEntry.RequestLog>()
+        }
     }
 
     fun clear() {
-        recentLogs.clear()
+        synchronized(recentLogs) {
+            recentLogs.clear()
+        }
     }
 }
