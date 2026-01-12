@@ -25,7 +25,13 @@ class LocalTools(private val context: Context) {
     val javascriptTool by lazy {
         Tool(
             name = "eval_javascript",
-            description = "Execute JavaScript code with QuickJS. If use this tool to calculate math, better to add `toFixed` to the code.",
+            description = """
+                Execute JavaScript code using QuickJS engine (ES2020).
+                The result is the value of the last expression in the code.
+                For calculations with decimals, use toFixed() to control precision.
+                No DOM, Node.js APIs, or console output available.
+                Example: '1 + 2' returns 3; 'const x = 5; x * 2' returns 10.
+            """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(
                     properties = buildJsonObject {
