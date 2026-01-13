@@ -728,5 +728,16 @@
   <string name="backup_page_s3_region">Region</string>
   <string name="backup_page_s3_backup_files">S3 Backup Files</string>
   <string name="backup_page_s3_backup">S3 Backup</string>
+  <string name="assistant_page_tab_thinking_mode">Thinking Mode</string>
+  <string name="assistant_detail_thinking_mode_desc">Configure custom thinking tags and prompts</string>
+  <string name="assistant_thinking_mode_enabled">Enable Thinking Mode</string>
+  <string name="assistant_thinking_mode_enabled_desc">When enabled, custom thinking tags will be used to parse model output</string>
+  <string name="assistant_thinking_mode_tags">Thinking Tags</string>
+  <string name="assistant_thinking_mode_tags_desc">Customize the start and end tags for thinking content</string>
+  <string name="assistant_thinking_mode_start_tag">Start Tag</string>
+  <string name="assistant_thinking_mode_end_tag">End Tag</string>
+  <string name="assistant_thinking_mode_display_name">Display Name</string>
+  <string name="assistant_thinking_mode_display_name_desc">Name displayed for the thinking section in the UI, leave empty to use default</string>
+  <string name="assistant_thinking_mode_prompt">Thinking Prompt</string>
+  <string name="assistant_thinking_mode_prompt_desc">Prompt to guide the model to use thinking format, will be appended after system prompt</string>
 </resources>
-

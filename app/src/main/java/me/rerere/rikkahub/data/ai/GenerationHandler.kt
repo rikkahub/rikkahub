@@ -242,6 +242,12 @@ class GenerationHandler(
                     append(assistant.systemPrompt)
                 }
 
+                // 思考模式提示词
+                if (assistant.thinkingMode.enabled && assistant.thinkingMode.prompt.isNotBlank()) {
+                    appendLine()
+                    append(assistant.thinkingMode.prompt)
+                }
+
                 // 记忆
                 if (assistant.enableMemory) {
                     appendLine()

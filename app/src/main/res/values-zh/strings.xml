@@ -728,5 +728,16 @@
   <string name="backup_page_s3_region">区域</string>
   <string name="backup_page_s3_backup_files">S3备份文件</string>
   <string name="backup_page_s3_backup">S3备份</string>
+  <string name="assistant_page_tab_thinking_mode">思考模式</string>
+  <string name="assistant_detail_thinking_mode_desc">配置自定义思考标签和提示词</string>
+  <string name="assistant_thinking_mode_enabled">启用思考模式</string>
+  <string name="assistant_thinking_mode_enabled_desc">启用后将使用自定义思考标签解析模型输出</string>
+  <string name="assistant_thinking_mode_tags">思考标签</string>
+  <string name="assistant_thinking_mode_tags_desc">自定义思考内容的开始和结束标签</string>
+  <string name="assistant_thinking_mode_start_tag">开始标签</string>
+  <string name="assistant_thinking_mode_end_tag">结束标签</string>
+  <string name="assistant_thinking_mode_display_name">显示名称</string>
+  <string name="assistant_thinking_mode_display_name_desc">在 UI 中显示的思考区域名称，留空则使用默认名称</string>
+  <string name="assistant_thinking_mode_prompt">思考提示词</string>
+  <string name="assistant_thinking_mode_prompt_desc">引导模型使用思考格式的提示词，将添加到系统提示词后</string>
 </resources>
-

@@ -69,6 +69,7 @@ import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.extractGeminiThinkingTitle
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
@@ -169,7 +170,8 @@ fun ChatMessageReasoning(
                     tint = MaterialTheme.colorScheme.secondary
                 )
                 Text(
-                    text = stringResource(R.string.deep_thinking),
+                    text = reasoning.metadata?.get("displayName")?.jsonPrimitive?.content
+                        ?: stringResource(R.string.deep_thinking),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.shimmer(

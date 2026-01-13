@@ -31,6 +31,7 @@ import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Code
+import com.composables.icons.lucide.Lightbulb
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquare
 import com.composables.icons.lucide.Settings
@@ -141,6 +142,13 @@ fun AssistantDetailPage(id: String) {
                     title = stringResource(R.string.assistant_page_tab_local_tools),
                     description = stringResource(R.string.assistant_detail_local_tools_desc),
                     onClick = { navController.navigate(Screen.AssistantLocalTool(id)) }
+                )
+
+                SettingCard(
+                    icon = Lucide.Lightbulb,
+                    title = stringResource(R.string.assistant_page_tab_thinking_mode),
+                    description = stringResource(R.string.assistant_detail_thinking_mode_desc),
+                    onClick = { navController.navigate(Screen.AssistantThinkingMode(id)) }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))

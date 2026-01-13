@@ -8,6 +8,18 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import kotlin.uuid.Uuid
 
+/**
+ * 思考模式配置
+ */
+@Serializable
+data class ThinkingModeConfig(
+    val enabled: Boolean = false,                    // 是否启用自定义思考标签
+    val startTag: String = "<think>",               // 开始标签
+    val endTag: String = "</think>",                // 结束标签
+    val displayName: String = "思考中",              // 显示名称
+    val prompt: String = "",                         // 思考模式提示词
+)
+
 @Serializable
 data class Assistant(
     val id: Uuid = Uuid.random(),
@@ -36,6 +48,7 @@ data class Assistant(
     val background: String? = null,
     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
+    val thinkingMode: ThinkingModeConfig = ThinkingModeConfig(), // 思考模式配置
 )
 
 @Serializable

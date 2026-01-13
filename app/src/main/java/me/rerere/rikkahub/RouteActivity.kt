@@ -71,6 +71,7 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantThinkingModePage
 import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
@@ -286,6 +287,11 @@ class RouteActivity : ComponentActivity() {
                         AssistantInjectionsPage(route.id)
                     }
 
+                    composable<Screen.AssistantThinkingMode> { backStackEntry ->
+                        val route = backStackEntry.toRoute<Screen.AssistantThinkingMode>()
+                        AssistantThinkingModePage(route.id)
+                    }
+
                     composable<Screen.Menu> {
                         MenuPage()
                     }
@@ -448,6 +454,9 @@ sealed interface Screen {
 
     @Serializable
     data class AssistantInjections(val id: String) : Screen
+
+    @Serializable
+    data class AssistantThinkingMode(val id: String) : Screen
 
     @Serializable
     data object Menu : Screen
