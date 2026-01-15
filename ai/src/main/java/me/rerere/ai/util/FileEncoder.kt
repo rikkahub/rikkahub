@@ -102,12 +102,7 @@ private fun File.compressAndEncode(
     }
     BitmapFactory.decodeFile(absolutePath, options)
 
-    // 如果尺寸在限制范围内且是支持的格式，直接编码
-    if (options.outWidth <= maxDimension && options.outHeight <= maxDimension && mimeType in supportedTypes) {
-        return Pair(encodeToBase64Streaming(), mimeType)
-    }
-
-    // 需要压缩或转换格式
+    // 强制压缩处理
     options.inSampleSize = calculateInSampleSize(options, maxDimension, maxDimension)
     options.inJustDecodeBounds = false
 
@@ -116,15 +111,11 @@ private fun File.compressAndEncode(
 
     return try {
         val byteArrayOutputStream = ByteArrayOutputStream()
-        val (format, outputMime) = when (mimeType) {
-            "image/png" -> Bitmap.CompressFormat.PNG to "image/png"
-            "image/webp" -> Bitmap.CompressFormat.WEBP to "image/webp"
-            else -> Bitmap.CompressFormat.JPEG to "image/jpeg"
-        }
+        // 强制使用 JPEG 格式，因为很多提供商不支持 webp
         Base64OutputStream(byteArrayOutputStream, Base64.NO_WRAP).use { base64Stream ->
-            bitmap.compress(format, quality, base64Stream)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, base64Stream)
         }
-        Pair(byteArrayOutputStream.toString(Charsets.ISO_8859_1.name()), outputMime)
+        Pair(byteArrayOutputStream.toString(Charsets.ISO_8859_1.name()), "image/jpeg")
     } finally {
         bitmap.recycle()
     }
@@ -141,14 +132,11 @@ private fun File.encodeToBase64Streaming(): String {
 }
 
 private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
-    val (height, width) = options.outHeight to options.outWidth
+    val height = options.outHeight
+    val width = options.outWidth
     var inSampleSize = 1
-    if (height > reqHeight || width > reqWidth) {
-        val halfHeight = height / 2
-        val halfWidth = width / 2
-        while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
-            inSampleSize *= 2
-        }
+    while ((height / inSampleSize) > reqHeight || (width / inSampleSize) > reqWidth) {
+        inSampleSize *= 2
     }
     return inSampleSize
 }
