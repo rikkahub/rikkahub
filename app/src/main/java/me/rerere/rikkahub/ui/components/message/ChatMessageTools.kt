@@ -54,6 +54,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.highlight.HighlightText
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -86,7 +87,7 @@ private fun getToolIcon(toolName: String) = when (toolName) {
 }
 
 private fun JsonElement?.getStringContent(key: String): String? =
-    this?.jsonObject?.get(key)?.jsonPrimitiveOrNull?.contentOrNull
+    this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.contentOrNull
 
 @Composable
 fun ToolCallItem(
