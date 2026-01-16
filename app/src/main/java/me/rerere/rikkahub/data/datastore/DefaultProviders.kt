@@ -113,8 +113,6 @@ val DEFAULT_PROVIDERS = listOf(
                 content = """
                     ${stringResource(R.string.silicon_flow_description)}
                     ${stringResource(R.string.silicon_flow_website)}
-
-                    ${stringResource(R.string.silicon_flow_built_in_models)}
                 """.trimIndent()
             )
         },
