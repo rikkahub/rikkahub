@@ -94,13 +94,15 @@ fun ColumnScope.ChatMessageActionButtons(
                 .size(16.dp)
         )
 
-        Icon(
-            Lucide.RefreshCw, stringResource(R.string.regenerate), modifier = Modifier
-                .clip(CircleShape)
-                .clickable { onRegenerate() }
-                .padding(8.dp)
-                .size(16.dp)
-        )
+        if (message.role == MessageRole.ASSISTANT) {
+            Icon(
+                Lucide.RefreshCw, stringResource(R.string.regenerate), modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { onRegenerate() }
+                    .padding(8.dp)
+                    .size(16.dp)
+            )
+        }
 
         if (message.role == MessageRole.ASSISTANT) {
             val tts = LocalTTSState.current
