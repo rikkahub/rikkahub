@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -21,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -76,6 +78,7 @@ fun ColumnScope.ChatMessageActionButtons(
     val context = LocalContext.current
     var isPendingDelete by remember { mutableStateOf(false) }
     var showTranslateDialog by remember { mutableStateOf(false) }
+    var showRegenerateConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(isPendingDelete) {
         if (isPendingDelete) {
@@ -96,15 +99,13 @@ fun ColumnScope.ChatMessageActionButtons(
                 .size(16.dp)
         )
 
-        if (message.role == MessageRole.ASSISTANT) {
-            Icon(
-                Lucide.RefreshCw, stringResource(R.string.regenerate), modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable { onRegenerate() }
-                    .padding(8.dp)
-                    .size(16.dp)
-            )
-        }
+        Icon(
+            Lucide.RefreshCw, stringResource(R.string.regenerate), modifier = Modifier
+                .clip(CircleShape)
+                .clickable { showRegenerateConfirm = true }
+                .padding(8.dp)
+                .size(16.dp)
+        )
 
         if (message.role == MessageRole.ASSISTANT) {
             val tts = LocalTTSState.current
@@ -195,6 +196,30 @@ fun ColumnScope.ChatMessageActionButtons(
             onDismissRequest = {
                 showTranslateDialog = false
             },
+        )
+    }
+
+    // Regenerate confirmation dialog
+    if (showRegenerateConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRegenerateConfirm = false },
+            title = { Text(stringResource(R.string.regenerate)) },
+            text = { Text(stringResource(R.string.regenerate_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRegenerateConfirm = false
+                        onRegenerate()
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRegenerateConfirm = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
         )
     }
 }

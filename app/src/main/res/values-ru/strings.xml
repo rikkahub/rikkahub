@@ -733,5 +733,6 @@
   <string name="setting_display_page_tts_only_read_quoted_desc">Если включено, TTS читает только текст в кавычках</string>
   <string name="setting_display_page_auto_play_tts_title">Автовоспроизведение TTS после генерации</string>
   <string name="setting_display_page_auto_play_tts_desc">Автоматически воспроизводить TTS после завершения генерации ответа ассистента</string>
+  <string name="regenerate_confirm_message">Вы уверены, что хотите перегенерировать это сообщение?</string>
 </resources>
 

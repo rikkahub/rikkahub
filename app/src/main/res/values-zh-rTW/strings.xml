@@ -735,5 +735,6 @@
   <string name="setting_display_page_tts_only_read_quoted_desc">啟用後，TTS 只會朗讀引號內的內容</string>
   <string name="setting_display_page_auto_play_tts_title">產生後自動播放 TTS</string>
   <string name="setting_display_page_auto_play_tts_desc">助理訊息產生完成後自動播放語音</string>
+  <string name="regenerate_confirm_message">您確定要重新產生這則訊息嗎？</string>
 </resources>
 

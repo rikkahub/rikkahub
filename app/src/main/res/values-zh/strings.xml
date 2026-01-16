@@ -735,5 +735,6 @@
   <string name="setting_display_page_tts_only_read_quoted_desc">启用后，TTS 仅朗读引号内的内容</string>
   <string name="setting_display_page_auto_play_tts_title">生成后自动播放TTS</string>
   <string name="setting_display_page_auto_play_tts_desc">助手消息生成完成后自动播放TTS</string>
+  <string name="regenerate_confirm_message">确定要重新生成此消息吗？</string>
 </resources>
 

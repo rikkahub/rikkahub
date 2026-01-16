@@ -735,5 +735,6 @@
   <string name="setting_display_page_tts_only_read_quoted_desc">When enabled, TTS will only read content within quotation marks</string>
   <string name="setting_display_page_auto_play_tts_title">Auto-play TTS After Generation</string>
   <string name="setting_display_page_auto_play_tts_desc">Automatically play TTS after assistant message generation completes</string>
+  <string name="regenerate_confirm_message">Are you sure you want to regenerate this message?</string>
 </resources>
 

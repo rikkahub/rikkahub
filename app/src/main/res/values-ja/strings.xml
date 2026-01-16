@@ -735,5 +735,6 @@
   <string name="setting_display_page_tts_only_read_quoted_desc">有効にすると、TTSは引用符内のコンテンツのみを読み上げます</string>
   <string name="setting_display_page_auto_play_tts_title">生成後にTTSを自動再生</string>
   <string name="setting_display_page_auto_play_tts_desc">アシスタントのメッセージ生成完了後にTTSを自動再生</string>
+  <string name="regenerate_confirm_message">このメッセージを再生成してもよろしいですか？</string>
 </resources>
 
