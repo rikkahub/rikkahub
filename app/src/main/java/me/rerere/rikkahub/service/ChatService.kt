@@ -759,7 +759,8 @@ class ChatService(
             "target_tokens" to targetTokens.toString(),
             "additional_context" to if (additionalPrompt.isNotBlank()) {
                 "Additional instructions from user: $additionalPrompt"
-            } else ""
+            } else "",
+            "locale" to Locale.getDefault().displayName
         )
 
         // Generate the compressed summary

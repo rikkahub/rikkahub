@@ -9,6 +9,8 @@ internal val DEFAULT_COMPRESS_PROMPT = """
     3. Target approximately {target_tokens} tokens
     4. Output the summary directly without any explanations or meta-commentary
     5. Format the summary as context information that can be used to continue the conversation
+    6. Use {locale} language
+    7. Start the output with a clear indicator that this is a summary (e.g., "[Summary of previous conversation]" or equivalent in the target language)
 
     {additional_context}
 
