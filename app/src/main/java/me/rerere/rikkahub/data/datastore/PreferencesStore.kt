@@ -372,7 +372,7 @@ data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
     val showUserAvatar: Boolean = true,
-    val showAssistantBubble: Boolean = true,
+    val showAssistantBubble: Boolean = false,
     val showModelIcon: Boolean = true,
     val showModelName: Boolean = true,
     val showTokenUsage: Boolean = true,
