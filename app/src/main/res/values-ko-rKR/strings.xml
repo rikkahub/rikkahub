@@ -728,5 +728,7 @@
   <string name="backup_page_s3_region">리전</string>
   <string name="backup_page_s3_backup_files">S3 백업 파일</string>
   <string name="backup_page_s3_backup">S3 백업</string>
+  <string name="setting_display_page_show_assistant_bubble_title">어시스턴트 메시지 버블 표시</string>
+  <string name="setting_display_page_show_assistant_bubble_desc">어시스턴트 메시지에 말풍선 배경 표시 여부</string>
 </resources>
 

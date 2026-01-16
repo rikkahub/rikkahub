@@ -728,5 +728,7 @@
   <string name="backup_page_s3_region">リージョン</string>
   <string name="backup_page_s3_backup_files">S3バックアップファイル</string>
   <string name="backup_page_s3_backup">S3バックアップ</string>
+  <string name="setting_display_page_show_assistant_bubble_title">アシスタントメッセージバブルを表示</string>
+  <string name="setting_display_page_show_assistant_bubble_desc">アシスタントメッセージのバブル背景を表示するかどうか</string>
 </resources>
 

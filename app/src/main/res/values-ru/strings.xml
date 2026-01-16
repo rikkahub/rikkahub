@@ -726,5 +726,7 @@
   <string name="backup_page_s3_region">Регион</string>
   <string name="backup_page_s3_backup_files">Файлы резервного копирования S3</string>
   <string name="backup_page_s3_backup">Резервное копирование S3</string>
+  <string name="setting_display_page_show_assistant_bubble_title">Показывать всплывающее сообщение ассистента</string>
+  <string name="setting_display_page_show_assistant_bubble_desc">Показывать фоновый пузырь для сообщений ассистента</string>
 </resources>
 

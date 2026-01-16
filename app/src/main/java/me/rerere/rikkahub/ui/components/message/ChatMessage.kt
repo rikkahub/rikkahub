@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardColors
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -329,17 +331,41 @@ private fun MessagePartsBlock(
                     }
                 }
             } else {
-                MarkdownBlock(
-                    content = part.text.replaceRegexes(
-                        assistant = assistant,
-                        scope = AssistantAffectScope.ASSISTANT,
-                        visual = true,
-                    ),
-                    onClickCitation = { id ->
-                        handleClickCitation(id)
-                    },
-                    modifier = Modifier.animateContentSize()
-                )
+                if (settings.displaySetting.showAssistantBubble) {
+                    Card(
+                        modifier = Modifier
+                            .animateContentSize(),
+                        shape = MaterialTheme.shapes.medium,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            MarkdownBlock(
+                                content = part.text.replaceRegexes(
+                                    assistant = assistant,
+                                    scope = AssistantAffectScope.ASSISTANT,
+                                    visual = true,
+                                ),
+                                onClickCitation = { id ->
+                                    handleClickCitation(id)
+                                },
+                            )
+                        }
+                    }
+                } else {
+                    MarkdownBlock(
+                        content = part.text.replaceRegexes(
+                            assistant = assistant,
+                            scope = AssistantAffectScope.ASSISTANT,
+                            visual = true,
+                        ),
+                        onClickCitation = { id ->
+                            handleClickCitation(id)
+                        },
+                        modifier = Modifier.animateContentSize()
+                    )
+                }
             }
         }
     }

@@ -728,5 +728,7 @@
   <string name="backup_page_s3_region">区域</string>
   <string name="backup_page_s3_backup_files">S3备份文件</string>
   <string name="backup_page_s3_backup">S3备份</string>
+  <string name="setting_display_page_show_assistant_bubble_title">显示助手消息气泡</string>
+  <string name="setting_display_page_show_assistant_bubble_desc">是否为助手消息显示气泡背景</string>
 </resources>
 
