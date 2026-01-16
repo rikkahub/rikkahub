@@ -746,5 +746,6 @@
   <string name="setting_model_page_compress_model_desc">会話履歴を圧縮するモデル</string>
   <string name="setting_model_page_compress_prompt_vars">変数: {content}, {target_tokens}, {additional_context}</string>
   <string name="chat_page_compressing">圧縮中…</string>
+  <string name="chat_page_compress_warning">⚠️ コンテキストを圧縮すると、現在の会話のすべてのメッセージがリセットされます</string>
 </resources>
 

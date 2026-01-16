@@ -746,5 +746,6 @@
   <string name="setting_model_page_compress_model_desc">대화 기록 압축용 모델</string>
   <string name="setting_model_page_compress_prompt_vars">변수: {content}, {target_tokens}, {additional_context}</string>
   <string name="chat_page_compressing">압축 중...</string>
+  <string name="chat_page_compress_warning">⚠️ 문맥 압축 시 현재 대화의 모든 메시지가 초기화됩니다</string>
 </resources>
 

@@ -746,5 +746,6 @@
   <string name="setting_model_page_compress_model_desc">Model for compressing conversation history</string>
   <string name="setting_model_page_compress_prompt_vars">Variables: {content}, {target_tokens}, {additional_context}</string>
   <string name="chat_page_compressing">Compressing...</string>
+  <string name="chat_page_compress_warning">⚠️ Compressing context will reset all messages in the current conversation</string>
 </resources>
 
