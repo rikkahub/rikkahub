@@ -82,7 +82,7 @@ sealed class TTSProviderSetting {
         override var name: String = "MiniMax TTS",
         val apiKey: String = "",
         val baseUrl: String = "https://api.minimaxi.com/v1",
-        val model: String = "speech-2.5-hd-preview",
+        val model: String = "speech-2.6-turbo",
         val voiceId: String = "female-shaonv",
         val emotion: String = "calm",
         val speed: Float = 1.0f
