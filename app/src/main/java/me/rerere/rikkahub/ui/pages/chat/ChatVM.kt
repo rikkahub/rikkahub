@@ -342,6 +342,19 @@ class ChatVM(
         }
     }
 
+    fun handleCompressContext(additionalPrompt: String, targetTokens: Int): Job {
+        return viewModelScope.launch {
+            chatService.compressConversation(
+                _conversationId,
+                conversation.value,
+                additionalPrompt,
+                targetTokens
+            ).onFailure {
+                chatService.addError(it)
+            }
+        }
+    }
+
     suspend fun forkMessage(message: UIMessage): Conversation {
         val node = conversation.value.getMessageNodeByMessage(message)
         val nodes = conversation.value.messageNodes.subList(

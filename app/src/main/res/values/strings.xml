@@ -736,5 +736,15 @@
   <string name="setting_display_page_auto_play_tts_title">Auto-play TTS After Generation</string>
   <string name="setting_display_page_auto_play_tts_desc">Automatically play TTS after assistant message generation completes</string>
   <string name="regenerate_confirm_message">Are you sure you want to regenerate this message?</string>
+  <string name="chat_page_compress_context">Compress History</string>
+  <string name="chat_page_compress_context_title">Compress Conversation History</string>
+  <string name="chat_page_compress_context_desc">Compress the conversation into a summary to save tokens</string>
+  <string name="chat_page_compress_target_tokens">Target Token Size</string>
+  <string name="chat_page_compress_additional_prompt">Additional Instructions (Optional)</string>
+  <string name="chat_page_compress_additional_prompt_hint">Specify what to preserve or focus on</string>
+  <string name="setting_model_page_compress_model">Compress Model</string>
+  <string name="setting_model_page_compress_model_desc">Model for compressing conversation history</string>
+  <string name="setting_model_page_compress_prompt_vars">Variables: {content}, {target_tokens}, {additional_context}</string>
+  <string name="chat_page_compressing">Compressing...</string>
 </resources>
 

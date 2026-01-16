@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Eye
+import com.composables.icons.lucide.FileArchive
 import com.composables.icons.lucide.GraduationCap
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircle
@@ -49,6 +50,7 @@ import com.composables.icons.lucide.NotebookTabs
 import com.composables.icons.lucide.Settings2
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
@@ -98,6 +100,10 @@ fun SettingModelPage(vm: SettingVM = koinViewModel()) {
 
             item {
                 DefaultOcrModelSetting(settings = settings, vm = vm)
+            }
+
+            item {
+                DefaultCompressModelSetting(settings = settings, vm = vm)
             }
         }
     }
@@ -508,6 +514,102 @@ private fun DefaultOcrModelSetting(
                             vm.updateSettings(
                                 settings.copy(
                                     ocrPrompt = DEFAULT_OCR_PROMPT
+                                )
+                            )
+                        }
+                    ) {
+                        Text(stringResource(R.string.setting_model_page_reset_to_default))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DefaultCompressModelSetting(
+    settings: Settings,
+    vm: SettingVM
+) {
+    var showModal by remember { mutableStateOf(false) }
+    ModelFeatureCard(
+        title = {
+            Text(
+                stringResource(R.string.setting_model_page_compress_model),
+                maxLines = 1
+            )
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_compress_model_desc))
+        },
+        icon = {
+            Icon(Lucide.FileArchive, null)
+        },
+        actions = {
+            Box(modifier = Modifier.weight(1f)) {
+                ModelSelector(
+                    modelId = settings.compressModelId,
+                    type = ModelType.CHAT,
+                    onSelect = {
+                        vm.updateSettings(
+                            settings.copy(
+                                compressModelId = it.id
+                            )
+                        )
+                    },
+                    providers = settings.providers,
+                    modifier = Modifier.wrapContentWidth()
+                )
+            }
+            IconButton(
+                onClick = {
+                    showModal = true
+                },
+                colors = IconButtonDefaults.filledTonalIconButtonColors()
+            ) {
+                Icon(Lucide.Settings2, null)
+            }
+        }
+    )
+
+    if (showModal) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showModal = false
+            },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FormItem(
+                    label = {
+                        Text(stringResource(R.string.setting_model_page_prompt))
+                    },
+                    description = {
+                        Text(stringResource(R.string.setting_model_page_compress_prompt_vars))
+                    }
+                ) {
+                    OutlinedTextField(
+                        value = settings.compressPrompt,
+                        onValueChange = {
+                            vm.updateSettings(
+                                settings.copy(
+                                    compressPrompt = it
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 10,
+                    )
+                    TextButton(
+                        onClick = {
+                            vm.updateSettings(
+                                settings.copy(
+                                    compressPrompt = DEFAULT_COMPRESS_PROMPT
                                 )
                             )
                         }

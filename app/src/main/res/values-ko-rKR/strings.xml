@@ -736,5 +736,15 @@
   <string name="setting_display_page_auto_play_tts_title">생성 후 TTS 자동 재생</string>
   <string name="setting_display_page_auto_play_tts_desc">어시스턴트 메시지 생성 완료 후 TTS 자동 재생</string>
   <string name="regenerate_confirm_message">이 메시지를 다시 생성하시겠습니까?</string>
+  <string name="chat_page_compress_context">기록 압축</string>
+  <string name="chat_page_compress_context_title">대화 기록 압축</string>
+  <string name="chat_page_compress_context_desc">대화를 요약하여 토큰을 절약하세요</string>
+  <string name="chat_page_compress_target_tokens">대상 토큰 크기</string>
+  <string name="chat_page_compress_additional_prompt">추가 지침(선택 사항)</string>
+  <string name="chat_page_compress_additional_prompt_hint">보존하거나 집중할 내용을 지정하세요</string>
+  <string name="setting_model_page_compress_model">모델 압축</string>
+  <string name="setting_model_page_compress_model_desc">대화 기록 압축용 모델</string>
+  <string name="setting_model_page_compress_prompt_vars">변수: {content}, {target_tokens}, {additional_context}</string>
+  <string name="chat_page_compressing">압축 중...</string>
 </resources>
 

@@ -341,6 +341,9 @@ private fun ChatPageContent(
                     onClearContext = {
                         vm.handleMessageTruncate()
                     },
+                    onCompressContext = { additionalPrompt, targetTokens ->
+                        vm.handleCompressContext(additionalPrompt, targetTokens)
+                    },
                 )
             },
             containerColor = Color.Transparent,

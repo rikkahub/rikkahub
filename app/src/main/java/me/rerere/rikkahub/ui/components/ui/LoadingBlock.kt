@@ -22,6 +22,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -45,7 +46,7 @@ enum class GridAnimationMode {
 }
 
 @Composable
-fun GlowGridLoading(
+fun GridLoading(
     modifier: Modifier = Modifier,
     activeColor: Color = MaterialTheme.colorScheme.primary,
     baseColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -108,7 +109,28 @@ fun GlowGridLoading(
 }
 
 @Composable
-fun GridCell(
+fun RandomGridLoading(
+    modifier: Modifier = Modifier,
+    activeColor: Color = MaterialTheme.colorScheme.primary,
+    baseColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    speed: Int = 1200,
+    glow: Boolean = true
+) {
+    val mode = remember {
+        GridAnimationMode.entries.random()
+    }
+    GridLoading(
+        modifier = modifier,
+        activeColor = activeColor,
+        baseColor = baseColor,
+        mode = mode,
+        speed = speed,
+        glow = glow
+    )
+}
+
+@Composable
+private fun GridCell(
     intensity: Float,
     activeColor: Color,
     baseColor: Color,
@@ -205,7 +227,7 @@ fun GlowGridLoadingPreview() {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             GridAnimationMode.entries.fastForEach { mode ->
-                GlowGridLoading(mode = mode)
+                GridLoading(mode = mode)
             }
         }
     }

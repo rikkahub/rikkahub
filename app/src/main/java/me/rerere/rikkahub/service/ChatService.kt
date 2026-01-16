@@ -732,6 +732,59 @@ class ChatService(
         }
     }
 
+    // 压缩对话历史
+    suspend fun compressConversation(
+        conversationId: Uuid,
+        conversation: Conversation,
+        additionalPrompt: String,
+        targetTokens: Int
+    ): Result<Unit> = runCatching {
+        val settings = settingsStore.settingsFlow.first()
+        val model = settings.findModelById(settings.compressModelId)
+            ?: settings.getCurrentChatModel()
+            ?: throw IllegalStateException("No model available for compression")
+        val provider = model.findProvider(settings.providers)
+            ?: throw IllegalStateException("Provider not found")
+
+        val providerHandler = providerManager.getProviderByType(provider)
+
+        // Build the content to compress
+        val contentToCompress = conversation.currentMessages
+            .truncate(conversation.truncateIndex)
+            .joinToString("\n\n") { it.summaryAsText() }
+
+        // Build the prompt with placeholders
+        val prompt = settings.compressPrompt.applyPlaceholders(
+            "content" to contentToCompress,
+            "target_tokens" to targetTokens.toString(),
+            "additional_context" to if (additionalPrompt.isNotBlank()) {
+                "Additional instructions from user: $additionalPrompt"
+            } else ""
+        )
+
+        // Generate the compressed summary
+        val result = providerHandler.generateText(
+            providerSetting = provider,
+            messages = listOf(UIMessage.user(prompt)),
+            params = TextGenerationParams(
+                model = model,
+            ),
+        )
+
+        val compressedSummary = result.choices[0].message?.toText()?.trim()
+            ?: throw IllegalStateException("Failed to generate compressed summary")
+
+        // Create new conversation with compressed history as user message
+        val summaryMessage = UIMessage.user(compressedSummary)
+        val newConversation = conversation.copy(
+            messageNodes = listOf(summaryMessage.toMessageNode()),
+            truncateIndex = -1,
+            chatSuggestions = emptyList(),
+        )
+
+        saveConversation(conversationId, newConversation)
+    }
+
     // 发送生成完成通知
     private fun sendGenerationDoneNotification(conversationId: Uuid) {
         val conversation = getConversationFlow(conversationId).value

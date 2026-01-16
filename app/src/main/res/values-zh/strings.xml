@@ -736,5 +736,15 @@
   <string name="setting_display_page_auto_play_tts_title">生成后自动播放TTS</string>
   <string name="setting_display_page_auto_play_tts_desc">助手消息生成完成后自动播放TTS</string>
   <string name="regenerate_confirm_message">确定要重新生成此消息吗？</string>
+  <string name="chat_page_compress_context">压缩历史</string>
+  <string name="chat_page_compress_context_title">压缩对话历史</string>
+  <string name="chat_page_compress_context_desc">将对话压缩为摘要以节省令牌</string>
+  <string name="chat_page_compress_target_tokens">目标Token大小</string>
+  <string name="chat_page_compress_additional_prompt">附加说明（可选）</string>
+  <string name="chat_page_compress_additional_prompt_hint">指定要保留或关注的内容</string>
+  <string name="setting_model_page_compress_model">压缩模型</string>
+  <string name="setting_model_page_compress_model_desc">用于压缩对话历史的模型</string>
+  <string name="setting_model_page_compress_prompt_vars">变量：{content}、{target_tokens}、{additional_context}</string>
+  <string name="chat_page_compressing">正在压缩...</string>
 </resources>
 

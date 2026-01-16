@@ -736,5 +736,15 @@
   <string name="setting_display_page_auto_play_tts_title">產生後自動播放 TTS</string>
   <string name="setting_display_page_auto_play_tts_desc">助理訊息產生完成後自動播放語音</string>
   <string name="regenerate_confirm_message">您確定要重新產生這則訊息嗎？</string>
+  <string name="chat_page_compress_context">壓縮歷史</string>
+  <string name="chat_page_compress_context_title">壓縮對話紀錄</string>
+  <string name="chat_page_compress_context_desc">將對話壓縮成摘要以節省 token</string>
+  <string name="chat_page_compress_target_tokens">目標 Token 大小</string>
+  <string name="chat_page_compress_additional_prompt">額外指示（選填）</string>
+  <string name="chat_page_compress_additional_prompt_hint">指定要保留或聚焦的內容</string>
+  <string name="setting_model_page_compress_model">壓縮模型</string>
+  <string name="setting_model_page_compress_model_desc">用於壓縮對話歷程的模型</string>
+  <string name="setting_model_page_compress_prompt_vars">變數：{content}、{target_tokens}、{additional_context}</string>
+  <string name="chat_page_compressing">正在壓縮...</string>
 </resources>
 

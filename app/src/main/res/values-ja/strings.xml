@@ -736,5 +736,15 @@
   <string name="setting_display_page_auto_play_tts_title">生成後にTTSを自動再生</string>
   <string name="setting_display_page_auto_play_tts_desc">アシスタントのメッセージ生成完了後にTTSを自動再生</string>
   <string name="regenerate_confirm_message">このメッセージを再生成してもよろしいですか？</string>
+  <string name="chat_page_compress_context">履歴を圧縮</string>
+  <string name="chat_page_compress_context_title">会話履歴を圧縮</string>
+  <string name="chat_page_compress_context_desc">会話を要約して圧縮し、トークンを節約します</string>
+  <string name="chat_page_compress_target_tokens">ターゲットトークンサイズ</string>
+  <string name="chat_page_compress_additional_prompt">追加指示（オプション）</string>
+  <string name="chat_page_compress_additional_prompt_hint">保持または重点的に扱う内容を指定</string>
+  <string name="setting_model_page_compress_model">モデルを圧縮</string>
+  <string name="setting_model_page_compress_model_desc">会話履歴を圧縮するモデル</string>
+  <string name="setting_model_page_compress_prompt_vars">変数: {content}, {target_tokens}, {additional_context}</string>
+  <string name="chat_page_compressing">圧縮中…</string>
 </resources>
 

@@ -734,5 +734,15 @@
   <string name="setting_display_page_auto_play_tts_title">Автовоспроизведение TTS после генерации</string>
   <string name="setting_display_page_auto_play_tts_desc">Автоматически воспроизводить TTS после завершения генерации ответа ассистента</string>
   <string name="regenerate_confirm_message">Вы уверены, что хотите перегенерировать это сообщение?</string>
+  <string name="chat_page_compress_context">Сжать историю</string>
+  <string name="chat_page_compress_context_title">Сжать историю чата</string>
+  <string name="chat_page_compress_context_desc">Сжать переписку в краткое резюме, чтобы сэкономить токены</string>
+  <string name="chat_page_compress_target_tokens">Целевой размер токенов</string>
+  <string name="chat_page_compress_additional_prompt">Дополнительные инструкции (по желанию)</string>
+  <string name="chat_page_compress_additional_prompt_hint">Укажите, что сохранить или на чём сосредоточиться</string>
+  <string name="setting_model_page_compress_model">Сжать модель</string>
+  <string name="setting_model_page_compress_model_desc">Модель для сжатия истории разговоров</string>
+  <string name="setting_model_page_compress_prompt_vars">Переменные: {content}, {target_tokens}, {additional_context}</string>
+  <string name="chat_page_compressing">Сжатие...</string>
 </resources>
 

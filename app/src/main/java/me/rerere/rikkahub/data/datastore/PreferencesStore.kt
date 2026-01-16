@@ -20,6 +20,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
@@ -79,6 +80,8 @@ class SettingsStore(
         val SUGGESTION_PROMPT = stringPreferencesKey("suggestion_prompt")
         val OCR_MODEL = stringPreferencesKey("ocr_model")
         val OCR_PROMPT = stringPreferencesKey("ocr_prompt")
+        val COMPRESS_MODEL = stringPreferencesKey("compress_model")
+        val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
@@ -140,6 +143,8 @@ class SettingsStore(
                 suggestionPrompt = preferences[SUGGESTION_PROMPT] ?: DEFAULT_SUGGESTION_PROMPT,
                 ocrModelId = preferences[OCR_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
                 ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
+                compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: SILICONFLOW_QWEN3_8B_ID,
+                compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -292,6 +297,8 @@ class SettingsStore(
             preferences[SUGGESTION_PROMPT] = settings.suggestionPrompt
             preferences[OCR_MODEL] = settings.ocrModelId.toString()
             preferences[OCR_PROMPT] = settings.ocrPrompt
+            preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
+            preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
 
@@ -346,6 +353,8 @@ data class Settings(
     val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
     val ocrModelId: Uuid = Uuid.random(),
     val ocrPrompt: String = DEFAULT_OCR_PROMPT,
+    val compressModelId: Uuid = Uuid.random(),
+    val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
