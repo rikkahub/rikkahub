@@ -438,14 +438,12 @@
   <string name="setting_page_about_desc">About this app</string>
   <string name="setting_page_assistant">Assistant</string>
   <string name="setting_page_assistant_desc">Set up personalized assistants (agents)</string>
-  <string name="setting_page_basic_settings">Basic Settings</string>
   <string name="setting_page_built_in_tools">Built-in Tools</string>
   <string name="setting_page_built_in_tools_desc">Select built-in tools supported by the model. These tools are directly provided by the API without requiring app support. Currently, this feature is only supported by the official Gemini API.</string>
   <string name="setting_page_built_in_tools_search">Search</string>
   <string name="setting_page_built_in_tools_search_desc">Enable Google Search integration</string>
   <string name="setting_page_built_in_tools_url_context">URL Context</string>
   <string name="setting_page_built_in_tools_url_context_desc">Enable URL content processing</string>
-  <string name="setting_page_chat_settings">Chat Settings</string>
   <string name="setting_page_chat_storage">Chat Storage</string>
   <string name="setting_page_chat_storage_desc">%1$d files, %2$.2f MB</string>
   <string name="setting_page_color_mode">Color Mode</string>
@@ -730,5 +728,7 @@
   <string name="backup_page_s3_backup">S3 Backup</string>
   <string name="setting_display_page_show_assistant_bubble_title">Show Assistant Message Bubble</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Whether to show bubble background for assistant messages</string>
+  <string name="setting_page_message_display_settings">Message Display</string>
+  <string name="setting_page_code_display_settings">Code Display</string>
+  <string name="setting_page_interaction_notification_settings">Interaction &amp;amp; Notifications</string>
 </resources>
-

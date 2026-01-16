@@ -152,7 +152,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
 
             stickyHeader {
                 Text(
-                    text = stringResource(R.string.setting_page_basic_settings),
+                    text = stringResource(R.string.setting_page_general_settings),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -249,7 +249,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
 
             stickyHeader {
                 Text(
-                    text = stringResource(R.string.setting_page_chat_settings),
+                    text = stringResource(R.string.setting_page_message_display_settings),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -378,6 +378,121 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
 
             item {
                 ListItem(
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_font_size_title))
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Slider(
+                        value = displaySetting.fontSizeRatio,
+                        onValueChange = {
+                            updateDisplaySetting(displaySetting.copy(fontSizeRatio = it))
+                        },
+                        valueRange = 0.5f..2f,
+                        steps = 11,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "${(displaySetting.fontSizeRatio * 100).toInt()}%",
+                    )
+                }
+                MarkdownBlock(
+                    content = stringResource(R.string.setting_display_page_font_size_preview),
+                    modifier = Modifier.padding(8.dp),
+                    style = LocalTextStyle.current.copy(
+                        fontSize = LocalTextStyle.current.fontSize * displaySetting.fontSizeRatio,
+                        lineHeight = LocalTextStyle.current.lineHeight * displaySetting.fontSizeRatio,
+                    )
+                )
+            }
+
+            stickyHeader {
+                Text(
+                    text = stringResource(R.string.setting_page_code_display_settings),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_auto_wrap_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_auto_wrap_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.codeBlockAutoWrap,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(codeBlockAutoWrap = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_auto_collapse_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_auto_collapse_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.codeBlockAutoCollapse,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(codeBlockAutoCollapse = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_show_line_numbers_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_show_line_numbers_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.showLineNumbers,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(showLineNumbers = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            stickyHeader {
+                Text(
+                    text = stringResource(R.string.setting_page_interaction_notification_settings),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+
+            item {
+                ListItem(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = {
                         Text(stringResource(R.string.setting_display_page_show_message_jumper_title))
@@ -455,103 +570,6 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             }
                         )
                     },
-                )
-            }
-
-            item {
-                ListItem(
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = {
-                        Text(stringResource(R.string.setting_display_page_code_block_auto_wrap_title))
-                    },
-                    supportingContent = {
-                        Text(stringResource(R.string.setting_display_page_code_block_auto_wrap_desc))
-                    },
-                    trailingContent = {
-                        Switch(
-                            checked = displaySetting.codeBlockAutoWrap,
-                            onCheckedChange = {
-                                updateDisplaySetting(displaySetting.copy(codeBlockAutoWrap = it))
-                            }
-                        )
-                    },
-                )
-            }
-
-            item {
-                ListItem(
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = {
-                        Text(stringResource(R.string.setting_display_page_code_block_auto_collapse_title))
-                    },
-                    supportingContent = {
-                        Text(stringResource(R.string.setting_display_page_code_block_auto_collapse_desc))
-                    },
-                    trailingContent = {
-                        Switch(
-                            checked = displaySetting.codeBlockAutoCollapse,
-                            onCheckedChange = {
-                                updateDisplaySetting(displaySetting.copy(codeBlockAutoCollapse = it))
-                            }
-                        )
-                    },
-                )
-            }
-
-            item {
-                ListItem(
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = {
-                        Text(stringResource(R.string.setting_display_page_show_line_numbers_title))
-                    },
-                    supportingContent = {
-                        Text(stringResource(R.string.setting_display_page_show_line_numbers_desc))
-                    },
-                    trailingContent = {
-                        Switch(
-                            checked = displaySetting.showLineNumbers,
-                            onCheckedChange = {
-                                updateDisplaySetting(displaySetting.copy(showLineNumbers = it))
-                            }
-                        )
-                    },
-                )
-            }
-
-            item {
-                ListItem(
-                    headlineContent = {
-                        Text(stringResource(R.string.setting_display_page_font_size_title))
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                )
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Slider(
-                        value = displaySetting.fontSizeRatio,
-                        onValueChange = {
-                            updateDisplaySetting(displaySetting.copy(fontSizeRatio = it))
-                        },
-                        valueRange = 0.5f..2f,
-                        steps = 11,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = "${(displaySetting.fontSizeRatio * 100).toInt()}%",
-                    )
-                }
-                MarkdownBlock(
-                    content = stringResource(R.string.setting_display_page_font_size_preview),
-                    modifier = Modifier.padding(8.dp),
-                    style = LocalTextStyle.current.copy(
-                        fontSize = LocalTextStyle.current.fontSize * displaySetting.fontSizeRatio,
-                        lineHeight = LocalTextStyle.current.lineHeight * displaySetting.fontSizeRatio,
-                    )
                 )
             }
         }

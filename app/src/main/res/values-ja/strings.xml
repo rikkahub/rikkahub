@@ -438,14 +438,12 @@
   <string name="setting_page_about_desc">このアプリについて</string>
   <string name="setting_page_assistant">アシスタント</string>
   <string name="setting_page_assistant_desc">カスタムアシスタント（エージェント）を設定</string>
-  <string name="setting_page_basic_settings">基本設定</string>
   <string name="setting_page_built_in_tools">組み込みツール</string>
   <string name="setting_page_built_in_tools_desc">モデルがサポートする組み込みツールを選択します。これらのツールはAPIに直接組み込まれており、アプリのサポートは不要です。現在、この機能は公式Gemini APIでのみサポートされています。</string>
   <string name="setting_page_built_in_tools_search">検索</string>
   <string name="setting_page_built_in_tools_search_desc">Google検索連携を有効化</string>
   <string name="setting_page_built_in_tools_url_context">URLコンテキスト</string>
   <string name="setting_page_built_in_tools_url_context_desc">URLコンテンツ処理を有効化</string>
-  <string name="setting_page_chat_settings">チャット設定</string>
   <string name="setting_page_chat_storage">チャット保存</string>
   <string name="setting_page_chat_storage_desc">%1$d ファイル、%2$.2f MB</string>
   <string name="setting_page_color_mode">カラーモード</string>
@@ -730,5 +728,7 @@
   <string name="backup_page_s3_backup">S3バックアップ</string>
   <string name="setting_display_page_show_assistant_bubble_title">アシスタントメッセージバブルを表示</string>
   <string name="setting_display_page_show_assistant_bubble_desc">アシスタントメッセージのバブル背景を表示するかどうか</string>
+  <string name="setting_page_message_display_settings">メッセージ表示</string>
+  <string name="setting_page_code_display_settings">コード表示</string>
+  <string name="setting_page_interaction_notification_settings">インタラクションと通知</string>
 </resources>
-

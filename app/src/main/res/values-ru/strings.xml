@@ -436,14 +436,12 @@
   <string name="setting_page_about_desc">Об этом приложении</string>
   <string name="setting_page_assistant">Ассистент</string>
   <string name="setting_page_assistant_desc">Настроить персонализированных ассистентов (агентов)</string>
-  <string name="setting_page_basic_settings">Основные настройки</string>
   <string name="setting_page_built_in_tools">Встроенные инструменты</string>
   <string name="setting_page_built_in_tools_desc">Выберите встроенные инструменты, поддерживаемые моделью. Эти инструменты предоставляются напрямую API и не требуют поддержки со стороны приложения. В настоящее время эта функция поддерживается только официальным API Gemini.</string>
   <string name="setting_page_built_in_tools_search">Поиск</string>
   <string name="setting_page_built_in_tools_search_desc">Включить интеграцию с Google Поиском</string>
   <string name="setting_page_built_in_tools_url_context">Контекст URL</string>
   <string name="setting_page_built_in_tools_url_context_desc">Включить обработку содержимого по URL</string>
-  <string name="setting_page_chat_settings">Настройки чата</string>
   <string name="setting_page_chat_storage">Хранилище чатов</string>
   <string name="setting_page_chat_storage_desc">%1$d файлов, %2$.2f МБ</string>
   <string name="setting_page_color_mode">Цветовая схема</string>
@@ -728,5 +726,7 @@
   <string name="backup_page_s3_backup">Резервное копирование S3</string>
   <string name="setting_display_page_show_assistant_bubble_title">Показывать всплывающее сообщение ассистента</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Показывать фоновый пузырь для сообщений ассистента</string>
+  <string name="setting_page_message_display_settings">Отображение сообщений</string>
+  <string name="setting_page_code_display_settings">Отображение кода</string>
+  <string name="setting_page_interaction_notification_settings">Взаимодействие и уведомления</string>
 </resources>
-

@@ -438,14 +438,12 @@
   <string name="setting_page_about_desc">앱 정보</string>
   <string name="setting_page_assistant">어시스턴트</string>
   <string name="setting_page_assistant_desc">개인화된 어시스턴트(에이전트) 설정</string>
-  <string name="setting_page_basic_settings">기본 설정</string>
   <string name="setting_page_built_in_tools">내장 도구</string>
   <string name="setting_page_built_in_tools_desc">모델이 지원하는 내장 도구 선택. 이러한 도구는 API에서 직접 제공되며 앱 지원이 필요하지 않습니다. 현재 이 기능은 공식 Gemini API에서만 지원됩니다.</string>
   <string name="setting_page_built_in_tools_search">검색</string>
   <string name="setting_page_built_in_tools_search_desc">Google 검색 통합 활성화</string>
   <string name="setting_page_built_in_tools_url_context">URL 컨텍스트</string>
   <string name="setting_page_built_in_tools_url_context_desc">URL 콘텐츠 처리 활성화</string>
-  <string name="setting_page_chat_settings">채팅 설정</string>
   <string name="setting_page_chat_storage">채팅 저장 공간</string>
   <string name="setting_page_chat_storage_desc">%1$d개 파일, %2$.2f MB</string>
   <string name="setting_page_color_mode">색상 모드</string>
@@ -730,5 +728,7 @@
   <string name="backup_page_s3_backup">S3 백업</string>
   <string name="setting_display_page_show_assistant_bubble_title">어시스턴트 메시지 버블 표시</string>
   <string name="setting_display_page_show_assistant_bubble_desc">어시스턴트 메시지에 말풍선 배경 표시 여부</string>
+  <string name="setting_page_message_display_settings">메시지 표시</string>
+  <string name="setting_page_code_display_settings">코드 표시</string>
+  <string name="setting_page_interaction_notification_settings">상호작용 &amp;amp; 알림</string>
 </resources>
-

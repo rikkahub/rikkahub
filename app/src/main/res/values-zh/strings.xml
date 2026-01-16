@@ -438,14 +438,12 @@
   <string name="setting_page_about_desc">关于本APP</string>
   <string name="setting_page_assistant">助手</string>
   <string name="setting_page_assistant_desc">设置个性化助手 (智能体)</string>
-  <string name="setting_page_basic_settings">基本设置</string>
   <string name="setting_page_built_in_tools">内置工具</string>
   <string name="setting_page_built_in_tools_desc">选择模型支持的内置工具, 这些工具直接由API内置，无需APP提供，当前这个功能仅支持Gemini官方API。</string>
   <string name="setting_page_built_in_tools_search">搜索</string>
   <string name="setting_page_built_in_tools_search_desc">启用 Google 搜索集成</string>
   <string name="setting_page_built_in_tools_url_context">URL 上下文</string>
   <string name="setting_page_built_in_tools_url_context_desc">启用 URL 内容处理</string>
-  <string name="setting_page_chat_settings">聊天设置</string>
   <string name="setting_page_chat_storage">聊天记录存储</string>
   <string name="setting_page_chat_storage_desc">%1$d 个文件，%2$.2f MB</string>
   <string name="setting_page_color_mode">颜色模式</string>
@@ -730,5 +728,7 @@
   <string name="backup_page_s3_backup">S3备份</string>
   <string name="setting_display_page_show_assistant_bubble_title">显示助手消息气泡</string>
   <string name="setting_display_page_show_assistant_bubble_desc">是否为助手消息显示气泡背景</string>
+  <string name="setting_page_message_display_settings">消息显示</string>
+  <string name="setting_page_code_display_settings">代码显示</string>
+  <string name="setting_page_interaction_notification_settings">互动与通知</string>
 </resources>
-
