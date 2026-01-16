@@ -733,5 +733,7 @@
   <string name="setting_page_interaction_notification_settings">互动与通知</string>
   <string name="setting_display_page_tts_only_read_quoted_title">TTS仅朗读引用内容</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">启用后，TTS 仅朗读引号内的内容</string>
+  <string name="setting_display_page_auto_play_tts_title">生成后自动播放TTS</string>
+  <string name="setting_display_page_auto_play_tts_desc">助手消息生成完成后自动播放TTS</string>
 </resources>
 

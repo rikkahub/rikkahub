@@ -64,9 +64,12 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
+import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.rikkahub.utils.extractQuotedContentAsText
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.rememberChatInputState
 import me.rerere.rikkahub.ui.hooks.useEditState
@@ -143,7 +146,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
 
     val chatListState = rememberLazyListState()
     LaunchedEffect(vm) {
-        if(!vm.chatListInitialized) {
+        if (!vm.chatListInitialized) {
             chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
             vm.chatListInitialized = true
         }
@@ -240,6 +243,8 @@ private fun ChatPageContent(
     LaunchedEffect(loadingJob) {
         inputState.loading = loadingJob != null
     }
+
+    TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     Surface(
         color = MaterialTheme.colorScheme.background,

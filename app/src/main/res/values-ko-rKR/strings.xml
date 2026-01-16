@@ -733,5 +733,7 @@
   <string name="setting_page_interaction_notification_settings">상호작용 &amp;amp; 알림</string>
   <string name="setting_display_page_tts_only_read_quoted_title">TTS가 인용 콘텐츠만 읽기</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">활성화하면 TTS가 따옴표 안의 내용만 읽습니다</string>
+  <string name="setting_display_page_auto_play_tts_title">생성 후 TTS 자동 재생</string>
+  <string name="setting_display_page_auto_play_tts_desc">어시스턴트 메시지 생성 완료 후 TTS 자동 재생</string>
 </resources>
 
