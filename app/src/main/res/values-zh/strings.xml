@@ -731,4 +731,7 @@
   <string name="setting_page_message_display_settings">消息显示</string>
   <string name="setting_page_code_display_settings">代码显示</string>
   <string name="setting_page_interaction_notification_settings">互动与通知</string>
+  <string name="setting_display_page_tts_only_read_quoted_title">TTS仅朗读引用内容</string>
+  <string name="setting_display_page_tts_only_read_quoted_desc">启用后，TTS 仅朗读引号内的内容</string>
 </resources>
+

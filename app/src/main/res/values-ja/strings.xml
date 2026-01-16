@@ -731,4 +731,7 @@
   <string name="setting_page_message_display_settings">メッセージ表示</string>
   <string name="setting_page_code_display_settings">コード表示</string>
   <string name="setting_page_interaction_notification_settings">インタラクションと通知</string>
+  <string name="setting_display_page_tts_only_read_quoted_title">引用部分のみTTSで読み上げ</string>
+  <string name="setting_display_page_tts_only_read_quoted_desc">有効にすると、TTSは引用符内のコンテンツのみを読み上げます</string>
 </resources>
+

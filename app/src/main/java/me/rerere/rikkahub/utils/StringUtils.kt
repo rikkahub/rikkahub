@@ -90,3 +90,43 @@ fun Int.formatNumber(): String {
 
 fun Float.toFixed(digits: Int = 0) = "%.${digits}f".format(this)
 fun Double.toFixed(digits: Int = 0) = "%.${digits}f".format(this)
+
+/**
+ * 提取字符串中所有引号内的内容
+ * 支持多种引号类型：英文双引号 "..."、英文单引号 '...'、中文双引号 "..."、中文单引号 '...'
+ * @return 所有引号内内容的列表
+ */
+fun String.extractQuotedContent(): List<String> {
+    val result = mutableListOf<String>()
+    // 匹配多种引号类型
+    val patterns = listOf(
+        """"([^"]*?)"""",  // 中文双引号
+        """'([^']*?)'""",  // 中文单引号
+        """"([^"]*?)"""",  // 英文双引号
+        """'([^']*?)'""",  // 英文单引号
+    )
+    for (pattern in patterns) {
+        val regex = Regex(pattern)
+        regex.findAll(this).forEach { matchResult ->
+            val content = matchResult.groupValues[1]
+            if (content.isNotBlank()) {
+                result.add(content)
+            }
+        }
+    }
+    return result
+}
+
+/**
+ * 提取字符串中所有引号内的内容并合并为一个字符串
+ * @param separator 分隔符，默认为换行
+ * @return 合并后的字符串，如果没有引号内容则返回 null
+ */
+fun String.extractQuotedContentAsText(separator: String = "\n"): String? {
+    val contents = extractQuotedContent()
+    return if (contents.isNotEmpty()) {
+        contents.joinToString(separator)
+    } else {
+        null
+    }
+}

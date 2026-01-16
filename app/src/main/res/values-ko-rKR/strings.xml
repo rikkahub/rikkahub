@@ -731,4 +731,7 @@
   <string name="setting_page_message_display_settings">메시지 표시</string>
   <string name="setting_page_code_display_settings">코드 표시</string>
   <string name="setting_page_interaction_notification_settings">상호작용 &amp;amp; 알림</string>
+  <string name="setting_display_page_tts_only_read_quoted_title">TTS가 인용 콘텐츠만 읽기</string>
+  <string name="setting_display_page_tts_only_read_quoted_desc">활성화하면 TTS가 따옴표 안의 내용만 읽습니다</string>
 </resources>
+

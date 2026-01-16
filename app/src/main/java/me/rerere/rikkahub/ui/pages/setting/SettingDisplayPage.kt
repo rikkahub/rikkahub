@@ -572,6 +572,26 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                     },
                 )
             }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_tts_only_read_quoted_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_tts_only_read_quoted_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.ttsOnlyReadQuoted,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(ttsOnlyReadQuoted = it))
+                            }
+                        )
+                    },
+                )
+            }
         }
     }
 }
