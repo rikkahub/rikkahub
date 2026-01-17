@@ -748,5 +748,8 @@
   <string name="chat_page_compressing">正在壓縮...</string>
   <string name="chat_page_compress_warning">⚠️ 壓縮上下文將重設目前對話中的所有訊息</string>
   <string name="setting_page_tts_settings">TTS設定</string>
+  <string name="setting_display_page_paste_long_text_as_file_title">貼上長文字為檔案</string>
+  <string name="setting_display_page_paste_long_text_as_file_desc">貼上文字超過上限時，自動儲存為檔案附件</string>
+  <string name="setting_display_page_paste_long_text_threshold_title">文字長度閾值</string>
 </resources>
 

@@ -748,5 +748,8 @@
   <string name="chat_page_compressing">圧縮中…</string>
   <string name="chat_page_compress_warning">⚠️ コンテキストを圧縮すると、現在の会話のすべてのメッセージがリセットされます</string>
   <string name="setting_page_tts_settings">TTS設定</string>
+  <string name="setting_display_page_paste_long_text_as_file_title">長いテキストをファイルとして貼り付け</string>
+  <string name="setting_display_page_paste_long_text_as_file_desc">テキストを貼り付けた際にしきい値を超える場合、自動的にファイル添付として保存します</string>
+  <string name="setting_display_page_paste_long_text_threshold_title">文字数しきい値</string>
 </resources>
 

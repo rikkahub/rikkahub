@@ -259,3 +259,18 @@ fun Context.listImageFiles(): List<File> {
         ?.filter { it.isFile && it.extension.lowercase() in listOf("png", "jpg", "jpeg", "webp") }?.toList()
         ?: emptyList()
 }
+
+fun Context.createChatTextFile(text: String): UIMessagePart.Document {
+    val dir = this.filesDir.resolve("upload")
+    if (!dir.exists()) {
+        dir.mkdirs()
+    }
+    val fileName = "${Uuid.random()}.txt"
+    val file = dir.resolve(fileName)
+    file.writeText(text)
+    return UIMessagePart.Document(
+        url = file.toUri().toString(),
+        fileName = "pasted_text.txt",
+        mime = "text/plain"
+    )
+}

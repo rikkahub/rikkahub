@@ -746,5 +746,8 @@
   <string name="chat_page_compressing">Сжатие...</string>
   <string name="chat_page_compress_warning">⚠️ Сжатие контекста приведёт к сбросу всех сообщений в текущем диалоге</string>
   <string name="setting_page_tts_settings">Настройки TTS</string>
+  <string name="setting_display_page_paste_long_text_as_file_title">Вставлять длинный текст как файл</string>
+  <string name="setting_display_page_paste_long_text_as_file_desc">При вставке текста, превышающего порог, автоматически сохранять его как файл-вложение</string>
+  <string name="setting_display_page_paste_long_text_threshold_title">Порог длины текста</string>
 </resources>
 

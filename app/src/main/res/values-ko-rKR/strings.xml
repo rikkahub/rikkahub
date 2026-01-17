@@ -748,5 +748,8 @@
   <string name="chat_page_compressing">압축 중...</string>
   <string name="chat_page_compress_warning">⚠️ 문맥 압축 시 현재 대화의 모든 메시지가 초기화됩니다</string>
   <string name="setting_page_tts_settings">TTS 설정</string>
+  <string name="setting_display_page_paste_long_text_as_file_title">긴 텍스트를 파일로 붙여넣기</string>
+  <string name="setting_display_page_paste_long_text_as_file_desc">복사한 텍스트가 임계값을 초과하면 자동으로 파일 첨부로 저장</string>
+  <string name="setting_display_page_paste_long_text_threshold_title">텍스트 길이 임계값</string>
 </resources>
 

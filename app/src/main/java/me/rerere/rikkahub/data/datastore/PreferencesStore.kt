@@ -398,6 +398,8 @@ data class DisplaySetting(
     val showLineNumbers: Boolean = false,
     val ttsOnlyReadQuoted: Boolean = false,
     val autoPlayTTSAfterGeneration: Boolean = false,
+    val pasteLongTextAsFile: Boolean = false,
+    val pasteLongTextThreshold: Int = 1000,
 )
 
 @Serializable
