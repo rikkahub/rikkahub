@@ -55,9 +55,6 @@ class RikkaHubApp : Application() {
             setDefaultsAsync(R.xml.remote_config_defaults)
             fetchAndActivate()
         }
-
-        // https://issuetracker.google.com/issues/469669851
-        ComposeFoundationFlags.isPausableCompositionInPrefetchEnabled = false
     }
 
     private fun deleteTempFiles() {
