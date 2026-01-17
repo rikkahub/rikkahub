@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.components.ai
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
@@ -18,16 +17,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Coins
 import com.composables.icons.lucide.Lucide
-import com.google.common.cache.CacheBuilder
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.rikkahub.utils.SimpleCache
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
 import java.util.concurrent.TimeUnit
 
-private val cache = CacheBuilder.newBuilder()
+private val cache = SimpleCache.builder<String, String>()
     .expireAfterWrite(2, TimeUnit.MINUTES)
-    .build<String, String>()
+    .build()
 
 @Composable
 fun ProviderBalanceText(
