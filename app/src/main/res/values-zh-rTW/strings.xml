@@ -747,5 +747,6 @@
   <string name="setting_model_page_compress_prompt_vars">變數：{content}、{target_tokens}、{additional_context}</string>
   <string name="chat_page_compressing">正在壓縮...</string>
   <string name="chat_page_compress_warning">⚠️ 壓縮上下文將重設目前對話中的所有訊息</string>
+  <string name="setting_page_tts_settings">TTS設定</string>
 </resources>
 

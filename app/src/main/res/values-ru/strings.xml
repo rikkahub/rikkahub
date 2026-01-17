@@ -745,5 +745,6 @@
   <string name="setting_model_page_compress_prompt_vars">Переменные: {content}, {target_tokens}, {additional_context}</string>
   <string name="chat_page_compressing">Сжатие...</string>
   <string name="chat_page_compress_warning">⚠️ Сжатие контекста приведёт к сбросу всех сообщений в текущем диалоге</string>
+  <string name="setting_page_tts_settings">Настройки TTS</string>
 </resources>
 

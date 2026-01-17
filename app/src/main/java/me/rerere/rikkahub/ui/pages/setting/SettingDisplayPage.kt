@@ -573,6 +573,15 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 )
             }
 
+            stickyHeader {
+                Text(
+                    text = stringResource(R.string.setting_page_tts_settings),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+
             item {
                 ListItem(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
