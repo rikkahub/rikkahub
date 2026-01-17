@@ -186,8 +186,12 @@ fun ChatInput(
     }
 
     var expand by remember { mutableStateOf(ExpandState.Collapsed) }
+    var showInjectionSheet by remember { mutableStateOf(false) }
+    var showCompressDialog by remember { mutableStateOf(false) }
     fun dismissExpand() {
         expand = ExpandState.Collapsed
+        showInjectionSheet = false
+        showCompressDialog = false
     }
 
     fun expandToggle(type: ExpandState) {
@@ -200,9 +204,9 @@ fun ChatInput(
 
     // Collapse when ime is visible
     val imeVisile = WindowInsets.isImeVisible
-    LaunchedEffect(imeVisile) {
-        if (imeVisile) {
-            expand = ExpandState.Collapsed
+    LaunchedEffect(imeVisile, showInjectionSheet, showCompressDialog) {
+        if (imeVisile && !showInjectionSheet && !showCompressDialog) {
+            dismissExpand()
         }
     }
 
@@ -315,11 +319,11 @@ fun ChatInput(
                         .combinedClickable(
                             enabled = state.loading || !state.isEmpty(),
                             onClick = {
-                                expand = ExpandState.Collapsed
+                                dismissExpand()
                                 sendMessage()
                             },
                             onLongClick = {
-                                expand = ExpandState.Collapsed
+                                dismissExpand()
                                 sendMessageWithoutAnswer()
                             }
                         )
@@ -372,6 +376,10 @@ fun ChatInput(
                             onClearContext = onClearContext,
                             onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
+                            showInjectionSheet = showInjectionSheet,
+                            onShowInjectionSheetChange = { showInjectionSheet = it },
+                            showCompressDialog = showCompressDialog,
+                            onShowCompressDialogChange = { showCompressDialog = it },
                             onDismiss = { dismissExpand() }
                         )
                     }
@@ -725,12 +733,14 @@ private fun FilesPicker(
     onClearContext: () -> Unit,
     onCompressContext: (additionalPrompt: String, targetTokens: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
+    showInjectionSheet: Boolean,
+    onShowInjectionSheetChange: (Boolean) -> Unit,
+    showCompressDialog: Boolean,
+    onShowCompressDialogChange: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val settings = LocalSettings.current
     val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
-    var showInjectionSheet by remember { mutableStateOf(false) }
-    var showCompressDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -801,7 +811,7 @@ private fun FilesPicker(
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.large)
                     .clickable {
-                        showInjectionSheet = true
+                        onShowInjectionSheetChange(true)
                     },
             )
         }
@@ -820,7 +830,7 @@ private fun FilesPicker(
             modifier = Modifier
                 .clip(MaterialTheme.shapes.large)
                 .clickable {
-                    showCompressDialog = true
+                    onShowCompressDialogChange(true)
                 },
         )
 
@@ -866,7 +876,7 @@ private fun FilesPicker(
             assistant = assistant,
             settings = settings,
             onUpdateAssistant = onUpdateAssistant,
-            onDismiss = { showInjectionSheet = false }
+            onDismiss = { onShowInjectionSheetChange(false) }
         )
     }
 
@@ -874,7 +884,7 @@ private fun FilesPicker(
     if (showCompressDialog) {
         CompressContextDialog(
             onDismiss = {
-                showCompressDialog = false
+                onShowCompressDialogChange(false)
                 onDismiss()
             },
             onConfirm = { additionalPrompt, targetTokens ->
@@ -1332,4 +1342,3 @@ private fun BigIconTextButtonPreview() {
         ) {}
     }
 }
-
