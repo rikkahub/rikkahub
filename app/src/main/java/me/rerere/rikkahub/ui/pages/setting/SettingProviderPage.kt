@@ -83,6 +83,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyStaggeredGridState
 import java.util.Locale
 import kotlinx.coroutines.launch
+import kotlin.uuid.Uuid
 
 @Composable
 fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
@@ -137,7 +138,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     ImportProviderButton {
                         vm.updateSettings(
                             settings.copy(
-                                providers = listOf(it) + settings.providers
+                                providers = listOf(it.copyProvider(Uuid.random())) + settings.providers
                             )
                         )
                     }
