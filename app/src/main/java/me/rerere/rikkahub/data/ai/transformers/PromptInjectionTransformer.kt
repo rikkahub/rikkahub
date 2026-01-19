@@ -5,6 +5,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.InjectionRole
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.extractContextForMatching
@@ -160,23 +161,29 @@ internal fun applyInjections(
     }
 
     // 处理 TOP_OF_CHAT：在第一条用户消息之前插入
-    val topContent = byPosition[InjectionPosition.TOP_OF_CHAT]
-        ?.joinToString("\n") { it.content }
-    if (!topContent.isNullOrEmpty()) {
+    val topInjections = byPosition[InjectionPosition.TOP_OF_CHAT]
+    if (!topInjections.isNullOrEmpty()) {
         // 重新计算索引（因为可能插入了系统消息）
         var insertIndex = result.indexOfFirst { it.role == MessageRole.USER }
             .takeIf { it >= 0 } ?: result.size
         insertIndex = findSafeInsertIndex(result, insertIndex)
-        result.add(insertIndex, UIMessage.user(wrapSystemTag(topContent)))
+        topInjections.forEach { injection ->
+            val message = createInjectionMessage(injection)
+            result.add(insertIndex, message)
+            insertIndex++
+        }
     }
 
     // 处理 BOTTOM_OF_CHAT：在最后一条消息之前插入
-    val bottomContent = byPosition[InjectionPosition.BOTTOM_OF_CHAT]
-        ?.joinToString("\n") { it.content }
-    if (!bottomContent.isNullOrEmpty()) {
+    val bottomInjections = byPosition[InjectionPosition.BOTTOM_OF_CHAT]
+    if (!bottomInjections.isNullOrEmpty()) {
         var insertIndex = (result.size - 1).coerceAtLeast(0)
         insertIndex = findSafeInsertIndex(result, insertIndex)
-        result.add(insertIndex, UIMessage.user(wrapSystemTag(bottomContent)))
+        bottomInjections.forEach { injection ->
+            val message = createInjectionMessage(injection)
+            result.add(insertIndex, message)
+            insertIndex++
+        }
     }
 
     // 处理 AT_DEPTH：在指定深度位置插入（从最新消息往前数）
@@ -185,16 +192,30 @@ internal fun applyInjections(
     if (!atDepthInjections.isNullOrEmpty()) {
         val byDepth = atDepthInjections.groupBy { it.injectDepth }
         byDepth.keys.sortedDescending().forEach { depth ->
-            val content = byDepth[depth]?.joinToString("\n") { it.content } ?: return@forEach
+            val injections = byDepth[depth] ?: return@forEach
             // 计算插入位置：result.size - depth，但要确保在有效范围内
             // depth=1 表示在最后一条消息之前，depth=2 表示在倒数第二条之前...
             var insertIndex = (result.size - depth).coerceIn(0, result.size)
             insertIndex = findSafeInsertIndex(result, insertIndex)
-            result.add(insertIndex, UIMessage.user(wrapSystemTag(content)))
+            injections.forEach { injection ->
+                val message = createInjectionMessage(injection)
+                result.add(insertIndex, message)
+                insertIndex++
+            }
         }
     }
 
     return result
+}
+
+/**
+ * 根据注入配置创建消息
+ */
+private fun createInjectionMessage(injection: PromptInjection): UIMessage {
+    return when (injection.role) {
+        InjectionRole.ASSISTANT -> UIMessage.assistant(injection.content)
+        InjectionRole.USER -> UIMessage.user(wrapSystemTag(injection.content))
+    }
 }
 
 /**
