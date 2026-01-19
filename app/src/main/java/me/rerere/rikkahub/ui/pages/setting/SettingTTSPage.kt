@@ -363,6 +363,7 @@ private fun TTSProviderItem(
                             is TTSProviderSetting.MiniMax -> "MiniMax"
                             is TTSProviderSetting.SystemTTS -> stringResource(R.string.setting_tts_page_provider_system)
                             is TTSProviderSetting.Qwen -> "Qwen"
+                            is TTSProviderSetting.Groq -> "Groq"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
