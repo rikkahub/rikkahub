@@ -134,7 +134,7 @@ class McpManager(
                     arguments = args,
                 ),
             ),
-            options = RequestOptions(timeout = 60.seconds),
+            options = RequestOptions(timeout = 120.seconds),
         )
         return McpJson.encodeToJsonElement(result.content)
     }
