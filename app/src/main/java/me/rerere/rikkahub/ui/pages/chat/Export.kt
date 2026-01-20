@@ -87,6 +87,7 @@ import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.BitmapComposer
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
+import com.dokar.sonner.rememberToasterState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.JsonInstant
@@ -380,10 +381,12 @@ private fun ExportedChatImage(
 ) {
     val navBackStack = rememberNavController()
     val highlighter = koinInject<Highlighter>()
+    val toasterState = rememberToasterState()
     RikkahubTheme {
         CompositionLocalProvider(
             LocalNavController provides navBackStack,
-            LocalHighlighter provides highlighter
+            LocalHighlighter provides highlighter,
+            LocalToaster provides toasterState
         ) {
             Surface(
                 modifier = Modifier.width(540.dp) // like 1080p but with density independence
