@@ -544,7 +544,6 @@ class ChatService(
                 Tool(
                     name = "search_web",
                     description = "search web for latest information",
-                    needsApproval = true,
                     parameters = {
                         val options = settings.searchServices.getOrElse(
                             index = settings.searchServiceSelected,
