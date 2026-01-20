@@ -492,6 +492,15 @@ class ChatVM(
         chatService.regenerateAtMessage(_conversationId, message, regenerateAssistantMsg)
     }
 
+    fun handleToolApproval(
+        toolCallId: String,
+        approved: Boolean,
+        reason: String = ""
+    ) {
+        analytics.logEvent("ai_tool_approval", null)
+        chatService.handleToolApproval(_conversationId, toolCallId, approved, reason)
+    }
+
     fun saveConversationAsync() {
         viewModelScope.launch {
             chatService.saveConversation(_conversationId, conversation.value)

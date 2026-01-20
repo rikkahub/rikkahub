@@ -189,6 +189,11 @@
   <string name="chat_message_tool_search_prefix">Search: %1$s</string>
   <string name="chat_message_tool_search_results_count">%1$d results</string>
   <string name="chat_message_tool_search_web">Search web: %1$s</string>
+  <string name="chat_message_tool_approve">Approve</string>
+  <string name="chat_message_tool_deny">Deny</string>
+  <string name="chat_message_tool_denied">Denied</string>
+  <string name="chat_message_tool_deny_dialog_title">Deny Tool Execution</string>
+  <string name="chat_message_tool_deny_dialog_hint">Reason (optional)</string>
   <string name="chat_page_cancel">Cancel</string>
   <string name="chat_page_clear_context">Clear Context</string>
   <string name="chat_page_clear_all_errors">Clear all</string>

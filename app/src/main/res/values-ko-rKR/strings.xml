@@ -751,5 +751,10 @@
   <string name="setting_display_page_paste_long_text_as_file_title">긴 텍스트를 파일로 붙여넣기</string>
   <string name="setting_display_page_paste_long_text_as_file_desc">복사한 텍스트가 임계값을 초과하면 자동으로 파일 첨부로 저장</string>
   <string name="setting_display_page_paste_long_text_threshold_title">텍스트 길이 임계값</string>
+  <string name="chat_message_tool_approve">승인</string>
+  <string name="chat_message_tool_deny">거부</string>
+  <string name="chat_message_tool_denied">거부됨</string>
+  <string name="chat_message_tool_deny_dialog_title">도구 실행 거부</string>
+  <string name="chat_message_tool_deny_dialog_hint">거절 사유(선택 사항)</string>
 </resources>
 

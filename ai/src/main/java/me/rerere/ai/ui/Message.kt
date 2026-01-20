@@ -318,6 +318,25 @@ fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
 }
 
 @Serializable
+sealed class ToolApprovalState {
+    @Serializable
+    @SerialName("auto")
+    data object Auto : ToolApprovalState()
+
+    @Serializable
+    @SerialName("pending")
+    data object Pending : ToolApprovalState()
+
+    @Serializable
+    @SerialName("approved")
+    data object Approved : ToolApprovalState()
+
+    @Serializable
+    @SerialName("denied")
+    data class Denied(val reason: String = "") : ToolApprovalState()
+}
+
+@Serializable
 sealed class UIMessagePart {
     abstract val priority: Int
     abstract val metadata: JsonObject?
@@ -386,6 +405,7 @@ sealed class UIMessagePart {
         val toolCallId: String,
         val toolName: String,
         val arguments: String,
+        val approvalState: ToolApprovalState = ToolApprovalState.Auto,
         override var metadata: JsonObject? = null
     ) : UIMessagePart() {
         fun merge(other: ToolCall): ToolCall {
@@ -393,6 +413,7 @@ sealed class UIMessagePart {
                 toolCallId = toolCallId,
                 toolName = toolName + other.toolName,
                 arguments = arguments + other.arguments,
+                approvalState = approvalState,
                 metadata = if(other.metadata != null) other.metadata else metadata,
             )
         }

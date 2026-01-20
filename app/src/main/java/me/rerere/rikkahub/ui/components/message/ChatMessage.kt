@@ -113,6 +113,7 @@ fun ChatMessage(
     onUpdate: (MessageNode) -> Unit,
     onTranslate: ((UIMessage, Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
+    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
     val chatMessages = conversation.currentMessages
@@ -169,6 +170,7 @@ fun ChatMessage(
                 messageIndex = messageIndex,
                 loading = loading,
                 model = model,
+                onToolApproval = onToolApproval,
             )
 
             message.translation?.let { translation ->
@@ -262,7 +264,8 @@ private fun MessagePartsBlock(
     annotations: List<UIMessageAnnotation>,
     messages: List<UIMessage>,
     messageIndex: Int,
-    loading: Boolean
+    loading: Boolean,
+    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -379,7 +382,14 @@ private fun MessagePartsBlock(
                     arguments = runCatching { JsonInstant.parseToJsonElement(toolCall.arguments) }
                         .getOrElse { EmptyJson },
                     content = null,
+                    approvalState = toolCall.approvalState,
                     loading = loading,
+                    onApprove = if (onToolApproval != null) {
+                        { onToolApproval(toolCall.toolCallId, true, "") }
+                    } else null,
+                    onDeny = if (onToolApproval != null) {
+                        { reason -> onToolApproval(toolCall.toolCallId, false, reason) }
+                    } else null,
                 )
             }
         }

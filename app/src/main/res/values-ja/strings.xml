@@ -751,5 +751,10 @@
   <string name="setting_display_page_paste_long_text_as_file_title">長いテキストをファイルとして貼り付け</string>
   <string name="setting_display_page_paste_long_text_as_file_desc">テキストを貼り付けた際にしきい値を超える場合、自動的にファイル添付として保存します</string>
   <string name="setting_display_page_paste_long_text_threshold_title">文字数しきい値</string>
+  <string name="chat_message_tool_approve">承認</string>
+  <string name="chat_message_tool_deny">拒否</string>
+  <string name="chat_message_tool_denied">拒否されました</string>
+  <string name="chat_message_tool_deny_dialog_title">ツール実行を拒否</string>
+  <string name="chat_message_tool_deny_dialog_hint">理由（任意）</string>
 </resources>
 

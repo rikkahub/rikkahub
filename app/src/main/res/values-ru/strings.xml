@@ -749,5 +749,10 @@
   <string name="setting_display_page_paste_long_text_as_file_title">Вставлять длинный текст как файл</string>
   <string name="setting_display_page_paste_long_text_as_file_desc">При вставке текста, превышающего порог, автоматически сохранять его как файл-вложение</string>
   <string name="setting_display_page_paste_long_text_threshold_title">Порог длины текста</string>
+  <string name="chat_message_tool_approve">Одобрить</string>
+  <string name="chat_message_tool_deny">Отклонить</string>
+  <string name="chat_message_tool_denied">Отклонено</string>
+  <string name="chat_message_tool_deny_dialog_title">Отклонить выполнение инструмента</string>
+  <string name="chat_message_tool_deny_dialog_hint">Причина (необязательно)</string>
 </resources>
 
