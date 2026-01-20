@@ -102,7 +102,13 @@ fun ColumnScope.ChatMessageActionButtons(
         Icon(
             Lucide.RefreshCw, stringResource(R.string.regenerate), modifier = Modifier
                 .clip(CircleShape)
-                .clickable { showRegenerateConfirm = true }
+                .clickable {
+                    if (message.role == MessageRole.USER) {
+                        showRegenerateConfirm = true
+                    } else {
+                        onRegenerate()
+                    }
+                }
                 .padding(8.dp)
                 .size(16.dp)
         )
