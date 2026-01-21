@@ -149,15 +149,17 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
                         navigateToChatPage(navController, conversation.id)
                     },
                     onDelete = {
-                        vm.deleteConversation(conversation)
                         scope.launch {
+                            // 先获取完整的对话数据（包含 messageNodes），用于撤销恢复
+                            val fullConversation = vm.getFullConversation(conversation.id) ?: conversation
+                            vm.deleteConversation(conversation)
                             val result = snackbarHostState.showSnackbar(
                                 message = snackMessageDeleted,
                                 actionLabel = snackMessageUndo,
                                 withDismissAction = true,
                             )
                             if (result == SnackbarResult.ActionPerformed) {
-                                vm.restoreConversation(conversation)
+                                vm.restoreConversation(fullConversation)
                             }
                         }
                     },

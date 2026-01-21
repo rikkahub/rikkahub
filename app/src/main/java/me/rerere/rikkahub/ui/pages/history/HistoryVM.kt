@@ -68,4 +68,8 @@ class HistoryVM(
             conversationRepo.insertConversation(conversation)
         }
     }
+
+    suspend fun getFullConversation(conversationId: Uuid): Conversation? {
+        return conversationRepo.getConversationById(conversationId)
+    }
 }
