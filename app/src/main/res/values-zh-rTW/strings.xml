@@ -756,5 +756,6 @@
   <string name="chat_message_tool_denied">已拒絕</string>
   <string name="chat_message_tool_deny_dialog_title">拒絕工具執行</string>
   <string name="chat_message_tool_deny_dialog_hint">原因（選填）</string>
+  <string name="setting_mcp_page_needs_approval">需要審核</string>
 </resources>
 

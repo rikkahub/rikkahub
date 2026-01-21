@@ -18,7 +18,8 @@ data class McpTool(
     val enable: Boolean = true,
     val name: String = "",
     val description: String? = null,
-    val inputSchema: InputSchema? = null
+    val inputSchema: InputSchema? = null,
+    val needsApproval: Boolean = false
 )
 
 @Serializable

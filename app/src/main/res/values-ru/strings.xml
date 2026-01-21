@@ -754,5 +754,6 @@
   <string name="chat_message_tool_denied">Отклонено</string>
   <string name="chat_message_tool_deny_dialog_title">Отклонить выполнение инструмента</string>
   <string name="chat_message_tool_deny_dialog_hint">Причина (необязательно)</string>
+  <string name="setting_mcp_page_needs_approval">Требует подтверждения</string>
 </resources>
 

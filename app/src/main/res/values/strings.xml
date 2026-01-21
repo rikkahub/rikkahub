@@ -756,5 +756,6 @@
   <string name="setting_display_page_paste_long_text_as_file_title">Paste Long Text as File</string>
   <string name="setting_display_page_paste_long_text_as_file_desc">When pasting text exceeds the threshold, automatically save it as a file attachment</string>
   <string name="setting_display_page_paste_long_text_threshold_title">Text Length Threshold</string>
+  <string name="setting_mcp_page_needs_approval">Needs Approval</string>
 </resources>
 

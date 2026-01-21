@@ -756,5 +756,6 @@
   <string name="chat_message_tool_denied">거부됨</string>
   <string name="chat_message_tool_deny_dialog_title">도구 실행 거부</string>
   <string name="chat_message_tool_deny_dialog_hint">거절 사유(선택 사항)</string>
+  <string name="setting_mcp_page_needs_approval">승인 필요</string>
 </resources>
 

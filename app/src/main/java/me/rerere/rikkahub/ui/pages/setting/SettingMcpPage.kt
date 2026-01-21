@@ -1,9 +1,11 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowOverflow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
@@ -37,7 +40,8 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.Switch
+import me.rerere.rikkahub.ui.components.ui.Switch
+import me.rerere.rikkahub.ui.components.ui.SwitchSize
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,9 +61,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.CircleAlert
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquareOff
 import com.composables.icons.lucide.Plus
@@ -73,6 +80,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.mcp.McpStatus
+import me.rerere.rikkahub.data.ai.mcp.McpTool
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -308,7 +316,7 @@ private fun McpServerConfigModal(state: EditState<McpServerConfig>) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.8f)
+                    .fillMaxHeight(0.9f)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -695,7 +703,7 @@ private fun McpToolsConfigure(
     val mcpManager = koinInject<McpManager>()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (mcpManager.getClient(config) == null) {
@@ -704,62 +712,146 @@ private fun McpToolsConfigure(
             }
         }
         items(config.commonOptions.tools) { tool ->
-            Card {
+            McpToolCard(
+                tool = tool,
+                onEnableChange = { newVal ->
+                    update(
+                        config.clone(
+                            commonOptions = config.commonOptions.copy(
+                                tools = config.commonOptions.tools.map {
+                                    if (tool.name == it.name) {
+                                        it.copy(enable = newVal)
+                                    } else {
+                                        it
+                                    }
+                                }
+                            )
+                        )
+                    )
+                },
+                onNeedsApprovalChange = { newVal ->
+                    update(
+                        config.clone(
+                            commonOptions = config.commonOptions.copy(
+                                tools = config.commonOptions.tools.map {
+                                    if (tool.name == it.name) {
+                                        it.copy(needsApproval = newVal)
+                                    } else {
+                                        it
+                                    }
+                                }
+                            )
+                        )
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun McpToolCard(
+    tool: McpTool,
+    onEnableChange: (Boolean) -> Unit,
+    onNeedsApprovalChange: (Boolean) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .animateContentSize()
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            // 第一行：工具名字和3个按钮
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = tool.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // 需要审批开关
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = tool.name,
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Text(
-                            text = tool.description ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                        )
+                    Text(
+                        text = stringResource(R.string.setting_mcp_page_needs_approval),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Switch(
+                        checked = tool.needsApproval,
+                        onCheckedChange = onNeedsApprovalChange,
+                        size = SwitchSize.Small
+                    )
+                }
+                // 启用开关
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "启用",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Switch(
+                        checked = tool.enable,
+                        onCheckedChange = onEnableChange,
+                        size = SwitchSize.Small
+                    )
+                }
+                // 展开/收起按钮
+                IconButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            // 展开后显示描述和参数
+            if (expanded) {
+                // 描述
+                if (!tool.description.isNullOrBlank()) {
+                    Text(
+                        text = tool.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    )
+                }
+                // 参数标签
+                tool.inputSchema?.let { it as? InputSchema.Obj }?.let { schema ->
+                    if (schema.properties.isNotEmpty()) {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            tool.inputSchema?.let { it as InputSchema.Obj }?.let { schema ->
-                                schema.properties.forEach { (key, _) ->
-                                    Tag(
-                                        type = if (schema.required?.contains(key) == true) TagType.INFO else TagType.DEFAULT
-                                    ) {
-                                        Text(
-                                            text = key,
-                                            style = MaterialTheme.typography.bodySmall,
-                                        )
-                                    }
+                            schema.properties.forEach { (key, _) ->
+                                Tag(
+                                    type = if (schema.required?.contains(key) == true) TagType.INFO else TagType.DEFAULT
+                                ) {
+                                    Text(
+                                        text = key,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
                                 }
                             }
                         }
                     }
-                    Switch(
-                        checked = tool.enable,
-                        onCheckedChange = { newVal ->
-                            update(
-                                config.clone(
-                                    commonOptions = config.commonOptions.copy(
-                                        tools = config.commonOptions.tools.map {
-                                            if (tool.name == it.name) {
-                                                it.copy(enable = newVal)
-                                            } else {
-                                                it
-                                            }
-                                        }
-                                    )
-                                )
-                            )
-                        }
-                    )
                 }
             }
         }
