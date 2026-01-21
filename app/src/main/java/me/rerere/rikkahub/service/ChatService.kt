@@ -552,7 +552,6 @@ class ChatService(
                         val service = SearchService.getService(options)
                         service.parameters
                     },
-                    needsApproval = true,
                     execute = {
                         val options = settings.searchServices.getOrElse(
                             index = settings.searchServiceSelected,
