@@ -93,10 +93,10 @@ data class ChatError(
 
 private val inputTransformers by lazy {
     listOf(
+        PromptInjectionTransformer,
         PlaceholderTransformer,
         DocumentAsPromptTransformer,
         OcrTransformer,
-        PromptInjectionTransformer,
     )
 }
 
