@@ -140,7 +140,7 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
         val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
         val scope = rememberCoroutineScope()
         val state = rememberPullToRefreshState()
-        val loading = status.values.any { it == McpStatus.Connecting }
+        val loading = status.values.any { it == McpStatus.Connecting || it is McpStatus.Reconnecting }
         PullToRefreshBox(
             isRefreshing = loading,
             onRefresh = {
@@ -250,6 +250,9 @@ private fun McpServerItem(
                     )
 
                     McpStatus.Connected -> Icon(Lucide.Terminal, null)
+                    is McpStatus.Reconnecting -> CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp)
+                    )
                     is McpStatus.Error -> Icon(Lucide.CircleAlert, null)
                 }
 

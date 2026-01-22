@@ -14,7 +14,10 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -39,6 +42,9 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
 private const val TAG = "McpManager"
+private const val MAX_RECONNECT_ATTEMPTS = 5
+private const val BASE_RECONNECT_DELAY_MS = 1000L
+private const val MAX_RECONNECT_DELAY_MS = 30000L
 
 class McpManager(
     private val settingsStore: SettingsStore,
@@ -66,6 +72,8 @@ class McpManager(
     }
 
     private val clients: MutableMap<McpServerConfig, Client> = mutableMapOf()
+    private val reconnectJobs: MutableMap<Uuid, Job> = mutableMapOf()
+    private val reconnectAttempts: MutableMap<Uuid, Int> = mutableMapOf()
     val syncingStatus = MutableStateFlow<Map<Uuid, McpStatus>>(mapOf())
 
     init {
@@ -171,6 +179,9 @@ class McpManager(
 
     suspend fun addClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
         removeClient(config) // Remove first
+        cancelReconnect(config.id)
+        reconnectAttempts[config.id] = 0
+
         val transport = getTransport(config)
         val client = Client(
             clientInfo = Implementation(
@@ -178,12 +189,33 @@ class McpManager(
                 version = "1.0",
             )
         )
+
+        // 注册 transport 回调以支持自动重连
+        transport.onClose {
+            Log.i(TAG, "Transport closed for ${config.commonOptions.name}")
+            val currentStatus = syncingStatus.value[config.id]
+            // 只有在已连接状态下才触发重连，避免正常关闭时重连
+            if (currentStatus == McpStatus.Connected) {
+                scheduleReconnect(config)
+            }
+        }
+
+        transport.onError { error ->
+            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            val currentStatus = syncingStatus.value[config.id]
+            // 只有在已连接状态下才触发重连
+            if (currentStatus == McpStatus.Connected) {
+                scheduleReconnect(config)
+            }
+        }
+
         clients[config] = client
         runCatching {
             setStatus(config = config, status = McpStatus.Connecting)
             client.connect(transport)
             sync(config)
             setStatus(config = config, status = McpStatus.Connected)
+            reconnectAttempts[config.id] = 0 // 重置重连计数
             Log.i(TAG, "addClient: connected ${config.commonOptions.name}")
         }.onFailure {
             it.printStackTrace()
@@ -267,6 +299,7 @@ class McpManager(
     }
 
     suspend fun removeClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
+        cancelReconnect(config.id)
         val toRemove = clients.entries.filter { it.key.id == config.id }
         toRemove.forEach { entry ->
             runCatching {
@@ -278,6 +311,108 @@ class McpManager(
             syncingStatus.emit(syncingStatus.value.toMutableMap().apply { remove(entry.key.id) })
             Log.i(TAG, "removeClient: ${entry.key} / ${entry.key.commonOptions.name}")
         }
+        reconnectAttempts.remove(config.id)
+    }
+
+    private fun scheduleReconnect(config: McpServerConfig) {
+        val configId = config.id
+        val currentAttempt = (reconnectAttempts[configId] ?: 0) + 1
+
+        if (currentAttempt > MAX_RECONNECT_ATTEMPTS) {
+            Log.w(TAG, "Max reconnect attempts reached for ${config.commonOptions.name}")
+            appScope.launch {
+                setStatus(config, McpStatus.Error("连接断开，已达最大重连次数"))
+            }
+            return
+        }
+
+        reconnectAttempts[configId] = currentAttempt
+
+        // 取消之前的重连任务
+        reconnectJobs[configId]?.cancel()
+
+        // 计算指数退避延迟
+        val delayMs = calculateBackoffDelay(currentAttempt)
+        Log.i(TAG, "Scheduling reconnect for ${config.commonOptions.name}, attempt $currentAttempt/$MAX_RECONNECT_ATTEMPTS, delay ${delayMs}ms")
+
+        reconnectJobs[configId] = appScope.launch {
+            try {
+                setStatus(config, McpStatus.Reconnecting(currentAttempt, MAX_RECONNECT_ATTEMPTS))
+                delay(delayMs)
+
+                // 检查配置是否仍然启用
+                val currentConfig = settingsStore.settingsFlow.value.mcpServers
+                    .find { it.id == configId && it.commonOptions.enable }
+
+                if (currentConfig == null) {
+                    Log.i(TAG, "Config disabled or removed, cancelling reconnect for ${config.commonOptions.name}")
+                    return@launch
+                }
+
+                Log.i(TAG, "Attempting reconnect for ${config.commonOptions.name}")
+                reconnectClient(currentConfig)
+            } catch (e: CancellationException) {
+                Log.i(TAG, "Reconnect cancelled for ${config.commonOptions.name}")
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Reconnect failed for ${config.commonOptions.name}", e)
+                // 继续尝试重连
+                scheduleReconnect(config)
+            }
+        }
+    }
+
+    private fun cancelReconnect(configId: Uuid) {
+        reconnectJobs[configId]?.cancel()
+        reconnectJobs.remove(configId)
+    }
+
+    private fun calculateBackoffDelay(attempt: Int): Long {
+        // 指数退避: baseDelay * 2^(attempt-1)，最大不超过 maxDelay
+        val exponentialDelay = BASE_RECONNECT_DELAY_MS * (1L shl (attempt - 1).coerceAtMost(10))
+        return exponentialDelay.coerceAtMost(MAX_RECONNECT_DELAY_MS)
+    }
+
+    private suspend fun reconnectClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
+        // 先关闭旧客户端
+        val oldEntry = clients.entries.find { it.key.id == config.id }
+        if (oldEntry != null) {
+            runCatching { oldEntry.value.close() }.onFailure { it.printStackTrace() }
+            clients.remove(oldEntry.key)
+        }
+
+        val transport = getTransport(config)
+        val client = Client(
+            clientInfo = Implementation(
+                name = config.commonOptions.name,
+                version = "1.0",
+            )
+        )
+
+        // 注册回调
+        transport.onClose {
+            Log.i(TAG, "Transport closed for ${config.commonOptions.name}")
+            val currentStatus = syncingStatus.value[config.id]
+            if (currentStatus == McpStatus.Connected) {
+                scheduleReconnect(config)
+            }
+        }
+
+        transport.onError { error ->
+            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            val currentStatus = syncingStatus.value[config.id]
+            if (currentStatus == McpStatus.Connected) {
+                scheduleReconnect(config)
+            }
+        }
+
+        clients[config] = client
+        setStatus(config, McpStatus.Connecting)
+        client.connect(transport)
+        sync(config)
+        setStatus(config, McpStatus.Connected)
+        reconnectAttempts[config.id] = 0 // 重置重连计数
+        Log.i(TAG, "Reconnected successfully: ${config.commonOptions.name}")
     }
 
     private suspend fun setStatus(config: McpServerConfig, status: McpStatus) {

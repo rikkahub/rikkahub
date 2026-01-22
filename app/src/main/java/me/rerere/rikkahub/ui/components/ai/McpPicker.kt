@@ -185,6 +185,9 @@ fun McpPicker(
                         )
 
                         McpStatus.Connected -> Icon(Lucide.Terminal, null)
+                        is McpStatus.Reconnecting -> CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp)
+                        )
                         is McpStatus.Error -> Icon(Lucide.CircleAlert, null)
                     }
                     Column(
@@ -196,11 +199,12 @@ fun McpPicker(
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
-                            text = when (status) {
+                            text = when (val s = status) {
                                 is McpStatus.Idle -> "Idle"
                                 is McpStatus.Connecting -> "Connecting"
                                 is McpStatus.Connected -> "Connected"
-                                is McpStatus.Error -> "Error: ${(status as McpStatus.Error).message}"
+                                is McpStatus.Reconnecting -> "Reconnecting (${s.attempt}/${s.maxAttempts})"
+                                is McpStatus.Error -> "Error: ${s.message}"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = LocalContentColor.current.copy(alpha = 0.8f),
