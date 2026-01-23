@@ -760,5 +760,6 @@
   <string name="setting_display_page_paste_long_text_as_file_desc">When pasting text exceeds the threshold, automatically save it as a file attachment</string>
   <string name="setting_display_page_paste_long_text_threshold_title">Text Length Threshold</string>
   <string name="setting_mcp_page_needs_approval">Needs Approval</string>
+  <string name="rikkahub_provider_description">Official free AI service, using user sponsorship funds to provide some free models for new users as fallback, no API key required. Has strict rate limits, if you have purchased your own provider, please use your own provider as much as possible.</string>
 </resources>
 

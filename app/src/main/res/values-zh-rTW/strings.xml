@@ -760,5 +760,6 @@
   <string name="prompt_page_role_user">使用者（包裹在系統標籤中）</string>
   <string name="prompt_page_role_assistant">助手（預填充）</string>
   <string name="prompt_page_injection_role">注入角色</string>
+  <string name="rikkahub_provider_description">官方免費 AI 服務，使用用戶贊助資金為新用戶提供部分免費模型作為備用，無需 API 金鑰。具有嚴格速率限制，若您已購買自己的提供者，請盡量使用自有提供者。</string>
 </resources>
 

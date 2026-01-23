@@ -132,6 +132,7 @@ private fun computeAIIconByName(name: String): String? {
         PATTERN_TOKENPONY.containsMatchIn(lowerName) -> "tokenpony.svg"
         PATTERN_LING.containsMatchIn(lowerName) -> "ling.png"
         PATTERN_MIMO.containsMatchIn(lowerName) -> "mimo.jpeg"
+        PATTERN_RIKKAHUB.containsMatchIn(lowerName) -> "rikkahub.svg"
 
         PATTERN_SEARCH_LINKUP.containsMatchIn(lowerName) -> "linkup.png"
         PATTERN_SEARCH_BING.containsMatchIn(lowerName) -> "bing.png"
@@ -153,6 +154,7 @@ private fun computeAIIconByName(name: String): String? {
 
 // 静态缓存和正则模式
 private val ICON_CACHE = mutableMapOf<String, String>()
+private val PATTERN_RIKKAHUB = Regex("rikka|auto")
 private val PATTERN_OPENAI = Regex("(gpt|openai|o\\d)")
 private val PATTERN_GEMINI = Regex("(gemini|nano-banana)")
 private val PATTERN_GOOGLE = Regex("google")

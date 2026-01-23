@@ -760,5 +760,6 @@
   <string name="prompt_page_role_user">ユーザー（システムタグでラップ）</string>
   <string name="prompt_page_role_assistant">アシスタント（プリフィル）</string>
   <string name="prompt_page_injection_role">インジェクションロール</string>
+  <string name="rikkahub_provider_description">公式の無料AIサービスです。ユーザーのスポンサー資金を使い、新規ユーザーのためのフォールバック用の一部無料モデルを提供します。APIキーは不要です。厳しいレート制限があります。独自のプロバイダーを購入済みの場合は、可能な限りそちらをご利用ください。</string>
 </resources>
 
