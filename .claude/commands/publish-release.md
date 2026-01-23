@@ -26,7 +26,8 @@ Updates:
 
 ## 发布
 
-使用github cli创建release, 并上传 app/release/xxx.apk 文件 (仅上传arm64版本)
+使用github cli创建release, 并上传 app/release/xxx.apk 文件
 
-- 标题使用版本号
-- 描述使用更新日志
+- 仅上传arm64版本, 上传前重命名apk，添加版本号到文件名内
+- release标题使用版本号
+- release描述使用更新日志
