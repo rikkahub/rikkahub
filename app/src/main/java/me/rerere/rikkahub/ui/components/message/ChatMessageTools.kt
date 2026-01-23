@@ -158,6 +158,7 @@ fun ToolCallItem(
                 }
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         text = when (toolName) {
@@ -178,6 +179,8 @@ fun ToolCallItem(
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.shimmer(isLoading = loading),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     if (toolName == ToolNames.CREATE_MEMORY || toolName == ToolNames.EDIT_MEMORY) {
                         content.getStringContent("content")?.let { memoryContent ->
