@@ -217,7 +217,7 @@
   <string name="chat_page_search_placeholder">搜尋對話記錄</string>
   <string name="chat_page_today">今天</string>
   <string name="chat_page_yesterday">昨天</string>
-  <string name="chat_size_dialog_content">目前大小：%.2f MB。這可能導致應用程式崩潰或延遲，甚至遺失此對話資料。請盡快建立新對話以繼續聊天。</string>
+  <string name="chat_size_dialog_content">目前訊息數：%1$d。這可能導致應用程式崩潰或延遲，甚至遺失此對話資料。請盡快建立新對話以繼續聊天。</string>
   <string name="chat_size_dialog_title">此對話資料過大</string>
   <string name="citations_count">%1$d 條引用</string>
   <string name="code_block_collapse">摺疊</string>

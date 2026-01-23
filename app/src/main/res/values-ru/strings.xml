@@ -215,7 +215,7 @@
   <string name="chat_page_search_placeholder">Поиск чатов</string>
   <string name="chat_page_today">Сегодня</string>
   <string name="chat_page_yesterday">Вчера</string>
-  <string name="chat_size_dialog_content">Текущий размер: %.2f МБ. Это может привести к вылету или зависанию приложения, а также к потере данных этой беседы. Пожалуйста, создайте новый чат как можно скорее, чтобы продолжить общение.</string>
+  <string name="chat_size_dialog_content">Текущее количество сообщений: %1$d. Это может привести к вылету или зависанию приложения, а также к потере данных этой беседы. Пожалуйста, создайте новый чат как можно скорее, чтобы продолжить общение.</string>
   <string name="chat_size_dialog_title">Данные этого разговора слишком большие</string>
   <string name="citations_count">%1$d цитирований</string>
   <string name="code_block_collapse">Свернуть</string>

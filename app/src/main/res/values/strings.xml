@@ -222,7 +222,7 @@
   <string name="chat_page_search_placeholder">Search chats</string>
   <string name="chat_page_today">Today</string>
   <string name="chat_page_yesterday">Yesterday</string>
-  <string name="chat_size_dialog_content">Current size: %.2f MB. This may cause the application to crash or lag, or even lose this conversation data. Please create a new conversation as soon as possible to continue chatting.</string>
+  <string name="chat_size_dialog_content">Current message count: %1$d. This may cause the application to crash or lag, or even lose this conversation data. Please create a new conversation as soon as possible to continue chatting.</string>
   <string name="chat_size_dialog_title">This conversation data is too large</string>
   <string name="citations_count">%1$d Citations</string>
   <string name="code_block_collapse">Collapse</string>
