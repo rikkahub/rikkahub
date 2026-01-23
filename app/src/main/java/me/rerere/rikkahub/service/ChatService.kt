@@ -16,6 +16,8 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -822,32 +824,47 @@ class ChatService(
 
         val providerHandler = providerManager.getProviderByType(provider)
 
-        // Build the content to compress
-        val contentToCompress = conversation.currentMessages
+        val maxMessagesPerChunk = 256
+        val messagesToCompress = conversation.currentMessages
             .truncate(conversation.truncateIndex)
-            .joinToString("\n\n") { it.summaryAsText() }
 
-        // Build the prompt with placeholders
-        val prompt = settings.compressPrompt.applyPlaceholders(
-            "content" to contentToCompress,
-            "target_tokens" to targetTokens.toString(),
-            "additional_context" to if (additionalPrompt.isNotBlank()) {
-                "Additional instructions from user: $additionalPrompt"
-            } else "",
-            "locale" to Locale.getDefault().displayName
-        )
+        fun splitMessages(messages: List<UIMessage>): List<List<UIMessage>> {
+            if (messages.size <= maxMessagesPerChunk) return listOf(messages)
+            val mid = messages.size / 2
+            val left = splitMessages(messages.subList(0, mid))
+            val right = splitMessages(messages.subList(mid, messages.size))
+            return left + right
+        }
 
-        // Generate the compressed summary
-        val result = providerHandler.generateText(
-            providerSetting = provider,
-            messages = listOf(UIMessage.user(prompt)),
-            params = TextGenerationParams(
-                model = model,
-            ),
-        )
+        suspend fun compressMessages(messages: List<UIMessage>): String {
+            val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText() }
+            val prompt = settings.compressPrompt.applyPlaceholders(
+                "content" to contentToCompress,
+                "target_tokens" to targetTokens.toString(),
+                "additional_context" to if (additionalPrompt.isNotBlank()) {
+                    "Additional instructions from user: $additionalPrompt"
+                } else "",
+                "locale" to Locale.getDefault().displayName
+            )
 
-        val compressedSummary = result.choices[0].message?.toText()?.trim()
-            ?: throw IllegalStateException("Failed to generate compressed summary")
+            val result = providerHandler.generateText(
+                providerSetting = provider,
+                messages = listOf(UIMessage.user(prompt)),
+                params = TextGenerationParams(
+                    model = model,
+                ),
+            )
+
+            return result.choices[0].message?.toText()?.trim()
+                ?: throw IllegalStateException("Failed to generate compressed summary")
+        }
+
+        val compressedSummary = coroutineScope {
+            splitMessages(messagesToCompress)
+                .map { chunk -> async { compressMessages(chunk) } }
+                .awaitAll()
+                .joinToString("\n\n")
+        }
 
         // Create new conversation with compressed history as user message
         val summaryMessage = UIMessage.user(compressedSummary)
