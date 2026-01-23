@@ -364,6 +364,13 @@ private fun SearchProviderCard(
                                 onUpdateService(options)
                             }
                         }
+
+                        is SearchServiceOptions.RikkaHubOptions -> {
+                            RikkaHubOptions(options as SearchServiceOptions.RikkaHubOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
                     }
 
                     ProvideTextStyle(MaterialTheme.typography.labelMedium) {
@@ -919,4 +926,55 @@ private fun BochaOptions(
             )
         }
     )
+}
+
+@Composable
+private fun RikkaHubOptions(
+    options: SearchServiceOptions.RikkaHubOptions,
+    onUpdateOptions: (SearchServiceOptions.RikkaHubOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text("Depth")
+        }
+    ) {
+        val depthOptions = listOf("standard", "deep")
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            depthOptions.forEachIndexed { index, depth ->
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = depthOptions.size),
+                    onClick = {
+                        onUpdateOptions(
+                            options.copy(
+                                depth = depth
+                            )
+                        )
+                    },
+                    selected = options.depth == depth
+                ) {
+                    Text(depth.replaceFirstChar { it.uppercase() })
+                }
+            }
+        }
+    }
 }
