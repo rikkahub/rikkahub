@@ -675,6 +675,11 @@
   <string name="prompt_page_position_after_system">After System Prompt</string>
   <string name="prompt_page_position_top_of_chat">Top of Chat</string>
   <string name="prompt_page_position_bottom_of_chat">Before Latest Message</string>
+  <string name="prompt_page_position_at_depth">At Depth</string>
+  <string name="prompt_page_inject_depth">Inject Depth</string>
+  <string name="prompt_page_injection_role">Injection Role</string>
+  <string name="prompt_page_role_user">User (wrapped in system tag)</string>
+  <string name="prompt_page_role_assistant">Assistant (prefill)</string>
   <string name="prompt_page_lorebook_empty">No Lorebooks</string>
   <string name="prompt_page_add_lorebook">Add Lorebook</string>
   <string name="prompt_page_unnamed_lorebook">Unnamed Lorebook</string>
@@ -720,8 +725,6 @@
   <string name="text_area_fullscreen_edit">Fullscreen edit</string>
   <string name="text_area_import_from_file">Import from file</string>
   <string name="text_area_save">Save</string>
-  <string name="prompt_page_position_at_depth">At Depth</string>
-  <string name="prompt_page_inject_depth">Inject Depth</string>
   <string name="setting_page_request_logs">Request Logs</string>
   <string name="setting_page_request_logs_desc">View HTTP request logs</string>
   <string name="backup_page_s3_endpoint">Endpoint</string>
