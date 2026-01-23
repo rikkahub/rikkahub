@@ -757,5 +757,8 @@
   <string name="chat_message_tool_deny_dialog_title">拒绝工具执行</string>
   <string name="chat_message_tool_deny_dialog_hint">原因（可选）</string>
   <string name="setting_mcp_page_needs_approval">需要审批</string>
+  <string name="prompt_page_role_user">用户（包裹在系统标签中）</string>
+  <string name="prompt_page_role_assistant">助手（预填充）</string>
+  <string name="prompt_page_injection_role">注入角色</string>
 </resources>
 

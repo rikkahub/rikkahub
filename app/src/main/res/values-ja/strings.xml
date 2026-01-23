@@ -757,5 +757,8 @@
   <string name="chat_message_tool_deny_dialog_title">ツール実行を拒否</string>
   <string name="chat_message_tool_deny_dialog_hint">理由（任意）</string>
   <string name="setting_mcp_page_needs_approval">承認が必要</string>
+  <string name="prompt_page_role_user">ユーザー（システムタグでラップ）</string>
+  <string name="prompt_page_role_assistant">アシスタント（プリフィル）</string>
+  <string name="prompt_page_injection_role">インジェクションロール</string>
 </resources>
 
