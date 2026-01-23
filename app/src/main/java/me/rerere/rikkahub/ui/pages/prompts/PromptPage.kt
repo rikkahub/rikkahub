@@ -78,13 +78,13 @@ import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
+import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.export.LorebookSerializer
 import me.rerere.rikkahub.data.export.ModeInjectionSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
 import me.rerere.rikkahub.data.model.InjectionPosition
-import me.rerere.rikkahub.data.model.InjectionRole
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -533,11 +533,11 @@ private fun getPositionLabel(position: InjectionPosition): String = when (positi
 
 @Composable
 private fun InjectionRoleSelector(
-    role: InjectionRole,
-    onSelect: (InjectionRole) -> Unit
+    role: MessageRole,
+    onSelect: (MessageRole) -> Unit
 ) {
     Select(
-        options = InjectionRole.entries,
+        options = listOf(MessageRole.USER, MessageRole.ASSISTANT),
         selectedOption = role,
         onOptionSelected = onSelect,
         optionToString = { getRoleLabel(it) },
@@ -546,9 +546,10 @@ private fun InjectionRoleSelector(
 }
 
 @Composable
-private fun getRoleLabel(role: InjectionRole): String = when (role) {
-    InjectionRole.USER -> stringResource(R.string.prompt_page_role_user)
-    InjectionRole.ASSISTANT -> stringResource(R.string.prompt_page_role_assistant)
+private fun getRoleLabel(role: MessageRole): String = when (role) {
+    MessageRole.USER -> stringResource(R.string.prompt_page_role_user)
+    MessageRole.ASSISTANT -> stringResource(R.string.prompt_page_role_assistant)
+    else -> role.name
 }
 
 // ==================== Lorebook Tab ====================

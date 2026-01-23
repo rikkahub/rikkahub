@@ -5,7 +5,6 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
-import me.rerere.rikkahub.data.model.InjectionRole
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.extractContextForMatching
@@ -167,8 +166,7 @@ internal fun applyInjections(
         var insertIndex = result.indexOfFirst { it.role == MessageRole.USER }
             .takeIf { it >= 0 } ?: result.size
         insertIndex = findSafeInsertIndex(result, insertIndex)
-        topInjections.forEach { injection ->
-            val message = createInjectionMessage(injection)
+        createMergedInjectionMessages(topInjections).forEach { message ->
             result.add(insertIndex, message)
             insertIndex++
         }
@@ -179,8 +177,7 @@ internal fun applyInjections(
     if (!bottomInjections.isNullOrEmpty()) {
         var insertIndex = (result.size - 1).coerceAtLeast(0)
         insertIndex = findSafeInsertIndex(result, insertIndex)
-        bottomInjections.forEach { injection ->
-            val message = createInjectionMessage(injection)
+        createMergedInjectionMessages(bottomInjections).forEach { message ->
             result.add(insertIndex, message)
             insertIndex++
         }
@@ -197,8 +194,7 @@ internal fun applyInjections(
             // depth=1 表示在最后一条消息之前，depth=2 表示在倒数第二条之前...
             var insertIndex = (result.size - depth).coerceIn(0, result.size)
             insertIndex = findSafeInsertIndex(result, insertIndex)
-            injections.forEach { injection ->
-                val message = createInjectionMessage(injection)
+            createMergedInjectionMessages(injections).forEach { message ->
                 result.add(insertIndex, message)
                 insertIndex++
             }
@@ -209,13 +205,19 @@ internal fun applyInjections(
 }
 
 /**
- * 根据注入配置创建消息
+ * 将同一 role 的注入合并成消息列表
+ * 按 role 分组后合并内容，返回合并后的消息列表
  */
-private fun createInjectionMessage(injection: PromptInjection): UIMessage {
-    return when (injection.role) {
-        InjectionRole.ASSISTANT -> UIMessage.assistant(injection.content)
-        InjectionRole.USER -> UIMessage.user(wrapSystemTag(injection.content))
-    }
+private fun createMergedInjectionMessages(injections: List<PromptInjection>): List<UIMessage> {
+    return injections
+        .groupBy { it.role }
+        .map { (role, grouped) ->
+            val mergedContent = grouped.joinToString("\n") { it.content }
+            when (role) {
+                MessageRole.ASSISTANT -> UIMessage.assistant(mergedContent)
+                else -> UIMessage.user(wrapSystemTag(mergedContent))
+            }
+        }
 }
 
 /**

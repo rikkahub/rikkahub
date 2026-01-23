@@ -6,7 +6,6 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
-import me.rerere.rikkahub.data.model.InjectionRole
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import org.junit.Assert.assertEquals
@@ -33,7 +32,7 @@ class PromptInjectionTransformerTest {
         position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
         content: String = "Injected content",
         injectDepth: Int = 4,
-        role: InjectionRole = InjectionRole.USER
+        role: MessageRole = MessageRole.USER
     ) = PromptInjection.ModeInjection(
         id = id,
         name = name,
@@ -53,7 +52,7 @@ class PromptInjectionTransformerTest {
         position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
         content: String = "Regex injected content",
         injectDepth: Int = 4,
-        role: InjectionRole = InjectionRole.USER,
+        role: MessageRole = MessageRole.USER,
         keywords: List<String> = listOf("trigger"),
         useRegex: Boolean = false,
         caseSensitive: Boolean = false,
