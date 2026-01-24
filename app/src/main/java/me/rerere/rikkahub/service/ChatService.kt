@@ -813,7 +813,8 @@ class ChatService(
         conversationId: Uuid,
         conversation: Conversation,
         additionalPrompt: String,
-        targetTokens: Int
+        targetTokens: Int,
+        keepRecentMessages: Int = 32
     ): Result<Unit> = runCatching {
         val settings = settingsStore.settingsFlow.first()
         val model = settings.findModelById(settings.compressModelId)
@@ -825,8 +826,22 @@ class ChatService(
         val providerHandler = providerManager.getProviderByType(provider)
 
         val maxMessagesPerChunk = 256
-        val messagesToCompress = conversation.currentMessages
-            .truncate(conversation.truncateIndex)
+        val allMessages = conversation.currentMessages.truncate(conversation.truncateIndex)
+
+        // Split messages into those to compress and those to keep
+        val messagesToCompress: List<UIMessage>
+        val messagesToKeep: List<UIMessage>
+
+        if (keepRecentMessages > 0 && allMessages.size > keepRecentMessages) {
+            messagesToCompress = allMessages.dropLast(keepRecentMessages)
+            messagesToKeep = allMessages.takeLast(keepRecentMessages)
+        } else if (keepRecentMessages > 0) {
+            // Not enough messages to compress while keeping recent ones
+            throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
+        } else {
+            messagesToCompress = allMessages
+            messagesToKeep = emptyList()
+        }
 
         fun splitMessages(messages: List<UIMessage>): List<List<UIMessage>> {
             if (messages.size <= maxMessagesPerChunk) return listOf(messages)
@@ -866,10 +881,14 @@ class ChatService(
                 .joinToString("\n\n")
         }
 
-        // Create new conversation with compressed history as user message
+        // Create new conversation with compressed history as user message + kept messages
         val summaryMessage = UIMessage.user(compressedSummary)
+        val newMessageNodes = buildList {
+            add(summaryMessage.toMessageNode())
+            addAll(messagesToKeep.map { it.toMessageNode() })
+        }
         val newConversation = conversation.copy(
-            messageNodes = listOf(summaryMessage.toMessageNode()),
+            messageNodes = newMessageNodes,
             truncateIndex = -1,
             chatSuggestions = emptyList(),
         )

@@ -344,8 +344,8 @@ private fun ChatPageContent(
                     onClearContext = {
                         vm.handleMessageTruncate()
                     },
-                    onCompressContext = { additionalPrompt, targetTokens ->
-                        vm.handleCompressContext(additionalPrompt, targetTokens)
+                    onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
+                        vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
                     },
                 )
             },

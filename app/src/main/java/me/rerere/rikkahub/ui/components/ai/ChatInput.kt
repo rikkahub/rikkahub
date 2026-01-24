@@ -164,7 +164,7 @@ fun ChatInput(
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
     onClearContext: () -> Unit,
-    onCompressContext: (additionalPrompt: String, targetTokens: Int) -> Job,
+    onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
     onLongSendClick: () -> Unit,
@@ -731,7 +731,7 @@ private fun FilesPicker(
     assistant: Assistant,
     state: ChatInputState,
     onClearContext: () -> Unit,
-    onCompressContext: (additionalPrompt: String, targetTokens: Int) -> Job,
+    onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     showInjectionSheet: Boolean,
     onShowInjectionSheetChange: (Boolean) -> Unit,
@@ -887,8 +887,8 @@ private fun FilesPicker(
                 onShowCompressDialogChange(false)
                 onDismiss()
             },
-            onConfirm = { additionalPrompt, targetTokens ->
-                onCompressContext(additionalPrompt, targetTokens)
+            onConfirm = { additionalPrompt, targetTokens, keepRecentMessages ->
+                onCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
             }
         )
     }

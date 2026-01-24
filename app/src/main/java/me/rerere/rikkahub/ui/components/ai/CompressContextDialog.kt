@@ -33,11 +33,13 @@ import me.rerere.rikkahub.ui.components.ui.RandomGridLoading
 @Composable
 fun CompressContextDialog(
     onDismiss: () -> Unit,
-    onConfirm: (additionalPrompt: String, targetTokens: Int) -> Job
+    onConfirm: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job
 ) {
     var additionalPrompt by remember { mutableStateOf("") }
     var selectedTokens by remember { mutableIntStateOf(2000) }
+    var keepRecentMessages by remember { mutableIntStateOf(32) }
     val tokenOptions = listOf(500, 1000, 2000, 4000)
+    val keepRecentOptions = listOf(0, 16, 32, 64)
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val isLoading = currentJob?.isActive == true
 
@@ -101,6 +103,28 @@ fun CompressContextDialog(
                         }
                     }
 
+                    // Keep recent messages selector
+                    Text(
+                        text = stringResource(R.string.chat_page_compress_keep_recent),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        keepRecentOptions.forEachIndexed { index, count ->
+                            SegmentedButton(
+                                selected = keepRecentMessages == count,
+                                onClick = { keepRecentMessages = count },
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = keepRecentOptions.size
+                                )
+                            ) {
+                                Text("$count")
+                            }
+                        }
+                    }
+
                     // Additional context input
                     OutlinedTextField(
                         value = additionalPrompt,
@@ -134,7 +158,7 @@ fun CompressContextDialog(
                 }
             } else {
                 TextButton(onClick = {
-                    currentJob = onConfirm(additionalPrompt, selectedTokens)
+                    currentJob = onConfirm(additionalPrompt, selectedTokens, keepRecentMessages)
                 }) {
                     Text(stringResource(R.string.confirm))
                 }

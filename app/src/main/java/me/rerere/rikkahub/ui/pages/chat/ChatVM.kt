@@ -346,13 +346,14 @@ class ChatVM(
         }
     }
 
-    fun handleCompressContext(additionalPrompt: String, targetTokens: Int): Job {
+    fun handleCompressContext(additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int): Job {
         return viewModelScope.launch {
             chatService.compressConversation(
                 _conversationId,
                 conversation.value,
                 additionalPrompt,
-                targetTokens
+                targetTokens,
+                keepRecentMessages
             ).onFailure {
                 chatService.addError(it)
             }
