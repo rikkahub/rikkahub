@@ -874,17 +874,17 @@ class ChatService(
                 ?: throw IllegalStateException("Failed to generate compressed summary")
         }
 
-        val compressedSummary = coroutineScope {
+        val compressedSummaries = coroutineScope {
             splitMessages(messagesToCompress)
                 .map { chunk -> async { compressMessages(chunk) } }
                 .awaitAll()
-                .joinToString("\n\n")
         }
 
-        // Create new conversation with compressed history as user message + kept messages
-        val summaryMessage = UIMessage.user(compressedSummary)
+        // Create new conversation with compressed history as multiple user messages + kept messages
         val newMessageNodes = buildList {
-            add(summaryMessage.toMessageNode())
+            compressedSummaries.forEach { summary ->
+                add(UIMessage.user(summary).toMessageNode())
+            }
             addAll(messagesToKeep.map { it.toMessageNode() })
         }
         val newConversation = conversation.copy(
