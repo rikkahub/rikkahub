@@ -237,7 +237,13 @@ class ConversationRepository(
             var offset = 0
             val pageSize = 64
             while (true) {
-                val page = messageNodeDAO.getNodesOfConversationPaged(conversationId, pageSize, offset)
+                val page = try {
+                    messageNodeDAO.getNodesOfConversationPaged(conversationId, pageSize, offset)
+                } catch (e: SQLiteBlobTooBigException) {
+                    e.printStackTrace()
+                    offset += pageSize
+                    continue
+                }
                 if (page.isEmpty()) break
                 page.forEach { entity ->
                     nodes.add(
