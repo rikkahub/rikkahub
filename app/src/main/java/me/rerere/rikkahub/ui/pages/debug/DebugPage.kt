@@ -197,6 +197,15 @@ private fun MainPage(vm: DebugVM) {
             Text("创建超大对话 (30MB)")
         }
 
+        Button(
+            onClick = {
+                vm.createConversationWithMessages(1024)
+                toaster.show("正在创建 1024 条消息对话...")
+            }
+        ) {
+            Text("创建 1024 个消息的聊天")
+        }
+
         var markdown by remember { mutableStateOf("") }
         MarkdownBlock(markdown, modifier = Modifier.fillMaxWidth())
         MathBlock(markdown)

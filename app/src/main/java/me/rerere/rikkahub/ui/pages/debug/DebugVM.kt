@@ -18,6 +18,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
+import kotlin.random.Random
 import kotlin.uuid.Uuid
 
 class DebugVM(
@@ -85,5 +86,42 @@ class DebugVM(
 
             conversationRepository.insertConversation(conversation)
         }
+    }
+
+    fun createConversationWithMessages(messageCount: Int = 1024) {
+        viewModelScope.launch {
+            val messageNodes = ArrayList<MessageNode>(messageCount)
+            val timeZone = TimeZone.currentSystemDefault()
+            repeat(messageCount) { index ->
+                val role = if (index % 2 == 0) MessageRole.USER else MessageRole.ASSISTANT
+                val message = UIMessage(
+                    id = Uuid.random(),
+                    role = role,
+                    parts = listOf(UIMessagePart.Text(randomMessageText(index, role))),
+                    createdAt = Clock.System.now().toLocalDateTime(timeZone),
+                )
+                messageNodes.add(MessageNode.of(message))
+            }
+
+            val conversation = Conversation(
+                id = Uuid.random(),
+                assistantId = DEFAULT_ASSISTANT_ID,
+                title = "${messageCount}条消息测试",
+                messageNodes = messageNodes,
+            )
+
+            conversationRepository.insertConversation(conversation)
+        }
+    }
+
+    private fun randomMessageText(index: Int, role: MessageRole): String {
+        val fragments = listOf(
+            "快速", "随机", "消息", "样例", "用于", "测试", "列表", "渲染", "滚动", "性能",
+            "聊天", "对话", "内容", "结构", "验证", "分页", "顺序", "稳定", "系统",
+        )
+        val wordCount = Random.nextInt(6, 14)
+        val prefix = if (role == MessageRole.USER) "用户" else "助手"
+        val body = List(wordCount) { fragments.random() }.joinToString(" ")
+        return "$prefix#${index + 1}: $body"
     }
 }
