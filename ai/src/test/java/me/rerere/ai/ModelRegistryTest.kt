@@ -31,10 +31,11 @@ class ModelRegistryTest {
     }
 
     @Test
-    fun testClaude45() {
-        assert(ModelRegistry.CLAUDE_4_5.match("claude-sonnet-4.5-20250929"))
-        assert(ModelRegistry.CLAUDE_4_5.match("claude-4.5-sonnet"))
-        assert(!ModelRegistry.CLAUDE_4_5.match("claude-sonnet-4-20250929"))
-        assert(!ModelRegistry.CLAUDE_4_5.match("claude-4-sonnet"))
+    fun testClaudeSeries() {
+        assert(ModelRegistry.CLAUDE_SERIES.match("claude-sonnet-4.5-20250929"))
+        assert(ModelRegistry.CLAUDE_SERIES.match("claude-4.5-sonnet"))
+        assert(ModelRegistry.CLAUDE_SERIES.match("claude-sonnet-4-20250929"))
+        assert(ModelRegistry.CLAUDE_SERIES.match("claude-4-sonnet"))
+        assert(ModelRegistry.CLAUDE_SERIES.match("claude-3.5-sonnet"))
     }
 }
