@@ -317,22 +317,9 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
-                // Handle executed tools as tool results
-                message.getTools().filter { it.isExecuted }.forEach { tool ->
-                    add(buildJsonObject {
-                        put("role", "user")
-                        putJsonArray("content") {
-                            add(buildJsonObject {
-                                put("type", "tool_result")
-                                put("tool_use_id", tool.toolCallId)
-                                put(
-                                    "content",
-                                    tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
-                            })
-                        }
-                    })
-                }
+                val executedTools = message.getTools().filter { it.isExecuted }
 
+                // 1. 先添加主消息（包含 tool_use，无论是否已执行）
                 add(buildJsonObject {
                     // role
                     put("role", JsonPrimitive(message.role.name.lowercase()))
@@ -367,16 +354,14 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                     })
                                 }
 
-                                // Handle Tool parts that are not executed
+                                // Tool parts: 始终生成 tool_use
                                 is UIMessagePart.Tool -> {
-                                    if (!part.isExecuted) {
-                                        add(buildJsonObject {
-                                            put("type", "tool_use")
-                                            put("id", part.toolCallId)
-                                            put("name", part.toolName)
-                                            put("input", json.parseToJsonElement(part.input.ifBlank { "{}" }))
-                                        })
-                                    }
+                                    add(buildJsonObject {
+                                        put("type", "tool_use")
+                                        put("id", part.toolCallId)
+                                        put("name", part.toolName)
+                                        put("input", json.parseToJsonElement(part.input.ifBlank { "{}" }))
+                                    })
                                 }
 
                                 is UIMessagePart.Reasoning -> {
@@ -392,13 +377,32 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                 }
 
                                 else -> {
-                                    Log.w(TAG, "buildMessages: message part not supported: $part")
-                                    // DO NOTHING
+                                    // Unsupported part type
                                 }
                             }
                         }
                     }
                 })
+
+                // 2. 如果有已执行的 Tools，追加 user 消息包含 tool_result
+                if (executedTools.isNotEmpty()) {
+                    add(buildJsonObject {
+                        put("role", "user")
+                        putJsonArray("content") {
+                            executedTools.forEach { tool ->
+                                add(buildJsonObject {
+                                    put("type", "tool_result")
+                                    put("tool_use_id", tool.toolCallId)
+                                    put(
+                                        "content",
+                                        tool.output.filterIsInstance<UIMessagePart.Text>()
+                                            .joinToString("\n") { it.text }
+                                    )
+                                })
+                            }
+                        }
+                    })
+                }
             }
     }
 
