@@ -228,82 +228,81 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             .filter {
                 it.isValidToUpload() && it.role != MessageRole.SYSTEM
             }
-            .forEachIndexed { index, message ->
-                // 1. 先添加当前消息
-                add(buildJsonObject {
-                    // role
-                    put("role", JsonPrimitive(message.role.name.lowercase()))
+            .forEach { message ->
+                val tools = message.getTools()
+                val hasContent = message.parts.any { it is UIMessagePart.Text || it is UIMessagePart.Image }
 
-                    // content
-                    if (message.parts.isOnlyTextPart()) {
-                        // 如果只是纯文本，直接赋值给content
-                        put(
-                            "content",
-                            message.parts.filterIsInstance<UIMessagePart.Text>().first().text
-                        )
-                    } else {
-                        // 否则，使用parts构建
-                        putJsonArray("content") {
-                            message.parts.forEach { part ->
-                                when (part) {
-                                    is UIMessagePart.Text -> {
-                                        add(buildJsonObject {
-                                            put(
-                                                "type",
-                                                if (message.role == MessageRole.USER) "input_text" else "output_text"
-                                            )
-                                            put("text", part.text)
-                                        })
-                                    }
+                // 1. 只有当消息有实际内容（文本或图片）时才添加主消息
+                if (hasContent) {
+                    add(buildJsonObject {
+                        // role
+                        put("role", JsonPrimitive(message.role.name.lowercase()))
 
-                                    is UIMessagePart.Image -> {
-                                        add(buildJsonObject {
-                                            part.encodeBase64().onSuccess { encodedImage ->
+                        // content
+                        if (message.parts.isOnlyTextPart()) {
+                            // 如果只是纯文本，直接赋值给content
+                            put(
+                                "content",
+                                message.parts.filterIsInstance<UIMessagePart.Text>().first().text
+                            )
+                        } else {
+                            // 否则，使用parts构建
+                            putJsonArray("content") {
+                                message.parts.forEach { part ->
+                                    when (part) {
+                                        is UIMessagePart.Text -> {
+                                            add(buildJsonObject {
                                                 put(
                                                     "type",
-                                                    if (message.role == MessageRole.USER) "input_image" else "output_image"
+                                                    if (message.role == MessageRole.USER) "input_text" else "output_text"
                                                 )
-                                                put("image_url", encodedImage.base64)
-                                            }.onFailure {
-                                                it.printStackTrace()
-                                                println("encode image failed: ${part.url}")
+                                                put("text", part.text)
+                                            })
+                                        }
 
-                                                put("type", "input_text")
-                                                put(
-                                                    "text",
-                                                    "Error: Failed to encode image to base64"
-                                                )
-                                            }
-                                        })
-                                    }
+                                        is UIMessagePart.Image -> {
+                                            add(buildJsonObject {
+                                                part.encodeBase64().onSuccess { encodedImage ->
+                                                    put(
+                                                        "type",
+                                                        if (message.role == MessageRole.USER) "input_image" else "output_image"
+                                                    )
+                                                    put("image_url", encodedImage.base64)
+                                                }.onFailure {
+                                                    it.printStackTrace()
+                                                    println("encode image failed: ${part.url}")
 
-                                    else -> {
-                                        Log.w(
-                                            TAG,
-                                            "buildMessages: message part not supported: $part"
-                                        )
-                                        // DO NOTHING
+                                                    put("type", "input_text")
+                                                    put(
+                                                        "text",
+                                                        "Error: Failed to encode image to base64"
+                                                    )
+                                                }
+                                            })
+                                        }
+
+                                        else -> {
+                                            // Tool parts are handled separately below
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                })
+                    })
+                }
 
                 // 2. 添加所有 tool_calls（无论是否已执行）
-                message.getTools()
-                    .takeIf { it.isNotEmpty() }
-                    ?.forEach { tool ->
-                        add(buildJsonObject {
-                            put("type", "function_call")
-                            put("call_id", tool.toolCallId)
-                            put("name", tool.toolName)
-                            put("arguments", tool.input)
-                        })
-                    }
+                tools.forEach { tool ->
+                    add(buildJsonObject {
+                        put("type", "function_call")
+                        put("call_id", tool.toolCallId)
+                        put("name", tool.toolName)
+                        put("arguments", tool.input)
+                    })
+                }
 
                 // 3. 添加已执行工具的 tool results
-                message.getTools().filter { it.isExecuted }.forEach { tool ->
+                tools.filter { it.isExecuted }.forEach { tool ->
                     add(buildJsonObject {
                         put("type", "function_call_output")
                         put("call_id", tool.toolCallId)
