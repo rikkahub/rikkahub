@@ -546,7 +546,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
             jsonObject.containsKey("functionCall") -> {
                 UIMessagePart.Tool(
-                    toolCallId = "",
+                    toolCallId = Uuid.random().toString(),
                     toolName = jsonObject["functionCall"]!!.jsonObject["name"]!!.jsonPrimitive.content,
                     input = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
                     output = emptyList(),
