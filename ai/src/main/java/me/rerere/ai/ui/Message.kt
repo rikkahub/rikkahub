@@ -70,7 +70,7 @@ data class UIMessage(
 
                     is UIMessagePart.Reasoning -> {
                         // Skip empty reasoning deltas
-                        if (deltaPart.reasoning.isEmpty()) {
+                        if (deltaPart.reasoning.isEmpty() && deltaPart.metadata == null) {
                             acc
                         } else {
                             val lastPart = acc.lastOrNull()
