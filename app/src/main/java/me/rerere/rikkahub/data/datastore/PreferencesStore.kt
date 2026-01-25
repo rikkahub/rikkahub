@@ -403,6 +403,7 @@ data class DisplaySetting(
     val autoPlayTTSAfterGeneration: Boolean = false,
     val pasteLongTextAsFile: Boolean = false,
     val pasteLongTextThreshold: Int = 1000,
+    val sendOnEnter: Boolean = false,
 )
 
 @Serializable

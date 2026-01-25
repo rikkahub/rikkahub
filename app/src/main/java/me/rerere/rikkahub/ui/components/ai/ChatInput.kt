@@ -46,6 +46,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -223,7 +225,11 @@ fun ChatInput(
             MediaFileInputRow(state = state, context = context)
 
             // Text Input Row
-            TextInputRow(state = state, context = context)
+            TextInputRow(
+                state = state,
+                context = context,
+                onSendMessage = { sendMessage() }
+            )
 
             // Actions Row
             Row(
@@ -393,6 +399,7 @@ fun ChatInput(
 private fun TextInputRow(
     state: ChatInputState,
     context: Context,
+    onSendMessage: () -> Unit,
 ) {
     val settings = LocalSettings.current
     val assistant = settings.getCurrentAssistant()
@@ -485,6 +492,14 @@ private fun TextInputRow(
                         Text(stringResource(R.string.chat_input_placeholder))
                     },
                     lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = if (settings.displaySetting.sendOnEnter) ImeAction.Send else ImeAction.Default
+                    ),
+                    onKeyboardAction = {
+                        if (settings.displaySetting.sendOnEnter && !state.isEmpty()) {
+                            onSendMessage()
+                        }
+                    },
                     colors = TextFieldDefaults.colors().copy(
                         unfocusedIndicatorColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,

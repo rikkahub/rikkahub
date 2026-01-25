@@ -761,5 +761,7 @@
   <string name="rikkahub_provider_description">Официальный бесплатный AI-сервис, использующий средства спонсоров для предоставления новым пользователям бесплатных моделей в качестве резерва; API-ключ не требуется. Действуют строгие ограничения по частоте запросов. Если у вас есть собственный провайдер, используйте его по возможности.</string>
   <string name="chat_page_compress_keep_recent">Сохранять недавние сообщения</string>
   <string name="chat_page_compress_not_enough_messages">Недостаточно сообщений для сжатия. Уменьшите количество сохраняемых сообщений или добавьте больше сообщений.</string>
+  <string name="setting_display_page_send_on_enter_title">Отправлять по Enter</string>
+  <string name="setting_display_page_send_on_enter_desc">Нажмите Enter, чтобы отправить сообщение, а не добавить новую строку</string>
 </resources>
 

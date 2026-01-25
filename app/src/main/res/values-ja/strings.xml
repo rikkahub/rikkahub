@@ -763,5 +763,7 @@
   <string name="rikkahub_provider_description">公式の無料AIサービスです。ユーザーのスポンサー資金を使い、新規ユーザーのためのフォールバック用の一部無料モデルを提供します。APIキーは不要です。厳しいレート制限があります。独自のプロバイダーを購入済みの場合は、可能な限りそちらをご利用ください。</string>
   <string name="chat_page_compress_keep_recent">最近のメッセージを保持</string>
   <string name="chat_page_compress_not_enough_messages">圧縮するためのメッセージが不足しています。保持するメッセージ数を減らすか、メッセージを追加してください。</string>
+  <string name="setting_display_page_send_on_enter_title">Enterキーで送信</string>
+  <string name="setting_display_page_send_on_enter_desc">Enterキーでメッセージを送信し、改行しない</string>
 </resources>
 

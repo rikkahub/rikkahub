@@ -495,6 +495,26 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 ListItem(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_send_on_enter_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_send_on_enter_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.sendOnEnter,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(sendOnEnter = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
                         Text(stringResource(R.string.setting_display_page_show_message_jumper_title))
                     },
                     supportingContent = {

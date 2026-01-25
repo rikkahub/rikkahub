@@ -763,5 +763,7 @@
   <string name="rikkahub_provider_description">Official free AI service, using user sponsorship funds to provide some free models for new users as fallback, no API key required. Has strict rate limits, if you have purchased your own provider, please use your own provider as much as possible.</string>
   <string name="chat_page_compress_keep_recent">Keep recent messages</string>
   <string name="chat_page_compress_not_enough_messages">Not enough messages to compress. Reduce the number of messages to keep or add more messages.</string>
+  <string name="setting_display_page_send_on_enter_title">Send on Enter</string>
+  <string name="setting_display_page_send_on_enter_desc">Press Enter to send message instead of adding a new line</string>
 </resources>
 
