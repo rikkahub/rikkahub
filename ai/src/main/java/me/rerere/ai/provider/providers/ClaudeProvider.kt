@@ -317,20 +317,20 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
-                if (message.role == MessageRole.TOOL) {
-                    message.getToolResults().forEach { result ->
-                        add(buildJsonObject {
-                            put("role", "user")
-                            putJsonArray("content") {
-                                add(buildJsonObject {
-                                    put("type", "tool_result")
-                                    put("tool_use_id", result.toolCallId)
-                                    put("content", json.encodeToString(result.content))
-                                })
-                            }
-                        })
-                    }
-                    return@forEach
+                // Handle executed tools as tool results
+                message.getTools().filter { it.isExecuted }.forEach { tool ->
+                    add(buildJsonObject {
+                        put("role", "user")
+                        putJsonArray("content") {
+                            add(buildJsonObject {
+                                put("type", "tool_result")
+                                put("tool_use_id", tool.toolCallId)
+                                put(
+                                    "content",
+                                    tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                            })
+                        }
+                    })
                 }
 
                 add(buildJsonObject {
@@ -367,13 +367,16 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                     })
                                 }
 
-                                is UIMessagePart.ToolCall -> {
-                                    add(buildJsonObject {
-                                        put("type", "tool_use")
-                                        put("id", part.toolCallId)
-                                        put("name", part.toolName)
-                                        put("input", json.parseToJsonElement(part.arguments))
-                                    })
+                                // Handle Tool parts that are not executed
+                                is UIMessagePart.Tool -> {
+                                    if (!part.isExecuted) {
+                                        add(buildJsonObject {
+                                            put("type", "tool_use")
+                                            put("id", part.toolCallId)
+                                            put("name", part.toolName)
+                                            put("input", json.parseToJsonElement(part.input.ifBlank { "{}" }))
+                                        })
+                                    }
                                 }
 
                                 is UIMessagePart.Reasoning -> {
@@ -409,22 +412,26 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             when (type) {
                 "text", "text_delta" -> {
                     val text = block["text"]?.jsonPrimitive?.contentOrNull ?: ""
-                    parts.add(UIMessagePart.Text(text))
+                    if (text.isNotEmpty()) {
+                        parts.add(UIMessagePart.Text(text))
+                    }
                 }
 
                 "thinking", "thinking_delta", "signature_delta" -> {
                     val thinking = block["thinking"]?.jsonPrimitive?.contentOrNull ?: ""
                     val signature = block["signature"]?.jsonPrimitive?.contentOrNull
-                    val reasoning = UIMessagePart.Reasoning(
-                        reasoning = thinking,
-                        createdAt = Clock.System.now(),
-                    )
-                    if (signature != null) {
-                        reasoning.metadata = buildJsonObject {
-                            put("signature", signature)
+                    if (thinking.isNotEmpty() || signature != null) {
+                        val reasoning = UIMessagePart.Reasoning(
+                            reasoning = thinking,
+                            createdAt = Clock.System.now(),
+                        )
+                        if (signature != null) {
+                            reasoning.metadata = buildJsonObject {
+                                put("signature", signature)
+                            }
                         }
+                        parts.add(reasoning)
                     }
-                    parts.add(reasoning)
                 }
 
                 "redacted_thinking" -> {
@@ -436,10 +443,11 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     val name = block["name"]?.jsonPrimitive?.contentOrNull ?: ""
                     val input = block["input"]?.jsonObject ?: JsonObject(emptyMap())
                     parts.add(
-                        UIMessagePart.ToolCall(
+                        UIMessagePart.Tool(
                             toolCallId = id,
                             toolName = name,
-                            arguments = if (input.isEmpty()) "" else json.encodeToString(input)
+                            input = if (input.isEmpty()) "" else json.encodeToString(input),
+                            output = emptyList()
                         )
                     )
                 }
@@ -447,10 +455,11 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 "input_json_delta" -> {
                     val input = block["partial_json"]?.jsonPrimitive?.contentOrNull
                     parts.add(
-                        UIMessagePart.ToolCall(
+                        UIMessagePart.Tool(
                             toolCallId = "",
                             toolName = "",
-                            arguments = input ?: ""
+                            input = input ?: "",
+                            output = emptyList()
                         )
                     )
                 }

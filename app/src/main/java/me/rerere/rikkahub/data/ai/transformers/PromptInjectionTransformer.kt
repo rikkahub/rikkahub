@@ -235,10 +235,9 @@ internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): I
         val currentMessage = messages.getOrNull(index)
 
         // 检查是否在工具调用链中间
-        // 如果前一条是包含 ToolCall 的消息，当前是包含 ToolResult 的 TOOL 消息
-        val isPrevToolCall = prevMessage?.getToolCalls()?.isNotEmpty() == true
-        val isCurrentToolResult = currentMessage?.role == MessageRole.TOOL &&
-            currentMessage.getToolResults().isNotEmpty()
+        // 如果前一条包含未执行的 Tool，当前包含已执行的 Tool
+        val isPrevToolCall = prevMessage?.getTools()?.any { !it.isExecuted } == true
+        val isCurrentToolResult = currentMessage?.getTools()?.any { it.isExecuted } == true
 
         if (isPrevToolCall && isCurrentToolResult) {
             // 在工具调用链中间，需要继续往前找

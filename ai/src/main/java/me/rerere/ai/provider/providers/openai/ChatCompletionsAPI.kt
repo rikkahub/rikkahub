@@ -374,96 +374,96 @@ class ChatCompletionsAPI(
         val lastUserMessageIndex = filteredMessages.indexOfLast { it.role == MessageRole.USER }
 
         filteredMessages.forEachIndexed { index, message ->
-                if (message.role == MessageRole.TOOL) {
-                    message.getToolResults().forEach { result ->
-                        add(buildJsonObject {
-                            put("role", "tool")
-                            put("name", result.toolName)
-                            put("tool_call_id", result.toolCallId)
-                            put("content", json.encodeToString(result.content))
-                        })
+            // 1. 先添加当前消息
+            add(buildJsonObject {
+                // role
+                put("role", JsonPrimitive(message.role.name.lowercase()))
+
+                // reasoning
+                // 只回传最后一条 user 消息之后的思考内容
+                if (index > lastUserMessageIndex) {
+                    message.parts.filterIsInstance<UIMessagePart.Reasoning>().firstOrNull()?.let { reasoning ->
+                        put("reasoning_content", reasoning.reasoning)
                     }
-                    return@forEachIndexed
                 }
-                add(buildJsonObject {
-                    // role
-                    put("role", JsonPrimitive(message.role.name.lowercase()))
 
-                    // reasoning
-                    // 只回传最后一条 user 消息之后的思考内容
-                    if (index > lastUserMessageIndex) {
-                        message.parts.filterIsInstance<UIMessagePart.Reasoning>().firstOrNull()?.let { reasoning ->
-                            put("reasoning_content", reasoning.reasoning)
-                        }
-                    }
+                // content
+                if (message.parts.isOnlyTextPart()) {
+                    // 如果只是纯文本，直接赋值给content
+                    put(
+                        "content",
+                        message.parts.filterIsInstance<UIMessagePart.Text>().first().text
+                    )
+                } else {
+                    // 否则，使用parts构建
+                    putJsonArray("content") {
+                        message.parts.forEach { part ->
+                            when (part) {
+                                is UIMessagePart.Text -> {
+                                    add(buildJsonObject {
+                                        put("type", "text")
+                                        put("text", part.text)
+                                    })
+                                }
 
-                    // content
-                    if (message.parts.isOnlyTextPart()) {
-                        // 如果只是纯文本，直接赋值给content
-                        put(
-                            "content",
-                            message.parts.filterIsInstance<UIMessagePart.Text>().first().text
-                        )
-                    } else {
-                        // 否则，使用parts构建
-                        putJsonArray("content") {
-                            message.parts.forEach { part ->
-                                when (part) {
-                                    is UIMessagePart.Text -> {
-                                        add(buildJsonObject {
+                                is UIMessagePart.Image -> {
+                                    add(buildJsonObject {
+                                        part.encodeBase64().onSuccess { encodedImage ->
+                                            put("type", "image_url")
+                                            put("image_url", buildJsonObject {
+                                                put("url", encodedImage.base64)
+                                            })
+                                        }.onFailure {
+                                            it.printStackTrace()
+                                            println("encode image failed: ${part.url}")
+
                                             put("type", "text")
-                                            put("text", part.text)
-                                        })
-                                    }
+                                            put("text", "")
+                                        }
+                                    })
+                                }
 
-                                    is UIMessagePart.Image -> {
-                                        add(buildJsonObject {
-                                            part.encodeBase64().onSuccess { encodedImage ->
-                                                put("type", "image_url")
-                                                put("image_url", buildJsonObject {
-                                                    put("url", encodedImage.base64)
-                                                })
-                                            }.onFailure {
-                                                it.printStackTrace()
-                                                println("encode image failed: ${part.url}")
-
-                                                put("type", "text")
-                                                put("text", "")
-                                            }
-                                        })
-                                    }
-
-                                    else -> {
-                                        Log.w(
-                                            TAG,
-                                            "buildMessages: message part not supported: $part"
-                                        )
-                                        // DO NOTHING
-                                    }
+                                else -> {
+                                    Log.w(
+                                        TAG,
+                                        "buildMessages: message part not supported: $part"
+                                    )
+                                    // DO NOTHING
                                 }
                             }
                         }
                     }
+                }
 
-                    // tool_calls
-                    message.getToolCalls()
-                        .takeIf { it.isNotEmpty() }
-                        ?.let { toolCalls ->
-                            put("tool_calls", buildJsonArray {
-                                toolCalls.forEach { toolCall ->
-                                    add(buildJsonObject {
-                                        put("id", toolCall.toolCallId)
-                                        put("type", "function")
-                                        put("function", buildJsonObject {
-                                            put("name", toolCall.toolName)
-                                            put("arguments", toolCall.arguments)
-                                        })
+                // tool_calls - 包含所有工具调用（无论是否已执行）
+                message.getTools()
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { tools ->
+                        put("tool_calls", buildJsonArray {
+                            tools.forEach { tool ->
+                                add(buildJsonObject {
+                                    put("id", tool.toolCallId)
+                                    put("type", "function")
+                                    put("function", buildJsonObject {
+                                        put("name", tool.toolName)
+                                        put("arguments", tool.input)
                                     })
-                                }
-                            })
-                        }
+                                })
+                            }
+                        })
+                    }
+            })
+
+            // 2. 再添加已执行工具的 tool results
+            message.getTools().filter { it.isExecuted }.forEach { tool ->
+                add(buildJsonObject {
+                    put("role", "tool")
+                    put("name", tool.toolName)
+                    put("tool_call_id", tool.toolCallId)
+                    put("content", tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
                 })
             }
+        }
     }
 
     private fun parseMessage(jsonObject: JsonObject): UIMessage {
@@ -499,14 +499,15 @@ class ChatCompletionsAPI(
                     val arguments =
                         toolCalls.jsonObject["function"]?.jsonObject?.get("arguments")?.jsonPrimitive?.contentOrNull
                     add(
-                        UIMessagePart.ToolCall(
+                        UIMessagePart.Tool(
                             toolCallId = toolCallId ?: "",
                             toolName = toolName ?: "",
-                            arguments = arguments ?: ""
+                            input = arguments ?: "",
+                            output = emptyList()
                         )
                     )
                 }
-                add(UIMessagePart.Text(content))
+                if (content.isNotEmpty()) add(UIMessagePart.Text(content))
                 images.forEach { image ->
                     val imageObject = image.jsonObjectOrNull ?: return@forEach
                     val type = imageObject["type"]?.jsonPrimitive?.contentOrNull ?: return@forEach

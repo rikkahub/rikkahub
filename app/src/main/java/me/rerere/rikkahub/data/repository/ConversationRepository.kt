@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.migrateToolNodes
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
@@ -246,17 +247,22 @@ class ConversationRepository(
                 }
                 if (page.isEmpty()) break
                 page.forEach { entity ->
+                    val messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages)
                     nodes.add(
                         MessageNode(
                             id = Uuid.parse(entity.id),
-                            messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages),
+                            messages = messages,
                             selectIndex = entity.selectIndex
                         )
                     )
                 }
                 offset += page.size
             }
-            nodes
+            // Migrate legacy TOOL nodes by merging them into previous ASSISTANT nodes
+            nodes.migrateToolNodes(
+                getMessages = { it.messages },
+                setMessages = { node, msgs -> node.copy(messages = msgs) }
+            )
         }
     }
 

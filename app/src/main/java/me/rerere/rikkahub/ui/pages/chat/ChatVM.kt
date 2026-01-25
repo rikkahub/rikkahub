@@ -428,9 +428,7 @@ class ChatVM(
     }
 
     fun deleteMessage(message: UIMessage) {
-        val relatedMessages = collectRelatedMessages(message)
         deleteMessageInternal(message)
-        relatedMessages.forEach { deleteMessageInternal(it) }
         saveConversationAsync()
     }
 
@@ -464,29 +462,6 @@ class ChatVM(
         viewModelScope.launch {
             chatService.saveConversation(_conversationId, newConversation)
         }
-    }
-
-    private fun collectRelatedMessages(message: UIMessage): List<UIMessage> {
-        val currentMessages = conversation.value.currentMessages
-        val index = currentMessages.indexOf(message)
-        if (index == -1) return emptyList()
-
-        val relatedMessages = hashSetOf<UIMessage>()
-        for (i in index - 1 downTo 0) {
-            if (currentMessages[i].hasPart<UIMessagePart.ToolCall>() || currentMessages[i].hasPart<UIMessagePart.ToolResult>()) {
-                relatedMessages.add(currentMessages[i])
-            } else {
-                break
-            }
-        }
-        for (i in index + 1 until currentMessages.size) {
-            if (currentMessages[i].hasPart<UIMessagePart.ToolCall>() || currentMessages[i].hasPart<UIMessagePart.ToolResult>()) {
-                relatedMessages.add(currentMessages[i])
-            } else {
-                break
-            }
-        }
-        return relatedMessages.toList()
     }
 
     fun regenerateAtMessage(

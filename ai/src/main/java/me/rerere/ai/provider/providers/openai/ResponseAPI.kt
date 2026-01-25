@@ -229,16 +229,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                 it.isValidToUpload() && it.role != MessageRole.SYSTEM
             }
             .forEachIndexed { index, message ->
-                if (message.role == MessageRole.TOOL) {
-                    message.getToolResults().forEach { result ->
-                        add(buildJsonObject {
-                            put("type", "function_call_output")
-                            put("call_id", result.toolCallId)
-                            put("output", json.encodeToString(result.content))
-                        })
-                    }
-                    return@forEachIndexed
-                }
+                // 1. 先添加当前消息
                 add(buildJsonObject {
                     // role
                     put("role", JsonPrimitive(message.role.name.lowercase()))
@@ -298,19 +289,27 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                         }
                     }
                 })
-                // tool_calls
-                message.getToolCalls()
+
+                // 2. 添加所有 tool_calls（无论是否已执行）
+                message.getTools()
                     .takeIf { it.isNotEmpty() }
-                    ?.let { toolCalls ->
-                        toolCalls.forEach { toolCall ->
-                            add(buildJsonObject {
-                                put("type", "function_call")
-                                put("call_id", toolCall.toolCallId)
-                                put("name", toolCall.toolName)
-                                put("arguments", toolCall.arguments)
-                            })
-                        }
+                    ?.forEach { tool ->
+                        add(buildJsonObject {
+                            put("type", "function_call")
+                            put("call_id", tool.toolCallId)
+                            put("name", tool.toolName)
+                            put("arguments", tool.input)
+                        })
                     }
+
+                // 3. 添加已执行工具的 tool results
+                message.getTools().filter { it.isExecuted }.forEach { tool ->
+                    add(buildJsonObject {
+                        put("type", "function_call_output")
+                        put("call_id", tool.toolCallId)
+                        put("output", tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                    })
+                }
             }
     }
 
@@ -375,11 +374,12 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                                 delta = UIMessage(
                                     role = MessageRole.ASSISTANT,
                                     parts = listOf(
-                                        UIMessagePart.ToolCall(
+                                        UIMessagePart.Tool(
                                             toolCallId = id,
                                             toolName = item["name"]?.jsonPrimitive?.content ?: "",
-                                            arguments = item["arguments"]?.jsonPrimitive?.content
-                                                ?: ""
+                                            input = item["arguments"]?.jsonPrimitive?.content
+                                                ?: "",
+                                            output = emptyList()
                                         )
                                     )
                                 ),
@@ -426,10 +426,11 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                             delta = UIMessage(
                                 role = MessageRole.ASSISTANT,
                                 parts = listOf(
-                                    UIMessagePart.ToolCall(
+                                    UIMessagePart.Tool(
                                         toolCallId = toolCallId,
                                         toolName = "",
-                                        arguments = arguments,
+                                        input = arguments,
+                                        output = emptyList()
                                     )
                                 )
                             ),
@@ -487,10 +488,11 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                     val arguments =
                         output["arguments"]?.jsonPrimitive?.content ?: error("arguments not found")
                     parts.add(
-                        UIMessagePart.ToolCall(
+                        UIMessagePart.Tool(
                             toolCallId = callId,
                             toolName = name,
-                            arguments = arguments
+                            input = arguments,
+                            output = emptyList()
                         )
                     )
                 }

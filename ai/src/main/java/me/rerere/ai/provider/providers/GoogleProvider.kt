@@ -545,10 +545,11 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             }
 
             jsonObject.containsKey("functionCall") -> {
-                UIMessagePart.ToolCall(
+                UIMessagePart.Tool(
                     toolCallId = "",
                     toolName = jsonObject["functionCall"]!!.jsonObject["name"]!!.jsonPrimitive.content,
-                    arguments = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
+                    input = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
+                    output = emptyList(),
                     metadata = buildJsonObject {
                         put("thoughtSignature", jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull)
                     }
@@ -636,27 +637,36 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                         }
                                     }
 
-                                    is UIMessagePart.ToolCall -> {
-                                        add(buildJsonObject {
-                                            put("functionCall", buildJsonObject {
-                                                put("name", part.toolName)
-                                                put("args", json.parseToJsonElement(part.arguments))
+                                    // Handle Tool parts
+                                    is UIMessagePart.Tool -> {
+                                        // Build function call for non-executed tools
+                                        if (!part.isExecuted) {
+                                            add(buildJsonObject {
+                                                put("functionCall", buildJsonObject {
+                                                    put("name", part.toolName)
+                                                    put("args", json.parseToJsonElement(part.input.ifBlank { "{}" }))
+                                                })
+                                                part.metadata?.get("thoughtSignature")?.let {
+                                                    put("thoughtSignature", it)
+                                                }
                                             })
-                                            part.metadata?.get("thoughtSignature")?.let {
-                                                put("thoughtSignature", it)
-                                            }
-                                        })
-                                    }
-
-                                    is UIMessagePart.ToolResult -> {
-                                        add(buildJsonObject {
-                                            put("functionResponse", buildJsonObject {
-                                                put("name", part.toolName)
-                                                put("response", buildJsonObject {
-                                                    put("result", part.content)
+                                        }
+                                        // Build function response for executed tools
+                                        if (part.isExecuted) {
+                                            add(buildJsonObject {
+                                                put("functionResponse", buildJsonObject {
+                                                    put("name", part.toolName)
+                                                    put("response", buildJsonObject {
+                                                        put(
+                                                            "result",
+                                                            JsonPrimitive(
+                                                                part.output.filterIsInstance<UIMessagePart.Text>()
+                                                                    .joinToString("\n") { it.text })
+                                                        )
+                                                    })
                                                 })
                                             })
-                                        })
+                                        }
                                     }
 
                                     else -> {

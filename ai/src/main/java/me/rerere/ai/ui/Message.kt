@@ -36,32 +36,31 @@ data class UIMessage(
             var newParts = delta.parts.fold(parts) { acc, deltaPart ->
                 when (deltaPart) {
                     is UIMessagePart.Text -> {
-                        val existingTextPart =
-                            acc.find { it is UIMessagePart.Text } as? UIMessagePart.Text
-                        if (existingTextPart != null) {
-                            acc.map { part ->
-                                if (part is UIMessagePart.Text) {
-                                    UIMessagePart.Text(existingTextPart.text + deltaPart.text)
-                                } else part
-                            }
+                        // Skip empty text deltas
+                        if (deltaPart.text.isEmpty()) {
+                            acc
                         } else {
-                            acc + deltaPart
+                            val lastPart = acc.lastOrNull()
+                            if (lastPart is UIMessagePart.Text) {
+                                // Append to the last Text part
+                                acc.dropLast(1) + lastPart.copy(text = lastPart.text + deltaPart.text)
+                            } else {
+                                // Create new Text part
+                                acc + deltaPart
+                            }
                         }
                     }
 
                     is UIMessagePart.Image -> {
-                        val existingImagePart =
-                            acc.find { it is UIMessagePart.Image } as? UIMessagePart.Image
-                        if (existingImagePart != null) {
-                            acc.map { part ->
-                                if (part is UIMessagePart.Image) {
-                                    UIMessagePart.Image(
-                                        url = existingImagePart.url + deltaPart.url,
-                                        metadata = deltaPart.metadata,
-                                    )
-                                } else part
-                            }
+                        val lastPart = acc.lastOrNull()
+                        if (lastPart is UIMessagePart.Image) {
+                            // Append to the last Image part (for streaming base64)
+                            acc.dropLast(1) + lastPart.copy(
+                                url = lastPart.url + deltaPart.url,
+                                metadata = deltaPart.metadata ?: lastPart.metadata
+                            )
                         } else {
+                            // Create new Image part
                             acc + UIMessagePart.Image(
                                 url = "data:image/png;base64,${deltaPart.url}",
                                 metadata = deltaPart.metadata,
@@ -70,53 +69,48 @@ data class UIMessage(
                     }
 
                     is UIMessagePart.Reasoning -> {
-                        val existingReasoningPart =
-                            acc.find { it is UIMessagePart.Reasoning } as? UIMessagePart.Reasoning
-                        if (existingReasoningPart != null) {
-                            acc.map { part ->
-                                if (part is UIMessagePart.Reasoning) {
-                                    UIMessagePart.Reasoning(
-                                        reasoning = existingReasoningPart.reasoning + deltaPart.reasoning,
-                                        createdAt = existingReasoningPart.createdAt,
-                                        finishedAt = null,
-                                    ).also {
-                                        if (deltaPart.metadata != null) {
-                                            it.metadata = deltaPart.metadata // 更新metadata
-                                            println("更新metadata: ${json.encodeToString(deltaPart)}")
-                                        }
-                                    }
-                                } else part
-                            }
+                        // Skip empty reasoning deltas
+                        if (deltaPart.reasoning.isEmpty()) {
+                            acc
                         } else {
-                            acc + deltaPart
+                            val lastPart = acc.lastOrNull()
+                            if (lastPart is UIMessagePart.Reasoning) {
+                                // Append to the last Reasoning part
+                                acc.dropLast(1) + UIMessagePart.Reasoning(
+                                    reasoning = lastPart.reasoning + deltaPart.reasoning,
+                                    createdAt = lastPart.createdAt,
+                                    finishedAt = null,
+                                ).also {
+                                    it.metadata = deltaPart.metadata ?: lastPart.metadata
+                                }
+                            } else {
+                                // Create new Reasoning part
+                                acc + deltaPart
+                            }
                         }
                     }
 
-                    is UIMessagePart.ToolCall -> {
+                    is UIMessagePart.Tool -> {
                         if (deltaPart.toolCallId.isBlank()) {
-                            val lastToolCall =
-                                acc.lastOrNull { it is UIMessagePart.ToolCall } as? UIMessagePart.ToolCall
-                            if (lastToolCall == null || lastToolCall.toolCallId.isBlank()) {
-                                acc + deltaPart.copy()
-                            } else {
+                            // No ID yet - append to the last Tool if it also has no ID
+                            val lastTool = acc.lastOrNull { it is UIMessagePart.Tool } as? UIMessagePart.Tool
+                            if (lastTool != null) {
                                 acc.map { part ->
-                                    if (part == lastToolCall && part is UIMessagePart.ToolCall) {
-                                        part.merge(deltaPart)
-                                    } else part
+                                    if (part === lastTool) part.merge(deltaPart) else part
                                 }
+                            } else {
+                                acc + deltaPart.copy()
                             }
                         } else {
-                            // insert or update
+                            // Has ID - find and update by ID, or insert new
                             val existsPart = acc.find {
-                                it is UIMessagePart.ToolCall && it.toolCallId == deltaPart.toolCallId
-                            } as? UIMessagePart.ToolCall
+                                it is UIMessagePart.Tool && it.toolCallId == deltaPart.toolCallId
+                            } as? UIMessagePart.Tool
                             if (existsPart == null) {
-                                // insert
                                 acc + deltaPart.copy()
                             } else {
-                                // update
                                 acc.map { part ->
-                                    if (part is UIMessagePart.ToolCall && part.toolCallId == deltaPart.toolCallId) {
+                                    if (part is UIMessagePart.Tool && part.toolCallId == deltaPart.toolCallId) {
                                         part.merge(deltaPart)
                                     } else part
                                 }
@@ -168,9 +162,7 @@ data class UIMessage(
         }
     }
 
-    fun getToolCalls() = parts.filterIsInstance<UIMessagePart.ToolCall>()
-
-    fun getToolResults() = parts.filterIsInstance<UIMessagePart.ToolResult>()
+    fun getTools() = parts.filterIsInstance<UIMessagePart.Tool>()
 
     fun isValidToUpload() = parts.any {
         it !is UIMessagePart.Reasoning
@@ -291,10 +283,10 @@ fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
 
         val currentMessage = this[adjustedStartIndex]
 
-        // 如果当前消息包含tool result，往前查找对应的tool call
-        if (currentMessage.getToolResults().isNotEmpty()) {
+        // 如果当前消息包含已执行的tool（有output），往前查找对应的tool call
+        if (currentMessage.getTools().any { it.isExecuted }) {
             for (i in adjustedStartIndex - 1 downTo 0) {
-                if (this[i].getToolCalls().isNotEmpty()) {
+                if (this[i].getTools().any { !it.isExecuted }) {
                     adjustedStartIndex = i
                     needsAdjustment = true
                     break
@@ -302,8 +294,8 @@ fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
             }
         }
 
-        // 如果当前消息包含tool call，往前查找对应的用户消息
-        if (currentMessage.getToolCalls().isNotEmpty()) {
+        // 如果当前消息包含未执行的tool call，往前查找对应的用户消息
+        if (currentMessage.getTools().any { !it.isExecuted }) {
             for (i in adjustedStartIndex - 1 downTo 0) {
                 if (this[i].role == MessageRole.USER) {
                     adjustedStartIndex = i
@@ -400,6 +392,7 @@ sealed class UIMessagePart {
         override var metadata: JsonObject? = null
     }
 
+    @Deprecated("Use UIMessagePart.Tool instead")
     @Serializable
     data class ToolCall(
         val toolCallId: String,
@@ -414,13 +407,14 @@ sealed class UIMessagePart {
                 toolName = toolName + other.toolName,
                 arguments = arguments + other.arguments,
                 approvalState = approvalState,
-                metadata = if(other.metadata != null) other.metadata else metadata,
+                metadata = if (other.metadata != null) other.metadata else metadata,
             )
         }
 
         override val priority: Int = 0
     }
 
+    @Deprecated("Use UIMessagePart.Tool instead")
     @Serializable
     data class ToolResult(
         val toolCallId: String,
@@ -430,6 +424,40 @@ sealed class UIMessagePart {
         override var metadata: JsonObject? = null
     ) : UIMessagePart() {
         override val priority: Int = 0
+    }
+
+    @Serializable
+    data class Tool(
+        val toolCallId: String,
+        val toolName: String,
+        val input: String,
+        val output: List<UIMessagePart> = emptyList(),
+        val approvalState: ToolApprovalState = ToolApprovalState.Auto,
+        override var metadata: JsonObject? = null
+    ) : UIMessagePart() {
+        override val priority: Int = 0
+
+        /** Whether the tool has been executed (has output) */
+        val isExecuted: Boolean get() = output.isNotEmpty()
+
+        /** Whether the tool is pending user approval */
+        val isPending: Boolean get() = approvalState is ToolApprovalState.Pending
+
+        /** Parse input string as JsonElement */
+        fun inputAsJson(): JsonElement = runCatching {
+            json.parseToJsonElement(input.ifBlank { "{}" })
+        }.getOrElse { JsonObject(emptyMap()) }
+
+        fun merge(other: Tool): Tool {
+            return Tool(
+                toolCallId = toolCallId,
+                toolName = toolName + other.toolName,
+                input = input + other.input,
+                output = output + other.output,
+                approvalState = approvalState,
+                metadata = if (other.metadata != null) other.metadata else metadata,
+            )
+        }
     }
 }
 
@@ -455,6 +483,216 @@ fun UIMessage.finishReasoning(): UIMessage {
             }
         }
     )
+}
+
+/**
+ * Migrate legacy ToolCall parts to new Tool type within a single message.
+ * This converts ToolCall parts to Tool parts with empty output.
+ */
+@Suppress("DEPRECATION")
+private fun UIMessage.migrateToolParts(): UIMessage {
+    val toolCalls = parts.filterIsInstance<UIMessagePart.ToolCall>()
+    if (toolCalls.isEmpty()) return this
+
+    val migratedParts = parts.map { part ->
+        if (part is UIMessagePart.ToolCall) {
+            UIMessagePart.Tool(
+                toolCallId = part.toolCallId,
+                toolName = part.toolName,
+                input = part.arguments,
+                output = emptyList(),
+                approvalState = part.approvalState,
+                metadata = part.metadata
+            )
+        } else {
+            part
+        }
+    }
+    return copy(parts = migratedParts)
+}
+
+/**
+ * Migrate TOOL role messages into previous ASSISTANT messages by
+ * merging ToolResult parts into corresponding Tool parts.
+ * Returns the migrated list with TOOL messages removed.
+ */
+@Suppress("DEPRECATION")
+fun List<UIMessage>.migrateToolMessages(): List<UIMessage> {
+    val result = mutableListOf<UIMessage>()
+    var i = 0
+
+    while (i < size) {
+        val message = this[i]
+
+        // If this is a TOOL role message, merge its results into previous ASSISTANT message
+        if (message.role == MessageRole.TOOL) {
+            val toolResults = message.parts.filterIsInstance<UIMessagePart.ToolResult>()
+            if (result.isNotEmpty() && result.last().role == MessageRole.ASSISTANT) {
+                // Find the last ASSISTANT message and update its Tool parts with results
+                val lastAssistant = result.removeAt(result.lastIndex)
+                val updatedParts = lastAssistant.parts.map { part ->
+                    if (part is UIMessagePart.Tool && !part.isExecuted) {
+                        val matchingResult = toolResults.find { result -> result.toolCallId == part.toolCallId }
+                        if (matchingResult != null) {
+                            part.copy(
+                                output = listOf(
+                                    UIMessagePart.Text(
+                                        json.encodeToString(matchingResult.content)
+                                    )
+                                )
+                            )
+                        } else {
+                            part
+                        }
+                    } else if (part is UIMessagePart.ToolCall) {
+                        // Also handle legacy ToolCall parts
+                        val matchingResult = toolResults.find { result -> result.toolCallId == part.toolCallId }
+                        if (matchingResult != null) {
+                            UIMessagePart.Tool(
+                                toolCallId = part.toolCallId,
+                                toolName = part.toolName,
+                                input = part.arguments,
+                                output = listOf(
+                                    UIMessagePart.Text(
+                                        json.encodeToString(matchingResult.content)
+                                    )
+                                ),
+                                approvalState = part.approvalState,
+                                metadata = part.metadata
+                            )
+                        } else {
+                            UIMessagePart.Tool(
+                                toolCallId = part.toolCallId,
+                                toolName = part.toolName,
+                                input = part.arguments,
+                                output = emptyList(),
+                                approvalState = part.approvalState,
+                                metadata = part.metadata
+                            )
+                        }
+                    } else {
+                        part
+                    }
+                }
+                result.add(lastAssistant.copy(parts = updatedParts))
+            }
+            // Skip the TOOL message (don't add it to result)
+            i++
+            continue
+        }
+
+        // For other messages, migrate their tool parts first
+        result.add(message.migrateToolParts())
+        i++
+    }
+
+    return result
+}
+
+/**
+ * Migrate legacy TOOL role messages at the MessageNode level.
+ * This handles the case where TOOL messages are stored in separate MessageNodes
+ * by merging ToolResult parts into the previous ASSISTANT node's Tool parts.
+ *
+ * @param MessageNode A container holding one or more UIMessages for branching.
+ * @return Migrated list with TOOL nodes removed and their results merged into ASSISTANT nodes.
+ */
+@Suppress("DEPRECATION")
+fun <T> List<T>.migrateToolNodes(
+    getMessages: (T) -> List<UIMessage>,
+    setMessages: (T, List<UIMessage>) -> T
+): List<T> {
+    val result = mutableListOf<T>()
+    var i = 0
+
+    while (i < size) {
+        val node = this[i]
+        val messages = getMessages(node)
+
+        // Check if this node contains TOOL role messages
+        val isToolNode = messages.any { it.role == MessageRole.TOOL }
+
+        if (isToolNode && result.isNotEmpty()) {
+            // Find the previous ASSISTANT node
+            val lastIndex = result.lastIndex
+            val lastNode = result[lastIndex]
+            val lastMessages = getMessages(lastNode)
+            val isAssistantNode = lastMessages.any { it.role == MessageRole.ASSISTANT }
+
+            if (isAssistantNode) {
+                // Collect all ToolResults from the TOOL node
+                val toolResults = messages.flatMap { msg ->
+                    msg.parts.filterIsInstance<UIMessagePart.ToolResult>()
+                }
+
+                // Update the ASSISTANT node's messages by merging ToolResults
+                val updatedMessages = lastMessages.map { assistantMsg ->
+                    if (assistantMsg.role != MessageRole.ASSISTANT) return@map assistantMsg
+
+                    val updatedParts = assistantMsg.parts.map { part ->
+                        when (part) {
+                            is UIMessagePart.Tool -> {
+                                if (!part.isExecuted) {
+                                    val matchingResult = toolResults.find { it.toolCallId == part.toolCallId }
+                                    if (matchingResult != null) {
+                                        part.copy(
+                                            output = listOf(
+                                                UIMessagePart.Text(
+                                                    json.encodeToString(matchingResult.content)
+                                                )
+                                            )
+                                        )
+                                    } else part
+                                } else part
+                            }
+
+                            is UIMessagePart.ToolCall -> {
+                                val matchingResult = toolResults.find { it.toolCallId == part.toolCallId }
+                                if (matchingResult != null) {
+                                    UIMessagePart.Tool(
+                                        toolCallId = part.toolCallId,
+                                        toolName = part.toolName,
+                                        input = part.arguments,
+                                        output = listOf(
+                                            UIMessagePart.Text(
+                                                json.encodeToString(matchingResult.content)
+                                            )
+                                        ),
+                                        approvalState = part.approvalState,
+                                        metadata = part.metadata
+                                    )
+                                } else {
+                                    UIMessagePart.Tool(
+                                        toolCallId = part.toolCallId,
+                                        toolName = part.toolName,
+                                        input = part.arguments,
+                                        output = emptyList(),
+                                        approvalState = part.approvalState,
+                                        metadata = part.metadata
+                                    )
+                                }
+                            }
+
+                            else -> part
+                        }
+                    }
+                    assistantMsg.copy(parts = updatedParts)
+                }
+
+                result[lastIndex] = setMessages(lastNode, updatedMessages)
+                // Skip the TOOL node (don't add it to result)
+                i++
+                continue
+            }
+        }
+
+        // For non-TOOL nodes, migrate their internal tool parts
+        val migratedMessages = messages.migrateToolMessages()
+        result.add(setMessages(node, migratedMessages))
+        i++
+    }
+
+    return result
 }
 
 @Serializable
