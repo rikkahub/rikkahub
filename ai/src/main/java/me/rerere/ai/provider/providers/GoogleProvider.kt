@@ -589,7 +589,11 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         return buildJsonArray {
             messages
                 .filter { it.role != MessageRole.SYSTEM && it.isValidToUpload() }
-                .forEachIndexed { index, message ->
+                .forEach { message ->
+                    val tools = message.parts.filterIsInstance<UIMessagePart.Tool>()
+                    val executedTools = tools.filter { it.isExecuted }
+
+                    // 1. 添加主消息（包含 functionCall）
                     add(buildJsonObject {
                         put("role", commonRoleToGoogleRole(message.role))
                         putJsonArray("parts") {
@@ -637,36 +641,17 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                         }
                                     }
 
-                                    // Handle Tool parts
+                                    // Tool parts: 始终生成 functionCall
                                     is UIMessagePart.Tool -> {
-                                        // Build function call for non-executed tools
-                                        if (!part.isExecuted) {
-                                            add(buildJsonObject {
-                                                put("functionCall", buildJsonObject {
-                                                    put("name", part.toolName)
-                                                    put("args", json.parseToJsonElement(part.input.ifBlank { "{}" }))
-                                                })
-                                                part.metadata?.get("thoughtSignature")?.let {
-                                                    put("thoughtSignature", it)
-                                                }
+                                        add(buildJsonObject {
+                                            put("functionCall", buildJsonObject {
+                                                put("name", part.toolName)
+                                                put("args", json.parseToJsonElement(part.input.ifBlank { "{}" }))
                                             })
-                                        }
-                                        // Build function response for executed tools
-                                        if (part.isExecuted) {
-                                            add(buildJsonObject {
-                                                put("functionResponse", buildJsonObject {
-                                                    put("name", part.toolName)
-                                                    put("response", buildJsonObject {
-                                                        put(
-                                                            "result",
-                                                            JsonPrimitive(
-                                                                part.output.filterIsInstance<UIMessagePart.Text>()
-                                                                    .joinToString("\n") { it.text })
-                                                        )
-                                                    })
-                                                })
-                                            })
-                                        }
+                                            part.metadata?.get("thoughtSignature")?.let {
+                                                put("thoughtSignature", it)
+                                            }
+                                        })
                                     }
 
                                     else -> {
@@ -676,6 +661,31 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                             }
                         }
                     })
+
+                    // 2. 如果有已执行的 Tools，追加 user 消息包含 functionResponse
+                    if (executedTools.isNotEmpty()) {
+                        add(buildJsonObject {
+                            put("role", "user")
+                            putJsonArray("parts") {
+                                executedTools.forEach { tool ->
+                                    add(buildJsonObject {
+                                        put("functionResponse", buildJsonObject {
+                                            put("name", tool.toolName)
+                                            put("response", buildJsonObject {
+                                                put(
+                                                    "result",
+                                                    JsonPrimitive(
+                                                        tool.output.filterIsInstance<UIMessagePart.Text>()
+                                                            .joinToString("\n") { it.text }
+                                                    )
+                                                )
+                                            })
+                                        })
+                                    })
+                                }
+                            }
+                        })
+                    }
                 }
         }
     }
