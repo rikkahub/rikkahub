@@ -73,7 +73,6 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyUIMessage
-import me.rerere.ai.ui.toSortedMessageParts
 import me.rerere.ai.util.encodeBase64
 import me.rerere.common.android.appTempFolder
 import me.rerere.highlight.Highlighter
@@ -245,7 +244,7 @@ private fun exportToMarkdown(
         messages.forEach { message ->
             val role = if (message.role == MessageRole.USER) "**User**" else "**Assistant**"
             append("$role:\n\n")
-            message.parts.toSortedMessageParts().forEach { part ->
+            message.parts.forEach { part ->
                 when (part) {
                     is UIMessagePart.Text -> {
                         append(part.text)
@@ -473,7 +472,7 @@ private fun ExportedChatMessage(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start
         ) {
-            message.parts.toSortedMessageParts().forEach { part ->
+            message.parts.forEach { part ->
                 when (part) {
                     is UIMessagePart.Text -> {
                         if (part.text.isNotBlank()) {

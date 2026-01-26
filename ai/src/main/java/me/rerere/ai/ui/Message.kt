@@ -330,40 +330,31 @@ sealed class ToolApprovalState {
 
 @Serializable
 sealed class UIMessagePart {
-    abstract val priority: Int
     abstract val metadata: JsonObject?
 
     @Serializable
     data class Text(
         val text: String,
         override var metadata: JsonObject? = null
-    ) : UIMessagePart() {
-        override val priority: Int = 0
-    }
+    ) : UIMessagePart()
 
     @Serializable
     data class Image(
         val url: String,
         override var metadata: JsonObject? = null
-    ) : UIMessagePart() {
-        override val priority: Int = 1
-    }
+    ) : UIMessagePart()
 
     @Serializable
     data class Video(
         val url: String,
         override var metadata: JsonObject? = null
-    ) : UIMessagePart() {
-        override val priority: Int = 1
-    }
+    ) : UIMessagePart()
 
     @Serializable
     data class Audio(
         val url: String,
         override var metadata: JsonObject? = null
-    ) : UIMessagePart() {
-        override val priority: Int = 1
-    }
+    ) : UIMessagePart()
 
     @Serializable
     data class Document(
@@ -371,9 +362,7 @@ sealed class UIMessagePart {
         val fileName: String,
         val mime: String = "text/*",
         override var metadata: JsonObject? = null
-    ) : UIMessagePart() {
-        override val priority: Int = 1
-    }
+    ) : UIMessagePart()
 
     @Serializable
     data class Reasoning(
@@ -381,14 +370,11 @@ sealed class UIMessagePart {
         val createdAt: Instant = Clock.System.now(),
         val finishedAt: Instant? = Clock.System.now(),
         override var metadata: JsonObject? = null
-    ) : UIMessagePart() {
-        override val priority: Int = -1
-    }
+    ) : UIMessagePart()
 
     @Deprecated("Deprecated")
     @Serializable
     data object Search : UIMessagePart() {
-        override val priority: Int = 0
         override var metadata: JsonObject? = null
     }
 
@@ -410,8 +396,6 @@ sealed class UIMessagePart {
                 metadata = if (other.metadata != null) other.metadata else metadata,
             )
         }
-
-        override val priority: Int = 0
     }
 
     @Deprecated("Use UIMessagePart.Tool instead")
@@ -422,9 +406,7 @@ sealed class UIMessagePart {
         val content: JsonElement,
         val arguments: JsonElement,
         override var metadata: JsonObject? = null
-    ) : UIMessagePart() {
-        override val priority: Int = 0
-    }
+    ) : UIMessagePart()
 
     @Serializable
     data class Tool(
@@ -435,8 +417,6 @@ sealed class UIMessagePart {
         val approvalState: ToolApprovalState = ToolApprovalState.Auto,
         override var metadata: JsonObject? = null
     ) : UIMessagePart() {
-        override val priority: Int = 0
-
         /** Whether the tool has been executed (has output) */
         val isExecuted: Boolean get() = output.isNotEmpty()
 
@@ -461,8 +441,35 @@ sealed class UIMessagePart {
     }
 }
 
+/**
+ * Sort message parts by type priority:
+ * - Reasoning (-1): shown first
+ * - Text, Tool, ToolCall, ToolResult, Search (0): middle
+ * - Image, Video, Audio, Document (1): shown last
+ *
+ * WARNING: This function is intended for migration only.
+ * Do not use for new messages as it may break the semantic order
+ * when a message contains multiple Reasoning/Text parts.
+ */
+@Deprecated(
+    message = "Only use for migration. May break semantic order for messages with multiple Reasoning/Text parts.",
+    level = DeprecationLevel.WARNING
+)
 fun List<UIMessagePart>.toSortedMessageParts(): List<UIMessagePart> {
-    return sortedBy { it.priority }
+    return sortedBy { part ->
+        when (part) {
+            is UIMessagePart.Reasoning -> -1
+            is UIMessagePart.Text -> 0
+            is UIMessagePart.Tool -> 0
+            is UIMessagePart.ToolCall -> 0
+            is UIMessagePart.ToolResult -> 0
+            is UIMessagePart.Search -> 0
+            is UIMessagePart.Image -> 1
+            is UIMessagePart.Video -> 1
+            is UIMessagePart.Audio -> 1
+            is UIMessagePart.Document -> 1
+        }
+    }
 }
 
 fun UIMessage.finishReasoning(): UIMessage {
@@ -492,7 +499,11 @@ fun UIMessage.finishReasoning(): UIMessage {
 @Suppress("DEPRECATION")
 private fun UIMessage.migrateToolParts(): UIMessage {
     val toolCalls = parts.filterIsInstance<UIMessagePart.ToolCall>()
-    if (toolCalls.isEmpty()) return this
+    if (toolCalls.isEmpty()) {
+        // Even if no ToolCall migration needed, ensure parts are sorted
+        val sortedParts = parts.toSortedMessageParts()
+        return if (sortedParts != parts) copy(parts = sortedParts) else this
+    }
 
     val migratedParts = parts.map { part ->
         if (part is UIMessagePart.ToolCall) {
@@ -508,7 +519,7 @@ private fun UIMessage.migrateToolParts(): UIMessage {
             part
         }
     }
-    return copy(parts = migratedParts)
+    return copy(parts = migratedParts.toSortedMessageParts())
 }
 
 /**
@@ -574,7 +585,7 @@ fun List<UIMessage>.migrateToolMessages(): List<UIMessage> {
                         part
                     }
                 }
-                result.add(lastAssistant.copy(parts = updatedParts))
+                result.add(lastAssistant.copy(parts = updatedParts.toSortedMessageParts()))
             }
             // Skip the TOOL message (don't add it to result)
             i++
@@ -676,7 +687,7 @@ fun <T> List<T>.migrateToolNodes(
                             else -> part
                         }
                     }
-                    assistantMsg.copy(parts = updatedParts)
+                    assistantMsg.copy(parts = updatedParts.toSortedMessageParts())
                 }
 
                 result[lastIndex] = setMessages(lastNode, updatedMessages)

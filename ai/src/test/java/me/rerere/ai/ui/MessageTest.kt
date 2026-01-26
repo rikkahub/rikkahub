@@ -501,6 +501,157 @@ class MessageTest {
         assertTrue(tools.all { it.isExecuted })
     }
 
+    // ==================== Parts Sorting Tests ====================
+
+    @Test
+    fun `migrateToolMessages should sort parts by priority - Reasoning before Text`() {
+        // Create message with wrong order: Text before Reasoning
+        val messages = listOf(
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("Query"))),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Text("Response text"),
+                    UIMessagePart.Reasoning(reasoning = "Thinking process")
+                )
+            )
+        )
+
+        val result = messages.migrateToolMessages()
+
+        assertEquals(2, result.size)
+        val assistantParts = result[1].parts
+        assertEquals(2, assistantParts.size)
+        // Reasoning (priority=-1) should come before Text (priority=0)
+        assertTrue(assistantParts[0] is UIMessagePart.Reasoning)
+        assertTrue(assistantParts[1] is UIMessagePart.Text)
+    }
+
+    @Test
+    fun `migrateToolMessages should sort parts with Tool and Reasoning`() {
+        val messages = listOf(
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("Query"))),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Tool("call1", "tool", "{}", listOf(UIMessagePart.Text("result"))),
+                    UIMessagePart.Text("Response"),
+                    UIMessagePart.Reasoning(reasoning = "Thinking")
+                )
+            )
+        )
+
+        val result = messages.migrateToolMessages()
+
+        val assistantParts = result[1].parts
+        assertEquals(3, assistantParts.size)
+        // Order should be: Reasoning(-1), Tool(0), Text(0) - stable sort keeps Tool before Text
+        assertTrue(assistantParts[0] is UIMessagePart.Reasoning)
+        // Tool and Text both have priority 0, order among them is stable
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `migrateToolMessages should sort parts after merging ToolResult`() {
+        val messages = listOf(
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("Query"))),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Text("Let me think"),
+                    UIMessagePart.Reasoning(reasoning = "Thinking"),
+                    UIMessagePart.ToolCall("call1", "tool", "{}")
+                )
+            ),
+            UIMessage(
+                role = MessageRole.TOOL,
+                parts = listOf(
+                    UIMessagePart.ToolResult("call1", "tool", JsonPrimitive("result"), JsonPrimitive("{}"))
+                )
+            )
+        )
+
+        val result = messages.migrateToolMessages()
+
+        assertEquals(2, result.size)
+        val assistantParts = result[1].parts
+        assertEquals(3, assistantParts.size)
+        // Reasoning should be first (priority=-1)
+        assertTrue(assistantParts[0] is UIMessagePart.Reasoning)
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `migrateToolNodes should sort parts after merging`() {
+        val nodes = listOf(
+            TestNode(
+                id = "node1",
+                messages = listOf(
+                    UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("Query")))
+                )
+            ),
+            TestNode(
+                id = "node2",
+                messages = listOf(
+                    UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Text("Response"),
+                            UIMessagePart.Reasoning(reasoning = "Thinking"),
+                            UIMessagePart.ToolCall("call1", "tool", "{}")
+                        )
+                    )
+                )
+            ),
+            TestNode(
+                id = "node3",
+                messages = listOf(
+                    UIMessage(
+                        role = MessageRole.TOOL,
+                        parts = listOf(
+                            UIMessagePart.ToolResult("call1", "tool", JsonPrimitive("result"), JsonPrimitive("{}"))
+                        )
+                    )
+                )
+            )
+        )
+
+        val result = nodes.migrateToolNodes(
+            getMessages = { it.messages },
+            setMessages = { node, msgs -> node.copy(messages = msgs) }
+        )
+
+        assertEquals(2, result.size)
+        val assistantParts = result[1].messages[0].parts
+        assertEquals(3, assistantParts.size)
+        // Reasoning should be first (priority=-1)
+        assertTrue(assistantParts[0] is UIMessagePart.Reasoning)
+    }
+
+    @Test
+    fun `migrateToolMessages should handle Image parts with correct priority`() {
+        val messages = listOf(
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("Query"))),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Image(url = "http://example.com/image.png"),
+                    UIMessagePart.Text("Description"),
+                    UIMessagePart.Reasoning(reasoning = "Thinking")
+                )
+            )
+        )
+
+        val result = messages.migrateToolMessages()
+
+        val assistantParts = result[1].parts
+        assertEquals(3, assistantParts.size)
+        // Order: Reasoning(-1), Text(0), Image(1)
+        assertTrue(assistantParts[0] is UIMessagePart.Reasoning)
+        assertTrue(assistantParts[1] is UIMessagePart.Text)
+        assertTrue(assistantParts[2] is UIMessagePart.Image)
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createTestMessages(count: Int): List<UIMessage> {

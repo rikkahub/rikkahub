@@ -366,7 +366,6 @@ private fun MessagePartsBlock(
                                 onClickCitation = { id -> handleClickCitation(id) },
                                 modifier = Modifier
                                     .animateContentSize()
-                                    .heightIn(min = 32.dp)
                             )
                         }
                     }
