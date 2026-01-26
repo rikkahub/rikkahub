@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
@@ -14,10 +15,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
@@ -63,7 +67,9 @@ fun <T> ChainOfThought(
         colors = cardColors,
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier
+                .padding(8.dp)
+                .animateContentSize(),
         ) {
             val visibleSteps = if (expanded || !canCollapse) {
                 steps
@@ -142,6 +148,7 @@ private class ChainOfThoughtScopeImpl(
         content: @Composable (() -> Unit)?
     ) {
         var stepExpanded by remember { mutableStateOf(false) }
+        val contentScrollState = rememberScrollState()
         val hasContent = content != null
         val lineColor = MaterialTheme.colorScheme.outlineVariant
 
@@ -265,6 +272,8 @@ private class ChainOfThoughtScopeImpl(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp, bottom = 8.dp)
+                            .heightIn(max = 160.dp)
+                            .verticalScroll(contentScrollState)
                     ) {
                         content?.invoke()
                     }
