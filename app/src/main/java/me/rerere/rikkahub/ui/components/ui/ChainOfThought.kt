@@ -78,17 +78,25 @@ fun <T> ChainOfThought(
                         .fillMaxWidth()
                         .clip(MaterialTheme.shapes.small)
                         .clickable { expanded = !expanded }
-                        .padding(vertical = 4.dp, horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+                    // 左侧：图标区域（24.dp，和步骤图标对齐）
+                    Box(
+                        modifier = Modifier.width(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+
+                    // 右侧：文字区域（8.dp 间距后开始，和步骤 label 对齐）
                     Text(
+                        modifier = Modifier.padding(start = 8.dp),
                         text = if (expanded) {
                             "Collapse"
                         } else {
