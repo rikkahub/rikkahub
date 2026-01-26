@@ -71,25 +71,29 @@ fun <T> ChainOfThought(
                 steps.takeLast(collapsedVisibleCount)
             }
 
-            // 显示折叠提示
-            if (canCollapse && !expanded) {
+            // 显示展开/折叠按钮（统一在顶部）
+            if (canCollapse) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(MaterialTheme.shapes.small)
-                        .clickable { expanded = true }
+                        .clickable { expanded = !expanded }
                         .padding(vertical = 4.dp, horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        imageVector = Lucide.ChevronDown,
+                        imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = "Show ${steps.size - collapsedVisibleCount} more steps",
+                        text = if (expanded) {
+                            "Collapse"
+                        } else {
+                            "Show ${steps.size - collapsedVisibleCount} more steps"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -103,31 +107,6 @@ fun <T> ChainOfThought(
                     ChainOfThoughtScopeImpl(isFirst = isFirst, isLast = isLast)
                 }
                 scope.content(step)
-            }
-
-            // 显示收起按钮
-            if (canCollapse && expanded) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.small)
-                        .clickable { expanded = false }
-                        .padding(vertical = 4.dp, horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Lucide.ChevronUp,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = "Collapse",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
             }
         }
     }
