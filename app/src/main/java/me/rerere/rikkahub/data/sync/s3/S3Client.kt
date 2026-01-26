@@ -4,6 +4,7 @@ import android.util.Log
 import android.util.Xml
 import io.ktor.client.HttpClient
 import io.ktor.client.request.headers
+import io.ktor.client.request.prepareRequest
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -12,6 +13,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpMethod
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.jvm.javaio.toInputStream
+import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
@@ -118,6 +120,45 @@ class S3Client(
             }
 
             response.bodyAsChannel().toInputStream()
+        }
+    }
+
+    suspend fun downloadObjectToFile(key: String, targetFile: File): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val path = "/${key.trimStart('/')}"
+            val signed = AwsSignatureV4.sign(
+                config = config,
+                method = "GET",
+                path = path,
+            )
+
+            Log.d(TAG, "GET (download to file): $key")
+
+            httpClient.prepareRequest(signed.url) {
+                method = HttpMethod.Get
+                headers {
+                    signed.headers.forEach { (k, v) -> append(k, v) }
+                }
+            }.execute { response ->
+                if (!response.status.isSuccess()) {
+                    val errorBody = response.bodyAsText()
+                    Log.e(TAG, "downloadObjectToFile failed: ${response.status} - $errorBody")
+                    throw S3Exception("Failed to download object: ${response.status}", errorBody)
+                }
+
+                val channel = response.bodyAsChannel()
+                targetFile.outputStream().use { outputStream ->
+                    val buffer = ByteArray(8192)
+                    while (!channel.isClosedForRead) {
+                        val bytesRead = channel.readAvailable(buffer)
+                        if (bytesRead > 0) {
+                            outputStream.write(buffer, 0, bytesRead)
+                        }
+                    }
+                }
+                Log.d(TAG, "downloadObjectToFile success: downloaded ${targetFile.length()} bytes")
+            }
+            Unit
         }
     }
 

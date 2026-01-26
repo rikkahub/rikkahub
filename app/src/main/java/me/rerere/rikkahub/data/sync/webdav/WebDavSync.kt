@@ -85,13 +85,9 @@ class WebDavSync(
         val backupFile = File(context.cacheDir, item.displayName)
 
         try {
-            // Download backup file
+            // Download backup file directly to file to avoid OOM
             Log.i(TAG, "restore: Downloading ${item.displayName}")
-            val data = client.get(item.displayName).getOrThrow()
-
-            FileOutputStream(backupFile).use { outputStream ->
-                outputStream.write(data)
-            }
+            client.downloadToFile(item.displayName, backupFile).getOrThrow()
 
             Log.i(TAG, "restore: Downloaded ${backupFile.length().fileSizeToString()}")
 
