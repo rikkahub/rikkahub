@@ -272,8 +272,6 @@ private class ChainOfThoughtScopeImpl(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp, bottom = 8.dp)
-                            .heightIn(max = 160.dp)
-                            .verticalScroll(contentScrollState)
                     ) {
                         content?.invoke()
                     }
