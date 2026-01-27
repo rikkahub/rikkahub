@@ -456,6 +456,12 @@ sealed class UIMessagePart {
     level = DeprecationLevel.WARNING
 )
 fun List<UIMessagePart>.toSortedMessageParts(): List<UIMessagePart> {
+    // Skip sorting if multiple Reasoning or Text parts exist to preserve semantic order
+    val reasoningCount = count { it is UIMessagePart.Reasoning }
+    val textCount = count { it is UIMessagePart.Text }
+    if (reasoningCount > 1 || textCount > 1) {
+        return this
+    }
     return sortedBy { part ->
         when (part) {
             is UIMessagePart.Reasoning -> -1
