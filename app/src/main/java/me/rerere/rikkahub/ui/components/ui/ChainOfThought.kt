@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Search
@@ -257,8 +258,15 @@ private class ChainOfThoughtScopeImpl(
                         status()
                     }
 
-                    // 展开指示器（仅在没有自定义onClick时显示）
-                    if (hasContent && onClick == null) {
+                    // 指示器：onClick 显示向右箭头，content 显示展开/折叠箭头
+                    if (onClick != null) {
+                        Icon(
+                            imageVector = Lucide.ChevronRight,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else if (hasContent) {
                         Icon(
                             imageVector = if (stepExpanded) Lucide.ChevronUp else Lucide.ChevronDown,
                             contentDescription = null,
