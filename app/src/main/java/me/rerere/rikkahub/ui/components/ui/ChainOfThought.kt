@@ -132,6 +132,7 @@ interface ChainOfThoughtScope {
         icon: ImageVector? = null, // 如果不提供，用点替代
         label: (@Composable () -> Unit),
         status: (@Composable () -> Unit)? = null,
+        onClick: (() -> Unit)? = null, // 自定义点击行为(如打开bottom sheet)，优先于content的展开行为
         content: (@Composable () -> Unit)? = null, // 如果提供，代表可展开
     )
 }
@@ -145,6 +146,7 @@ private class ChainOfThoughtScopeImpl(
         icon: ImageVector?,
         label: @Composable (() -> Unit),
         status: @Composable (() -> Unit)?,
+        onClick: (() -> Unit)?,
         content: @Composable (() -> Unit)?
     ) {
         var stepExpanded by remember { mutableStateOf(false) }
@@ -229,7 +231,11 @@ private class ChainOfThoughtScopeImpl(
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
-                            if (hasContent) {
+                            if (onClick != null) {
+                                Modifier
+                                    .clip(MaterialTheme.shapes.small)
+                                    .clickable { onClick() }
+                            } else if (hasContent) {
                                 Modifier
                                     .clip(MaterialTheme.shapes.small)
                                     .clickable { stepExpanded = !stepExpanded }
@@ -251,8 +257,8 @@ private class ChainOfThoughtScopeImpl(
                         status()
                     }
 
-                    // 展开指示器
-                    if (hasContent) {
+                    // 展开指示器（仅在没有自定义onClick时显示）
+                    if (hasContent && onClick == null) {
                         Icon(
                             imageVector = if (stepExpanded) Lucide.ChevronUp else Lucide.ChevronDown,
                             contentDescription = null,
