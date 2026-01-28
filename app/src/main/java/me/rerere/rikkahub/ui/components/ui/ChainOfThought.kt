@@ -27,8 +27,11 @@ import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -299,40 +302,52 @@ private class ChainOfThoughtScopeImpl(
 @Composable
 private fun ChainOfThoughtPreview() {
     MaterialTheme {
-        Surface {
-            ChainOfThought(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                steps = listOf(
-                    Triple("Searching", Lucide.Search, "Completed"),
-                    Triple("Analyzing results", Lucide.Sparkles, "In progress"),
-                    Triple("Step without icon", null, null),
-                    Triple("Final step", Lucide.Sparkles, "Done"),
-                ),
-                collapsedVisibleCount = 2,
-            ) { (label, icon, status) ->
-                ChainOfThoughtStep(
-                    icon = icon,
-                    label = { Text(label, style = MaterialTheme.typography.bodyMedium) },
-                    status = status?.let {
-                        {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    content = if (label.contains("Search")) {
-                        {
-                            Text(
-                                "This is expandable content for the search step. It can contain more details about the search process.",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    } else null
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text("Chain of thought")
+                    }
                 )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier.padding(innerPadding),
+            ) {
+                ChainOfThought(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    steps = listOf(
+                        Triple("Searching", Lucide.Search, "Completed"),
+                        Triple("Analyzing results", Lucide.Sparkles, "In progress"),
+                        Triple("Step without icon", null, null),
+                        Triple("Final step", Lucide.Sparkles, "Done"),
+                    ),
+                    collapsedVisibleCount = 2,
+                ) { (label, icon, status) ->
+                    ChainOfThoughtStep(
+                        icon = icon,
+                        label = { Text(label, style = MaterialTheme.typography.bodyMedium) },
+                        status = status?.let {
+                            {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        content = if (label.contains("Search")) {
+                            {
+                                Text(
+                                    "This is expandable content for the search step. It can contain more details about the search process.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        } else null
+                    )
+                }
             }
         }
     }
