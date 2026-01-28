@@ -133,7 +133,7 @@ fun <T> ChainOfThought(
 interface ChainOfThoughtScope {
     @Composable
     fun ChainOfThoughtStep(
-        icon: ImageVector? = null, // 如果不提供，用点替代
+        icon: (@Composable () -> Unit)? = null, // 如果不提供，用点替代
         label: (@Composable () -> Unit),
         status: (@Composable () -> Unit)? = null,
         onClick: (() -> Unit)? = null, // 自定义点击行为(如打开bottom sheet)，优先于content的展开行为
@@ -147,7 +147,7 @@ private class ChainOfThoughtScopeImpl(
 ) : ChainOfThoughtScope {
     @Composable
     override fun ChainOfThoughtStep(
-        icon: ImageVector?,
+        icon: @Composable (() -> Unit)?,
         label: @Composable (() -> Unit),
         status: @Composable (() -> Unit)?,
         onClick: (() -> Unit)?,
@@ -207,12 +207,7 @@ private class ChainOfThoughtScopeImpl(
                     contentAlignment = Alignment.Center,
                 ) {
                     if (icon != null) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                        icon()
                     } else {
                         Box(
                             modifier = Modifier
@@ -301,6 +296,15 @@ private class ChainOfThoughtScopeImpl(
 @Preview(showBackground = true)
 @Composable
 private fun ChainOfThoughtPreview() {
+    // 定义步骤数据类
+    data class StepData(
+        val label: String,
+        val icon: ImageVector?,
+        val status: String?,
+        val hasContent: Boolean = false,
+        val hasOnClick: Boolean = false,
+    )
+
     MaterialTheme {
         Scaffold(
             topBar = {
@@ -319,17 +323,27 @@ private fun ChainOfThoughtPreview() {
                         .fillMaxWidth()
                         .padding(16.dp),
                     steps = listOf(
-                        Triple("Searching", Lucide.Search, "Completed"),
-                        Triple("Analyzing results", Lucide.Sparkles, "In progress"),
-                        Triple("Step without icon", null, null),
-                        Triple("Final step", Lucide.Sparkles, "Done"),
+                        StepData("Searching the web", Lucide.Search, "3 results", hasContent = true),
+                        StepData("Reading documents", Lucide.Sparkles, "Completed", hasOnClick = true),
+                        StepData("Analyzing results", Lucide.Sparkles, "In progress", hasContent = true),
+                        StepData("Step without icon", null, null),
+                        StepData("Final step", Lucide.Sparkles, "Done"),
                     ),
                     collapsedVisibleCount = 2,
-                ) { (label, icon, status) ->
+                ) { step ->
                     ChainOfThoughtStep(
-                        icon = icon,
-                        label = { Text(label, style = MaterialTheme.typography.bodyMedium) },
-                        status = status?.let {
+                        icon = step.icon?.let {
+                            {
+                                Icon(
+                                    imageVector = it,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        },
+                        label = { Text(step.label, style = MaterialTheme.typography.bodyMedium) },
+                        status = step.status?.let {
                             {
                                 Text(
                                     it,
@@ -338,12 +352,37 @@ private fun ChainOfThoughtPreview() {
                                 )
                             }
                         },
-                        content = if (label.contains("Search")) {
+                        onClick = if (step.hasOnClick) {
+                            { /* Open bottom sheet */ }
+                        } else null,
+                        content = if (step.hasContent) {
                             {
-                                Text(
-                                    "This is expandable content for the search step. It can contain more details about the search process.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    if (step.label.contains("Search")) {
+                                        // 搜索结果示例
+                                        listOf(
+                                            "example.com - Example Domain",
+                                            "docs.example.com - Documentation",
+                                            "blog.example.com - Blog Post"
+                                        ).forEach { result ->
+                                            Text(
+                                                text = "• $result",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    } else {
+                                        // 分析内容示例
+                                        Text(
+                                            text = "This is expandable content showing detailed analysis. " +
+                                                    "It can contain multiple lines of text, code snippets, " +
+                                                    "or any other composable content.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
                             }
                         } else null
                     )
