@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -29,6 +30,8 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.PartGroup
+import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -374,96 +377,176 @@ class ChatCompletionsAPI(
         val lastUserMessageIndex = filteredMessages.indexOfLast { it.role == MessageRole.USER }
 
         filteredMessages.forEachIndexed { index, message ->
-            // 1. 先添加当前消息
-            add(buildJsonObject {
-                // role
-                put("role", JsonPrimitive(message.role.name.lowercase()))
+            if (message.role == MessageRole.ASSISTANT) {
+                addAssistantMessages(message, index > lastUserMessageIndex)
+            } else {
+                addNonAssistantMessage(message)
+            }
+        }
+    }
 
-                // reasoning
-                // 只回传最后一条 user 消息之后的思考内容
-                if (index > lastUserMessageIndex) {
-                    message.parts.filterIsInstance<UIMessagePart.Reasoning>().firstOrNull()?.let { reasoning ->
-                        put("reasoning_content", reasoning.reasoning)
+    private fun JsonArrayBuilder.addAssistantMessages(message: UIMessage, includeReasoning: Boolean) {
+        val groups = groupPartsByToolBoundary(message.parts)
+        val contentBuffer = mutableListOf<UIMessagePart>()
+        var reasoningPart: UIMessagePart.Reasoning? = null
+
+        for (group in groups) {
+            when (group) {
+                is PartGroup.Content -> {
+                    // 从当前 group 中提取 reasoning（保持顺序）
+                    if (includeReasoning) {
+                        group.parts.filterIsInstance<UIMessagePart.Reasoning>().firstOrNull()?.let {
+                            reasoningPart = it
+                        }
                     }
+                    group.parts
+                        .filter { it is UIMessagePart.Text || it is UIMessagePart.Image }
+                        .forEach { contentBuffer.add(it) }
                 }
 
-                // content
-                if (message.parts.isOnlyTextPart()) {
-                    // 如果只是纯文本，直接赋值给content
-                    put(
-                        "content",
-                        message.parts.filterIsInstance<UIMessagePart.Text>().first().text
+                is PartGroup.Tools -> {
+                    // 输出 assistant 消息（包含累积的内容 + tool_calls）
+                    add(
+                        buildAssistantMessageJson(
+                            contentParts = contentBuffer,
+                            tools = group.tools,
+                            reasoningPart = reasoningPart
+                        )
                     )
-                } else {
-                    // 否则，使用parts构建
-                    putJsonArray("content") {
-                        message.parts.forEach { part ->
-                            when (part) {
-                                is UIMessagePart.Text -> {
-                                    add(buildJsonObject {
-                                        put("type", "text")
-                                        put("text", part.text)
+                    contentBuffer.clear()
+                    reasoningPart = null // 清空，下一个 group 可能有新的 reasoning
+
+                    // 紧跟 tool 结果消息
+                    group.tools.forEach { tool ->
+                        add(buildJsonObject {
+                            put("role", "tool")
+                            put("name", tool.toolName)
+                            put("tool_call_id", tool.toolCallId)
+                            put(
+                                "content",
+                                tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                        })
+                    }
+                }
+            }
+        }
+
+        // 输出剩余内容
+        if (contentBuffer.isNotEmpty() || reasoningPart != null) {
+            add(
+                buildAssistantMessageJson(
+                    contentParts = contentBuffer,
+                    tools = emptyList(),
+                    reasoningPart = reasoningPart
+                )
+            )
+        }
+    }
+
+    private fun buildAssistantMessageJson(
+        contentParts: List<UIMessagePart>,
+        tools: List<UIMessagePart.Tool>,
+        reasoningPart: UIMessagePart.Reasoning?
+    ) = buildJsonObject {
+        put("role", "assistant")
+
+        // reasoning_content
+        reasoningPart?.let {
+            put("reasoning_content", it.reasoning)
+        }
+
+        // content
+        if (contentParts.isEmpty()) {
+            put("content", "")
+        } else if (contentParts.size == 1 && contentParts[0] is UIMessagePart.Text) {
+            put("content", (contentParts[0] as UIMessagePart.Text).text)
+        } else {
+            putJsonArray("content") {
+                contentParts.forEach { part ->
+                    when (part) {
+                        is UIMessagePart.Text -> {
+                            add(buildJsonObject {
+                                put("type", "text")
+                                put("text", part.text)
+                            })
+                        }
+
+                        is UIMessagePart.Image -> {
+                            add(buildJsonObject {
+                                part.encodeBase64().onSuccess { encodedImage ->
+                                    put("type", "image_url")
+                                    put("image_url", buildJsonObject {
+                                        put("url", encodedImage.base64)
                                     })
+                                }.onFailure {
+                                    it.printStackTrace()
+                                    put("type", "text")
+                                    put("text", "")
                                 }
+                            })
+                        }
 
-                                is UIMessagePart.Image -> {
-                                    add(buildJsonObject {
-                                        part.encodeBase64().onSuccess { encodedImage ->
-                                            put("type", "image_url")
-                                            put("image_url", buildJsonObject {
-                                                put("url", encodedImage.base64)
-                                            })
-                                        }.onFailure {
-                                            it.printStackTrace()
-                                            println("encode image failed: ${part.url}")
+                        else -> {}
+                    }
+                }
+            }
+        }
 
-                                            put("type", "text")
-                                            put("text", "")
-                                        }
-                                    })
-                                }
+        // tool_calls
+        if (tools.isNotEmpty()) {
+            put("tool_calls", buildJsonArray {
+                tools.forEach { tool ->
+                    add(buildJsonObject {
+                        put("id", tool.toolCallId)
+                        put("type", "function")
+                        put("function", buildJsonObject {
+                            put("name", tool.toolName)
+                            put("arguments", tool.input)
+                        })
+                    })
+                }
+            })
+        }
+    }
 
-                                else -> {
-                                    Log.w(
-                                        TAG,
-                                        "buildMessages: message part not supported: $part"
-                                    )
-                                    // DO NOTHING
-                                }
+    private fun JsonArrayBuilder.addNonAssistantMessage(message: UIMessage) {
+        add(buildJsonObject {
+            put("role", JsonPrimitive(message.role.name.lowercase()))
+
+            if (message.parts.isOnlyTextPart()) {
+                put("content", message.parts.filterIsInstance<UIMessagePart.Text>().first().text)
+            } else {
+                putJsonArray("content") {
+                    message.parts.forEach { part ->
+                        when (part) {
+                            is UIMessagePart.Text -> {
+                                add(buildJsonObject {
+                                    put("type", "text")
+                                    put("text", part.text)
+                                })
                             }
+
+                            is UIMessagePart.Image -> {
+                                add(buildJsonObject {
+                                    part.encodeBase64().onSuccess { encodedImage ->
+                                        put("type", "image_url")
+                                        put("image_url", buildJsonObject {
+                                            put("url", encodedImage.base64)
+                                        })
+                                    }.onFailure {
+                                        it.printStackTrace()
+                                        put("type", "text")
+                                        put("text", "")
+                                    }
+                                })
+                            }
+
+                            else -> {}
                         }
                     }
                 }
-
-                // tool_calls - 包含所有工具调用（无论是否已执行）
-                message.getTools()
-                    .takeIf { it.isNotEmpty() }
-                    ?.let { tools ->
-                        put("tool_calls", buildJsonArray {
-                            tools.forEach { tool ->
-                                add(buildJsonObject {
-                                    put("id", tool.toolCallId)
-                                    put("type", "function")
-                                    put("function", buildJsonObject {
-                                        put("name", tool.toolName)
-                                        put("arguments", tool.input)
-                                    })
-                                })
-                            }
-                        })
-                    }
-            })
-
-            // 2. 再添加已执行工具的 tool results
-            message.getTools().filter { it.isExecuted }.forEach { tool ->
-                add(buildJsonObject {
-                    put("role", "tool")
-                    put("name", tool.toolName)
-                    put("tool_call_id", tool.toolCallId)
-                    put("content", tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
-                })
             }
-        }
+        })
     }
 
     private fun parseMessage(jsonObject: JsonObject): UIMessage {

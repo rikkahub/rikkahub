@@ -5,6 +5,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -24,6 +25,8 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.PartGroup
+import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -225,91 +228,106 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
 
     private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
         messages
-            .filter {
-                it.isValidToUpload() && it.role != MessageRole.SYSTEM
-            }
+            .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
-                val tools = message.getTools()
-                val hasContent = message.parts.any { it is UIMessagePart.Text || it is UIMessagePart.Image }
-
-                // 1. 只有当消息有实际内容（文本或图片）时才添加主消息
-                if (hasContent) {
-                    add(buildJsonObject {
-                        // role
-                        put("role", JsonPrimitive(message.role.name.lowercase()))
-
-                        // content
-                        if (message.parts.isOnlyTextPart()) {
-                            // 如果只是纯文本，直接赋值给content
-                            put(
-                                "content",
-                                message.parts.filterIsInstance<UIMessagePart.Text>().first().text
-                            )
-                        } else {
-                            // 否则，使用parts构建
-                            putJsonArray("content") {
-                                message.parts.forEach { part ->
-                                    when (part) {
-                                        is UIMessagePart.Text -> {
-                                            add(buildJsonObject {
-                                                put(
-                                                    "type",
-                                                    if (message.role == MessageRole.USER) "input_text" else "output_text"
-                                                )
-                                                put("text", part.text)
-                                            })
-                                        }
-
-                                        is UIMessagePart.Image -> {
-                                            add(buildJsonObject {
-                                                part.encodeBase64().onSuccess { encodedImage ->
-                                                    put(
-                                                        "type",
-                                                        if (message.role == MessageRole.USER) "input_image" else "output_image"
-                                                    )
-                                                    put("image_url", encodedImage.base64)
-                                                }.onFailure {
-                                                    it.printStackTrace()
-                                                    println("encode image failed: ${part.url}")
-
-                                                    put("type", "input_text")
-                                                    put(
-                                                        "text",
-                                                        "Error: Failed to encode image to base64"
-                                                    )
-                                                }
-                                            })
-                                        }
-
-                                        else -> {
-                                            // Tool parts are handled separately below
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    })
-                }
-
-                // 2. 添加所有 tool_calls（无论是否已执行）
-                tools.forEach { tool ->
-                    add(buildJsonObject {
-                        put("type", "function_call")
-                        put("call_id", tool.toolCallId)
-                        put("name", tool.toolName)
-                        put("arguments", tool.input)
-                    })
-                }
-
-                // 3. 添加已执行工具的 tool results
-                tools.filter { it.isExecuted }.forEach { tool ->
-                    add(buildJsonObject {
-                        put("type", "function_call_output")
-                        put("call_id", tool.toolCallId)
-                        put("output", tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
-                    })
+                if (message.role == MessageRole.ASSISTANT) {
+                    addAssistantItems(message)
+                } else {
+                    addUserItems(message)
                 }
             }
+    }
+
+    private fun JsonArrayBuilder.addAssistantItems(message: UIMessage) {
+        val groups = groupPartsByToolBoundary(message.parts)
+        val contentBuffer = mutableListOf<UIMessagePart>()
+
+        for (group in groups) {
+            when (group) {
+                is PartGroup.Content -> {
+                    group.parts
+                        .filter { it is UIMessagePart.Text || it is UIMessagePart.Image }
+                        .forEach { contentBuffer.add(it) }
+                }
+
+                is PartGroup.Tools -> {
+                    // 先输出累积的内容
+                    if (contentBuffer.isNotEmpty()) {
+                        addContentItem(MessageRole.ASSISTANT, contentBuffer)
+                        contentBuffer.clear()
+                    }
+
+                    // 输出 function_call + function_call_output
+                    group.tools.forEach { tool ->
+                        add(buildJsonObject {
+                            put("type", "function_call")
+                            put("call_id", tool.toolCallId)
+                            put("name", tool.toolName)
+                            put("arguments", tool.input)
+                        })
+                        add(buildJsonObject {
+                            put("type", "function_call_output")
+                            put("call_id", tool.toolCallId)
+                            put(
+                                "output",
+                                tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                        })
+                    }
+                }
+            }
+        }
+
+        // 输出剩余内容
+        if (contentBuffer.isNotEmpty()) {
+            addContentItem(MessageRole.ASSISTANT, contentBuffer)
+        }
+    }
+
+    private fun JsonArrayBuilder.addUserItems(message: UIMessage) {
+        val contentParts = message.parts.filter { it is UIMessagePart.Text || it is UIMessagePart.Image }
+        if (contentParts.isNotEmpty()) {
+            addContentItem(message.role, contentParts)
+        }
+    }
+
+    private fun JsonArrayBuilder.addContentItem(role: MessageRole, parts: List<UIMessagePart>) {
+        if (parts.isEmpty()) return
+
+        add(buildJsonObject {
+            put("role", JsonPrimitive(role.name.lowercase()))
+
+            if (parts.isOnlyTextPart()) {
+                put("content", (parts.first() as UIMessagePart.Text).text)
+            } else {
+                putJsonArray("content") {
+                    parts.forEach { part ->
+                        when (part) {
+                            is UIMessagePart.Text -> {
+                                add(buildJsonObject {
+                                    put("type", if (role == MessageRole.USER) "input_text" else "output_text")
+                                    put("text", part.text)
+                                })
+                            }
+
+                            is UIMessagePart.Image -> {
+                                add(buildJsonObject {
+                                    part.encodeBase64().onSuccess { encodedImage ->
+                                        put("type", if (role == MessageRole.USER) "input_image" else "output_image")
+                                        put("image_url", encodedImage.base64)
+                                    }.onFailure {
+                                        it.printStackTrace()
+                                        put("type", "input_text")
+                                        put("text", "Error: Failed to encode image to base64")
+                                    }
+                                })
+                            }
+
+                            else -> {}
+                        }
+                    }
+                }
+            }
+        })
     }
 
     private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
