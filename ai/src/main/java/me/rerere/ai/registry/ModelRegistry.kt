@@ -43,6 +43,7 @@ object ModelRegistry {
     private val DOUBAO_1_6 = ModelMatcher.containsRegex("doubao.+1([-.])6")
     private val GROK_4 = ModelMatcher.containsRegex("grok-4")
     private val KIMI_K2 = ModelMatcher.containsRegex("kimi-k2")
+    private val KIMI_K2_5 = ModelMatcher.containsRegex("kimi-k2\\.5")
     private val STEP_3 = ModelMatcher.containsRegex("step-3")
     private val INTERN_S1 = ModelMatcher.containsRegex("intern-s1")
     private val GLM_4_5 = ModelMatcher.containsRegex("glm-4.5")
@@ -53,11 +54,11 @@ object ModelRegistry {
     val QWEN_MT = ModelMatcher.containsRegex("qwen-mt")
 
     val VISION_MODELS =
-        GPT4O + GPT_4_1 + GPT_5 + OPENAI_O_MODELS + GEMINI_SERIES + CLAUDE_SERIES + DOUBAO_1_6 + GROK_4 + STEP_3 + INTERN_S1
+        GPT4O + GPT_4_1 + GPT_5 + OPENAI_O_MODELS + GEMINI_SERIES + CLAUDE_SERIES + DOUBAO_1_6 + GROK_4 + STEP_3 + INTERN_S1 + KIMI_K2_5
     val TOOL_MODELS =
-        GPT4O + GPT_4_1 + GPT_OSS + GPT_5 + OPENAI_O_MODELS + GEMINI_SERIES + CLAUDE_SERIES + QWEN_3 + DOUBAO_1_6 + GROK_4 + KIMI_K2 + STEP_3 + INTERN_S1 + GLM_4_5 + DEEPSEEK_R1 + DEEPSEEK_V3 + DEEPSEEK_V3_1 + DEEPSEEK_V3_2 + GLM_4_6 + GLM_4_7 + MINIMAX_M2 + XIAOMI_MIMO_V2
+        GPT4O + GPT_4_1 + GPT_OSS + GPT_5 + OPENAI_O_MODELS + GEMINI_SERIES + CLAUDE_SERIES + QWEN_3 + DOUBAO_1_6 + GROK_4 + KIMI_K2 + KIMI_K2_5 + STEP_3 + INTERN_S1 + GLM_4_5 + DEEPSEEK_R1 + DEEPSEEK_V3 + DEEPSEEK_V3_1 + DEEPSEEK_V3_2 + GLM_4_6 + GLM_4_7 + MINIMAX_M2 + XIAOMI_MIMO_V2
     val REASONING_MODELS =
-        GPT_OSS + GPT_5 + OPENAI_O_MODELS + GEMINI_2_5_FLASH + GEMINI_2_5_PRO + GEMINI_3_SERIES + GEMINI_LATEST + CLAUDE_SERIES + QWEN_3 + DOUBAO_1_6 + GROK_4 + KIMI_K2 + STEP_3 + INTERN_S1 + GLM_4_5 + DEEPSEEK_R1 + DEEPSEEK_V3_1 + DEEPSEEK_V3_2 + GLM_4_6 + GLM_4_7 + MINIMAX_M2 + XIAOMI_MIMO_V2
+        GPT_OSS + GPT_5 + OPENAI_O_MODELS + GEMINI_2_5_FLASH + GEMINI_2_5_PRO + GEMINI_3_SERIES + GEMINI_LATEST + CLAUDE_SERIES + QWEN_3 + DOUBAO_1_6 + GROK_4 + KIMI_K2 + KIMI_K2_5 + STEP_3 + INTERN_S1 + GLM_4_5 + DEEPSEEK_R1 + DEEPSEEK_V3_1 + DEEPSEEK_V3_2 + GLM_4_6 + GLM_4_7 + MINIMAX_M2 + XIAOMI_MIMO_V2
     val CHAT_IMAGE_GEN_MODELS = GEMINI_2_5_IMAGE + GEMINI_3_PRO_IMAGE + GEMINI_NANO_BANANA
 
     val MODEL_INPUT_MODALITIES = ModelData { modelId ->
