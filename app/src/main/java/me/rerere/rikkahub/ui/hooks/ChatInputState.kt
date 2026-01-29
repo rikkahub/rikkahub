@@ -14,11 +14,15 @@ class ChatInputState {
     var messageContent by mutableStateOf(listOf<UIMessagePart>())
     var editingMessage by mutableStateOf<Uuid?>(null)
     var loading by mutableStateOf(false)
+    private var editingParts: List<UIMessagePart>? = null
+    private var editingTextIndex: Int? = null
 
     fun clearInput() {
         textContent.setTextAndPlaceCursorAtEnd("")
         messageContent = emptyList()
         editingMessage = null
+        editingParts = null
+        editingTextIndex = null
     }
 
     fun isEditing() = editingMessage != null
@@ -32,12 +36,26 @@ class ChatInputState {
     }
 
     fun setContents(contents: List<UIMessagePart>) {
-        val text = contents.filterIsInstance<UIMessagePart.Text>().joinToString { it.text }
+        val lastTextIndex = contents.indexOfLast { it is UIMessagePart.Text }
+        val text = if (lastTextIndex >= 0) {
+            (contents[lastTextIndex] as UIMessagePart.Text).text
+        } else {
+            ""
+        }
         textContent.setTextAndPlaceCursorAtEnd(text)
         messageContent = contents.filter { it !is UIMessagePart.Text }
+        editingParts = contents
+        editingTextIndex = if (lastTextIndex >= 0) lastTextIndex else null
     }
 
     fun getContents(): List<UIMessagePart> {
+        val parts = editingParts
+        val textIndex = editingTextIndex
+        if (isEditing() && parts != null && textIndex != null) {
+            val newParts = parts.toMutableList()
+            newParts[textIndex] = UIMessagePart.Text(textContent.text.toString())
+            return newParts
+        }
         return listOf(UIMessagePart.Text(textContent.text.toString())) + messageContent
     }
 
