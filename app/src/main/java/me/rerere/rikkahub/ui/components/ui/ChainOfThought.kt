@@ -135,7 +135,7 @@ interface ChainOfThoughtScope {
     fun ChainOfThoughtStep(
         icon: (@Composable () -> Unit)? = null, // 如果不提供，用点替代
         label: (@Composable () -> Unit),
-        status: (@Composable () -> Unit)? = null,
+        extra: (@Composable () -> Unit)? = null,
         onClick: (() -> Unit)? = null, // 自定义点击行为(如打开bottom sheet)，优先于content的展开行为
         content: (@Composable () -> Unit)? = null, // 如果提供，代表可展开
     )
@@ -149,7 +149,7 @@ private class ChainOfThoughtScopeImpl(
     override fun ChainOfThoughtStep(
         icon: @Composable (() -> Unit)?,
         label: @Composable (() -> Unit),
-        status: @Composable (() -> Unit)?,
+        extra: @Composable (() -> Unit)?,
         onClick: (() -> Unit)?,
         content: @Composable (() -> Unit)?
     ) {
@@ -251,9 +251,9 @@ private class ChainOfThoughtScopeImpl(
                         label()
                     }
 
-                    // Status
-                    if (status != null) {
-                        status()
+                    // Extra
+                    if (extra != null) {
+                        extra()
                     }
 
                     // 指示器：onClick 显示向右箭头，content 显示展开/折叠箭头
@@ -343,7 +343,7 @@ private fun ChainOfThoughtPreview() {
                             }
                         },
                         label = { Text(step.label, style = MaterialTheme.typography.bodyMedium) },
-                        status = step.status?.let {
+                        extra = step.status?.let {
                             {
                                 Text(
                                     it,
