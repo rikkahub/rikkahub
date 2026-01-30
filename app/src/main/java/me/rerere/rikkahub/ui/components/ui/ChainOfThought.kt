@@ -147,16 +147,31 @@ fun <T> ChainOfThought(
 }
 
 interface ChainOfThoughtScope {
+    /**
+     * 非受控 step：内部管理展开状态
+     */
     @Composable
     fun ChainOfThoughtStep(
-        icon: (@Composable () -> Unit)? = null, // 如果不提供，用点替代
+        icon: (@Composable () -> Unit)? = null,
         label: (@Composable () -> Unit),
         extra: (@Composable () -> Unit)? = null,
-        onClick: (() -> Unit)? = null, // 自定义点击行为(如打开bottom sheet)，优先于content的展开行为
-        expanded: Boolean? = null, // 受控展开状态，为 null 时使用内部状态
-        onExpandedChange: ((Boolean) -> Unit)? = null, // 受控展开状态变化
-        contentVisible: Boolean? = null, // 内容显示状态，null 则由 expanded 控制
-        content: (@Composable () -> Unit)? = null, // 如果提供，代表可展开
+        onClick: (() -> Unit)? = null,
+        content: (@Composable () -> Unit)? = null,
+    )
+
+    /**
+     * 受控 step：外部控制展开状态
+     */
+    @Composable
+    fun ControlledChainOfThoughtStep(
+        expanded: Boolean,
+        onExpandedChange: (Boolean) -> Unit,
+        icon: (@Composable () -> Unit)? = null,
+        label: (@Composable () -> Unit),
+        extra: (@Composable () -> Unit)? = null,
+        onClick: (() -> Unit)? = null,
+        contentVisible: Boolean = expanded,
+        content: (@Composable () -> Unit)? = null,
     )
 }
 
@@ -167,24 +182,56 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
         label: @Composable (() -> Unit),
         extra: @Composable (() -> Unit)?,
         onClick: (() -> Unit)?,
-        expanded: Boolean?,
-        onExpandedChange: ((Boolean) -> Unit)?,
-        contentVisible: Boolean?,
         content: @Composable (() -> Unit)?
     ) {
-        var stepExpandedInternal by remember { mutableStateOf(false) }
-        val isControlled = expanded != null
-        val stepExpanded = expanded ?: stepExpandedInternal
-        val hasContent = content != null
-        val isContentVisible = contentVisible ?: stepExpanded
+        var expanded by remember { mutableStateOf(false) }
+        ChainOfThoughtStepContent(
+            icon = icon,
+            label = label,
+            extra = extra,
+            onClick = onClick,
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+            contentVisible = expanded,
+            content = content,
+        )
+    }
 
-        fun toggleExpanded() {
-            if (isControlled) {
-                onExpandedChange?.invoke(!stepExpanded)
-            } else {
-                stepExpandedInternal = !stepExpanded
-            }
-        }
+    @Composable
+    override fun ControlledChainOfThoughtStep(
+        expanded: Boolean,
+        onExpandedChange: (Boolean) -> Unit,
+        icon: @Composable (() -> Unit)?,
+        label: @Composable (() -> Unit),
+        extra: @Composable (() -> Unit)?,
+        onClick: (() -> Unit)?,
+        contentVisible: Boolean,
+        content: @Composable (() -> Unit)?
+    ) {
+        ChainOfThoughtStepContent(
+            icon = icon,
+            label = label,
+            extra = extra,
+            onClick = onClick,
+            expanded = expanded,
+            onExpandedChange = onExpandedChange,
+            contentVisible = contentVisible,
+            content = content,
+        )
+    }
+
+    @Composable
+    private fun ChainOfThoughtStepContent(
+        icon: @Composable (() -> Unit)?,
+        label: @Composable (() -> Unit),
+        extra: @Composable (() -> Unit)?,
+        onClick: (() -> Unit)?,
+        expanded: Boolean,
+        onExpandedChange: (Boolean) -> Unit,
+        contentVisible: Boolean,
+        content: @Composable (() -> Unit)?
+    ) {
+        val hasContent = content != null
 
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -201,7 +248,7 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
                         } else if (hasContent) {
                             Modifier
                                 .clip(MaterialTheme.shapes.small)
-                                .clickable { toggleExpanded() }
+                                .clickable { onExpandedChange(!expanded) }
                         } else {
                             Modifier
                         }
@@ -256,7 +303,7 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
                     )
                 } else if (hasContent) {
                     Icon(
-                        imageVector = if (stepExpanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                        imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -265,7 +312,7 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
             }
 
             // 展开内容（缩进对齐 label）
-            if (isContentVisible && hasContent) {
+            if (contentVisible && hasContent) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -288,6 +335,7 @@ private fun ChainOfThoughtPreview() {
         val status: String?,
         val hasContent: Boolean = false,
         val hasOnClick: Boolean = false,
+        val controlled: Boolean = false,
     )
 
     MaterialTheme {
@@ -303,6 +351,9 @@ private fun ChainOfThoughtPreview() {
             Column(
                 modifier = Modifier.padding(innerPadding),
             ) {
+                // 受控状态示例
+                var controlledExpanded by remember { mutableStateOf(false) }
+
                 ChainOfThought(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -310,67 +361,87 @@ private fun ChainOfThoughtPreview() {
                     steps = listOf(
                         StepData("Searching the web", Lucide.Search, "3 results", hasContent = true),
                         StepData("Reading documents", Lucide.Sparkles, "Completed", hasOnClick = true),
-                        StepData("Analyzing results", Lucide.Sparkles, "In progress", hasContent = true),
+                        StepData("Analyzing results (controlled)", Lucide.Sparkles, "In progress", hasContent = true, controlled = true),
                         StepData("Step without icon", null, null),
                         StepData("Final step", Lucide.Sparkles, "Done"),
                     ),
                     collapsedVisibleCount = 2,
                 ) { step ->
-                    ChainOfThoughtStep(
-                        icon = step.icon?.let {
-                            {
-                                Icon(
-                                    imageVector = it,
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxSize(),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        },
-                        label = { Text(step.label, style = MaterialTheme.typography.bodyMedium) },
-                        extra = step.status?.let {
-                            {
-                                Text(
-                                    it,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        onClick = if (step.hasOnClick) {
-                            { /* Open bottom sheet */ }
-                        } else null,
-                        content = if (step.hasContent) {
-                            {
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    if (step.label.contains("Search")) {
-                                        // 搜索结果示例
-                                        listOf(
-                                            "example.com - Example Domain",
-                                            "docs.example.com - Documentation",
-                                            "blog.example.com - Blog Post"
-                                        ).forEach { result ->
-                                            Text(
-                                                text = "• $result",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    } else {
-                                        // 分析内容示例
+                    val iconComposable: (@Composable () -> Unit)? = step.icon?.let {
+                        {
+                            Icon(
+                                imageVector = it,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    val labelComposable: @Composable () -> Unit = {
+                        Text(step.label, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    val extraComposable: (@Composable () -> Unit)? = step.status?.let {
+                        {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    val onClickHandler: (() -> Unit)? = if (step.hasOnClick) {
+                        { /* Open bottom sheet */ }
+                    } else null
+                    val contentComposable: (@Composable () -> Unit)? = if (step.hasContent) {
+                        {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (step.label.contains("Search")) {
+                                    listOf(
+                                        "example.com - Example Domain",
+                                        "docs.example.com - Documentation",
+                                        "blog.example.com - Blog Post"
+                                    ).forEach { result ->
                                         Text(
-                                            text = "This is expandable content showing detailed analysis. " +
-                                                "It can contain multiple lines of text, code snippets, " +
-                                                "or any other composable content.",
+                                            text = "• $result",
                                             style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
+                                } else {
+                                    Text(
+                                        text = "This is expandable content showing detailed analysis. " +
+                                            "It can contain multiple lines of text, code snippets, " +
+                                            "or any other composable content.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
                                 }
                             }
-                        } else null
-                    )
+                        }
+                    } else null
+
+                    if (step.controlled) {
+                        // 受控版本
+                        ControlledChainOfThoughtStep(
+                            expanded = controlledExpanded,
+                            onExpandedChange = { controlledExpanded = it },
+                            icon = iconComposable,
+                            label = labelComposable,
+                            extra = extraComposable,
+                            onClick = onClickHandler,
+                            content = contentComposable,
+                        )
+                    } else {
+                        // 非受控版本
+                        ChainOfThoughtStep(
+                            icon = iconComposable,
+                            label = labelComposable,
+                            extra = extraComposable,
+                            onClick = onClickHandler,
+                            content = contentComposable,
+                        )
+                    }
                 }
             }
         }

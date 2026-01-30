@@ -113,7 +113,9 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
         }
     }
 
-    ChainOfThoughtStep(
+    ControlledChainOfThoughtStep(
+        expanded = expandState == ReasoningCardState.Expanded,
+        onExpandedChange = ::onExpandedChange,
         icon = {
             Icon(
                 painter = painterResource(R.drawable.deepthink),
@@ -144,8 +146,6 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
                 )
             }
         },
-        expanded = expandState == ReasoningCardState.Expanded,
-        onExpandedChange = ::onExpandedChange,
         contentVisible = expandState != ReasoningCardState.Collapsed,
         content = {
             val isPreview = expandState == ReasoningCardState.Preview
