@@ -3,6 +3,8 @@ package me.rerere.rikkahub
 import android.app.Application
 import android.util.Log
 import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.runtime.Composer
+import androidx.compose.runtime.tooling.ComposeStackTraceMode
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
@@ -55,6 +57,8 @@ class RikkaHubApp : Application() {
             setDefaultsAsync(R.xml.remote_config_defaults)
             fetchAndActivate()
         }
+
+        // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
 
     private fun deleteTempFiles() {
