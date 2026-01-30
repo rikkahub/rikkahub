@@ -1,9 +1,6 @@
 package me.rerere.rikkahub.ui.components.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
@@ -137,6 +133,9 @@ interface ChainOfThoughtScope {
         label: (@Composable () -> Unit),
         extra: (@Composable () -> Unit)? = null,
         onClick: (() -> Unit)? = null, // 自定义点击行为(如打开bottom sheet)，优先于content的展开行为
+        expanded: Boolean? = null, // 受控展开状态，为 null 时使用内部状态
+        onExpandedChange: ((Boolean) -> Unit)? = null, // 受控展开状态变化
+        contentVisible: Boolean? = null, // 内容显示状态，null 则由 expanded 控制
         content: (@Composable () -> Unit)? = null, // 如果提供，代表可展开
     )
 }
@@ -151,12 +150,25 @@ private class ChainOfThoughtScopeImpl(
         label: @Composable (() -> Unit),
         extra: @Composable (() -> Unit)?,
         onClick: (() -> Unit)?,
+        expanded: Boolean?,
+        onExpandedChange: ((Boolean) -> Unit)?,
+        contentVisible: Boolean?,
         content: @Composable (() -> Unit)?
     ) {
-        var stepExpanded by remember { mutableStateOf(false) }
-        val contentScrollState = rememberScrollState()
+        var stepExpandedInternal by remember { mutableStateOf(false) }
+        val isControlled = expanded != null
+        val stepExpanded = expanded ?: stepExpandedInternal
         val hasContent = content != null
+        val isContentVisible = contentVisible ?: stepExpanded
         val lineColor = MaterialTheme.colorScheme.outlineVariant
+
+        fun toggleExpanded() {
+            if (isControlled) {
+                onExpandedChange?.invoke(!stepExpanded)
+            } else {
+                stepExpandedInternal = !stepExpanded
+            }
+        }
 
         Row(
             modifier = Modifier
@@ -237,7 +249,7 @@ private class ChainOfThoughtScopeImpl(
                             } else if (hasContent) {
                                 Modifier
                                     .clip(MaterialTheme.shapes.small)
-                                    .clickable { stepExpanded = !stepExpanded }
+                                    .clickable { toggleExpanded() }
                             } else {
                                 Modifier
                             }
@@ -275,11 +287,7 @@ private class ChainOfThoughtScopeImpl(
                 }
 
                 // 展开内容
-                AnimatedVisibility(
-                    visible = stepExpanded && hasContent,
-                    enter = expandVertically(),
-                    exit = shrinkVertically(),
-                ) {
+                if (isContentVisible && hasContent) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
