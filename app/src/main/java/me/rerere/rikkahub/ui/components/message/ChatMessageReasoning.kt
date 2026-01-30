@@ -137,7 +137,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
         extra = {
             if (duration > 0.seconds) {
                 Text(
-                    text = "${duration.toString(DurationUnit.SECONDS, 1)}s",
+                    text = duration.toString(DurationUnit.SECONDS, 1),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.shimmer(isLoading = loading),
