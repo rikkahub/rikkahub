@@ -69,6 +69,7 @@ import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.components.ui.FaviconRow
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.GridLoading
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.JsonInstant
@@ -103,6 +104,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
 ) {
     var showResult by remember { mutableStateOf(false) }
     var showDenyDialog by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(true) }
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
     val arguments = tool.inputAsJson()
@@ -129,7 +131,18 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
     }
 
-    ChainOfThoughtStep(
+    // 判断是否有额外内容需要显示
+    val hasExtraContent = when (tool.toolName) {
+        ToolNames.CREATE_MEMORY, ToolNames.EDIT_MEMORY -> content.getStringContent("content") != null
+        ToolNames.SEARCH_WEB -> content.getStringContent("answer") != null ||
+            (content?.jsonObject?.get("items")?.jsonArray?.isNotEmpty() == true)
+        ToolNames.SCRAPE_WEB -> arguments.getStringContent("url") != null
+        else -> false
+    } || isDenied
+
+    ControlledChainOfThoughtStep(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
         icon = {
             if (loading) {
                 CircularProgressIndicator(
@@ -146,74 +159,14 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             }
         },
         label = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.shimmer(isLoading = loading),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (tool.toolName == ToolNames.CREATE_MEMORY || tool.toolName == ToolNames.EDIT_MEMORY) {
-                    content.getStringContent("content")?.let { memoryContent ->
-                        Text(
-                            text = memoryContent,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.shimmer(isLoading = loading),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                if (tool.toolName == ToolNames.SEARCH_WEB) {
-                    content.getStringContent("answer")?.let { answer ->
-                        Text(
-                            text = answer,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.shimmer(isLoading = loading),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    val items = content?.jsonObject?.get("items")?.jsonArray ?: emptyList()
-                    if (items.isNotEmpty()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            FaviconRow(
-                                urls = items.mapNotNull { it.getStringContent("url") },
-                                size = 18.dp,
-                            )
-                            Text(
-                                text = stringResource(R.string.chat_message_tool_search_results_count, items.size),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                            )
-                        }
-                    }
-                }
-                if (tool.toolName == ToolNames.SCRAPE_WEB) {
-                    val url = arguments.getStringContent("url") ?: ""
-                    Text(
-                        text = url,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                    )
-                }
-                if (isDenied) {
-                    val reason = (tool.approvalState as ToolApprovalState.Denied).reason
-                    Text(
-                        text = stringResource(R.string.chat_message_tool_denied) +
-                            if (reason.isNotBlank()) ": $reason" else "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.shimmer(isLoading = loading),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         },
         extra = if (isPending && onToolApproval != null) {
             {
@@ -247,6 +200,72 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         },
         onClick = if (content != null) {
             { showResult = true }
+        } else {
+            null
+        },
+        content = if (hasExtraContent) {
+            {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (tool.toolName == ToolNames.CREATE_MEMORY || tool.toolName == ToolNames.EDIT_MEMORY) {
+                        content.getStringContent("content")?.let { memoryContent ->
+                            Text(
+                                text = memoryContent,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.shimmer(isLoading = loading),
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    if (tool.toolName == ToolNames.SEARCH_WEB) {
+                        content.getStringContent("answer")?.let { answer ->
+                            Text(
+                                text = answer,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.shimmer(isLoading = loading),
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        val items = content?.jsonObject?.get("items")?.jsonArray ?: emptyList()
+                        if (items.isNotEmpty()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                FaviconRow(
+                                    urls = items.mapNotNull { it.getStringContent("url") },
+                                    size = 18.dp,
+                                )
+                                Text(
+                                    text = stringResource(R.string.chat_message_tool_search_results_count, items.size),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                                )
+                            }
+                        }
+                    }
+                    if (tool.toolName == ToolNames.SCRAPE_WEB) {
+                        val url = arguments.getStringContent("url") ?: ""
+                        Text(
+                            text = url,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                        )
+                    }
+                    if (isDenied) {
+                        val reason = (tool.approvalState as ToolApprovalState.Denied).reason
+                        Text(
+                            text = stringResource(R.string.chat_message_tool_denied) +
+                                if (reason.isNotBlank()) ": $reason" else "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
         } else {
             null
         },
