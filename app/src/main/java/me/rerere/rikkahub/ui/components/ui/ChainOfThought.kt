@@ -6,9 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,15 +28,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocal
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -48,6 +50,8 @@ import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Sparkles
+
+private val LocalCardColor = staticCompositionLocalOf { Color.White }
 
 @Composable
 fun <T> ChainOfThought(
@@ -62,65 +66,81 @@ fun <T> ChainOfThought(
     var expanded by remember { mutableStateOf(false) }
     val canCollapse = steps.size > collapsedVisibleCount
 
-    Card(
-        modifier = modifier,
-        colors = cardColors,
+    CompositionLocalProvider(
+        LocalCardColor provides cardColors.containerColor
     ) {
-        Column(
-            modifier = Modifier
-                .padding(8.dp)
-                .animateContentSize(),
+        Card(
+            modifier = modifier,
+            colors = cardColors,
         ) {
-            val visibleSteps = if (expanded || !canCollapse) {
-                steps
-            } else {
-                steps.takeLast(collapsedVisibleCount)
-            }
+            Column(
+                modifier = Modifier
+                    .padding(8.dp)
+                    .animateContentSize(),
+            ) {
+                val visibleSteps = if (expanded || !canCollapse) {
+                    steps
+                } else {
+                    steps.takeLast(collapsedVisibleCount)
+                }
 
-            // 显示展开/折叠按钮（统一在顶部）
-            if (canCollapse) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.small)
-                        .clickable { expanded = !expanded }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // 左侧：图标区域（24.dp，和步骤图标对齐）
-                    Box(
-                        modifier = Modifier.width(24.dp),
-                        contentAlignment = Alignment.Center,
+                // 显示展开/折叠按钮（统一在顶部）
+                if (canCollapse) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable { expanded = !expanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary,
+                        // 左侧：图标区域（24.dp，和步骤图标对齐）
+                        Box(
+                            modifier = Modifier.width(24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+
+                        // 右侧：文字区域（8.dp 间距后开始，和步骤 label 对齐）
+                        Text(
+                            modifier = Modifier.padding(start = 8.dp),
+                            text = if (expanded) {
+                                "Collapse"
+                            } else {
+                                "Show ${steps.size - collapsedVisibleCount} more steps"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
-
-                    // 右侧：文字区域（8.dp 间距后开始，和步骤 label 对齐）
-                    Text(
-                        modifier = Modifier.padding(start = 8.dp),
-                        text = if (expanded) {
-                            "Collapse"
-                        } else {
-                            "Show ${steps.size - collapsedVisibleCount} more steps"
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
                 }
-            }
 
-            visibleSteps.forEachIndexed { index, step ->
-                val isFirst = index == 0
-                val isLast = index == visibleSteps.lastIndex
-                val scope = remember(isFirst, isLast) {
-                    ChainOfThoughtScopeImpl(isFirst = isFirst, isLast = isLast)
+                val lineColor = MaterialTheme.colorScheme.outlineVariant
+                val scope = remember { ChainOfThoughtScopeImpl() }
+                Box(
+                    modifier = Modifier.drawBehind {
+                        val x = 12.dp.toPx()
+                        val offsetPx = 18.dp.toPx()
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(x, offsetPx),
+                            end = Offset(x, size.height - offsetPx),
+                            strokeWidth = 1.dp.toPx()
+                        )
+                    }
+                ) {
+                    Column {
+                        visibleSteps.forEach { step ->
+                            scope.content(step)
+                        }
+                    }
                 }
-                scope.content(step)
             }
         }
     }
@@ -140,10 +160,7 @@ interface ChainOfThoughtScope {
     )
 }
 
-private class ChainOfThoughtScopeImpl(
-    private val isFirst: Boolean,
-    private val isLast: Boolean
-) : ChainOfThoughtScope {
+private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
     @Composable
     override fun ChainOfThoughtStep(
         icon: @Composable (() -> Unit)?,
@@ -160,7 +177,6 @@ private class ChainOfThoughtScopeImpl(
         val stepExpanded = expanded ?: stepExpandedInternal
         val hasContent = content != null
         val isContentVisible = contentVisible ?: stepExpanded
-        val lineColor = MaterialTheme.colorScheme.outlineVariant
 
         fun toggleExpanded() {
             if (isControlled) {
@@ -170,131 +186,92 @@ private class ChainOfThoughtScopeImpl(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min),
+        Column(
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            // 左侧：Icon + 连接线（贯穿整个步骤高度）
-            Box(
+            // Label 行：Icon + Label + Extra + 指示器
+            Row(
                 modifier = Modifier
-                    .width(24.dp)
-                    .fillMaxHeight()
-                    .drawBehind {
-                        val centerX = size.width / 2
-                        val iconSize = 16.dp.toPx()
-                        val iconTopPadding = 8.dp.toPx()
-                        val gap = 4.dp.toPx()
-
-                        val iconTop = iconTopPadding
-                        val iconBottom = iconTopPadding + iconSize
-
-                        // Draw top line
-                        if (!isFirst) {
-                            drawLine(
-                                color = lineColor,
-                                start = Offset(centerX, 0f),
-                                end = Offset(centerX, iconTop - gap),
-                                strokeWidth = 1.dp.toPx()
-                            )
+                    .fillMaxWidth()
+                    .then(
+                        if (onClick != null) {
+                            Modifier
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable { onClick() }
+                        } else if (hasContent) {
+                            Modifier
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable { toggleExpanded() }
+                        } else {
+                            Modifier
                         }
-
-                        // Draw bottom line
-                        if (!isLast) {
-                            drawLine(
-                                color = lineColor,
-                                start = Offset(centerX, iconBottom + gap),
-                                end = Offset(centerX, size.height),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                        }
-                    },
-                contentAlignment = Alignment.TopCenter,
+                    )
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Icon 容器，带有顶部 padding 对齐 label 行
+                // Icon（不透明背景遮住背后的连线）
                 Box(
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .size(16.dp),
+                    modifier = Modifier.width(24.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (icon != null) {
-                        icon()
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(LocalCardColor.current),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (icon != null) {
+                            Box(modifier = Modifier.size(14.dp)) {
+                                icon()
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.onSurfaceVariant)
+                            )
+                        }
                     }
+                }
+
+                // Label
+                Box(modifier = Modifier.weight(1f)) {
+                    label()
+                }
+
+                // Extra
+                if (extra != null) {
+                    extra()
+                }
+
+                // 指示器：onClick 显示向右箭头，content 显示展开/折叠箭头
+                if (onClick != null) {
+                    Icon(
+                        imageVector = Lucide.ChevronRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (hasContent) {
+                    Icon(
+                        imageVector = if (stepExpanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
-            // 右侧：内容区域
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 8.dp),
-            ) {
-                // Label 行
-                Row(
+            // 展开内容（缩进对齐 label）
+            if (isContentVisible && hasContent) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(
-                            if (onClick != null) {
-                                Modifier
-                                    .clip(MaterialTheme.shapes.small)
-                                    .clickable { onClick() }
-                            } else if (hasContent) {
-                                Modifier
-                                    .clip(MaterialTheme.shapes.small)
-                                    .clickable { toggleExpanded() }
-                            } else {
-                                Modifier
-                            }
-                        )
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                        .padding(start = 32.dp, top = 4.dp, bottom = 8.dp)
                 ) {
-                    // Label
-                    Box(modifier = Modifier.weight(1f)) {
-                        label()
-                    }
-
-                    // Extra
-                    if (extra != null) {
-                        extra()
-                    }
-
-                    // 指示器：onClick 显示向右箭头，content 显示展开/折叠箭头
-                    if (onClick != null) {
-                        Icon(
-                            imageVector = Lucide.ChevronRight,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else if (hasContent) {
-                        Icon(
-                            imageVector = if (stepExpanded) Lucide.ChevronUp else Lucide.ChevronDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                // 展开内容
-                if (isContentVisible && hasContent) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp, bottom = 8.dp)
-                    ) {
-                        content?.invoke()
-                    }
+                    content?.invoke()
                 }
             }
         }
@@ -385,8 +362,8 @@ private fun ChainOfThoughtPreview() {
                                         // 分析内容示例
                                         Text(
                                             text = "This is expandable content showing detailed analysis. " +
-                                                    "It can contain multiple lines of text, code snippets, " +
-                                                    "or any other composable content.",
+                                                "It can contain multiple lines of text, code snippets, " +
+                                                "or any other composable content.",
                                             style = MaterialTheme.typography.bodySmall,
                                         )
                                     }
