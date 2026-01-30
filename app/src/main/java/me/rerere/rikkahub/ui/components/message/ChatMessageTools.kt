@@ -66,6 +66,7 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
+import me.rerere.rikkahub.ui.components.ui.DotLoading
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.components.ui.FaviconRow
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -145,9 +146,8 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         onExpandedChange = { expanded = it },
         icon = {
             if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 3.dp,
+                DotLoading(
+                    modifier = Modifier.size(10.dp),
                 )
             } else {
                 Icon(
