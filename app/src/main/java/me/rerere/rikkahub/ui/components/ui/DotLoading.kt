@@ -24,7 +24,8 @@ import androidx.compose.ui.unit.dp
 fun DotLoading(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
-    animationDuration: Int = 600
+    animationDuration: Int = 600,
+    size: Dp = 16.dp,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "dot_loading")
     val alpha by infiniteTransition.animateFloat(
@@ -38,8 +39,9 @@ fun DotLoading(
     )
 
     Box(
-        modifier = modifier
-            .size(16.dp)
+        modifier = Modifier
+            .size(size)
+            .then(modifier)
             .alpha(alpha)
             .background(color = color, shape = CircleShape)
     )

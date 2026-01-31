@@ -147,7 +147,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         icon = {
             if (loading) {
                 DotLoading(
-                    modifier = Modifier.size(10.dp),
+                    size = 10.dp
                 )
             } else {
                 Icon(
