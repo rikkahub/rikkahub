@@ -1,9 +1,7 @@
 package me.rerere.rikkahub.ui.pages.log
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -38,8 +35,8 @@ import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.launch
 import me.rerere.common.android.LogEntry
 import me.rerere.common.android.Logging
-import me.rerere.highlight.HighlightText
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.JsonTree
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import java.text.SimpleDateFormat
@@ -258,18 +255,20 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                ) {
-                    HighlightText(
-                        code = JsonInstantPretty.encodeToString(
-                            JsonInstantPretty.parseToJsonElement(body)
-                        ),
-                        language = "json",
-                        fontFamily = JetbrainsMono,
+                val jsonElement = remember(body) {
+                    runCatching { JsonInstantPretty.parseToJsonElement(body) }.getOrNull()
+                }
+                if (jsonElement != null) {
+                    JsonTree(
+                        json = jsonElement,
                         modifier = Modifier.padding(top = 4.dp),
+                        initialExpandLevel = 2
+                    )
+                } else {
+                    Text(
+                        text = body,
+                        fontFamily = JetbrainsMono,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
             }
