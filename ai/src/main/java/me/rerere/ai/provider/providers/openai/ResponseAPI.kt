@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -42,6 +43,7 @@ import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
+import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -176,6 +178,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         return buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)
+            put("store", false)
 
             if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
@@ -202,6 +205,9 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                     if (level != ReasoningLevel.AUTO) {
                         put("effort", level.effort)
                     }
+                })
+                put("include", buildJsonArray {
+                    add("reasoning.encrypted_content")
                 })
             }
 
@@ -245,9 +251,34 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         for (group in groups) {
             when (group) {
                 is PartGroup.Content -> {
-                    group.parts
-                        .filter { it is UIMessagePart.Text || it is UIMessagePart.Image }
-                        .forEach { contentBuffer.add(it) }
+                    group.parts.forEach { part ->
+                        when (part) {
+                            is UIMessagePart.Reasoning -> {
+                                // 先输出累积的文本/图片内容
+                                if (contentBuffer.isNotEmpty()) {
+                                    addContentItem(MessageRole.ASSISTANT, contentBuffer)
+                                    contentBuffer.clear()
+                                }
+                                // 输出 reasoning item
+                                add(buildJsonObject {
+                                    put("type", "reasoning")
+                                    put("summary", buildJsonArray {
+                                        add(buildJsonObject {
+                                            put("type","summary_text")
+                                            put("text", part.reasoning)
+                                        })
+                                    })
+                                    part.metadata?.get("encrypted_content")?.jsonPrimitiveOrNull?.contentOrNull?.let {
+                                        put("encrypted_content", part.metadata?.get("encrypted_content")?.jsonPrimitive?.contentOrNull ?: "")
+                                    }
+                                })
+                            }
+                            is UIMessagePart.Text, is UIMessagePart.Image -> {
+                                contentBuffer.add(part)
+                            }
+                            else -> {}
+                        }
+                    }
                 }
 
                 is PartGroup.Tools -> {
@@ -404,7 +435,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                             )
                         )
                     )
-                } else if(type == "reasoning") {
+                } else if (type == "reasoning") {
                     return MessageChunk(
                         id = id,
                         model = "",
@@ -419,6 +450,40 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                                             reasoning = "",
                                             createdAt = Clock.System.now(),
                                             finishedAt = null,
+                                        )
+                                    )
+                                ),
+                                finishReason = null,
+                            )
+                        )
+                    )
+                }
+            }
+
+            "response.output_item.done" -> {
+                val item = jsonObject["item"]?.jsonObject ?: error("chunk item not found")
+                val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
+                val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
+                if (type == "reasoning") {
+                    val encryptedContent = item["encrypted_content"]?.jsonPrimitive?.content
+                    // val summary = item["summary"]?.jsonArray ?: error("summary not found")
+                    return MessageChunk(
+                        id = id,
+                        model = "",
+                        choices = listOf(
+                            UIMessageChoice(
+                                index = 0,
+                                message = null,
+                                delta = UIMessage(
+                                    role = MessageRole.ASSISTANT,
+                                    parts = listOf(
+                                        UIMessagePart.Reasoning(
+                                            reasoning = "",
+                                            createdAt = Clock.System.now(),
+                                            finishedAt = null,
+                                            metadata = buildJsonObject {
+                                                put("encrypted_content", encryptedContent)
+                                            }
                                         )
                                     )
                                 ),
