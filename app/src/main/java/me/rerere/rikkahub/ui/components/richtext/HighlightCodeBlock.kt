@@ -124,89 +124,97 @@ fun HighlightCodeBlock(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
+            .background(MaterialTheme.colorScheme.surfaceContainer),
     ) {
-        HighlightCodeActions(
-            language = language,
-            scope = scope,
-            clipboardManager = clipboardManager,
-            code = code,
-            createDocumentLauncher = createDocumentLauncher,
-            navController = navController,
-        )
-        when {
-            completeCodeBlock && language == "mermaid" -> {
-                Mermaid(
-                    code = code,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            else -> {
-                Spacer(Modifier.height(8.dp))
-
-                val textStyle = LocalTextStyle.current.merge(style)
-                val codeLines = remember(code) { code.lines() }
-                val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
-                val displayCode = if (isExpanded) code else collapsedCode
-                val displayLines = remember(displayCode) { displayCode.lines() }
-
-                // 如果显示行号且自动换行，需要逐行渲染以保持对齐
-                when {
-                    showLineNumbers && autoWrap -> {
-                        CodeBlockWithLineNumbersWrapped(
-                            displayLines = displayLines,
-                            language = language,
-                            textStyle = textStyle,
-                            colorPalette = colorPalette,
-                        )
-                    }
-                    else -> {
-                        CodeBlockDefault(
-                            displayCode = displayCode,
-                            displayLines = displayLines,
-                            language = language,
-                            textStyle = textStyle,
-                            colorPalette = colorPalette,
-                            autoWrap = autoWrap,
-                            showLineNumbers = showLineNumbers,
-                            scrollState = scrollState,
-                        )
-                    }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            HighlightCodeActions(
+                language = language,
+                scope = scope,
+                clipboardManager = clipboardManager,
+                code = code,
+                createDocumentLauncher = createDocumentLauncher,
+                navController = navController,
+            )
+        }
+        Column(
+            modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
+        ) {
+            when {
+                completeCodeBlock && language == "mermaid" -> {
+                    Mermaid(
+                        code = code,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
+                else -> {
+                    val textStyle = LocalTextStyle.current.merge(style)
+                    val codeLines = remember(code) { code.lines() }
+                    val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
+                    val displayCode = if (isExpanded) code else collapsedCode
+                    val displayLines = remember(displayCode) { displayCode.lines() }
 
-                Spacer(Modifier.height(4.dp))
-                // 代码折叠按钮
-                if (settings.displaySetting.codeBlockAutoCollapse && codeLines.size > COLLAPSE_LINES) {
-                    Box(
-                        modifier = Modifier
-                            .onClick {
-                                isExpanded = !isExpanded
-                            }
-                            .fillMaxWidth(),
-                    ) {
-                        Row(
+                    // 如果显示行号且自动换行，需要逐行渲染以保持对齐
+                    when {
+                        showLineNumbers && autoWrap -> {
+                            CodeBlockWithLineNumbersWrapped(
+                                displayLines = displayLines,
+                                language = language,
+                                textStyle = textStyle,
+                                colorPalette = colorPalette,
+                            )
+                        }
+                        else -> {
+                            CodeBlockDefault(
+                                displayCode = displayCode,
+                                displayLines = displayLines,
+                                language = language,
+                                textStyle = textStyle,
+                                colorPalette = colorPalette,
+                                autoWrap = autoWrap,
+                                showLineNumbers = showLineNumbers,
+                                scrollState = scrollState,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+                    // 代码折叠按钮
+                    if (settings.displaySetting.codeBlockAutoCollapse && codeLines.size > COLLAPSE_LINES) {
+                        Box(
                             modifier = Modifier
-                                .align(Alignment.Center)
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .onClick {
+                                    isExpanded = !isExpanded
+                                }
+                                .fillMaxWidth(),
                         ) {
-                            Icon(
-                                imageVector = if (isExpanded) Lucide.ChevronsUp else Lucide.ChevronsDown,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.size(textStyle.fontSize.toDp())
-                            )
-                            Text(
-                                text = if (isExpanded) {
-                                    stringResource(id = R.string.code_block_collapse)
-                                } else {
-                                    stringResource(id = R.string.code_block_expand)
-                                },
-                                fontSize = textStyle.fontSize,
-                                lineHeight = textStyle.lineHeight,
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isExpanded) Lucide.ChevronsUp else Lucide.ChevronsDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(textStyle.fontSize.toDp())
+                                )
+                                Text(
+                                    text = if (isExpanded) {
+                                        stringResource(id = R.string.code_block_collapse)
+                                    } else {
+                                        stringResource(id = R.string.code_block_expand)
+                                    },
+                                    fontSize = textStyle.fontSize,
+                                    lineHeight = textStyle.lineHeight,
+                                )
+                            }
                         }
                     }
                 }
