@@ -79,16 +79,24 @@ import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import org.koin.compose.koinInject
 
 private object ToolNames {
-    const val CREATE_MEMORY = "create_memory"
-    const val EDIT_MEMORY = "edit_memory"
-    const val DELETE_MEMORY = "delete_memory"
+    const val MEMORY = "memory_tool"
     const val SEARCH_WEB = "search_web"
     const val SCRAPE_WEB = "scrape_web"
 }
 
-private fun getToolIcon(toolName: String) = when (toolName) {
-    ToolNames.CREATE_MEMORY, ToolNames.EDIT_MEMORY -> Lucide.BookHeart
-    ToolNames.DELETE_MEMORY -> Lucide.BookDashed
+private object MemoryActions {
+    const val CREATE = "create"
+    const val EDIT = "edit"
+    const val DELETE = "delete"
+}
+
+private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
+    ToolNames.MEMORY -> when (action) {
+        MemoryActions.CREATE, MemoryActions.EDIT -> Lucide.BookHeart
+        MemoryActions.DELETE -> Lucide.BookDashed
+        else -> Lucide.Wrench
+    }
+
     ToolNames.SEARCH_WEB -> Lucide.Search
     ToolNames.SCRAPE_WEB -> Lucide.Earth
     else -> Lucide.Wrench
@@ -109,6 +117,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
     val arguments = tool.inputAsJson()
+    val memoryAction = arguments.getStringContent("action")
     val content = if (tool.isExecuted) {
         runCatching {
             JsonInstant.parseToJsonElement(
@@ -120,9 +129,13 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     }
 
     val title = when (tool.toolName) {
-        ToolNames.CREATE_MEMORY -> stringResource(R.string.chat_message_tool_create_memory)
-        ToolNames.EDIT_MEMORY -> stringResource(R.string.chat_message_tool_edit_memory)
-        ToolNames.DELETE_MEMORY -> stringResource(R.string.chat_message_tool_delete_memory)
+        ToolNames.MEMORY -> when (memoryAction) {
+            MemoryActions.CREATE -> stringResource(R.string.chat_message_tool_create_memory)
+            MemoryActions.EDIT -> stringResource(R.string.chat_message_tool_edit_memory)
+            MemoryActions.DELETE -> stringResource(R.string.chat_message_tool_delete_memory)
+            else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
+        }
+
         ToolNames.SEARCH_WEB -> stringResource(
             R.string.chat_message_tool_search_web,
             arguments.getStringContent("query") ?: ""
@@ -134,7 +147,8 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
 
     // 判断是否有额外内容需要显示
     val hasExtraContent = when (tool.toolName) {
-        ToolNames.CREATE_MEMORY, ToolNames.EDIT_MEMORY -> content.getStringContent("content") != null
+        ToolNames.MEMORY -> memoryAction in listOf(MemoryActions.CREATE, MemoryActions.EDIT) &&
+            content.getStringContent("content") != null
         ToolNames.SEARCH_WEB -> content.getStringContent("answer") != null ||
             (content?.jsonObject?.get("items")?.jsonArray?.isNotEmpty() == true)
         ToolNames.SCRAPE_WEB -> arguments.getStringContent("url") != null
@@ -151,7 +165,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                 )
             } else {
                 Icon(
-                    imageVector = getToolIcon(tool.toolName),
+                    imageVector = getToolIcon(tool.toolName, memoryAction),
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                     tint = LocalContentColor.current.copy(alpha = 0.7f)
@@ -206,7 +220,9 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         content = if (hasExtraContent) {
             {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (tool.toolName == ToolNames.CREATE_MEMORY || tool.toolName == ToolNames.EDIT_MEMORY) {
+                    if (tool.toolName == ToolNames.MEMORY &&
+                        memoryAction in listOf(MemoryActions.CREATE, MemoryActions.EDIT)
+                    ) {
                         content.getStringContent("content")?.let { memoryContent ->
                             Text(
                                 text = memoryContent,
@@ -302,7 +318,9 @@ private fun ToolCallPreviewSheet(
     val memoryRepo: MemoryRepository = koinInject()
     val scope = rememberCoroutineScope()
 
-    val isMemoryOperation = toolName in listOf(ToolNames.CREATE_MEMORY, ToolNames.EDIT_MEMORY)
+    val memoryAction = arguments.getStringContent("action")
+    val isMemoryOperation = toolName == ToolNames.MEMORY &&
+        memoryAction in listOf(MemoryActions.CREATE, MemoryActions.EDIT)
     val memoryId = (content as? JsonObject)?.get("id")?.jsonPrimitiveOrNull?.intOrNull
 
     ModalBottomSheet(

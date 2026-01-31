@@ -607,6 +607,9 @@ private fun ExportedReasoningCard(reasoning: UIMessagePart.Reasoning, expanded: 
 private fun ExportedTool(
     tool: UIMessagePart.Tool
 ) {
+    val memoryAction = runCatching {
+        tool.inputAsJson().jsonObject["action"]?.jsonPrimitiveOrNull?.contentOrNull
+    }.getOrNull()
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -619,8 +622,11 @@ private fun ExportedTool(
         ) {
             Icon(
                 imageVector = when (tool.toolName) {
-                    "create_memory", "edit_memory" -> Lucide.BookHeart
-                    "delete_memory" -> Lucide.BookDashed
+                    "memory_tool" -> when (memoryAction) {
+                        "create", "edit" -> Lucide.BookHeart
+                        "delete" -> Lucide.BookDashed
+                        else -> Lucide.Wrench
+                    }
                     "search_web" -> Lucide.Earth
                     "scrape_web" -> Lucide.Earth
                     else -> Lucide.Wrench
@@ -632,9 +638,13 @@ private fun ExportedTool(
             Column {
                 Text(
                     text = when (tool.toolName) {
-                        "create_memory" -> stringResource(R.string.chat_message_tool_create_memory)
-                        "edit_memory" -> stringResource(R.string.chat_message_tool_edit_memory)
-                        "delete_memory" -> stringResource(R.string.chat_message_tool_delete_memory)
+                        "memory_tool" -> when (memoryAction) {
+                            "create" -> stringResource(R.string.chat_message_tool_create_memory)
+                            "edit" -> stringResource(R.string.chat_message_tool_edit_memory)
+                            "delete" -> stringResource(R.string.chat_message_tool_delete_memory)
+                            else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
+                        }
+
                         "search_web" -> {
                             val query = runCatching {
                                 tool.inputAsJson().jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull

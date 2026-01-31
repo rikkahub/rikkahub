@@ -332,7 +332,7 @@ class GenerationHandler(
                 // 记忆
                 if (assistant.enableMemory) {
                     appendLine()
-                    append(buildMemoryPrompt(model = model, memories = memories))
+                    append(buildMemoryPrompt(memories = memories))
                 }
                 if (assistant.enableRecentChatsReference) {
                     appendLine()
