@@ -82,6 +82,7 @@ import me.rerere.rikkahub.utils.toLocalString
 import me.rerere.search.SearchService
 import me.rerere.search.SearchServiceOptions
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -558,7 +559,7 @@ class ChatService(
                     Search the web for up-to-date or specific information.
                     Use this when the user asks for the latest news, current facts, or needs verification.
                     Generate focused keywords and run multiple searches if needed.
-                    Today is ${LocalDateTime.now().toLocalString()}.
+                    Today is ${LocalDate.now().toLocalString(true)}.
 
                     Response format:
                     - items[].id (short id), title, url, text

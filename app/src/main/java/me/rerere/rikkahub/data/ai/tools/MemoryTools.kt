@@ -13,6 +13,8 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.utils.toLocalString
+import java.time.LocalDate
 
 fun buildMemoryTools(
     json: Json,
@@ -23,21 +25,21 @@ fun buildMemoryTools(
     Tool(
         name = "memory_tool",
         description = """
-            记忆工具用于跨对话保存用户相关的长期信息。
-            使用 `action` 控制操作：`create`（新增）、`edit`（更新）、`delete`（删除）。
-            - 没有相关记录：`create` + `content`
-            - 已有相关记录：`edit` + `id` + `content`
-            - 过时/无用记录：`delete` + `id`
-            记忆会自动出现在后续对话的 <memories> 标签中。
-            不要存储敏感信息（如民族、宗教、性取向、政治观点、性生活、犯罪记录等）。
-            可记录：称呼/姓名、偏好、计划事项、工作相关、聊天风格偏好、首次聊天时间等。
-            含日期时请使用绝对时间格式；当前时间是 {cur_datetime}。
-            不要在对话中直接展示记忆内容，除非用户明确要求。
-            相似记忆应合并，优先更新现有记录。
+            The memory tool stores long-term information across conversations.
+            Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove).
+            - No relevant record: `create` + `content`
+            - Existing relevant record: `edit` + `id` + `content`
+            - Outdated/irrelevant record: `delete` + `id`
+            Memories will automatically appear in the <memories> tag in later conversations.
+            Do not store sensitive information (e.g., ethnicity, religion, sexual orientation, political views, sex life, criminal records).
+            You may store: preferred name, preferences, plans, work-related notes, chat style preferences, first chat time, etc.
+            Do not show memory content directly in the conversation unless the user explicitly asks.
+            Today is ${LocalDate.now().toLocalString(true)}.
+            Similar memories should be merged; prefer updating existing records.
 
-            示例：
-            {"action":"create","content":"用户更喜欢简短回复，周末更常在线。"}
-            {"action":"edit","id":12,"content":"用户称呼更新为“阿星”，喜欢中文回复。"}
+            Examples:
+            {"action":"create","content":"User prefers brief replies and is more active on weekends."}
+            {"action":"edit","id":12,"content":"User’s preferred name updated to “A-Xing”, prefers Chinese replies."}
             {"action":"delete","id":7}
         """.trimIndent(),
         parameters = {
