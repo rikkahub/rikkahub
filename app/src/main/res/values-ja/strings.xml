@@ -769,5 +769,7 @@
   <string name="chain_of_thought_show_more_steps">あと %d ステップを表示</string>
   <string name="assistant_page_global_memory">グローバルメモリ</string>
   <string name="assistant_page_global_memory_desc">アシスタントごとに分離されたメモリではなく、グローバル共有メモリを使用します。有効にすると、すべてのアシスタントが同じメモリストレージを共有します</string>
+  <string name="assistant_page_local_tools_time_info_title">時刻情報</string>
+  <string name="assistant_page_local_tools_time_info_desc">デバイスから現在の日付、曜日、時刻、タイムゾーン情報を取得</string>
 </resources>
 

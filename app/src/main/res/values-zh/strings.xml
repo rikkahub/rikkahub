@@ -769,5 +769,7 @@
   <string name="chain_of_thought_show_more_steps">再显示 %d 步</string>
   <string name="assistant_page_global_memory">全局记忆</string>
   <string name="assistant_page_global_memory_desc">使用全局共享内存而非助手隔离内存。启用后，所有助手共享同一内存存储</string>
+  <string name="assistant_page_local_tools_time_info_title">时间信息</string>
+  <string name="assistant_page_local_tools_time_info_desc">从设备获取当前日期、星期、时间和时区信息</string>
 </resources>
 

@@ -767,5 +767,7 @@
   <string name="chain_of_thought_show_more_steps">Показать ещё %d шагов</string>
   <string name="assistant_page_global_memory">Глобальная память</string>
   <string name="assistant_page_global_memory_desc">Использовать общую память вместо изолированной для ассистента. При включении все ассистенты используют одно и то же хранилище памяти</string>
+  <string name="assistant_page_local_tools_time_info_title">Информация о времени</string>
+  <string name="assistant_page_local_tools_time_info_desc">Получить текущую дату, день недели, время и часовой пояс с устройства</string>
 </resources>
 

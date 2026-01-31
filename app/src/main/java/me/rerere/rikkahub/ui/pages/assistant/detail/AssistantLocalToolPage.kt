@@ -85,6 +85,21 @@ private fun AssistantLocalToolContent(
                 onUpdate(assistant.copy(localTools = newLocalTools))
             }
         )
+
+        // 时间信息工具卡片
+        LocalToolCard(
+            title = stringResource(R.string.assistant_page_local_tools_time_info_title),
+            description = stringResource(R.string.assistant_page_local_tools_time_info_desc),
+            isEnabled = assistant.localTools.contains(LocalToolOption.TimeInfo),
+            onToggle = { enabled ->
+                val newLocalTools = if (enabled) {
+                    assistant.localTools + LocalToolOption.TimeInfo
+                } else {
+                    assistant.localTools - LocalToolOption.TimeInfo
+                }
+                onUpdate(assistant.copy(localTools = newLocalTools))
+            }
+        )
     }
 }
 

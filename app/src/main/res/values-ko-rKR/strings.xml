@@ -769,5 +769,7 @@
   <string name="chain_of_thought_show_more_steps">%d단계 더 보기</string>
   <string name="assistant_page_global_memory">글로벌 메모리</string>
   <string name="assistant_page_global_memory_desc">보조 앱별 메모리 대신 전역 공유 메모리를 사용합니다. 활성화하면 모든 보조 앱이 동일한 메모리 저장소를 공유합니다.</string>
+  <string name="assistant_page_local_tools_time_info_title">시간 정보</string>
+  <string name="assistant_page_local_tools_time_info_desc">기기에서 현재 날짜, 요일, 시간, 시간대 정보 가져오기</string>
 </resources>
 
