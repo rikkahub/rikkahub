@@ -769,6 +769,7 @@ class ChatService(
             }
         }.onFailure {
             it.printStackTrace()
+            addError(it)
         }
     }
 
