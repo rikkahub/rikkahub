@@ -19,8 +19,14 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -194,11 +200,29 @@ class RouteActivity : ComponentActivity() {
                     showCloseButton = true,
                 )
                 TTSController()
-                NavHost(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background),
-                    startDestination = Screen.Chat(
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    if (BuildConfig.DEBUG) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "[开发模式]",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                    NavHost(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        startDestination = Screen.Chat(
                         id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
                             Uuid.random().toString()
                         } else {
@@ -364,6 +388,7 @@ class RouteActivity : ComponentActivity() {
                     composable<Screen.Prompts> {
                         PromptPage()
                     }
+                }
                 }
             }
         }
