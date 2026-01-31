@@ -629,7 +629,9 @@ private fun ListItemNode(
         if (directContent.isNotEmpty()) {
             Row {
                 Text(
-                    text = bulletText, modifier = Modifier.alignByBaseline()
+                    text = bulletText,
+                    modifier = Modifier.alignByBaseline(),
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -705,7 +707,7 @@ private fun Paragraph(
     val density = LocalDensity.current
     FlowRow(
         modifier = modifier.then(
-            if (node.nextSibling() != null) Modifier.padding(bottom = 4.dp)
+            if (node.nextSibling() != null) Modifier.padding(bottom = 8.dp)
             else Modifier
         )
     ) {
