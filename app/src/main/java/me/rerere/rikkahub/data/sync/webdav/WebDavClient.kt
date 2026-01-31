@@ -5,15 +5,18 @@ import android.util.Xml
 import io.ktor.client.HttpClient
 import io.ktor.client.request.basicAuth
 import io.ktor.client.request.headers
+import io.ktor.client.request.prepareRequest
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.HttpStatement
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.jvm.javaio.toInputStream
+import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.WebDavConfig
@@ -120,6 +123,37 @@ class WebDavClient(
             }
 
             response.bodyAsChannel().toInputStream()
+        }
+    }
+
+    suspend fun downloadToFile(path: String, targetFile: File): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = config.buildUrl(path)
+            Log.d(TAG, "GET (download to file): $url")
+
+            httpClient.prepareRequest(url) {
+                method = HttpMethod.Get
+                basicAuth(config.username, config.password)
+            }.execute { response ->
+                if (!response.status.isSuccess()) {
+                    val errorBody = response.bodyAsText()
+                    Log.e(TAG, "downloadToFile failed: ${response.status} - $errorBody")
+                    throw WebDavException("Failed to download: ${response.status}", response.status.value, errorBody)
+                }
+
+                val channel = response.bodyAsChannel()
+                targetFile.outputStream().use { outputStream ->
+                    val buffer = ByteArray(8192)
+                    while (!channel.isClosedForRead) {
+                        val bytesRead = channel.readAvailable(buffer)
+                        if (bytesRead > 0) {
+                            outputStream.write(buffer, 0, bytesRead)
+                        }
+                    }
+                }
+                Log.d(TAG, "downloadToFile success: downloaded ${targetFile.length()} bytes")
+            }
+            Unit
         }
     }
 

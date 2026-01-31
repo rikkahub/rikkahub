@@ -82,13 +82,9 @@ class S3Sync(
         val backupFile = File(context.cacheDir, item.displayName)
 
         try {
-            // Download backup file
+            // Download backup file directly to file to avoid OOM
             Log.i(TAG, "restoreFromS3: Downloading ${item.displayName}")
-            val data = client.getObject(item.key).getOrThrow()
-
-            FileOutputStream(backupFile).use { outputStream ->
-                outputStream.write(data)
-            }
+            client.downloadObjectToFile(item.key, backupFile).getOrThrow()
 
             Log.i(TAG, "restoreFromS3: Downloaded ${backupFile.length().fileSizeToString()}")
 

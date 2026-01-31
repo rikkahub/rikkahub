@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -317,86 +318,105 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
-                if (message.role == MessageRole.TOOL) {
-                    message.getToolResults().forEach { result ->
-                        add(buildJsonObject {
-                            put("role", "user")
-                            putJsonArray("content") {
-                                add(buildJsonObject {
-                                    put("type", "tool_result")
-                                    put("tool_use_id", result.toolCallId)
-                                    put("content", json.encodeToString(result.content))
-                                })
-                            }
-                        })
-                    }
-                    return@forEach
+                if (message.role == MessageRole.ASSISTANT) {
+                    addAssistantMessage(message)
+                } else {
+                    addUserMessage(message)
+                }
+            }
+    }
+
+    private fun JsonArrayBuilder.addAssistantMessage(message: UIMessage) {
+        val groups = groupPartsByToolBoundary(message.parts)
+        val contentBuffer = mutableListOf<JsonObject>()
+
+        for (group in groups) {
+            when (group) {
+                is PartGroup.Content -> {
+                    group.parts.mapNotNull { it.toContentBlock() }.forEach { contentBuffer.add(it) }
                 }
 
-                add(buildJsonObject {
-                    // role
-                    put("role", JsonPrimitive(message.role.name.lowercase()))
+                is PartGroup.Tools -> {
+                    // 添加 tool_use 到内容缓冲
+                    group.tools.forEach { contentBuffer.add(it.toToolUseBlock()) }
 
-                    // content
-                    putJsonArray("content") {
-                        message.parts.forEach { part ->
-                            when (part) {
-                                is UIMessagePart.Text -> {
-                                    add(buildJsonObject {
-                                        put("type", "text")
-                                        put("text", part.text)
-                                    })
-                                }
+                    // 输出 assistant 消息
+                    add(buildJsonObject {
+                        put("role", "assistant")
+                        putJsonArray("content") { contentBuffer.forEach { add(it) } }
+                    })
+                    contentBuffer.clear()
 
-                                is UIMessagePart.Image -> {
-                                    add(buildJsonObject {
-                                        part.encodeBase64(withPrefix = false).onSuccess { encodedImage ->
-                                            put("type", "image")
-                                            put("source", buildJsonObject {
-                                                put("type", "base64")
-                                                put("media_type", encodedImage.mimeType)
-                                                put("data", encodedImage.base64)
-                                            })
-                                        }.onFailure {
-                                            it.printStackTrace()
-                                            Log.w(TAG, "encode image failed: ${part.url}")
-                                            // 如果图片编码失败，添加一个空文本块
-                                            put("type", "text")
-                                            put("text", "")
-                                        }
-                                    })
-                                }
-
-                                is UIMessagePart.ToolCall -> {
-                                    add(buildJsonObject {
-                                        put("type", "tool_use")
-                                        put("id", part.toolCallId)
-                                        put("name", part.toolName)
-                                        put("input", json.parseToJsonElement(part.arguments))
-                                    })
-                                }
-
-                                is UIMessagePart.Reasoning -> {
-                                    add(buildJsonObject {
-                                        put("type", "thinking")
-                                        put("thinking", part.reasoning)
-                                        part.metadata?.let {
-                                            it.forEach { entry ->
-                                                put(entry.key, entry.value)
-                                            }
-                                        }
-                                    })
-                                }
-
-                                else -> {
-                                    Log.w(TAG, "buildMessages: message part not supported: $part")
-                                    // DO NOTHING
-                                }
-                            }
+                    // 紧跟 tool_result
+                    add(buildJsonObject {
+                        put("role", "user")
+                        putJsonArray("content") {
+                            group.tools.forEach { add(it.toToolResultBlock()) }
                         }
-                    }
-                })
+                    })
+                }
             }
+        }
+
+        // 输出剩余内容
+        if (contentBuffer.isNotEmpty()) {
+            add(buildJsonObject {
+                put("role", "assistant")
+                putJsonArray("content") { contentBuffer.forEach { add(it) } }
+            })
+        }
+    }
+
+    private fun JsonArrayBuilder.addUserMessage(message: UIMessage) {
+        add(buildJsonObject {
+            put("role", message.role.name.lowercase())
+            putJsonArray("content") {
+                message.parts.mapNotNull { it.toContentBlock() }.forEach { add(it) }
+            }
+        })
+    }
+
+    private fun UIMessagePart.toContentBlock(): JsonObject? = when (this) {
+        is UIMessagePart.Text -> buildJsonObject {
+            put("type", "text")
+            put("text", text)
+        }
+
+        is UIMessagePart.Image -> buildJsonObject {
+            encodeBase64(withPrefix = false).onSuccess { encoded ->
+                put("type", "image")
+                put("source", buildJsonObject {
+                    put("type", "base64")
+                    put("media_type", encoded.mimeType)
+                    put("data", encoded.base64)
+                })
+            }.onFailure {
+                Log.w(TAG, "encode image failed: $url", it)
+                put("type", "text")
+                put("text", "")
+            }
+        }
+
+        is UIMessagePart.Reasoning -> buildJsonObject {
+            put("type", "thinking")
+            put("thinking", reasoning)
+            metadata?.forEach { (key, value) -> put(key, value) }
+        }
+
+        else -> null
+    }
+
+    private fun UIMessagePart.Tool.toToolUseBlock() = buildJsonObject {
+        put("type", "tool_use")
+        put("id", toolCallId)
+        put("name", toolName)
+        put("input", json.parseToJsonElement(input.ifBlank { "{}" }))
+    }
+
+    private fun UIMessagePart.Tool.toToolResultBlock() = buildJsonObject {
+        put("type", "tool_result")
+        put("tool_use_id", toolCallId)
+        put("content", output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
     }
 
     private fun parseMessage(content: JsonArray): UIMessage {
@@ -409,22 +429,26 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             when (type) {
                 "text", "text_delta" -> {
                     val text = block["text"]?.jsonPrimitive?.contentOrNull ?: ""
-                    parts.add(UIMessagePart.Text(text))
+                    if (text.isNotEmpty()) {
+                        parts.add(UIMessagePart.Text(text))
+                    }
                 }
 
                 "thinking", "thinking_delta", "signature_delta" -> {
                     val thinking = block["thinking"]?.jsonPrimitive?.contentOrNull ?: ""
                     val signature = block["signature"]?.jsonPrimitive?.contentOrNull
-                    val reasoning = UIMessagePart.Reasoning(
-                        reasoning = thinking,
-                        createdAt = Clock.System.now(),
-                    )
-                    if (signature != null) {
-                        reasoning.metadata = buildJsonObject {
-                            put("signature", signature)
+                    if (thinking.isNotEmpty() || signature != null) {
+                        val reasoning = UIMessagePart.Reasoning(
+                            reasoning = thinking,
+                            createdAt = Clock.System.now(),
+                        )
+                        if (signature != null) {
+                            reasoning.metadata = buildJsonObject {
+                                put("signature", signature)
+                            }
                         }
+                        parts.add(reasoning)
                     }
-                    parts.add(reasoning)
                 }
 
                 "redacted_thinking" -> {
@@ -436,10 +460,11 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     val name = block["name"]?.jsonPrimitive?.contentOrNull ?: ""
                     val input = block["input"]?.jsonObject ?: JsonObject(emptyMap())
                     parts.add(
-                        UIMessagePart.ToolCall(
+                        UIMessagePart.Tool(
                             toolCallId = id,
                             toolName = name,
-                            arguments = if (input.isEmpty()) "" else json.encodeToString(input)
+                            input = if (input.isEmpty()) "" else json.encodeToString(input),
+                            output = emptyList()
                         )
                     )
                 }
@@ -447,10 +472,11 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 "input_json_delta" -> {
                     val input = block["partial_json"]?.jsonPrimitive?.contentOrNull
                     parts.add(
-                        UIMessagePart.ToolCall(
+                        UIMessagePart.Tool(
                             toolCallId = "",
                             toolName = "",
-                            arguments = input ?: ""
+                            input = input ?: "",
+                            output = emptyList()
                         )
                     )
                 }

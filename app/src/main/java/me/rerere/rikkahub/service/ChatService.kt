@@ -387,16 +387,18 @@ class ChatService(
                     ToolApprovalState.Denied(reason)
                 }
 
-                // Update the tool call approval state
+                // Update the tool approval state
                 val updatedNodes = conversation.messageNodes.map { node ->
                     node.copy(
                         messages = node.messages.map { msg ->
                             msg.copy(
                                 parts = msg.parts.map { part ->
-                                    if (part is UIMessagePart.ToolCall && part.toolCallId == toolCallId) {
-                                        part.copy(approvalState = newApprovalState)
-                                    } else {
-                                        part
+                                    when {
+                                        part is UIMessagePart.Tool && part.toolCallId == toolCallId -> {
+                                            part.copy(approvalState = newApprovalState)
+                                        }
+
+                                        else -> part
                                     }
                                 }
                             )
@@ -406,15 +408,15 @@ class ChatService(
                 val updatedConversation = conversation.copy(messageNodes = updatedNodes)
                 saveConversation(conversationId, updatedConversation)
 
-                // Check if there are still pending tool calls
-                val hasPendingToolCalls = updatedNodes.any { node ->
+                // Check if there are still pending tools
+                val hasPendingTools = updatedNodes.any { node ->
                     node.currentMessage.parts.any { part ->
-                        part is UIMessagePart.ToolCall && part.approvalState is ToolApprovalState.Pending
+                        part is UIMessagePart.Tool && part.isPending
                     }
                 }
 
-                // Only continue generation when all pending tool calls are handled
-                if (!hasPendingToolCalls) {
+                // Only continue generation when all pending tools are handled
+                if (!hasPendingTools) {
                     handleMessageComplete(conversationId)
                 }
 
@@ -580,7 +582,7 @@ class ChatService(
                     }, systemPrompt = { model, messages ->
                         if (model.tools.isNotEmpty()) return@Tool ""
                         val hasToolCall =
-                            messages.any { it.getToolCalls().any { toolCall -> toolCall.toolName == "search_web" } }
+                            messages.any { it.getTools().any { tool -> tool.toolName == "search_web" } }
                         val prompt = StringBuilder()
                         prompt.append(
                             """
@@ -678,23 +680,31 @@ class ChatService(
         val conversation = getConversationFlow(conversationId).value
         var messagesNodes = conversation.messageNodes
 
-        // 移除无效tool call
+        // 移除无效 tool (未执行的 Tool)
         messagesNodes = messagesNodes.mapIndexed { index, node ->
-            val next = if (index < messagesNodes.size - 1) messagesNodes[index + 1] else null
-            if (node.currentMessage.hasPart<UIMessagePart.ToolCall>()) {
-                // Skip removal if any tool call is Approved (waiting to be executed)
-                val hasApprovedToolCall = node.currentMessage.parts
-                    .filterIsInstance<UIMessagePart.ToolCall>()
-                    .any { it.approvalState is ToolApprovalState.Approved }
-                if (hasApprovedToolCall) {
+            // Check for Tool type with non-executed tools
+            val hasPendingTools = node.currentMessage.getTools().any { !it.isExecuted }
+
+            if (hasPendingTools) {
+                // Skip removal if any tool is Approved (waiting to be executed)
+                val hasApprovedTool = node.currentMessage.getTools().any {
+                    it.approvalState is ToolApprovalState.Approved
+                }
+                if (hasApprovedTool) {
                     return@mapIndexed node
                 }
-                if (next?.currentMessage?.hasPart<UIMessagePart.ToolResult>() != true) {
-                    return@mapIndexed node.copy(
-                        messages = node.messages.filter { it.id != node.currentMessage.id },
-                        selectIndex = node.selectIndex - 1
-                    )
+
+                // If all tools are executed, it's valid
+                val allToolsExecuted = node.currentMessage.getTools().all { it.isExecuted }
+                if (allToolsExecuted && node.currentMessage.getTools().isNotEmpty()) {
+                    return@mapIndexed node
                 }
+
+                // Remove message with pending non-approved tools
+                return@mapIndexed node.copy(
+                    messages = node.messages.filter { it.id != node.currentMessage.id },
+                    selectIndex = node.selectIndex - 1
+                )
             }
             node
         }

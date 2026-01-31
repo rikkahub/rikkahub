@@ -765,5 +765,7 @@
   <string name="chat_page_compress_not_enough_messages">압축할 메시지가 부족합니다. 유지할 메시지 수를 줄이거나 더 많은 메시지를 추가하세요.</string>
   <string name="setting_display_page_send_on_enter_title">Enter 키로 전송</string>
   <string name="setting_display_page_send_on_enter_desc">Enter 키를 누르면 줄 바꿈 대신 메시지를 전송합니다</string>
+  <string name="chain_of_thought_collapse">접기</string>
+  <string name="chain_of_thought_show_more_steps">%d단계 더 보기</string>
 </resources>
 

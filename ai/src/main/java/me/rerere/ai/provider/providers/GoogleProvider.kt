@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -380,8 +381,8 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                         }
 
                         else -> {
-                            if(ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
-                                when(val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
+                            if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
+                                when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
                                     ReasoningLevel.HIGH -> put("thinkingLevel", "high")
                                     ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
                                     ReasoningLevel.LOW -> put("thinkingLevel", "low")
@@ -545,10 +546,11 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             }
 
             jsonObject.containsKey("functionCall") -> {
-                UIMessagePart.ToolCall(
-                    toolCallId = "",
+                UIMessagePart.Tool(
+                    toolCallId = Uuid.random().toString(),
                     toolName = jsonObject["functionCall"]!!.jsonObject["name"]!!.jsonPrimitive.content,
-                    arguments = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
+                    input = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
+                    output = emptyList(),
                     metadata = buildJsonObject {
                         put("thoughtSignature", jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull)
                     }
@@ -565,7 +567,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     "Only image mime type is supported"
                 }
                 // 如果是思考过程中的草稿图，直接忽略
-                if(thought) {
+                if (thought) {
                     return UIMessagePart.Reasoning(
                         reasoning = "[Draft Image]\n",
                         createdAt = Clock.System.now(),
@@ -588,86 +590,131 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         return buildJsonArray {
             messages
                 .filter { it.role != MessageRole.SYSTEM && it.isValidToUpload() }
-                .forEachIndexed { index, message ->
+                .forEach { message ->
+                    if (message.role == MessageRole.ASSISTANT) {
+                        addModelMessage(message)
+                    } else {
+                        addUserMessage(message)
+                    }
+                }
+        }
+    }
+
+    private fun JsonArrayBuilder.addModelMessage(message: UIMessage) {
+        val groups = groupPartsByToolBoundary(message.parts)
+        val partsBuffer = mutableListOf<JsonObject>()
+
+        for (group in groups) {
+            when (group) {
+                is PartGroup.Content -> {
+                    group.parts.mapNotNull { it.toGooglePart() }.forEach { partsBuffer.add(it) }
+                }
+
+                is PartGroup.Tools -> {
+                    // 添加 functionCall 到 parts 缓冲
+                    group.tools.forEach { partsBuffer.add(it.toFunctionCallPart()) }
+
+                    // 输出 model 消息
                     add(buildJsonObject {
-                        put("role", commonRoleToGoogleRole(message.role))
+                        put("role", "model")
+                        putJsonArray("parts") { partsBuffer.forEach { add(it) } }
+                    })
+                    partsBuffer.clear()
+
+                    // 紧跟 functionResponse
+                    add(buildJsonObject {
+                        put("role", "user")
                         putJsonArray("parts") {
-                            for (part in message.parts) {
-                                when (part) {
-                                    is UIMessagePart.Text -> {
-                                        add(buildJsonObject {
-                                            put("text", part.text)
-                                        })
-                                    }
-
-                                    is UIMessagePart.Image -> {
-                                        part.encodeBase64(false).onSuccess { encodedImage ->
-                                            add(buildJsonObject {
-                                                put("inline_data", buildJsonObject {
-                                                    put("mime_type", encodedImage.mimeType)
-                                                    put("data", encodedImage.base64)
-                                                })
-                                                part.metadata?.get("thoughtSignature")?.jsonPrimitive?.contentOrNull?.let {
-                                                    put("thoughtSignature", it)
-                                                }
-                                            })
-                                        }
-                                    }
-
-                                    is UIMessagePart.Video -> {
-                                        part.encodeBase64(false).onSuccess { base64Data ->
-                                            add(buildJsonObject {
-                                                put("inline_data", buildJsonObject {
-                                                    put("mime_type", "video/mp4")
-                                                    put("data", base64Data)
-                                                })
-                                            })
-                                        }
-                                    }
-
-                                    is UIMessagePart.Audio -> {
-                                        part.encodeBase64(false).onSuccess { base64Data ->
-                                            add(buildJsonObject {
-                                                put("inline_data", buildJsonObject {
-                                                    put("mime_type", "audio/mp3")
-                                                    put("data", base64Data)
-                                                })
-                                            })
-                                        }
-                                    }
-
-                                    is UIMessagePart.ToolCall -> {
-                                        add(buildJsonObject {
-                                            put("functionCall", buildJsonObject {
-                                                put("name", part.toolName)
-                                                put("args", json.parseToJsonElement(part.arguments))
-                                            })
-                                            part.metadata?.get("thoughtSignature")?.let {
-                                                put("thoughtSignature", it)
-                                            }
-                                        })
-                                    }
-
-                                    is UIMessagePart.ToolResult -> {
-                                        add(buildJsonObject {
-                                            put("functionResponse", buildJsonObject {
-                                                put("name", part.toolName)
-                                                put("response", buildJsonObject {
-                                                    put("result", part.content)
-                                                })
-                                            })
-                                        })
-                                    }
-
-                                    else -> {
-                                        // Unsupported part type
-                                    }
-                                }
-                            }
+                            group.tools.forEach { add(it.toFunctionResponsePart()) }
                         }
                     })
                 }
+            }
         }
+
+        // 输出剩余内容
+        if (partsBuffer.isNotEmpty()) {
+            add(buildJsonObject {
+                put("role", "model")
+                putJsonArray("parts") { partsBuffer.forEach { add(it) } }
+            })
+        }
+    }
+
+    private fun JsonArrayBuilder.addUserMessage(message: UIMessage) {
+        add(buildJsonObject {
+            put("role", commonRoleToGoogleRole(message.role))
+            putJsonArray("parts") {
+                message.parts.mapNotNull { it.toGooglePart() }.forEach { add(it) }
+            }
+        })
+    }
+
+    private fun UIMessagePart.toGooglePart(): JsonObject? = when (this) {
+        is UIMessagePart.Text -> buildJsonObject {
+            put("text", text)
+        }
+
+        is UIMessagePart.Image -> {
+            encodeBase64(false).getOrNull()?.let { encoded ->
+                buildJsonObject {
+                    put("inline_data", buildJsonObject {
+                        put("mime_type", encoded.mimeType)
+                        put("data", encoded.base64)
+                    })
+                    metadata?.get("thoughtSignature")?.jsonPrimitive?.contentOrNull?.let {
+                        put("thoughtSignature", it)
+                    }
+                }
+            }
+        }
+
+        is UIMessagePart.Video -> {
+            encodeBase64(false).getOrNull()?.let { base64Data ->
+                buildJsonObject {
+                    put("inline_data", buildJsonObject {
+                        put("mime_type", "video/mp4")
+                        put("data", base64Data)
+                    })
+                }
+            }
+        }
+
+        is UIMessagePart.Audio -> {
+            encodeBase64(false).getOrNull()?.let { base64Data ->
+                buildJsonObject {
+                    put("inline_data", buildJsonObject {
+                        put("mime_type", "audio/mp3")
+                        put("data", base64Data)
+                    })
+                }
+            }
+        }
+
+        else -> null
+    }
+
+    private fun UIMessagePart.Tool.toFunctionCallPart() = buildJsonObject {
+        put("functionCall", buildJsonObject {
+            put("name", toolName)
+            put("args", json.parseToJsonElement(input.ifBlank { "{}" }))
+        })
+        metadata?.get("thoughtSignature")?.let {
+            put("thoughtSignature", it)
+        }
+    }
+
+    private fun UIMessagePart.Tool.toFunctionResponsePart() = buildJsonObject {
+        put("functionResponse", buildJsonObject {
+            put("name", toolName)
+            put("response", buildJsonObject {
+                put(
+                    "result",
+                    output.filterIsInstance<UIMessagePart.Text>()
+                        .joinToString("\n") { it.text }
+                )
+            })
+        })
     }
 
     private fun parseUsageMeta(jsonObject: JsonObject?): TokenUsage? {
@@ -703,11 +750,13 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             }
             putJsonObject("parameters") {
                 put("sampleCount", params.numOfImages)
-                put("aspectRatio", when(params.aspectRatio) {
-                    ImageAspectRatio.SQUARE -> "1:1"
-                    ImageAspectRatio.LANDSCAPE -> "16:9"
-                    ImageAspectRatio.PORTRAIT -> "9:16"
-                })
+                put(
+                    "aspectRatio", when (params.aspectRatio) {
+                        ImageAspectRatio.SQUARE -> "1:1"
+                        ImageAspectRatio.LANDSCAPE -> "16:9"
+                        ImageAspectRatio.PORTRAIT -> "9:16"
+                    }
+                )
             }
         }.mergeCustomBody(params.customBody)
 
@@ -740,7 +789,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
-        val predictions =  bodyJson["predictions"]?.jsonArray ?: error("No predictions in response")
+        val predictions = bodyJson["predictions"]?.jsonArray ?: error("No predictions in response")
 
         val items = predictions.mapNotNull { prediction ->
             val predictionObj = prediction.jsonObject

@@ -7,10 +7,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -64,7 +65,6 @@ import com.composables.icons.lucide.Music
 import com.composables.icons.lucide.Video
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -84,6 +84,7 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
+import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -94,8 +95,6 @@ import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.urlDecode
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
-
-private val EmptyJson = JsonObject(emptyMap())
 
 @Composable
 fun ChatMessage(
@@ -273,8 +272,11 @@ private fun MessagePartsBlock(
     fun handleClickCitation(citationId: String) {
         messages.forEach { message ->
             message.parts.forEach { part ->
-                if (part is UIMessagePart.ToolResult && part.toolName == "search_web") {
-                    val items = part.content.jsonObject["items"]?.jsonArray ?: return@forEach
+                if (part is UIMessagePart.Tool && part.toolName == "search_web" && part.isExecuted) {
+                    val outputText = part.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+                    val items =
+                        runCatching { JsonInstant.parseToJsonElement(outputText).jsonObject["items"]?.jsonArray }.getOrNull()
+                            ?: return@forEach
                     items.forEach { item ->
                         val id = item.jsonObject["id"]?.jsonPrimitive?.content ?: return@forEach
                         val url = item.jsonObject["url"]?.jsonPrimitive?.content ?: return@forEach
@@ -302,109 +304,232 @@ private fun MessagePartsBlock(
             }
     }
 
-    // Reasoning
-    parts.filterIsInstance<UIMessagePart.Reasoning>().fastForEach { reasoning ->
-        ChatMessageReasoning(
-            reasoning = reasoning,
-            model = model,
-            assistant = assistant
-        )
-    }
-
-    // Text
-    parts.filterIsInstance<UIMessagePart.Text>().fastForEach { part ->
-        SelectionContainer {
-            if (role == MessageRole.USER) {
-                Card(
-                    modifier = Modifier
-                        .animateContentSize(),
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        MarkdownBlock(
-                            content = part.text.replaceRegexes(
-                                assistant = assistant,
-                                scope = AssistantAffectScope.USER,
-                                visual = true,
-                            ),
-                            onClickCitation = { id ->
-                                handleClickCitation(id)
+    // Render parts in original order (group thinking/tool as chain-of-thought)
+    val groupedParts = remember(parts) { parts.groupMessageParts() }
+    groupedParts.fastForEach { block ->
+        when (block) {
+            is MessagePartBlock.ThinkingBlock -> {
+                if (block.steps.isNotEmpty()) {
+                    ChainOfThought(
+                        modifier = Modifier.animateContentSize(),
+                        steps = block.steps,
+                    ) { step ->
+                        when (step) {
+                            is ThinkingStep.ReasoningStep -> {
+                                key(step.reasoning.createdAt) {
+                                    ChatMessageReasoningStep(
+                                        reasoning = step.reasoning,
+                                        model = model,
+                                        assistant = assistant,
+                                    )
+                                }
                             }
-                        )
-                    }
-                }
-            } else {
-                if (settings.displaySetting.showAssistantBubble) {
-                    Card(
-                        modifier = Modifier
-                            .animateContentSize(),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(8.dp)) {
-                            MarkdownBlock(
-                                content = part.text.replaceRegexes(
-                                    assistant = assistant,
-                                    scope = AssistantAffectScope.ASSISTANT,
-                                    visual = true,
-                                ),
-                                onClickCitation = { id ->
-                                    handleClickCitation(id)
-                                },
-                            )
+
+                            is ThinkingStep.ToolStep -> {
+                                key(step.tool.toolCallId.ifBlank { step.hashCode().toString() }) {
+                                    ChatMessageToolStep(
+                                        tool = step.tool,
+                                        loading = loading && !step.tool.isExecuted,
+                                        onToolApproval = onToolApproval,
+                                    )
+                                }
+                            }
                         }
                     }
-                } else {
-                    MarkdownBlock(
-                        content = part.text.replaceRegexes(
-                            assistant = assistant,
-                            scope = AssistantAffectScope.ASSISTANT,
-                            visual = true,
-                        ),
-                        onClickCitation = { id ->
-                            handleClickCitation(id)
+                }
+            }
+
+            is MessagePartBlock.ContentBlock -> when (val part = block.part) {
+                is UIMessagePart.Text -> {
+                    SelectionContainer {
+                        if (role == MessageRole.USER) {
+                            Card(
+                                modifier = Modifier.animateContentSize(),
+                                shape = MaterialTheme.shapes.medium,
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    MarkdownBlock(
+                                        content = part.text.replaceRegexes(
+                                            assistant = assistant,
+                                            scope = AssistantAffectScope.USER,
+                                            visual = true,
+                                        ),
+                                        onClickCitation = { id -> handleClickCitation(id) }
+                                    )
+                                }
+                            }
+                        } else {
+                            if (settings.displaySetting.showAssistantBubble) {
+                                Card(
+                                    modifier = Modifier.animateContentSize(),
+                                    shape = MaterialTheme.shapes.medium,
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                    )
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        MarkdownBlock(
+                                            content = part.text.replaceRegexes(
+                                                assistant = assistant,
+                                                scope = AssistantAffectScope.ASSISTANT,
+                                                visual = true,
+                                            ),
+                                            onClickCitation = { id -> handleClickCitation(id) },
+                                        )
+                                    }
+                                }
+                            } else {
+                                MarkdownBlock(
+                                    content = part.text.replaceRegexes(
+                                        assistant = assistant,
+                                        scope = AssistantAffectScope.ASSISTANT,
+                                        visual = true,
+                                    ),
+                                    onClickCitation = { id -> handleClickCitation(id) },
+                                    modifier = Modifier
+                                        .animateContentSize()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                is UIMessagePart.Video -> {
+                    Surface(
+                        tonalElevation = 2.dp,
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW)
+                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            intent.data = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                part.url.toUri().toFile()
+                            )
+                            val chooserIndent = Intent.createChooser(intent, null)
+                            context.startActivity(chooserIndent)
                         },
-                        modifier = Modifier.animateContentSize()
+                        modifier = Modifier,
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
+                            Icon(Lucide.Video, null)
+                        }
+                    }
+                }
+
+                is UIMessagePart.Audio -> {
+                    Surface(
+                        tonalElevation = 2.dp,
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW)
+                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            intent.data = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                part.url.toUri().toFile()
+                            )
+                            val chooserIndent = Intent.createChooser(intent, null)
+                            context.startActivity(chooserIndent)
+                        },
+                        modifier = Modifier,
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Lucide.Music,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                is UIMessagePart.Image -> {
+                    ZoomableAsyncImage(
+                        model = part.url,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.medium)
+                            .height(72.dp)
                     )
+                }
+
+                is UIMessagePart.Document -> {
+                    Surface(
+                        tonalElevation = 2.dp,
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW)
+                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            intent.data = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                part.url.toUri().toFile()
+                            )
+                            val chooserIndent = Intent.createChooser(intent, null)
+                            context.startActivity(chooserIndent)
+                        },
+                        modifier = Modifier,
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.tertiaryContainer
+                    ) {
+                        ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                when (part.mime) {
+                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> {
+                                        Icon(
+                                            painter = painterResource(R.drawable.docx),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    "application/pdf" -> {
+                                        Icon(
+                                            painter = painterResource(R.drawable.pdf),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    else -> {
+                                        Icon(
+                                            imageVector = Lucide.File,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = part.fileName,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 200.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    // Skip unknown part types (e.g., deprecated ToolCall, ToolResult, Search)
                 }
             }
         }
     }
 
-    // Tool Calls
-    if (messageIndex == messages.lastIndex) {
-        parts.filterIsInstance<UIMessagePart.ToolCall>().fastForEachIndexed { index, toolCall ->
-            key(index) {
-                ToolCallItem(
-                    toolName = toolCall.toolName,
-                    arguments = runCatching { JsonInstant.parseToJsonElement(toolCall.arguments) }
-                        .getOrElse { EmptyJson },
-                    content = null,
-                    approvalState = toolCall.approvalState,
-                    loading = loading,
-                    onApprove = if (onToolApproval != null) {
-                        { onToolApproval(toolCall.toolCallId, true, "") }
-                    } else null,
-                    onDeny = if (onToolApproval != null) {
-                        { reason -> onToolApproval(toolCall.toolCallId, false, reason) }
-                    } else null,
-                )
-            }
-        }
-    }
-    parts.filterIsInstance<UIMessagePart.ToolResult>().fastForEachIndexed { index, toolCall ->
-        key(index) {
-            ToolCallItem(
-                toolName = toolCall.toolName,
-                arguments = toolCall.arguments,
-                content = toolCall.content,
-            )
-        }
-    }
-
-    // Annotations
+    // Annotations (always rendered at the end)
     if (annotations.isNotEmpty()) {
         Column(
             modifier = Modifier.animateContentSize(),
@@ -457,168 +582,6 @@ private fun MessagePartsBlock(
                 }
             ) {
                 Text(stringResource(R.string.citations_count, annotations.size))
-            }
-        }
-    }
-
-    // Videos
-    val videos = parts.filterIsInstance<UIMessagePart.Video>()
-    if (videos.isNotEmpty()) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            videos.fastForEach {
-                Surface(
-                    tonalElevation = 2.dp,
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW)
-                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        intent.data = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            it.url.toUri().toFile()
-                        )
-                        val chooserIndent = Intent.createChooser(intent, null)
-                        context.startActivity(chooserIndent)
-                    },
-                    modifier = Modifier,
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center){
-                        Icon(Lucide.Video, null)
-                    }
-                }
-            }
-        }
-    }
-
-    // Audios
-    val audios = parts.filterIsInstance<UIMessagePart.Audio>()
-    if (audios.isNotEmpty()) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            audios.fastForEach {
-                Surface(
-                    tonalElevation = 2.dp,
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW)
-                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        intent.data = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            it.url.toUri().toFile()
-                        )
-                        val chooserIndent = Intent.createChooser(intent, null)
-                        context.startActivity(chooserIndent)
-                    },
-                    modifier = Modifier,
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Lucide.Music,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Images
-    val images = parts.filterIsInstance<UIMessagePart.Image>()
-    if (images.isNotEmpty()) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-
-            images.fastForEach {
-                ZoomableAsyncImage(
-                    model = it.url,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.medium)
-                        .height(72.dp)
-                )
-            }
-        }
-    }
-
-    // Documents
-    val documents = parts.filterIsInstance<UIMessagePart.Document>()
-    if (documents.isNotEmpty()) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            documents.fastForEach {
-                Surface(
-                    tonalElevation = 2.dp,
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW)
-                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        intent.data = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            it.url.toUri().toFile()
-                        )
-                        val chooserIndent = Intent.createChooser(intent, null)
-                        context.startActivity(chooserIndent)
-                    },
-                    modifier = Modifier,
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.tertiaryContainer
-                ) {
-                    ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            when (it.mime) {
-                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> {
-                                    Icon(
-                                        painter = painterResource(R.drawable.docx),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                "application/pdf" -> {
-                                    Icon(
-                                        painter = painterResource(R.drawable.pdf),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                else -> {
-                                    Icon(
-                                        imageVector = Lucide.File,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = it.fileName,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .widthIn(max = 200.dp)
-                            )
-                        }
-                    }
-                }
             }
         }
     }

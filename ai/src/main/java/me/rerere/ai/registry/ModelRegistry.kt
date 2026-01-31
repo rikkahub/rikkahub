@@ -32,7 +32,7 @@ object ModelRegistry {
     private val CLAUDE_SONNET_3_5 = ModelMatcher.containsRegex("claude-3.5-sonnet")
     private val CLAUDE_SONNET_3_7 = ModelMatcher.containsRegex("claude-3.7-sonnet")
     private val CLAUDE_4 = ModelMatcher.containsRegex("claude.*-4")
-    private val CLAUDE_4_5 = ModelMatcher.containsRegex("claude.*-4.5")
+    val CLAUDE_4_5 = ModelMatcher.containsRegex("claude.*-4.5")
     val CLAUDE_SERIES = CLAUDE_SONNET_3_5 + CLAUDE_SONNET_3_7 + CLAUDE_4 + CLAUDE_4_5
 
     private val DEEPSEEK_V3 = ModelMatcher.containsRegex("deepseek-(v3|chat)")

@@ -73,7 +73,6 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyUIMessage
-import me.rerere.ai.ui.toSortedMessageParts
 import me.rerere.ai.util.encodeBase64
 import me.rerere.common.android.appTempFolder
 import me.rerere.highlight.Highlighter
@@ -245,7 +244,7 @@ private fun exportToMarkdown(
         messages.forEach { message ->
             val role = if (message.role == MessageRole.USER) "**User**" else "**Assistant**"
             append("$role:\n\n")
-            message.parts.toSortedMessageParts().forEach { part ->
+            message.parts.forEach { part ->
                 when (part) {
                     is UIMessagePart.Text -> {
                         append(part.text)
@@ -447,6 +446,7 @@ private fun ExportedChatImage(
     }
 }
 
+@Suppress("DEPRECATION")
 @Composable
 private fun ExportedChatMessage(
     message: UIMessage,
@@ -472,7 +472,7 @@ private fun ExportedChatMessage(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start
         ) {
-            message.parts.toSortedMessageParts().forEach { part ->
+            message.parts.forEach { part ->
                 when (part) {
                     is UIMessagePart.Text -> {
                         if (part.text.isNotBlank()) {
@@ -513,12 +513,9 @@ private fun ExportedChatMessage(
                         ExportedReasoningCard(reasoning = part, expanded = options.expandReasoning)
                     }
 
-                    is UIMessagePart.ToolCall -> {
-                        ExportedToolCall(toolCall = part)
-                    }
-
-                    is UIMessagePart.ToolResult -> {
-                        ExportedToolResult(toolResult = part)
+                    // Tool (unified type)
+                    is UIMessagePart.Tool -> {
+                        ExportedTool(tool = part)
                     }
 
                     else -> {
@@ -607,8 +604,8 @@ private fun ExportedReasoningCard(reasoning: UIMessagePart.Reasoning, expanded: 
 }
 
 @Composable
-private fun ExportedToolCall(
-    toolCall: UIMessagePart.ToolCall
+private fun ExportedTool(
+    tool: UIMessagePart.Tool
 ) {
     Surface(
         shape = MaterialTheme.shapes.medium,
@@ -621,7 +618,7 @@ private fun ExportedToolCall(
             modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)
         ) {
             Icon(
-                imageVector = when (toolCall.toolName) {
+                imageVector = when (tool.toolName) {
                     "create_memory", "edit_memory" -> Lucide.BookHeart
                     "delete_memory" -> Lucide.BookDashed
                     "search_web" -> Lucide.Earth
@@ -634,66 +631,19 @@ private fun ExportedToolCall(
             )
             Column {
                 Text(
-                    text = when (toolCall.toolName) {
+                    text = when (tool.toolName) {
                         "create_memory" -> stringResource(R.string.chat_message_tool_create_memory)
                         "edit_memory" -> stringResource(R.string.chat_message_tool_edit_memory)
                         "delete_memory" -> stringResource(R.string.chat_message_tool_delete_memory)
                         "search_web" -> {
                             val query = runCatching {
-                                JsonInstant.parseToJsonElement(toolCall.arguments).jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull
+                                tool.inputAsJson().jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull
                                     ?: ""
                             }.getOrDefault("")
                             stringResource(R.string.chat_message_tool_search_web, query)
                         }
                         "scrape_web" -> stringResource(R.string.chat_message_tool_scrape_web)
-                        else -> stringResource(R.string.chat_message_tool_call_generic, toolCall.toolName)
-                    },
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExportedToolResult(toolResult: UIMessagePart.ToolResult) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)
-        ) {
-            Icon(
-                imageVector = when (toolResult.toolName) {
-                    "create_memory", "edit_memory" -> Lucide.BookHeart
-                    "delete_memory" -> Lucide.BookDashed
-                    "search_web" -> Lucide.Earth
-                    "scrape_web" -> Lucide.Earth
-                    else -> Lucide.Wrench
-                },
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-            )
-            Column {
-                Text(
-                    text = when (toolResult.toolName) {
-                        "create_memory" -> stringResource(R.string.chat_message_tool_create_memory)
-                        "edit_memory" -> stringResource(R.string.chat_message_tool_edit_memory)
-                        "delete_memory" -> stringResource(R.string.chat_message_tool_delete_memory)
-                        "search_web" -> {
-                            val query =
-                                toolResult.arguments.jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull
-                                    ?: ""
-                            stringResource(R.string.chat_message_tool_search_web, query)
-                        }
-                        "scrape_web" -> stringResource(R.string.chat_message_tool_scrape_web)
-                        else -> stringResource(R.string.chat_message_tool_call_generic, toolResult.toolName)
+                        else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
                     },
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,

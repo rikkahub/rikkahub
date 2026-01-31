@@ -765,5 +765,7 @@
   <string name="chat_page_compress_not_enough_messages">圧縮するためのメッセージが不足しています。保持するメッセージ数を減らすか、メッセージを追加してください。</string>
   <string name="setting_display_page_send_on_enter_title">Enterキーで送信</string>
   <string name="setting_display_page_send_on_enter_desc">Enterキーでメッセージを送信し、改行しない</string>
+  <string name="chain_of_thought_collapse">折りたたむ</string>
+  <string name="chain_of_thought_show_more_steps">あと %d ステップを表示</string>
 </resources>
 
