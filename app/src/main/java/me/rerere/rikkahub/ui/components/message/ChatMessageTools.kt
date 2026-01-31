@@ -198,7 +198,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         } else {
             null
         },
-        onClick = if (content != null) {
+        onClick = if (content != null || isPending) {
             { showResult = true }
         } else {
             null
@@ -281,7 +281,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         )
     }
 
-    if (showResult && content != null) {
+    if (showResult) {
         ToolCallPreviewSheet(
             toolName = tool.toolName,
             arguments = arguments,
@@ -295,7 +295,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
 private fun ToolCallPreviewSheet(
     toolName: String,
     arguments: JsonElement,
-    content: JsonElement,
+    content: JsonElement?,
     onDismissRequest: () -> Unit = {}
 ) {
     val navController = LocalNavController.current
@@ -309,24 +309,38 @@ private fun ToolCallPreviewSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         onDismissRequest = onDismissRequest,
         content = {
-            when (toolName) {
-                ToolNames.SEARCH_WEB -> SearchWebPreview(
-                    arguments = arguments,
-                    content = content,
-                    navController = navController
-                )
-
-                ToolNames.SCRAPE_WEB -> ScrapeWebPreview(content = content)
-                else -> GenericToolPreview(
+            if (content == null) {
+                // 工具未执行,只显示参数
+                GenericToolPreview(
                     toolName = toolName,
                     arguments = arguments,
-                    content = content,
-                    isMemoryOperation = isMemoryOperation,
-                    memoryId = memoryId,
+                    content = null,
+                    isMemoryOperation = false,
+                    memoryId = null,
                     memoryRepo = memoryRepo,
                     scope = scope,
                     onDismissRequest = onDismissRequest
                 )
+            } else {
+                when (toolName) {
+                    ToolNames.SEARCH_WEB -> SearchWebPreview(
+                        arguments = arguments,
+                        content = content,
+                        navController = navController
+                    )
+
+                    ToolNames.SCRAPE_WEB -> ScrapeWebPreview(content = content)
+                    else -> GenericToolPreview(
+                        toolName = toolName,
+                        arguments = arguments,
+                        content = content,
+                        isMemoryOperation = isMemoryOperation,
+                        memoryId = memoryId,
+                        memoryRepo = memoryRepo,
+                        scope = scope,
+                        onDismissRequest = onDismissRequest
+                    )
+                }
             }
         },
     )
@@ -471,7 +485,7 @@ private fun ScrapeWebPreview(content: JsonElement) {
 private fun GenericToolPreview(
     toolName: String,
     arguments: JsonElement,
-    content: JsonElement,
+    content: JsonElement?,
     isMemoryOperation: Boolean,
     memoryId: Int?,
     memoryRepo: MemoryRepository,
@@ -523,16 +537,18 @@ private fun GenericToolPreview(
                 style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
             )
         }
-        FormItem(
-            label = {
-                Text(stringResource(R.string.chat_message_tool_call_result))
+        if (content != null) {
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.chat_message_tool_call_result))
+                }
+            ) {
+                HighlightCodeBlock(
+                    code = JsonInstantPretty.encodeToString(content),
+                    language = "json",
+                    style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+                )
             }
-        ) {
-            HighlightCodeBlock(
-                code = JsonInstantPretty.encodeToString(content),
-                language = "json",
-                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
-            )
         }
     }
 }
