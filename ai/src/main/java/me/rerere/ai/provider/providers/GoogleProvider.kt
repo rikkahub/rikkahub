@@ -381,8 +381,8 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                         }
 
                         else -> {
-                            if(ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
-                                when(val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
+                            if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
+                                when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
                                     ReasoningLevel.HIGH -> put("thinkingLevel", "high")
                                     ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
                                     ReasoningLevel.LOW -> put("thinkingLevel", "low")
@@ -567,7 +567,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     "Only image mime type is supported"
                 }
                 // 如果是思考过程中的草稿图，直接忽略
-                if(thought) {
+                if (thought) {
                     return UIMessagePart.Reasoning(
                         reasoning = "[Draft Image]\n",
                         createdAt = Clock.System.now(),
@@ -710,10 +710,8 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             put("response", buildJsonObject {
                 put(
                     "result",
-                    JsonPrimitive(
-                        output.filterIsInstance<UIMessagePart.Text>()
-                            .joinToString("\n") { it.text }
-                    )
+                    output.filterIsInstance<UIMessagePart.Text>()
+                        .joinToString("\n") { it.text }
                 )
             })
         })
@@ -752,11 +750,13 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             }
             putJsonObject("parameters") {
                 put("sampleCount", params.numOfImages)
-                put("aspectRatio", when(params.aspectRatio) {
-                    ImageAspectRatio.SQUARE -> "1:1"
-                    ImageAspectRatio.LANDSCAPE -> "16:9"
-                    ImageAspectRatio.PORTRAIT -> "9:16"
-                })
+                put(
+                    "aspectRatio", when (params.aspectRatio) {
+                        ImageAspectRatio.SQUARE -> "1:1"
+                        ImageAspectRatio.LANDSCAPE -> "16:9"
+                        ImageAspectRatio.PORTRAIT -> "9:16"
+                    }
+                )
             }
         }.mergeCustomBody(params.customBody)
 
@@ -789,7 +789,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
-        val predictions =  bodyJson["predictions"]?.jsonArray ?: error("No predictions in response")
+        val predictions = bodyJson["predictions"]?.jsonArray ?: error("No predictions in response")
 
         val items = predictions.mapNotNull { prediction ->
             val predictionObj = prediction.jsonObject
