@@ -223,7 +223,7 @@ private fun createMergedInjectionMessages(injections: List<PromptInjection>): Li
 /**
  * 查找安全的插入位置，避免破坏工具调用链
  *
- * 工具调用链的结构：ASSISTANT(ToolCall) -> TOOL(ToolResult)
+ * 工具调用链的结构：ASSISTANT(未执行的Tool) -> ASSISTANT(已执行的Tool)
  * 不能在这两者之间插入消息
  */
 internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): Int {
