@@ -765,5 +765,7 @@
   <string name="chat_page_compress_not_enough_messages">訊息不足，無法壓縮。請減少要保留的訊息數量，或新增更多訊息。</string>
   <string name="setting_display_page_send_on_enter_title">按 Enter 鍵傳送</string>
   <string name="setting_display_page_send_on_enter_desc">按 Enter 鍵即可傳送訊息，而非換行</string>
+  <string name="chain_of_thought_collapse">收合</string>
+  <string name="chain_of_thought_show_more_steps">顯示更多 %d 個步驟</string>
 </resources>
 

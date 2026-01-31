@@ -765,5 +765,7 @@
   <string name="chat_page_compress_not_enough_messages">消息数量不足，无法压缩。请减少保留的消息数量或添加更多消息。</string>
   <string name="setting_display_page_send_on_enter_title">按Enter发送</string>
   <string name="setting_display_page_send_on_enter_desc">按 Enter 发送消息而非换行</string>
+  <string name="chain_of_thought_collapse">收起</string>
+  <string name="chain_of_thought_show_more_steps">再显示 %d 步</string>
 </resources>
 

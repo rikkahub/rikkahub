@@ -42,8 +42,10 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.R
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.ChevronUp
@@ -111,9 +113,12 @@ fun <T> ChainOfThought(
                         Text(
                             modifier = Modifier.padding(start = 8.dp),
                             text = if (expanded) {
-                                "Collapse"
+                                stringResource(R.string.chain_of_thought_collapse)
                             } else {
-                                "Show ${steps.size - collapsedVisibleCount} more steps"
+                                stringResource(
+                                    R.string.chain_of_thought_show_more_steps,
+                                    steps.size - collapsedVisibleCount
+                                )
                             },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,

@@ -765,5 +765,7 @@
   <string name="chat_page_compress_not_enough_messages">Not enough messages to compress. Reduce the number of messages to keep or add more messages.</string>
   <string name="setting_display_page_send_on_enter_title">Send on Enter</string>
   <string name="setting_display_page_send_on_enter_desc">Press Enter to send message instead of adding a new line</string>
+  <string name="chain_of_thought_collapse">Collapse</string>
+  <string name="chain_of_thought_show_more_steps">Show %d more steps</string>
 </resources>
 
