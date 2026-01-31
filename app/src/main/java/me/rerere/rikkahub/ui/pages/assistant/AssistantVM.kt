@@ -68,5 +68,9 @@ class AssistantVM(
     }
 
     fun getMemories(assistant: Assistant) =
-        memoryRepository.getMemoriesOfAssistantFlow(assistant.id.toString())
+        if (assistant.useGlobalMemory) {
+            memoryRepository.getGlobalMemoriesFlow()
+        } else {
+            memoryRepository.getMemoriesOfAssistantFlow(assistant.id.toString())
+        }
 }

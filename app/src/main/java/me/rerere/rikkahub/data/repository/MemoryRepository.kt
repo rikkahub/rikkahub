@@ -7,6 +7,10 @@ import me.rerere.rikkahub.data.db.entity.MemoryEntity
 import me.rerere.rikkahub.data.model.AssistantMemory
 
 class MemoryRepository(private val memoryDAO: MemoryDAO) {
+    companion object {
+        const val GLOBAL_MEMORY_ID = "__global__"
+    }
+
     fun getMemoriesOfAssistantFlow(assistantId: String): Flow<List<AssistantMemory>> =
         memoryDAO.getMemoriesOfAssistantFlow(assistantId)
             .map { entities ->
@@ -15,6 +19,17 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
 
     suspend fun getMemoriesOfAssistant(assistantId: String): List<AssistantMemory> {
         return memoryDAO.getMemoriesOfAssistant(assistantId)
+            .map { AssistantMemory(it.id, it.content) }
+    }
+
+    fun getGlobalMemoriesFlow(): Flow<List<AssistantMemory>> =
+        memoryDAO.getMemoriesOfAssistantFlow(GLOBAL_MEMORY_ID)
+            .map { entities ->
+                entities.map { AssistantMemory(it.id, it.content) }
+            }
+
+    suspend fun getGlobalMemories(): List<AssistantMemory> {
+        return memoryDAO.getMemoriesOfAssistant(GLOBAL_MEMORY_ID)
             .map { AssistantMemory(it.id, it.content) }
     }
 

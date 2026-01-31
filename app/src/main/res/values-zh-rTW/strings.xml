@@ -767,5 +767,7 @@
   <string name="setting_display_page_send_on_enter_desc">按 Enter 鍵即可傳送訊息，而非換行</string>
   <string name="chain_of_thought_collapse">收合</string>
   <string name="chain_of_thought_show_more_steps">顯示更多 %d 個步驟</string>
+  <string name="assistant_page_global_memory">全域記憶體</string>
+  <string name="assistant_page_global_memory_desc">使用全域共享記憶體，而非助理隔離記憶體。啟用後，所有助理將共用同一份記憶體儲存空間</string>
 </resources>
 

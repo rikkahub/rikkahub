@@ -767,5 +767,7 @@
   <string name="setting_display_page_send_on_enter_desc">Enter 키를 누르면 줄 바꿈 대신 메시지를 전송합니다</string>
   <string name="chain_of_thought_collapse">접기</string>
   <string name="chain_of_thought_show_more_steps">%d단계 더 보기</string>
+  <string name="assistant_page_global_memory">글로벌 메모리</string>
+  <string name="assistant_page_global_memory_desc">보조 앱별 메모리 대신 전역 공유 메모리를 사용합니다. 활성화하면 모든 보조 앱이 동일한 메모리 저장소를 공유합니다.</string>
 </resources>
 

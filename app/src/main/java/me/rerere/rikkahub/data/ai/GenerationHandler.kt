@@ -87,10 +87,15 @@ class GenerationHandler(
             val toolsInternal = buildList {
                 Log.i(TAG, "generateInternal: build tools($assistant)")
                 if (assistant?.enableMemory == true) {
+                    val memoryAssistantId = if (assistant.useGlobalMemory) {
+                        MemoryRepository.GLOBAL_MEMORY_ID
+                    } else {
+                        assistant.id.toString()
+                    }
                     buildMemoryTools(
                         json = json,
                         onCreation = { content ->
-                            memoryRepo.addMemory(assistant.id.toString(), content)
+                            memoryRepo.addMemory(memoryAssistantId, content)
                         },
                         onUpdate = { id, content ->
                             memoryRepo.updateContent(id, content)

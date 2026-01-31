@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -48,7 +49,14 @@ class AssistantDetailVM(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = Assistant()
         )
 
-    val memories = memoryRepository.getMemoriesOfAssistantFlow(assistantId.toString())
+    val memories = assistant
+        .flatMapLatest { currentAssistant ->
+            if (currentAssistant.useGlobalMemory) {
+                memoryRepository.getGlobalMemoriesFlow()
+            } else {
+                memoryRepository.getMemoriesOfAssistantFlow(assistantId.toString())
+            }
+        }
         .stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
@@ -147,8 +155,13 @@ class AssistantDetailVM(
 
     fun addMemory(memory: AssistantMemory) {
         viewModelScope.launch {
+            val memoryAssistantId = if (assistant.value.useGlobalMemory) {
+                MemoryRepository.GLOBAL_MEMORY_ID
+            } else {
+                assistantId.toString()
+            }
             memoryRepository.addMemory(
-                assistantId = assistantId.toString(),
+                assistantId = memoryAssistantId,
                 content = memory.content
             )
         }

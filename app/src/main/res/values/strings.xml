@@ -767,5 +767,7 @@
   <string name="setting_display_page_send_on_enter_desc">Press Enter to send message instead of adding a new line</string>
   <string name="chain_of_thought_collapse">Collapse</string>
   <string name="chain_of_thought_show_more_steps">Show %d more steps</string>
+  <string name="assistant_page_global_memory">Global Memory</string>
+  <string name="assistant_page_global_memory_desc">Use global shared memory instead of assistant-isolated memory. When enabled, all assistants share the same memory storage</string>
 </resources>
 

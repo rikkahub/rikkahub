@@ -767,5 +767,7 @@
   <string name="setting_display_page_send_on_enter_desc">Enterキーでメッセージを送信し、改行しない</string>
   <string name="chain_of_thought_collapse">折りたたむ</string>
   <string name="chain_of_thought_show_more_steps">あと %d ステップを表示</string>
+  <string name="assistant_page_global_memory">グローバルメモリ</string>
+  <string name="assistant_page_global_memory_desc">アシスタントごとに分離されたメモリではなく、グローバル共有メモリを使用します。有効にすると、すべてのアシスタントが同じメモリストレージを共有します</string>
 </resources>
 

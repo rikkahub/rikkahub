@@ -187,6 +187,37 @@ private fun AssistantMemoryContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_global_memory))
+                },
+                description = {
+                    Text(
+                        text = stringResource(R.string.assistant_page_global_memory_desc),
+                    )
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.useGlobalMemory,
+                        onCheckedChange = {
+                            onUpdateAssistant(
+                                assistant.copy(
+                                    useGlobalMemory = it
+                                )
+                            )
+                        },
+                        enabled = assistant.enableMemory
+                    )
+                }
+            )
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_recent_chats))
                 },
                 description = {
