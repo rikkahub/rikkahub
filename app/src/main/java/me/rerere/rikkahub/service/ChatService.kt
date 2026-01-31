@@ -27,10 +27,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -43,9 +43,9 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.truncate
 import me.rerere.common.android.Logging
@@ -78,9 +78,11 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.deleteChatFiles
+import me.rerere.rikkahub.utils.toLocalString
 import me.rerere.search.SearchService
 import me.rerere.search.SearchServiceOptions
 import java.time.Instant
+import java.time.LocalDateTime
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
@@ -552,7 +554,24 @@ class ChatService(
             add(
                 Tool(
                     name = "search_web",
-                    description = "search web for latest information",
+                    description = """
+                    Search the web for up-to-date or specific information.
+                    Use this when the user asks for the latest news, current facts, or needs verification.
+                    Generate focused keywords and run multiple searches if needed.
+                    Today is ${LocalDateTime.now().toLocalString()}.
+
+                    Response format:
+                    - items[].id (short id), title, url, text
+
+                    Citations:
+                    - After using results, add `[citation,domain](id)` after the sentence.
+                    - Multiple citations are allowed.
+                    - If no results are cited, omit citations.
+
+                    Example:
+                    The capital of France is Paris. [citation,example.com](abc123)
+                    The population is about 2.1 million. [citation,example.com](abc123) [citation,example2.com](def456)
+                    """.trimIndent(),
                     parameters = {
                         val options = settings.searchServices.getOrElse(
                             index = settings.searchServiceSelected,
@@ -583,55 +602,6 @@ class ChatService(
                                 JsonObject(map)
                             }
                         results
-                    }, systemPrompt = { model, messages ->
-                        if (model.tools.isNotEmpty()) return@Tool ""
-                        val hasToolCall =
-                            messages.any { it.getTools().any { tool -> tool.toolName == "search_web" } }
-                        val prompt = StringBuilder()
-                        prompt.append(
-                            """
-                    ## tool: search_web
-
-                    ### usage
-                    - You can use the search_web tool to search the internet for the latest news or to confirm some facts.
-                    - You can perform multiple search if needed
-                    - Generate keywords based on the user's question
-                    - Today is {{cur_date}}
-                    """.trimIndent()
-                        )
-                        if (hasToolCall) {
-                            prompt.append(
-                                """
-                        ### result example
-                        ```json
-                        {
-                            "items": [
-                                {
-                                    "id": "random id in 6 characters",
-                                    "title": "Title",
-                                    "url": "https://example.com",
-                                    "text": "Some relevant snippets"
-                                }
-                            ]
-                        }
-                        ```
-
-                        ### citation
-                        After using the search tool, when replying to users, you need to add a reference format to the referenced search terms in the content.
-                        When citing facts or data from search results, you need to add a citation marker after the sentence: `[citation,domain](id of the search result)`.
-
-                        For example:
-                        ```
-                        The capital of France is Paris. [citation,example.com](id of the search result)
-
-                        The population of Paris is about 2.1 million. [citation,example.com](id of the search result) [citation,example2.com](id of the search result)
-                        ```
-
-                        If no search results are cited, you do not need to add a citation marker.
-                        """.trimIndent()
-                            )
-                        }
-                        prompt.toString()
                     }
                 )
             )
@@ -644,7 +614,11 @@ class ChatService(
                 add(
                     Tool(
                         name = "scrape_web",
-                        description = "scrape web for content",
+                        description = """
+                        Scrape a URL for detailed page content.
+                        Use this when the user requests content from a specific page or when search snippets are insufficient.
+                        Avoid using it for common questions unless the user asks.
+                        """.trimIndent(),
                         parameters = {
                             val options = settings.searchServices.getOrElse(
                                 index = settings.searchServiceSelected,
@@ -663,16 +637,6 @@ class ChatService(
                                 serviceOptions = options,
                             )
                             JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject
-                        },
-                        systemPrompt = { model, messages ->
-                            return@Tool """
-                            ## tool: scrape_web
-
-                            ### usage
-                            - You can use the scrape_web tool to scrape url for detailed content.
-                            - You can perform multiple scrape if needed.
-                            - For common problems, try not to use this tool unless the user requests it.
-                        """.trimIndent()
                         }
                     ))
             }
