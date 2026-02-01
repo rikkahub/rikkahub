@@ -25,9 +25,8 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.GenMediaRepository
-import me.rerere.rikkahub.utils.createImageFileFromBase64
-import me.rerere.rikkahub.utils.getImagesDir
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -40,8 +39,8 @@ data class GeneratedImage(
     val model: String
 )
 
-private fun GenMediaEntity.toGeneratedImage(context: Application): GeneratedImage {
-    val imagesDir = context.getImagesDir()
+private fun GenMediaEntity.toGeneratedImage(filesManager: FilesManager): GeneratedImage {
+    val imagesDir = filesManager.getImagesDir()
     val fullPath = File(imagesDir, this.path.removePrefix("images/")).absolutePath
 
     return GeneratedImage(
@@ -58,6 +57,7 @@ class ImgGenVM(
     val settingsStore: SettingsStore,
     val providerManager: ProviderManager,
     val genMediaRepository: GenMediaRepository,
+    private val filesManager: FilesManager,
 ) : AndroidViewModel(context) {
     private val _prompt = MutableStateFlow("")
     val prompt: StateFlow<String> = _prompt
@@ -84,7 +84,7 @@ class ImgGenVM(
     )
     val generatedImages: Flow<PagingData<GeneratedImage>> = pager.flow
         .map { pagingData ->
-            pagingData.map { entity -> entity.toGeneratedImage(getApplication()) }
+            pagingData.map { entity -> entity.toGeneratedImage(filesManager) }
         }
         .cachedIn(viewModelScope)
 
@@ -175,14 +175,13 @@ class ImgGenVM(
         modelName: String,
         index: Int
     ): File {
-        val context = getApplication<Application>()
-        val imagesDir = context.getImagesDir()
+        val imagesDir = filesManager.getImagesDir()
 
         val timestamp = System.currentTimeMillis()
         val filename = "${timestamp}_${modelName}_$index.png"
         val imageFile = File(imagesDir, filename)
 
-        val createdFile = context.createImageFileFromBase64(item.data, imageFile.absolutePath)
+        val createdFile = filesManager.createImageFileFromBase64(item.data, imageFile.absolutePath)
 
         // Save to database with relative path
         val relativePath = "images/${imageFile.name}"

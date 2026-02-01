@@ -25,7 +25,8 @@ val viewModelModule = module {
             conversationRepo = get(),
             chatService = get(),
             updateChecker = get(),
-            analytics = get()
+            analytics = get(),
+            filesManager = get()
         )
     }
     viewModelOf(::SettingVM)
@@ -37,7 +38,7 @@ val viewModelModule = module {
             id = it.get(),
             settingsStore = get(),
             memoryRepository = get(),
-            context = get(),
+            filesManager = get(),
         )
     }
     viewModelOf(::TranslatorVM)

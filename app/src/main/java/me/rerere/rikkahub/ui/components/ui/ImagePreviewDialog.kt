@@ -25,8 +25,9 @@ import com.dokar.sonner.ToastType
 import com.jvziyaoyao.scale.image.pager.ImagePager
 import com.jvziyaoyao.scale.zoomable.pager.rememberZoomablePagerState
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.utils.saveMessageImage
+import org.koin.compose.koinInject
 
 @Composable
 fun ImagePreviewDialog(
@@ -34,6 +35,7 @@ fun ImagePreviewDialog(
     onDismissRequest: () -> Unit,
 ) {
     val context = LocalContext.current
+    val filesManager: FilesManager = koinInject()
     val state = rememberZoomablePagerState { images.size }
     val toaster = LocalToaster.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -67,7 +69,7 @@ fun ImagePreviewDialog(
                             runCatching {
                                 toaster.show("正在保存")
                                 val imgUrl = images[state.currentPage]
-                                context.saveMessageImage(imgUrl)
+                                filesManager.saveMessageImage(context, imgUrl)
                                 toaster.show(message = "已保存图片", type = ToastType.Success)
                             }.onFailure {
                                 it.printStackTrace()

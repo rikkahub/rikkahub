@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.data.repository
 
-import android.content.Context
 import android.database.sqlite.SQLiteBlobTooBigException
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
@@ -17,18 +16,18 @@ import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.deleteChatFiles
 import java.time.Instant
 import kotlin.uuid.Uuid
 
 class ConversationRepository(
-    private val context: Context,
     private val conversationDAO: ConversationDAO,
     private val messageNodeDAO: MessageNodeDAO,
     private val database: AppDatabase,
+    private val filesManager: FilesManager,
 ) {
     companion object {
         private const val PAGE_SIZE = 20
@@ -162,7 +161,7 @@ class ConversationRepository(
                 conversationToConversationEntity(conversation)
             )
         }
-        context.deleteChatFiles(fullConversation.files)
+        filesManager.deleteChatFiles(fullConversation.files)
     }
 
     suspend fun deleteConversationOfAssistant(assistantId: Uuid) {

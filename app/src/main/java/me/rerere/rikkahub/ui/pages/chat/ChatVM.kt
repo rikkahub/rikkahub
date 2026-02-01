@@ -37,6 +37,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.Avatar
@@ -49,8 +50,6 @@ import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.UpdateChecker
-import me.rerere.rikkahub.utils.createChatFilesByContents
-import me.rerere.rikkahub.utils.deleteChatFiles
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
 import java.time.ZoneId
@@ -67,6 +66,7 @@ class ChatVM(
     private val chatService: ChatService,
     val updateChecker: UpdateChecker,
     private val analytics: FirebaseAnalytics,
+    private val filesManager: FilesManager,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
@@ -230,7 +230,7 @@ class ChatVM(
         val newAvatar = newSettings.displaySetting.userAvatar
 
         if (oldAvatar is Avatar.Image && oldAvatar != newAvatar) {
-            context.deleteChatFiles(listOf(oldAvatar.url.toUri()))
+            filesManager.deleteChatFiles(listOf(oldAvatar.url.toUri()))
         }
     }
 
@@ -374,7 +374,7 @@ class ChatVM(
                                 is UIMessagePart.Image -> {
                                     val url = part.url
                                     if (url.startsWith("file:")) {
-                                        val copied = context.createChatFilesByContents(
+                                        val copied = filesManager.createChatFilesByContents(
                                             listOf(url.toUri())
                                         ).firstOrNull()
                                         if (copied != null) part.copy(url = copied.toString()) else part
@@ -384,7 +384,7 @@ class ChatVM(
                                 is UIMessagePart.Document -> {
                                     val url = part.url
                                     if (url.startsWith("file:")) {
-                                        val copied = context.createChatFilesByContents(
+                                        val copied = filesManager.createChatFilesByContents(
                                             listOf(url.toUri())
                                         ).firstOrNull()
                                         if (copied != null) part.copy(url = copied.toString()) else part
@@ -394,7 +394,7 @@ class ChatVM(
                                 is UIMessagePart.Video -> {
                                     val url = part.url
                                     if (url.startsWith("file:")) {
-                                        val copied = context.createChatFilesByContents(
+                                        val copied = filesManager.createChatFilesByContents(
                                             listOf(url.toUri())
                                         ).firstOrNull()
                                         if (copied != null) part.copy(url = copied.toString()) else part
@@ -404,7 +404,7 @@ class ChatVM(
                                 is UIMessagePart.Audio -> {
                                     val url = part.url
                                     if (url.startsWith("file:")) {
-                                        val copied = context.createChatFilesByContents(
+                                        val copied = filesManager.createChatFilesByContents(
                                             listOf(url.toUri())
                                         ).firstOrNull()
                                         if (copied != null) part.copy(url = copied.toString()) else part

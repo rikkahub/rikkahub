@@ -64,12 +64,12 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
-import me.rerere.rikkahub.utils.deleteChatFiles
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
 import java.time.Instant
@@ -113,6 +113,7 @@ class ChatService(
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
     val mcpManager: McpManager,
+    private val filesManager: FilesManager,
 ) {
     // 存储每个对话的状态
     private val conversations = ConcurrentHashMap<Uuid, MutableStateFlow<Conversation>>()
@@ -912,7 +913,7 @@ class ChatService(
             newFiles.none { it == file }
         }
         if (deletedFiles.isNotEmpty()) {
-            context.deleteChatFiles(deletedFiles)
+            filesManager.deleteChatFiles(deletedFiles)
             Log.w(TAG, "checkFilesDelete: $deletedFiles")
         }
     }
