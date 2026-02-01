@@ -771,5 +771,15 @@
   <string name="chain_of_thought_show_more_steps">Show %d more steps</string>
   <string name="assistant_page_global_memory">Global Memory</string>
   <string name="assistant_page_global_memory_desc">Use global shared memory instead of assistant-isolated memory. When enabled, all assistants share the same memory storage</string>
+  <string name="notification_channel_chat_live_update">Chat Generation Progress</string>
+  <string name="notification_live_update_title">Generating response...</string>
+  <string name="notification_live_update_thinking">Thinking...</string>
+  <string name="notification_live_update_tool">Running tool: %s</string>
+  <string name="notification_live_update_writing">Writing response...</string>
+  <string name="notification_live_update_chip_thinking">Thinking</string>
+  <string name="notification_live_update_chip_tool">Tool</string>
+  <string name="notification_live_update_chip_writing">Writing</string>
+  <string name="setting_display_page_live_update_notification">Live Update Notification</string>
+  <string name="setting_display_page_live_update_notification_desc">Show real-time notification updates during message generation (Android 15+)</string>
 </resources>
 

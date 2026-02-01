@@ -1,15 +1,11 @@
 package me.rerere.rikkahub.service
 
-import android.Manifest
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.util.Log
-import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -51,6 +47,7 @@ import me.rerere.ai.ui.truncate
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
+import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
@@ -78,6 +75,8 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.deleteChatFiles
+import me.rerere.rikkahub.utils.sendNotification
+import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.toLocalString
 import me.rerere.search.SearchService
 import me.rerere.search.SearchServiceOptions
@@ -506,6 +505,9 @@ class ChatService(
                 },
                 truncateIndex = conversation.truncateIndex,
             ).onCompletion {
+                // 取消 Live Update 通知
+                cancelLiveUpdateNotification(conversationId)
+
                 // 可能被取消了，或者意外结束，兜底更新
                 val updatedConversation = getConversationFlow(conversationId).value.copy(
                     messageNodes = getConversationFlow(conversationId).value.messageNodes.map { node ->
@@ -525,10 +527,18 @@ class ChatService(
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunk.messages)
                         updateConversation(conversationId, updatedConversation)
+
+                        // 如果应用不在前台，发送 Live Update 通知
+                        if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
+                            sendLiveUpdateNotification(conversationId, chunk.messages)
+                        }
                     }
                 }
             }
         }.onFailure {
+            // 取消 Live Update 通知
+            cancelLiveUpdateNotification(conversationId)
+
             it.printStackTrace()
             addError(it)
             Logging.log(TAG, "handleMessageComplete: $it")
@@ -878,26 +888,100 @@ class ChatService(
 
     // 发送生成完成通知
     private fun sendGenerationDoneNotification(conversationId: Uuid) {
-        val conversation = getConversationFlow(conversationId).value
-        val notification =
-            NotificationCompat.Builder(context, CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID)
-                .setContentTitle(context.getString(R.string.notification_chat_done_title))
-                .setContentText(conversation.currentMessages.lastOrNull()?.toText()?.take(50) ?: "")
-                .setSmallIcon(R.drawable.small_icon)
-                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-                .setAutoCancel(true)
-                .setDefaults(NotificationCompat.DEFAULT_ALL)
-                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-                .setContentIntent(getPendingIntent(context, conversationId))
+        // 先取消 Live Update 通知
+        cancelLiveUpdateNotification(conversationId)
 
-        if (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
+        val conversation = getConversationFlow(conversationId).value
+        context.sendNotification(
+            channelId = CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID,
+            notificationId = 1
         ) {
-            return
+            title = context.getString(R.string.notification_chat_done_title)
+            content = conversation.currentMessages.lastOrNull()?.toText()?.take(50) ?: ""
+            autoCancel = true
+            useDefaults = true
+            category = NotificationCompat.CATEGORY_MESSAGE
+            contentIntent = getPendingIntent(context, conversationId)
         }
-        NotificationManagerCompat.from(context).notify(1, notification.build())
+    }
+
+    // Live Update 通知相关
+    private fun getLiveUpdateNotificationId(conversationId: Uuid): Int {
+        return conversationId.hashCode() + 10000
+    }
+
+    private fun sendLiveUpdateNotification(
+        conversationId: Uuid,
+        messages: List<UIMessage>
+    ) {
+        val lastMessage = messages.lastOrNull() ?: return
+        val parts = lastMessage.parts
+
+        // 确定当前状态
+        val (chipText, statusText, contentText) = determineNotificationContent(parts)
+
+        context.sendNotification(
+            channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
+            notificationId = getLiveUpdateNotificationId(conversationId)
+        ) {
+            title = context.getString(R.string.notification_live_update_title)
+            content = contentText
+            subText = statusText
+            ongoing = true
+            onlyAlertOnce = true
+            category = NotificationCompat.CATEGORY_PROGRESS
+            useBigTextStyle = true
+            contentIntent = getPendingIntent(context, conversationId)
+            requestPromotedOngoing = true
+            shortCriticalText = chipText
+        }
+    }
+
+    private fun determineNotificationContent(parts: List<UIMessagePart>): Triple<String, String, String> {
+        // 检查最近的 part 来确定状态
+        val lastReasoning = parts.filterIsInstance<UIMessagePart.Reasoning>().lastOrNull()
+        val lastTool = parts.filterIsInstance<UIMessagePart.Tool>().lastOrNull()
+        val lastText = parts.filterIsInstance<UIMessagePart.Text>().lastOrNull()
+
+        return when {
+            // 正在执行工具
+            lastTool != null && !lastTool.isExecuted -> {
+                val toolName = lastTool.toolName.removePrefix("mcp__")
+                Triple(
+                    context.getString(R.string.notification_live_update_chip_tool),
+                    context.getString(R.string.notification_live_update_tool, toolName),
+                    lastTool.input.take(100)
+                )
+            }
+            // 正在思考（Reasoning 未结束）
+            lastReasoning != null && lastReasoning.finishedAt == null -> {
+                Triple(
+                    context.getString(R.string.notification_live_update_chip_thinking),
+                    context.getString(R.string.notification_live_update_thinking),
+                    lastReasoning.reasoning.takeLast(200)
+                )
+            }
+            // 正在写回复
+            lastText != null -> {
+                Triple(
+                    context.getString(R.string.notification_live_update_chip_writing),
+                    context.getString(R.string.notification_live_update_writing),
+                    lastText.text.takeLast(200)
+                )
+            }
+            // 默认状态
+            else -> {
+                Triple(
+                    context.getString(R.string.notification_live_update_chip_writing),
+                    context.getString(R.string.notification_live_update_title),
+                    ""
+                )
+            }
+        }
+    }
+
+    private fun cancelLiveUpdateNotification(conversationId: Uuid) {
+        context.cancelNotification(getLiveUpdateNotificationId(conversationId))
     }
 
     private fun getPendingIntent(context: Context, conversationId: Uuid): PendingIntent {

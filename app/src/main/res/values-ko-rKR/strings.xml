@@ -771,5 +771,15 @@
   <string name="assistant_page_global_memory_desc">보조 앱별 메모리 대신 전역 공유 메모리를 사용합니다. 활성화하면 모든 보조 앱이 동일한 메모리 저장소를 공유합니다.</string>
   <string name="assistant_page_local_tools_time_info_title">시간 정보</string>
   <string name="assistant_page_local_tools_time_info_desc">기기에서 현재 날짜, 요일, 시간, 시간대 정보 가져오기</string>
+  <string name="notification_channel_chat_live_update">채팅 생성 진행률</string>
+  <string name="notification_live_update_title">응답 생성 중…</string>
+  <string name="notification_live_update_thinking">생각 중...</string>
+  <string name="notification_live_update_tool">도구 실행 중: %s</string>
+  <string name="notification_live_update_writing">응답 작성 중...</string>
+  <string name="notification_live_update_chip_thinking">생각 중</string>
+  <string name="notification_live_update_chip_tool">도구</string>
+  <string name="notification_live_update_chip_writing">작성 중</string>
+  <string name="setting_display_page_live_update_notification">실시간 업데이트 알림</string>
+  <string name="setting_display_page_live_update_notification_desc">메시지 생성 중 실시간 알림 업데이트 표시 (Android 15+)</string>
 </resources>
 

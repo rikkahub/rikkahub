@@ -31,6 +31,7 @@ import org.koin.core.context.startKoin
 private const val TAG = "RikkaHubApp"
 
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
+const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -81,6 +82,16 @@ class RikkaHubApp : Application() {
             .setVibrationEnabled(true)
             .build()
         notificationManager.createNotificationChannel(chatCompletedChannel)
+
+        val chatLiveUpdateChannel = NotificationChannelCompat
+            .Builder(
+                CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
+                NotificationManagerCompat.IMPORTANCE_LOW
+            )
+            .setName(getString(R.string.notification_channel_chat_live_update))
+            .setVibrationEnabled(false)
+            .build()
+        notificationManager.createNotificationChannel(chatLiveUpdateChannel)
     }
 
     override fun onTerminate() {

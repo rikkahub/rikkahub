@@ -227,6 +227,28 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 )
             }
 
+            if (displaySetting.enableNotificationOnMessageGeneration) {
+                item {
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = {
+                            Text(stringResource(R.string.setting_display_page_live_update_notification))
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.setting_display_page_live_update_notification_desc))
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.enableLiveUpdateNotification,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(enableLiveUpdateNotification = it))
+                                }
+                            )
+                        },
+                    )
+                }
+            }
+
 //            item {
 //                ListItem(
 //                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),

@@ -771,5 +771,15 @@
   <string name="assistant_page_global_memory_desc">アシスタントごとに分離されたメモリではなく、グローバル共有メモリを使用します。有効にすると、すべてのアシスタントが同じメモリストレージを共有します</string>
   <string name="assistant_page_local_tools_time_info_title">時刻情報</string>
   <string name="assistant_page_local_tools_time_info_desc">デバイスから現在の日付、曜日、時刻、タイムゾーン情報を取得</string>
+  <string name="notification_channel_chat_live_update">チャット生成の進行状況</string>
+  <string name="notification_live_update_title">応答を生成中…</string>
+  <string name="notification_live_update_thinking">考え中…</string>
+  <string name="notification_live_update_tool">ツール実行中: %s</string>
+  <string name="notification_live_update_writing">応答を書いています…</string>
+  <string name="notification_live_update_chip_thinking">考え中</string>
+  <string name="notification_live_update_chip_tool">ツール</string>
+  <string name="notification_live_update_chip_writing">書き込み中</string>
+  <string name="setting_display_page_live_update_notification">ライブアップデート通知</string>
+  <string name="setting_display_page_live_update_notification_desc">メッセージ生成中のリアルタイム通知アップデートを表示（Android 15以降）</string>
 </resources>
 

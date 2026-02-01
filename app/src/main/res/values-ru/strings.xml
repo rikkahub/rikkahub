@@ -769,5 +769,15 @@
   <string name="assistant_page_global_memory_desc">Использовать общую память вместо изолированной для ассистента. При включении все ассистенты используют одно и то же хранилище памяти</string>
   <string name="assistant_page_local_tools_time_info_title">Информация о времени</string>
   <string name="assistant_page_local_tools_time_info_desc">Получить текущую дату, день недели, время и часовой пояс с устройства</string>
+  <string name="notification_channel_chat_live_update">Прогресс генерации чата</string>
+  <string name="notification_live_update_title">Генерируется ответ…</string>
+  <string name="notification_live_update_thinking">Думаю…</string>
+  <string name="notification_live_update_tool">Запущен инструмент: %s</string>
+  <string name="notification_live_update_writing">Пишем ответ…</string>
+  <string name="notification_live_update_chip_thinking">Думает</string>
+  <string name="notification_live_update_chip_tool">Инструмент</string>
+  <string name="notification_live_update_chip_writing">Идёт запись</string>
+  <string name="setting_display_page_live_update_notification">Уведомление об обновлении в реальном времени</string>
+  <string name="setting_display_page_live_update_notification_desc">Показывать уведомления об обновлениях в реальном времени во время генерации сообщений (Android 15+)</string>
 </resources>
 

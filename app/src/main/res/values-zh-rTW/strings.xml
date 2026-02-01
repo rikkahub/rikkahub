@@ -771,5 +771,15 @@
   <string name="assistant_page_global_memory_desc">使用全域共享記憶體，而非助理隔離記憶體。啟用後，所有助理將共用同一份記憶體儲存空間</string>
   <string name="assistant_page_local_tools_time_info_title">時間資訊</string>
   <string name="assistant_page_local_tools_time_info_desc">從裝置取得目前日期、星期、時間與時區資訊</string>
+  <string name="notification_channel_chat_live_update">聊天生成進度</string>
+  <string name="notification_live_update_title">正在生成回應…</string>
+  <string name="notification_live_update_thinking">思考中...</string>
+  <string name="notification_live_update_tool">正在執行工具：%s</string>
+  <string name="notification_live_update_writing">正在撰寫回覆…</string>
+  <string name="notification_live_update_chip_thinking">思考中</string>
+  <string name="notification_live_update_chip_tool">工具</string>
+  <string name="notification_live_update_chip_writing">正在書寫</string>
+  <string name="setting_display_page_live_update_notification">即時更新通知</string>
+  <string name="setting_display_page_live_update_notification_desc">在訊息產生期間顯示即時通知更新（Android 15+）</string>
 </resources>
 
