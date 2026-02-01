@@ -39,6 +39,18 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GPT_5_1 = defineModel {
+        tokens("gpt", "5", "1")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val GPT_5_2 = defineModel {
+        tokens("gpt", "5", "2")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val GEMINI_20_FLASH = defineModel {
         tokens("gemini", "2", "0", "flash")
         visionInput()
@@ -189,6 +201,12 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val DOUBAO_1_8 = defineModel {
+        tokens("doubao", "1", "8")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val GROK_4 = defineModel {
         tokens("grok", "4")
         visionInput()
@@ -253,6 +271,8 @@ object ModelRegistry {
         OPENAI_O_MODELS,
         GPT_OSS,
         GPT_5,
+        GPT_5_1,
+        GPT_5_2,
         GEMINI_20_FLASH,
         GEMINI_2_5_FLASH,
         GEMINI_2_5_PRO,
@@ -275,6 +295,7 @@ object ModelRegistry {
         DEEPSEEK_V3_2,
         QWEN_3,
         DOUBAO_1_6,
+        DOUBAO_1_8,
         GROK_4,
         KIMI_K2,
         KIMI_K2_5,
