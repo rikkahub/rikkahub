@@ -497,7 +497,11 @@ class ChatService(
                                 parameters = { tool.inputSchema },
                                 needsApproval = tool.needsApproval,
                                 execute = {
-                                    mcpManager.callTool(tool.name, it.jsonObject)
+                                    listOf(
+                                        UIMessagePart.Text(
+                                            mcpManager.callTool(tool.name, it.jsonObject).toString()
+                                        )
+                                    )
                                 },
                             )
                         )
@@ -612,7 +616,7 @@ class ChatService(
                                     })
                                 JsonObject(map)
                             }
-                        results
+                        listOf(UIMessagePart.Text(results.toString()))
                     }
                 )
             )
@@ -647,7 +651,8 @@ class ChatService(
                                 commonOptions = settings.searchCommonOptions,
                                 serviceOptions = options,
                             )
-                            JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject
+                            val payload = JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject
+                            listOf(UIMessagePart.Text(payload.toString()))
                         }
                     ))
             }

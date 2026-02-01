@@ -258,9 +258,7 @@ class GenerationHandler(
                             val args = json.parseToJsonElement(tool.input.ifBlank { "{}" })
                             Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
                             val result = toolDef.execute(args)
-                            executedTools += tool.copy(
-                                output = listOf(UIMessagePart.Text(json.encodeToString(result)))
-                            )
+                            executedTools += tool.copy(output = result)
                         }.onFailure {
                             it.printStackTrace()
                             executedTools += tool.copy(
