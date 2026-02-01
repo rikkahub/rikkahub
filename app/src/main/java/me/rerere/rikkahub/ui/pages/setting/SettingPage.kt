@@ -3,8 +3,10 @@ package me.rerere.rikkahub.ui.pages.setting
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -61,11 +63,14 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.Select
+import me.rerere.rikkahub.ui.components.ui.icons.DiscordIcon
+import me.rerere.rikkahub.ui.components.ui.icons.TencentQQIcon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
 import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
 import me.rerere.rikkahub.ui.theme.ColorMode
 import me.rerere.rikkahub.utils.countChatFiles
+import me.rerere.rikkahub.utils.joinQQGroup
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -300,12 +305,43 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
             }
 
             item {
+                val context = LocalContext.current
                 SettingItem(
                     navController = navController,
                     title = { Text(stringResource(R.string.setting_page_about)) },
                     description = { Text(stringResource(R.string.setting_page_about_desc)) },
                     icon = { Icon(Lucide.BadgeInfo, "About") },
-                    link = Screen.SettingAbout
+                    link = Screen.SettingAbout,
+                    trailingContent = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    context.joinQQGroup("wMdqlDETtzIz6o49HrBR2TeQlwcX6RH9")
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = TencentQQIcon,
+                                    contentDescription = "QQ",
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    context.openUrl("https://discord.gg/9weBqxe5c4")
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = DiscordIcon,
+                                    contentDescription = "Discord",
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+                    }
                 )
             }
 
@@ -423,6 +459,7 @@ fun SettingItem(
     description: @Composable () -> Unit,
     icon: @Composable () -> Unit,
     link: Screen? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
     onClick: () -> Unit = {}
 ) {
     Surface(
@@ -440,7 +477,8 @@ fun SettingItem(
             },
             leadingContent = {
                 icon()
-            }
+            },
+            trailingContent = trailingContent
         )
     }
 }
