@@ -20,9 +20,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
@@ -200,25 +198,11 @@ class RouteActivity : ComponentActivity() {
                     showCloseButton = true,
                 )
                 TTSController()
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    if (BuildConfig.DEBUG) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "[开发模式]",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                    }
                     NavHost(
                         modifier = Modifier
                             .fillMaxSize(),
@@ -389,6 +373,16 @@ class RouteActivity : ComponentActivity() {
                         PromptPage()
                     }
                 }
+                    if (BuildConfig.DEBUG) {
+                        Text(
+                            text = "[开发模式]",
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                        )
+                    }
                 }
             }
         }
