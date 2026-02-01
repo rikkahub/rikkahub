@@ -87,6 +87,7 @@ import me.rerere.rikkahub.ui.pages.prompts.PromptPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
+import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
@@ -357,6 +358,10 @@ class RouteActivity : ComponentActivity() {
                         SettingDonatePage()
                     }
 
+                        composable<Screen.SettingFiles> {
+                            SettingFilesPage()
+                        }
+
                     composable<Screen.Developer> {
                         DeveloperPage()
                     }
@@ -512,6 +517,9 @@ sealed interface Screen {
 
     @Serializable
     data object SettingDonate : Screen
+
+    @Serializable
+    data object SettingFiles : Screen
 
     @Serializable
     data object Developer : Screen

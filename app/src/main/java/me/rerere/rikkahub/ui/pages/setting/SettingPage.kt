@@ -58,6 +58,7 @@ import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.SunMoon
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Volume2
+import com.composables.icons.lucide.FolderOpen
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
@@ -292,6 +293,16 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     icon = {
                         Icon(Lucide.HardDrive, "Storage")
                     },
+                )
+            }
+
+            item {
+                SettingItem(
+                    navController = navController,
+                    title = { Text("文件管理") },
+                    description = { Text("管理上传文件") },
+                    icon = { Icon(Lucide.FolderOpen, "Files") },
+                    link = Screen.SettingFiles
                 )
             }
 

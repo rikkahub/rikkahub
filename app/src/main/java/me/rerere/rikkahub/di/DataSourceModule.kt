@@ -73,6 +73,10 @@ val dataSourceModule = module {
         get<AppDatabase>().messageNodeDao()
     }
 
+    single {
+        get<AppDatabase>().managedFileDao()
+    }
+
     single { McpManager(settingsStore = get(), appScope = get()) }
 
     single {

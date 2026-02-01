@@ -21,6 +21,7 @@ import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.utils.DatabaseUtil
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
@@ -50,6 +51,9 @@ class RikkaHubApp : Application() {
         // delete temp files
         deleteTempFiles()
 
+        // sync upload files to DB
+        syncManagedFiles()
+
         // Init remote config
         get<FirebaseRemoteConfig>().apply {
             setConfigSettingsAsync(remoteConfigSettings {
@@ -67,6 +71,16 @@ class RikkaHubApp : Application() {
             val dir = appTempFolder
             if (dir.exists()) {
                 dir.deleteRecursively()
+            }
+        }
+    }
+
+    private fun syncManagedFiles() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<FilesManager>().syncFolder()
+            }.onFailure {
+                Log.e(TAG, "syncManagedFiles failed", it)
             }
         }
     }
