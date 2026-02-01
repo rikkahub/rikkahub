@@ -779,5 +779,7 @@
   <string name="notification_live_update_chip_writing">Идёт запись</string>
   <string name="setting_display_page_live_update_notification">Уведомление об обновлении в реальном времени</string>
   <string name="setting_display_page_live_update_notification_desc">Показывать уведомления об обновлениях в реальном времени во время генерации сообщений (Android 15+)</string>
+  <string name="setting_display_page_enable_auto_scroll_title">Автопрокрутка</string>
+  <string name="setting_display_page_enable_auto_scroll_desc">Автоматически прокручивать вниз при генерации контента ИИ</string>
 </resources>
 

@@ -786,5 +786,7 @@
   <string name="notification_live_update_chip_writing">Writing</string>
   <string name="setting_display_page_live_update_notification">Live Update Notification</string>
   <string name="setting_display_page_live_update_notification_desc">Show real-time notification updates during message generation (Android 15+)</string>
+  <string name="setting_display_page_enable_auto_scroll_title">Auto Scroll</string>
+  <string name="setting_display_page_enable_auto_scroll_desc">Automatically scroll to the bottom when AI is generating content</string>
 </resources>
 

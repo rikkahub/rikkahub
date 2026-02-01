@@ -579,6 +579,26 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 ListItem(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_enable_auto_scroll_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_enable_auto_scroll_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.enableAutoScroll,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(enableAutoScroll = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
                         Text(stringResource(R.string.setting_display_page_enable_message_generation_haptic_effect_title))
                     },
                     supportingContent = {

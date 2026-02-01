@@ -786,5 +786,7 @@
   <string name="chat_message_tool_get_time">時刻情報を取得</string>
   <string name="chat_message_tool_clipboard_read">クリップボードを読み取り</string>
   <string name="chat_message_tool_clipboard_write">クリップボードに書き込み</string>
+  <string name="setting_display_page_enable_auto_scroll_title">自動スクロール</string>
+  <string name="setting_display_page_enable_auto_scroll_desc">AIがコンテンツを生成中に自動で下までスクロールする</string>
 </resources>
 

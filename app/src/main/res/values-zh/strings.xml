@@ -786,5 +786,7 @@
   <string name="chat_message_tool_get_time">获取时间信息</string>
   <string name="chat_message_tool_clipboard_read">读取剪贴板</string>
   <string name="chat_message_tool_clipboard_write">写入剪贴板</string>
+  <string name="setting_display_page_enable_auto_scroll_title">自动滚动</string>
+  <string name="setting_display_page_enable_auto_scroll_desc">AI生成内容时自动滚动到底部</string>
 </resources>
 
