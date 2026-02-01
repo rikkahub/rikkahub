@@ -42,6 +42,9 @@ import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.BookDashed
 import com.composables.icons.lucide.BookHeart
 import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.Clipboard
+import com.composables.icons.lucide.ClipboardPaste
+import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Search
@@ -82,12 +85,19 @@ private object ToolNames {
     const val MEMORY = "memory_tool"
     const val SEARCH_WEB = "search_web"
     const val SCRAPE_WEB = "scrape_web"
+    const val GET_TIME_INFO = "get_time_info"
+    const val CLIPBOARD = "clipboard_tool"
 }
 
 private object MemoryActions {
     const val CREATE = "create"
     const val EDIT = "edit"
     const val DELETE = "delete"
+}
+
+private object ClipboardActions {
+    const val READ = "read"
+    const val WRITE = "write"
 }
 
 private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
@@ -99,6 +109,12 @@ private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
 
     ToolNames.SEARCH_WEB -> Lucide.Search
     ToolNames.SCRAPE_WEB -> Lucide.Earth
+    ToolNames.GET_TIME_INFO -> Lucide.Clock
+    ToolNames.CLIPBOARD -> when (action) {
+        ClipboardActions.READ -> Lucide.Clipboard
+        ClipboardActions.WRITE -> Lucide.ClipboardPaste
+        else -> Lucide.Clipboard
+    }
     else -> Lucide.Wrench
 }
 
@@ -142,6 +158,12 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         )
 
         ToolNames.SCRAPE_WEB -> stringResource(R.string.chat_message_tool_scrape_web)
+        ToolNames.GET_TIME_INFO -> stringResource(R.string.chat_message_tool_get_time)
+        ToolNames.CLIPBOARD -> when (memoryAction) {
+            ClipboardActions.READ -> stringResource(R.string.chat_message_tool_clipboard_read)
+            ClipboardActions.WRITE -> stringResource(R.string.chat_message_tool_clipboard_write)
+            else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
+        }
         else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
     }
 

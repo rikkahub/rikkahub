@@ -781,5 +781,10 @@
   <string name="notification_live_update_chip_writing">正在书写</string>
   <string name="setting_display_page_live_update_notification">实时更新通知</string>
   <string name="setting_display_page_live_update_notification_desc">在生成消息时显示实时通知更新（Android 15+）</string>
+  <string name="assistant_page_local_tools_clipboard_title">剪贴板</string>
+  <string name="assistant_page_local_tools_clipboard_desc">读取或写入设备剪贴板中的纯文本</string>
+  <string name="chat_message_tool_get_time">获取时间信息</string>
+  <string name="chat_message_tool_clipboard_read">读取剪贴板</string>
+  <string name="chat_message_tool_clipboard_write">写入剪贴板</string>
 </resources>
 

@@ -781,5 +781,10 @@
   <string name="notification_live_update_chip_writing">작성 중</string>
   <string name="setting_display_page_live_update_notification">실시간 업데이트 알림</string>
   <string name="setting_display_page_live_update_notification_desc">메시지 생성 중 실시간 알림 업데이트 표시 (Android 15+)</string>
+  <string name="assistant_page_local_tools_clipboard_title">클립보드</string>
+  <string name="assistant_page_local_tools_clipboard_desc">기기 클립보드에서 텍스트 읽기 또는 쓰기</string>
+  <string name="chat_message_tool_get_time">시간 정보 가져오기</string>
+  <string name="chat_message_tool_clipboard_read">클립보드 읽기</string>
+  <string name="chat_message_tool_clipboard_write">클립보드에 쓰기</string>
 </resources>
 
