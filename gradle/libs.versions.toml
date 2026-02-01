@@ -13,7 +13,7 @@ commons-text = "1.15.0"
 lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.12.3"
 composeBom = "2026.01.01"
-media3 = "1.9.0"
+media3 = "1.9.1"
 metadataExtractor = "2.19.0"
 nav2 = "2.9.7"
 nav3Core = "1.0.0"
@@ -81,7 +81,7 @@ androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
-androidx-material3 = { group = "androidx.compose.material3", name = "material3", version = "1.5.0-alpha11" }
+androidx-material3 = { group = "androidx.compose.material3", name = "material3", version = "1.5.0-alpha13" }
 androidx-navigation2 = { group = "androidx.navigation", name = "navigation-compose", version.ref = "nav2" }
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "nav3Core" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "nav3Core" }
