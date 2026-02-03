@@ -2,25 +2,30 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +46,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
+import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -55,17 +61,25 @@ fun SettingFilesPage(
     val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val folders = remember { listOf(FileFolders.UPLOAD) }
 
-    var files by remember { mutableStateOf<List<ManagedFileEntity>>(emptyList()) }
+    var filesByFolder by remember { mutableStateOf<Map<String, List<ManagedFileEntity>>>(emptyMap()) }
+    var selectedFolder by remember { mutableStateOf(FileFolders.UPLOAD) }
     var pendingDelete by remember { mutableStateOf<ManagedFileEntity?>(null) }
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         isLoading = true
-        filesManager.syncFolder()
-        files = filesManager.list()
+        val data = mutableMapOf<String, List<ManagedFileEntity>>()
+        folders.forEach { folder ->
+            filesManager.syncFolder(folder)
+            data[folder] = filesManager.list(folder)
+        }
+        filesByFolder = data
         isLoading = false
     }
+
+    val files = filesByFolder[selectedFolder].orEmpty()
 
     if (pendingDelete != null) {
         val target = pendingDelete!!
@@ -79,7 +93,11 @@ fun SettingFilesPage(
                         scope.launch {
                             val ok = filesManager.delete(target.id, deleteFromDisk = true)
                             if (ok) {
-                                files = files.filterNot { it.id == target.id }
+                                filesByFolder = filesByFolder.toMutableMap().apply {
+                                    val current = (this[selectedFolder] ?: emptyList())
+                                        .filterNot { it.id == target.id }
+                                    this[selectedFolder] = current
+                                }
                                 toaster.show("已删除")
                             } else {
                                 toaster.show("删除失败")
@@ -101,7 +119,7 @@ fun SettingFilesPage(
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = { Text("文件管理") },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior
@@ -109,45 +127,81 @@ fun SettingFilesPage(
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
     ) { innerPadding ->
-        if (isLoading && files.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("加载中...")
-            }
-        } else if (files.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("暂无文件")
-            }
-        } else {
-            LazyVerticalStaggeredGrid(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalItemSpacing = 8.dp,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                state = gridState,
-                columns = StaggeredGridCells.Fixed(2)
-            ) {
-                items(files, key = { it.id }) { file ->
-                    FileItem(
-                        file = file,
-                        fileOnDisk = filesManager.getFile(file),
-                        onDelete = { pendingDelete = file }
-                    )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            FolderRow(
+                folders = folders,
+                selectedFolder = selectedFolder,
+                onFolderSelected = { selectedFolder = it }
+            )
+
+            if (isLoading && files.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("加载中...")
+                }
+            } else if (files.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("暂无文件")
+                }
+            } else {
+                LazyVerticalStaggeredGrid(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalItemSpacing = 8.dp,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    state = gridState,
+                    columns = StaggeredGridCells.Fixed(2)
+                ) {
+                    items(files, key = { it.id }) { file ->
+                        FileItem(
+                            file = file,
+                            fileOnDisk = filesManager.getFile(file),
+                            onDelete = { pendingDelete = file }
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun FolderRow(
+    folders: List<String>,
+    selectedFolder: String,
+    onFolderSelected: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        folders.forEach { folder ->
+            FilterChip(
+                selected = selectedFolder == folder,
+                onClick = { onFolderSelected(folder) },
+                label = { Text(folderDisplayName(folder)) }
+            )
+        }
+    }
+}
+
+private fun folderDisplayName(folder: String): String = when (folder) {
+    FileFolders.UPLOAD -> "上传"
+    else -> folder
 }
 
 @Composable
@@ -160,7 +214,7 @@ private fun FileItem(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        androidx.compose.foundation.layout.Column {
+        Column {
             Box(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -196,7 +250,7 @@ private fun FileItem(
                 }
             }
 
-            androidx.compose.foundation.layout.Column(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp)

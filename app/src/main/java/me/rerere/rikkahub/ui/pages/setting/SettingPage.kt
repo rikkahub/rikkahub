@@ -294,16 +294,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     icon = {
                         Icon(Lucide.HardDrive, "Storage")
                     },
-                )
-            }
-
-            item {
-                SettingItem(
-                    navController = navController,
-                    title = { Text("文件管理") },
-                    description = { Text("管理上传文件") },
-                    icon = { Icon(Lucide.FolderOpen, "Files") },
-                    link = Screen.SettingFiles
+                    link = Screen.SettingFiles,
                 )
             }
 
