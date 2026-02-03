@@ -58,9 +58,11 @@ import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.SunMoon
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Volume2
+import com.composables.icons.lucide.FolderOpen
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.icons.DiscordIcon
@@ -69,17 +71,18 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
 import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
 import me.rerere.rikkahub.ui.theme.ColorMode
-import me.rerere.rikkahub.utils.countChatFiles
 import me.rerere.rikkahub.utils.joinQQGroup
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 @Composable
 fun SettingPage(vm: SettingVM = koinViewModel()) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val filesManager: FilesManager = koinInject()
     Scaffold(
         topBar = {
             LargeTopAppBar(
@@ -269,9 +272,8 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
             }
 
             item {
-                val context = LocalContext.current
                 val storageState by produceState(-1 to 0L) {
-                    value = context.countChatFiles()
+                    value = filesManager.countChatFiles()
                 }
                 SettingItem(
                     navController = navController,
@@ -292,6 +294,16 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     icon = {
                         Icon(Lucide.HardDrive, "Storage")
                     },
+                )
+            }
+
+            item {
+                SettingItem(
+                    navController = navController,
+                    title = { Text("文件管理") },
+                    description = { Text("管理上传文件") },
+                    icon = { Icon(Lucide.FolderOpen, "Files") },
+                    link = Screen.SettingFiles
                 )
             }
 

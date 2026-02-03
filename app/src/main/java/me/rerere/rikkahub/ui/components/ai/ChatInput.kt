@@ -128,6 +128,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ui.InjectionSelector
@@ -139,11 +140,7 @@ import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
-import me.rerere.rikkahub.utils.createChatFilesByContents
-import me.rerere.rikkahub.utils.createChatTextFile
-import me.rerere.rikkahub.utils.deleteChatFiles
-import me.rerere.rikkahub.utils.getFileMimeType
-import me.rerere.rikkahub.utils.getFileNameFromUri
+import org.koin.compose.koinInject
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
@@ -172,6 +169,7 @@ fun ChatInput(
     onLongSendClick: () -> Unit,
 ) {
     val context = LocalContext.current
+    val filesManager: FilesManager = koinInject()
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
 
@@ -402,6 +400,7 @@ private fun TextInputRow(
     onSendMessage: () -> Unit,
 ) {
     val settings = LocalSettings.current
+    val filesManager: FilesManager = koinInject()
     val assistant = settings.getCurrentAssistant()
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -450,7 +449,7 @@ private fun TextInputRow(
                                     val uri = item.uri
                                     if (uri != null) {
                                         state.addImages(
-                                            context.createChatFilesByContents(
+                                            filesManager.createChatFilesByContents(
                                                 listOf(
                                                     uri
                                                 )
@@ -466,7 +465,7 @@ private fun TextInputRow(
                                 transferableContent.consume { item ->
                                     val text = item.text?.toString()
                                     if (text != null && text.length > settings.displaySetting.pasteLongTextThreshold) {
-                                        val document = context.createChatTextFile(text)
+                                        val document = filesManager.createChatTextFile(text)
                                         state.addFiles(listOf(document))
                                         true
                                     } else {
@@ -587,6 +586,7 @@ private fun MediaFileInputRow(
     state: ChatInputState,
     context: Context
 ) {
+    val filesManager: FilesManager = koinInject()
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
@@ -618,7 +618,7 @@ private fun MediaFileInputRow(
                             state.messageContent =
                                 state.messageContent.filterNot { it == image }
                             // Delete image
-                            context.deleteChatFiles(listOf(image.url.toUri()))
+                            filesManager.deleteChatFiles(listOf(image.url.toUri()))
                         }
                         .align(Alignment.TopEnd)
                         .background(MaterialTheme.colorScheme.secondary),
@@ -651,7 +651,7 @@ private fun MediaFileInputRow(
                             state.messageContent =
                                 state.messageContent.filterNot { it == video }
                             // Delete image
-                            context.deleteChatFiles(listOf(video.url.toUri()))
+                            filesManager.deleteChatFiles(listOf(video.url.toUri()))
                         }
                         .align(Alignment.TopEnd)
                         .background(MaterialTheme.colorScheme.secondary),
@@ -684,7 +684,7 @@ private fun MediaFileInputRow(
                             state.messageContent =
                                 state.messageContent.filterNot { it == audio }
                             // Delete image
-                            context.deleteChatFiles(listOf(audio.url.toUri()))
+                            filesManager.deleteChatFiles(listOf(audio.url.toUri()))
                         }
                         .align(Alignment.TopEnd)
                         .background(MaterialTheme.colorScheme.secondary),
@@ -729,7 +729,7 @@ private fun MediaFileInputRow(
                                 state.messageContent =
                                     state.messageContent.filterNot { it == document }
                                 // Delete image
-                                context.deleteChatFiles(listOf(document.url.toUri()))
+                                filesManager.deleteChatFiles(listOf(document.url.toUri()))
                             }
                             .align(Alignment.TopEnd)
                             .background(MaterialTheme.colorScheme.secondary),
@@ -1023,10 +1023,11 @@ private fun useCropLauncher(
 private fun ImagePickButton(onAddImages: (List<Uri>) -> Unit = {}) {
     val context = LocalContext.current
     val settings = LocalSettings.current
+    val filesManager: FilesManager = koinInject()
 
     val (_, launchCrop) = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
-            onAddImages(context.createChatFilesByContents(listOf(croppedUri)))
+            onAddImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
         }
     )
 
@@ -1038,7 +1039,7 @@ private fun ImagePickButton(onAddImages: (List<Uri>) -> Unit = {}) {
             // Check if we should skip crop based on settings
             if (settings.displaySetting.skipCropImage) {
                 // Skip crop, directly add images
-                onAddImages(context.createChatFilesByContents(selectedUris))
+                onAddImages(filesManager.createChatFilesByContents(selectedUris))
             } else {
                 // Show crop interface
                 if (selectedUris.size == 1) {
@@ -1046,7 +1047,7 @@ private fun ImagePickButton(onAddImages: (List<Uri>) -> Unit = {}) {
                     launchCrop(selectedUris.first())
                 } else {
                     // Multiple images - no crop
-                    onAddImages(context.createChatFilesByContents(selectedUris))
+                    onAddImages(filesManager.createChatFilesByContents(selectedUris))
                 }
             }
         } else {
@@ -1072,12 +1073,13 @@ fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
 
     val context = LocalContext.current
     val settings = LocalSettings.current
+    val filesManager: FilesManager = koinInject()
     var cameraOutputUri by remember { mutableStateOf<Uri?>(null) }
     var cameraOutputFile by remember { mutableStateOf<File?>(null) }
 
     val (_, launchCrop) = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
-            onAddImages(context.createChatFilesByContents(listOf(croppedUri)))
+            onAddImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
         },
         onCleanup = {
             // Clean up camera temp file after cropping is done
@@ -1094,7 +1096,7 @@ fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
             // Check if we should skip crop based on settings
             if (settings.displaySetting.skipCropImage) {
                 // Skip crop, directly add image
-                onAddImages(context.createChatFilesByContents(listOf(cameraOutputUri!!)))
+                onAddImages(filesManager.createChatFilesByContents(listOf(cameraOutputUri!!)))
                 // Clean up camera temp file
                 cameraOutputFile?.delete()
                 cameraOutputFile = null
@@ -1143,11 +1145,12 @@ fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
 @Composable
 fun VideoPickButton(onAddVideos: (List<Uri>) -> Unit = {}) {
     val context = LocalContext.current
+    val filesManager: FilesManager = koinInject()
     val videoPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { selectedUris ->
         if (selectedUris.isNotEmpty()) {
-            onAddVideos(context.createChatFilesByContents(selectedUris))
+            onAddVideos(filesManager.createChatFilesByContents(selectedUris))
         }
     }
 
@@ -1166,11 +1169,12 @@ fun VideoPickButton(onAddVideos: (List<Uri>) -> Unit = {}) {
 @Composable
 fun AudioPickButton(onAddAudios: (List<Uri>) -> Unit = {}) {
     val context = LocalContext.current
+    val filesManager: FilesManager = koinInject()
     val audioPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { selectedUris ->
         if (selectedUris.isNotEmpty()) {
-            onAddAudios(context.createChatFilesByContents(selectedUris))
+            onAddAudios(filesManager.createChatFilesByContents(selectedUris))
         }
     }
 
@@ -1190,6 +1194,7 @@ fun AudioPickButton(onAddAudios: (List<Uri>) -> Unit = {}) {
 fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
     val context = LocalContext.current
     val toaster = LocalToaster.current
+    val filesManager: FilesManager = koinInject()
     val pickMedia =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isNotEmpty()) {
@@ -1212,8 +1217,8 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                 )
 
                 val documents = uris.mapNotNull { uri ->
-                    val fileName = context.getFileNameFromUri(uri) ?: "file"
-                    val mime = context.getFileMimeType(uri) ?: "text/plain"
+                    val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
+                    val mime = filesManager.getFileMimeType(uri) ?: "text/plain"
 
                     // Filter by MIME type or file extension
                     val isAllowed = allowedMimeTypes.contains(mime) ||
@@ -1240,7 +1245,7 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                         fileName.endsWith(".yaml", ignoreCase = true)
 
                     if (isAllowed) {
-                        val localUri = context.createChatFilesByContents(listOf(uri))[0]
+                        val localUri = filesManager.createChatFilesByContents(listOf(uri))[0]
                         UIMessagePart.Document(
                             url = localUri.toString(),
                             fileName = fileName,

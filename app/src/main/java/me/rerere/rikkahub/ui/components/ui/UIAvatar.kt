@@ -33,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -44,9 +43,10 @@ import coil3.compose.AsyncImage
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.hooks.rememberAvatarShape
-import me.rerere.rikkahub.utils.createChatFilesByContents
+import org.koin.compose.koinInject
 
 @Composable
 fun TextAvatar(
@@ -86,7 +86,7 @@ fun UIAvatar(
     onUpdate: ((Avatar) -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
-    val context = LocalContext.current
+    val filesManager: FilesManager = koinInject()
     var showPickOption by remember { mutableStateOf(false) }
     var showEmojiPicker by remember { mutableStateOf(false) }
     var showUrlInput by remember { mutableStateOf(false) }
@@ -96,7 +96,7 @@ fun UIAvatar(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val localUris = context.createChatFilesByContents(listOf(it))
+            val localUris = filesManager.createChatFilesByContents(listOf(it))
             localUris.firstOrNull()?.let { localUri ->
                 onUpdate?.invoke(Avatar.Image(localUri.toString()))
             }

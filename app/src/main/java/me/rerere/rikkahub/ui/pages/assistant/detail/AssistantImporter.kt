@@ -1,8 +1,8 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
-import android.util.Base64
 import android.content.Context
 import android.net.Uri
+import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -37,13 +37,13 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.utils.ImageUtils
-import me.rerere.rikkahub.utils.createChatFilesByContents
-import me.rerere.rikkahub.utils.getFileMimeType
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.R
+import org.koin.compose.koinInject
 
 @Composable
 fun AssistantImporter(
@@ -64,6 +64,7 @@ private fun SillyTavernImporter(
     onImport: (Assistant) -> Unit
 ) {
     val context = LocalContext.current
+    val filesManager: FilesManager = koinInject()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     var isLoading by remember { mutableStateOf(false) }
@@ -80,7 +81,8 @@ private fun SillyTavernImporter(
                             context = context,
                             uri = uri,
                             onImport = onImport,
-                            toaster = toaster
+                            toaster = toaster,
+                            filesManager = filesManager,
                         )
                     }.onFailure { exception ->
                         exception.printStackTrace()
@@ -105,7 +107,8 @@ private fun SillyTavernImporter(
                             context = context,
                             uri = uri,
                             onImport = onImport,
-                            toaster = toaster
+                            toaster = toaster,
+                            filesManager = filesManager,
                         )
                     }.onFailure { exception ->
                         exception.printStackTrace()
@@ -250,16 +253,17 @@ private suspend fun importAssistantFromUri(
     uri: Uri,
     onImport: (Assistant) -> Unit,
     toaster: ToasterState,
+    filesManager: FilesManager,
 ) {
     try {
-        val mime = withContext(Dispatchers.IO) { context.getFileMimeType(uri) }
+        val mime = withContext(Dispatchers.IO) { filesManager.getFileMimeType(uri) }
         val (jsonString, backgroundStr) = withContext(Dispatchers.IO) {
             when (mime) {
                 "image/png" -> {
                     val result = ImageUtils.getTavernCharacterMeta(context, uri)
                     result.map { base64Data ->
                         val json = String(Base64.decode(base64Data, Base64.DEFAULT))
-                        val bg = context.createChatFilesByContents(listOf(uri)).first().toString()
+                        val bg = filesManager.createChatFilesByContents(listOf(uri)).first().toString()
                         json to bg
                     }.getOrElse { throw it }
                 }

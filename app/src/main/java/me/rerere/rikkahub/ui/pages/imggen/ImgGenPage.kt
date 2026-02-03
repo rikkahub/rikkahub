@@ -87,14 +87,15 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.utils.saveMessageImage
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import java.io.File
 
 @Composable
@@ -350,6 +351,7 @@ private fun ImageGalleryScreen(
 ) {
     val generatedImages = vm.generatedImages.collectAsLazyPagingItems()
     val context = LocalContext.current
+    val filesManager: FilesManager = koinInject()
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -456,7 +458,7 @@ private fun ImageGalleryScreen(
                                             onClick = {
                                                 scope.launch {
                                                     try {
-                                                        context.saveMessageImage("file://${it.filePath}")
+                                                        filesManager.saveMessageImage(context, "file://${it.filePath}")
                                                         toaster.show(
                                                             message = context.getString(R.string.imggen_page_image_saved_success),
                                                             type = ToastType.Success
