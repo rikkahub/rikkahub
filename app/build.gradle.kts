@@ -257,6 +257,7 @@ dependencies {
 
     // modules
     implementation(project(":ai"))
+    implementation(project(":web"))
     implementation(project(":document"))
     implementation(project(":highlight"))
     implementation(project(":search"))
