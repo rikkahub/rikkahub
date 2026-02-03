@@ -199,6 +199,9 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
 
+    // ktor server (for web api in app module)
+    implementation(libs.ktor.server.content.negotiation)
+
     // ucrop
     implementation(libs.ucrop)
 
