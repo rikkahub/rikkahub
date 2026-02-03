@@ -19,6 +19,7 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "~/components/ui/sidebar";
+import Markdown from "~/components/markdown";
 import api from "~/services/api";
 
 type ConversationListDto = {
@@ -87,7 +88,7 @@ export default function ConversationsPage() {
     ConversationListDto[]
   >([]);
   const [activeId, setActiveId] = React.useState<string | null>(
-    routeId ?? null
+    routeId ?? null,
   );
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -181,7 +182,7 @@ export default function ConversationsPage() {
         navigate(`/c/${id}`);
       }
     },
-    [navigate, routeId]
+    [navigate, routeId],
   );
 
   return (
@@ -290,11 +291,7 @@ export default function ConversationsPage() {
                 <div className="flex flex-col gap-2">
                   {message.parts.map((part, index) => {
                     if (typeof part.text === "string" && part.text.length > 0) {
-                      return (
-                        <div key={index} className="whitespace-pre-wrap">
-                          {part.text}
-                        </div>
-                      );
+                      return <Markdown key={index} content={part.text} />;
                     }
                     if (
                       typeof part.reasoning === "string" &&
@@ -331,13 +328,19 @@ export default function ConversationsPage() {
                     }
                     if (part.url) {
                       return (
-                        <div key={index} className="text-xs text-muted-foreground">
+                        <div
+                          key={index}
+                          className="text-xs text-muted-foreground"
+                        >
                           {part.fileName ?? part.url}
                         </div>
                       );
                     }
                     return (
-                      <div key={index} className="text-xs text-muted-foreground">
+                      <div
+                        key={index}
+                        className="text-xs text-muted-foreground"
+                      >
                         [Unsupported part]
                       </div>
                     );
