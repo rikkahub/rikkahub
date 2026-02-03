@@ -93,6 +93,7 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 - If the user explicitly requests localization, all languages should be supported.
 - English(en) is the default language. Chinese(zh), Japanese(ja), and Traditional Chinese(zh-rTW), Korean(ko-rKR) are
   supported.
+- use `locale-tui` tool to translate and manage string resources.
 
 #### locale-tui Tool
 
