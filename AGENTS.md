@@ -1,40 +1,50 @@
 # Repository Guidelines
 
-## Project Overview
+本文档面向贡献者，概述本仓库的模块结构、开发流程与提交规范，便于快速上手并保持一致的协作质量。
 
-RikkaHub is a native Android LLM chat client that supports switching between different AI providers for conversations.
-Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
+## Build, Test, and Development Commands
 
-## Architecture Overview
+使用 Android Studio 或命令行 Gradle：
 
-### Module Structure
+```bash
+./gradlew assembleDebug          # 构建 Debug APK
+./gradlew test                   # 运行所有模块的 JVM 单元测试
+./gradlew connectedDebugAndroidTest  # 运行设备/模拟器上的仪器测试
+./gradlew lint                   # 运行 Android Lint
+```
+
+构建应用需要在 `app/` 下提供 `google-services.json`（用于 Firebase）。
+
+## Coding Style & Naming Conventions
+
+本仓库使用 `.editorconfig` 统一格式：
+
+- Kotlin/Gradle 脚本：4 空格缩进，最大行长 120。
+- XML/JSON：2 空格缩进。
+- Markdown/YAML：2 空格缩进，允许尾随空格（用于对齐）。
+
+命名习惯：模块名为小写目录（如 `ai/`、`tts/`），Kotlin 类遵循 PascalCase，测试类以 `*Test` 结尾。
+
+## Testing Guidelines
+
+测试框架以 JUnit/AndroidX Test 为主。未设定强制覆盖率门槛，但新逻辑应配套新增/更新测试。测试文件命名建议：
+
+- 单元测试：`FooTest.kt`
+- 仪器测试：`FooInstrumentedTest.kt` 或 `*Test.kt`
+
+## Module Structure
 
 - **app**: Main application module with UI, ViewModels, and core logic
 - **ai**: AI SDK abstraction layer for different providers (OpenAI, Google, Anthropic)
+- **common**: Common utilities and extensions
+- **document**: Document parsing module for handling PDF, DOCX, and PPTX files
 - **highlight**: Code syntax highlighting implementation
 - **search**: Search functionality SDK (Exa, Tavily, Zhipu)
 - **tts**: Text-to-speech implementation for different providers
-- **common**: Common utilities and extensions
+- **web**: Embedded web server module that provides Ktor server startup function and hosts static frontend build files (
+  built from web-ui/ React project)
 
-### Key Technologies
-
-- **Jetpack Compose**: Modern UI toolkit
-- **Koin**: Dependency injection
-- **Room**: Database ORM
-- **DataStore**: Preferences storage
-- **OkHttp**: HTTP client with SSE support
-- **Navigation Compose**: App navigation
-- **Kotlinx Serialization**: JSON handling
-
-### Core Packages (app module)
-
-- `data/`: Data layer with repositories, database entities, and API clients
-- `ui/pages/`: Screen implementations and ViewModels
-- `ui/components/`: Reusable UI components
-- `di/`: Dependency injection modules
-- `utils/`: Utility functions and extensions
-
-### Concepts
+## Concepts
 
 - **Assistant**: An assistant configuration with system prompts, model parameters, and conversation isolation. Each
   assistant maintains its own settings including temperature, context size, custom headers, tools, memory options, regex
@@ -71,19 +81,7 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
   processing after generation completes.
   (app/src/main/java/me/rerere/rikkahub/data/ai/transformers/Transformer.kt)
 
-## Development Guidelines
-
-### UI Development
-
-- Follow Material Design 3 principles
-- Use existing UI components from `ui/components/`
-- Reference `SettingProviderPage.kt` for page layout patterns
-- Use `FormItem` for consistent form layouts
-- Implement proper state management with ViewModels
-- Use `Lucide.XXX` for icons, and import `import com.composables.icons.lucide.XXX` for each icon
-- Use `LocalToaster.current` for toast messages
-
-### Internationalization
+## Internationalization
 
 - String resources located in `app/src/main/res/values-*/strings.xml`
 - Use `stringResource(R.string.key_name)` in Compose
@@ -91,15 +89,9 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 - If the user does not explicitly request localization, prioritize implementing functionality without considering
   localization. (e.g `Text("Hello world")`)
 - If the user explicitly requests localization, all languages should be supported.
-- English(en) is the default language. Chinese(zh), Japanese(ja), and Traditional Chinese(zh-rTW), Korean(ko-rKR) are
-  supported.
-- use `locale-tui` tool to translate and manage string resources.
-
-#### locale-tui Tool
+- Use `locale-tui` tool for managing translations.
 
 The `locale-tui` tool provides CLI and TUI interfaces for managing string resources with AI-powered translation.
-
-**Add Command Usage:**
 
 ```bash
 # Add a new string resource with automatic translation
@@ -112,57 +104,17 @@ uv run --directory locale-tui src/main.py add test_key "Test" --skip-translate  
 ```
 
 **Options:**
-
 - `--module, -m`: Specify module name (defaults to first module in config)
 - `--skip-translate`: Skip automatic translation, only add to source language
 
 **Behavior:**
-
 1. Adds key-value pair to source language `strings.xml` (values/strings.xml)
 2. By default, automatically translates to all configured target languages using OpenAI API
 3. Saves translations to respective language directories (values-zh, values-ja, etc.)
 4. Displays translation progress and results for each language
 5. The input value should only be English
 
-**Set Command Usage:**
+## Security & Configuration Tips
 
-```bash
-# Manually set a string value for a specific language
-uv run --directory locale-tui src/main.py set <key> <value> [OPTIONS]
-
-# Examples:
-uv run --directory locale-tui src/main.py set hello_world "你好，世界！" -l values-zh      # Set Chinese translation
-uv run --directory locale-tui src/main.py set greeting "Welcome" -l values              # Set source language
-uv run --directory locale-tui src/main.py set test_key "テスト" -l values-ja -m app       # Set Japanese with module
-```
-
-**Options:**
-
-- `--lang, -l`: Specify language code (e.g., values, values-zh, values-ja), defaults to source language (values)
-- `--module, -m`: Specify module name (defaults to first module in config)
-
-**Behavior:**
-
-1. Manually sets a key-value pair for a specific language without auto-translation
-2. Useful for correcting or overriding auto-translated values
-3. Creates the language directory and file if they don't exist
-
-**Other Commands:**
-
-- `uv run --directory locale-tui src/main.py list-keys [-m module]`: List all string resource keys
-
-See `locale-tui/CLAUDE.md` for detailed documentation.
-
-### Database
-
-- Room database with migration support
-- Schema files in `app/schemas/`
-- Use KSP for Room annotation processing
-- Current database version tracked in `AppDatabase.kt`
-
-### AI Provider Integration
-
-- New providers go in `ai/src/main/java/me/rerere/ai/provider/providers/`
-- Extend base `Provider` class
-- Implement required API methods following existing patterns
-- Support for streaming responses via SSE
+- 请勿提交密钥或生产凭据；如需本地配置，使用 `local.properties` 或环境变量。
+- 若涉及网络请求或第三方服务，请同步更新文档与示例配置。
