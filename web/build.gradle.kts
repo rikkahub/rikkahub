@@ -43,6 +43,7 @@ dependencies {
     api(libs.ktor.server.core)
     implementation(libs.ktor.server.host.common)
     implementation(libs.ktor.server.content.negotiation)
+    api(libs.ktor.server.sse)
     api(libs.ktor.server.cio)
 
     testImplementation(libs.junit)

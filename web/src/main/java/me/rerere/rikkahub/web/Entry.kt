@@ -16,6 +16,7 @@ import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.routing.routing
+import io.ktor.server.sse.SSE
 
 fun startWebServer(
     port: Int = 8080,
@@ -32,6 +33,7 @@ fun startWebServer(
             anyHost()
         }
         install(ConditionalHeaders)
+        install(SSE)
         install(DefaultHeaders)
         routing {
             staticResources("/", "static") {
