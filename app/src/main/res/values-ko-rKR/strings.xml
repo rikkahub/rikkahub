@@ -788,5 +788,15 @@
   <string name="chat_message_tool_clipboard_write">클립보드에 쓰기</string>
   <string name="setting_display_page_enable_auto_scroll_title">자동 스크롤</string>
   <string name="setting_display_page_enable_auto_scroll_desc">AI가 콘텐츠를 생성할 때 자동으로 아래로 스크롤합니다</string>
+  <string name="setting_files_page_title">파일 관리</string>
+  <string name="setting_files_page_delete_file_title">파일 삭제</string>
+  <string name="setting_files_page_delete_action">삭제</string>
+  <string name="setting_files_page_cancel_action">취소</string>
+  <string name="setting_files_page_deleted_toast">삭제됨</string>
+  <string name="setting_files_page_delete_failed_toast">삭제 실패</string>
+  <string name="setting_files_page_loading">불러오는 중...</string>
+  <string name="setting_files_page_no_files">파일 없음</string>
+  <string name="setting_files_page_folder_upload">업로드</string>
+  <string name="setting_files_page_delete_content_description">삭제</string>
 </resources>
 

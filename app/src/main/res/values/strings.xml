@@ -788,5 +788,15 @@
   <string name="setting_display_page_live_update_notification_desc">Show real-time notification updates during message generation (Android 15+)</string>
   <string name="setting_display_page_enable_auto_scroll_title">Auto Scroll</string>
   <string name="setting_display_page_enable_auto_scroll_desc">Automatically scroll to the bottom when AI is generating content</string>
+  <string name="setting_files_page_title">File Management</string>
+  <string name="setting_files_page_delete_file_title">Delete File</string>
+  <string name="setting_files_page_delete_action">Delete</string>
+  <string name="setting_files_page_cancel_action">Cancel</string>
+  <string name="setting_files_page_deleted_toast">Deleted</string>
+  <string name="setting_files_page_delete_failed_toast">Delete Failed</string>
+  <string name="setting_files_page_loading">Loading...</string>
+  <string name="setting_files_page_no_files">No Files</string>
+  <string name="setting_files_page_folder_upload">Upload</string>
+  <string name="setting_files_page_delete_content_description">Delete</string>
 </resources>
 

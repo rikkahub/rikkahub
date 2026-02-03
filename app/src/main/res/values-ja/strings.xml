@@ -788,5 +788,15 @@
   <string name="chat_message_tool_clipboard_write">クリップボードに書き込み</string>
   <string name="setting_display_page_enable_auto_scroll_title">自動スクロール</string>
   <string name="setting_display_page_enable_auto_scroll_desc">AIがコンテンツを生成中に自動で下までスクロールする</string>
+  <string name="setting_files_page_title">ファイル管理</string>
+  <string name="setting_files_page_delete_file_title">ファイルを削除</string>
+  <string name="setting_files_page_delete_action">削除</string>
+  <string name="setting_files_page_cancel_action">キャンセル</string>
+  <string name="setting_files_page_deleted_toast">削除しました</string>
+  <string name="setting_files_page_delete_failed_toast">削除に失敗しました</string>
+  <string name="setting_files_page_loading">読み込み中…</string>
+  <string name="setting_files_page_no_files">ファイルがありません</string>
+  <string name="setting_files_page_folder_upload">アップロード</string>
+  <string name="setting_files_page_delete_content_description">削除</string>
 </resources>
 

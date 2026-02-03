@@ -781,5 +781,15 @@
   <string name="setting_display_page_live_update_notification_desc">Показывать уведомления об обновлениях в реальном времени во время генерации сообщений (Android 15+)</string>
   <string name="setting_display_page_enable_auto_scroll_title">Автопрокрутка</string>
   <string name="setting_display_page_enable_auto_scroll_desc">Автоматически прокручивать вниз при генерации контента ИИ</string>
+  <string name="setting_files_page_title">Управление файлами</string>
+  <string name="setting_files_page_delete_file_title">Удалить файл</string>
+  <string name="setting_files_page_delete_action">Удалить</string>
+  <string name="setting_files_page_cancel_action">Отмена</string>
+  <string name="setting_files_page_deleted_toast">Удалено</string>
+  <string name="setting_files_page_delete_failed_toast">Не удалось удалить</string>
+  <string name="setting_files_page_loading">Загрузка...</string>
+  <string name="setting_files_page_no_files">Нет файлов</string>
+  <string name="setting_files_page_folder_upload">Загрузить</string>
+  <string name="setting_files_page_delete_content_description">Удалить</string>
 </resources>
 

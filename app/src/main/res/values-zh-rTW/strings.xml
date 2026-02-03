@@ -788,5 +788,15 @@
   <string name="chat_message_tool_clipboard_write">寫入剪貼簿</string>
   <string name="setting_display_page_enable_auto_scroll_title">自動滾動</string>
   <string name="setting_display_page_enable_auto_scroll_desc">AI 正在產生內容時，自動捲動至底部</string>
+  <string name="setting_files_page_title">檔案管理</string>
+  <string name="setting_files_page_delete_file_title">刪除檔案</string>
+  <string name="setting_files_page_delete_action">刪除</string>
+  <string name="setting_files_page_cancel_action">取消</string>
+  <string name="setting_files_page_deleted_toast">已刪除</string>
+  <string name="setting_files_page_delete_failed_toast">刪除失敗</string>
+  <string name="setting_files_page_loading">載入中…</string>
+  <string name="setting_files_page_no_files">無檔案</string>
+  <string name="setting_files_page_folder_upload">上傳</string>
+  <string name="setting_files_page_delete_content_description">刪除</string>
 </resources>
 

@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.composables.icons.lucide.Image
@@ -46,6 +47,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -62,6 +64,10 @@ fun SettingFilesPage(
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val folders = remember { listOf(FileFolders.UPLOAD) }
+
+    // 预先获取字符串资源
+    val deletedToast = stringResource(R.string.setting_files_page_deleted_toast)
+    val deleteFailedToast = stringResource(R.string.setting_files_page_delete_failed_toast)
 
     var filesByFolder by remember { mutableStateOf<Map<String, List<ManagedFileEntity>>>(emptyMap()) }
     var selectedFolder by remember { mutableStateOf(FileFolders.UPLOAD) }
@@ -85,7 +91,7 @@ fun SettingFilesPage(
         val target = pendingDelete!!
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除文件") },
+            title = { Text(stringResource(R.string.setting_files_page_delete_file_title)) },
             text = { Text(target.displayName) },
             confirmButton = {
                 TextButton(
@@ -98,20 +104,20 @@ fun SettingFilesPage(
                                         .filterNot { it.id == target.id }
                                     this[selectedFolder] = current
                                 }
-                                toaster.show("已删除")
+                                toaster.show(deletedToast)
                             } else {
-                                toaster.show("删除失败")
+                                toaster.show(deleteFailedToast)
                             }
                             pendingDelete = null
                         }
                     }
                 ) {
-                    Text("删除")
+                    Text(stringResource(R.string.setting_files_page_delete_action))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) {
-                    Text("取消")
+                    Text(stringResource(R.string.setting_files_page_cancel_action))
                 }
             }
         )
@@ -120,7 +126,7 @@ fun SettingFilesPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("文件管理") },
+                title = { Text(stringResource(R.string.setting_files_page_title)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior
             )
@@ -144,7 +150,7 @@ fun SettingFilesPage(
                         .fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("加载中...")
+                    Text(stringResource(R.string.setting_files_page_loading))
                 }
             } else if (files.isEmpty()) {
                 Box(
@@ -152,7 +158,7 @@ fun SettingFilesPage(
                         .fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("暂无文件")
+                    Text(stringResource(R.string.setting_files_page_no_files))
                 }
             } else {
                 LazyVerticalStaggeredGrid(
@@ -199,8 +205,9 @@ private fun FolderRow(
     }
 }
 
+@Composable
 private fun folderDisplayName(folder: String): String = when (folder) {
-    FileFolders.UPLOAD -> "上传"
+    FileFolders.UPLOAD -> stringResource(R.string.setting_files_page_folder_upload)
     else -> folder
 }
 
@@ -246,7 +253,7 @@ private fun FileItem(
                     onClick = onDelete,
                     modifier = Modifier.align(Alignment.TopEnd)
                 ) {
-                    Icon(Lucide.Trash2, contentDescription = "Delete")
+                    Icon(Lucide.Trash2, contentDescription = stringResource(R.string.setting_files_page_delete_content_description))
                 }
             }
 
