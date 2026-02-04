@@ -14,6 +14,63 @@ import { Check, Copy } from "lucide-react";
 import "katex/dist/katex.min.css";
 import "./markdown.css";
 
+// Regex patterns for preprocessing
+const INLINE_LATEX_REGEX = /\\\((.+?)\\\)/g;
+const BLOCK_LATEX_REGEX = /\\\[(.+?)\\\]/gs;
+const THINKING_REGEX = /<think>([\s\S]*?)(?:<\/think>|$)/g;
+const CODE_BLOCK_REGEX = /```[\s\S]*?```|`[^`\n]*`/g;
+
+// Preprocess markdown content
+function preProcess(content: string): string {
+  // Find all code block positions
+  const codeBlocks: { start: number; end: number }[] = [];
+  let match;
+  const codeBlockRegex = new RegExp(CODE_BLOCK_REGEX.source, "g");
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    codeBlocks.push({ start: match.index, end: match.index + match[0].length });
+  }
+
+  // Check if position is inside a code block
+  const isInCodeBlock = (position: number): boolean => {
+    return codeBlocks.some(
+      (range) => position >= range.start && position < range.end
+    );
+  };
+
+  // Replace inline formulas \( ... \) to $ ... $, skip code blocks
+  let result = content.replace(
+    new RegExp(INLINE_LATEX_REGEX.source, "g"),
+    (match, group1, offset) => {
+      if (isInCodeBlock(offset)) {
+        return match;
+      }
+      return `$${group1}$`;
+    }
+  );
+
+  // Replace block formulas \[ ... \] to $$ ... $$, skip code blocks
+  result = result.replace(
+    new RegExp(BLOCK_LATEX_REGEX.source, "gs"),
+    (match, group1, offset) => {
+      if (isInCodeBlock(offset)) {
+        return match;
+      }
+      return `$$${group1}$$`;
+    }
+  );
+
+  // Replace thinking tags with blockquote format
+  result = result.replace(THINKING_REGEX, (_, thinkContent) => {
+    return thinkContent
+      .split("\n")
+      .filter((line: string) => line.trim() !== "")
+      .map((line: string) => `>${line}`)
+      .join("\n");
+  });
+
+  return result;
+}
+
 type MarkdownProps = {
   content: string;
   className?: string;
@@ -78,6 +135,8 @@ function CodeBlock({
 }
 
 export default function Markdown({ content, className, onClickCitation }: MarkdownProps) {
+  const processedContent = React.useMemo(() => preProcess(content), [content]);
+
   return (
     <div className={cn("markdown", className)}>
       <ReactMarkdown
@@ -135,7 +194,7 @@ export default function Markdown({ content, className, onClickCitation }: Markdo
           },
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   );
