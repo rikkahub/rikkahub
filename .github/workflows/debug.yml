@@ -1,8 +1,9 @@
-name: Debug Build
+name: Debug Build (Fixed & Fast)
 
 on:
   workflow_dispatch:
   push:
+    branches: [ "main", "master" ]
   pull_request:
 
 jobs:
@@ -14,23 +15,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Gradle cache
-        uses: actions/cache@v4
+      # 使用官方 Gradle Action 加速构建
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+           # 仅在主分支上写入缓存，其他分支只读取，防止缓存膨胀
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
 
-      # 【关键修复】生成假的 google-services.json
-      # 插件必须检测到这个文件存在才会继续编译
-      # 这里的 package_name 必须对应你项目的包名 (从你的日志看是 me.rerere.rikkahub)
+      # ✅【核心修复】生成包含 .debug 后缀的 Mock JSON
+      # 我们在 "client" 数组里放了两组数据，分别对应正式版和 Debug 版
       - name: Create Mock Google Services JSON
         run: |
           cat <<EOF > app/google-services.json
@@ -48,22 +47,27 @@ jobs:
                     "package_name": "me.rerere.rikkahub"
                   }
                 },
-                "api_key": [
-                  {
-                    "current_key": "mock-api-key"
+                "api_key": [{ "current_key": "mock-api-key" }]
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:123456789012:android:mockappid-debug",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub.debug"
                   }
-                ]
+                },
+                "api_key": [{ "current_key": "mock-api-key" }]
               }
             ]
           }
           EOF
 
-      - name: Gradle Build Debug
+      - name: Build Debug APK
         run: |
           chmod +x gradlew
-          # 使用 assembleDebug 构建调试包
-          # -x lint 跳过耗时检查
-          ./gradlew assembleDebug -x lint
+          # --build-cache: 开启 Gradle 增量缓存
+          # -x lint: 跳过检查
+          ./gradlew assembleDebug -x lint --build-cache --parallel
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
