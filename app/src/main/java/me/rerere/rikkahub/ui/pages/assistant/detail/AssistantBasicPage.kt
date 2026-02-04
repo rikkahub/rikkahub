@@ -406,7 +406,8 @@ internal fun AssistantBasicContent(
                                 thinkingBudget = tokens
                             )
                         )
-                    }
+                    },
+                    modelId = assistant.chatModelId
                 )
             }
             HorizontalDivider()

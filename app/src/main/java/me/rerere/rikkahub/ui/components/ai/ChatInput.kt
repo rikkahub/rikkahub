@@ -286,6 +286,7 @@ fun ChatInput(
                                 onUpdateAssistant(assistant.copy(thinkingBudget = it))
                             },
                             onlyIcon = true,
+                            modelId = model.modelId,
                         )
                     }
 

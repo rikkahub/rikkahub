@@ -40,11 +40,14 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 
+import me.rerere.ai.registry.ModelRegistry
+
 @Composable
 fun ReasoningButton(
     modifier: Modifier = Modifier,
     onlyIcon: Boolean = false,
     reasoningTokens: Int,
+    modelId: String? = null,
     onUpdateReasoningTokens: (Int) -> Unit,
 ) {
     var showPicker by remember { mutableStateOf(false) }
@@ -52,6 +55,7 @@ fun ReasoningButton(
     if (showPicker) {
         ReasoningPicker(
             reasoningTokens = reasoningTokens,
+            modelId = modelId,
             onDismissRequest = { showPicker = false },
             onUpdateReasoningTokens = onUpdateReasoningTokens
         )
@@ -87,6 +91,7 @@ fun ReasoningButton(
 @Composable
 fun ReasoningPicker(
     reasoningTokens: Int,
+    modelId: String? = null,
     onDismissRequest: () -> Unit = {},
     onUpdateReasoningTokens: (Int) -> Unit,
 ) {
@@ -104,104 +109,137 @@ fun ReasoningPicker(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.OFF,
-                icon = {
-                    Icon(Lucide.LightbulbOff, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_off))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_off_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(0)
-                }
-            )
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.AUTO,
-                icon = {
-                    Icon(Lucide.Sparkle, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_auto))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_auto_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(-1)
-                }
-            )
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.LOW,
-                icon = {
-                    Icon(Lucide.Lightbulb, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_light))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_light_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(1024)
-                }
-            )
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.MEDIUM,
-                icon = {
-                    Icon(Lucide.Lightbulb, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_medium))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_medium_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(16_000)
-                }
-            )
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.HIGH,
-                icon = {
-                    Icon(Lucide.Lightbulb, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_heavy))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_heavy_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(32_000)
-                }
-            )
-
-            Card(
-                modifier = Modifier.imePadding(),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                ) {
-                    Text(stringResource(id = R.string.reasoning_custom))
-                    var input by remember(reasoningTokens) {
-                        mutableStateOf(reasoningTokens.toString())
+            if (modelId != null && ModelRegistry.GEMINI_3_SERIES.match(modelId)) {
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.LOW,
+                    icon = {
+                        Icon(Lucide.Lightbulb, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_light))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_light_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(1024)
                     }
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { newValue ->
-                            input = newValue
-                            val newTokens = newValue.toIntOrNull()
-                            if (newTokens != null) {
-                                onUpdateReasoningTokens(newTokens)
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                )
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.HIGH || currentLevel == ReasoningLevel.MEDIUM,
+                    icon = {
+                        Icon(Lucide.Lightbulb, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_heavy))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_heavy_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(32_000)
+                    }
+                )
+            } else {
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.OFF,
+                    icon = {
+                        Icon(Lucide.LightbulbOff, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_off))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_off_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(0)
+                    }
+                )
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.AUTO,
+                    icon = {
+                        Icon(Lucide.Sparkle, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_auto))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_auto_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(-1)
+                    }
+                )
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.LOW,
+                    icon = {
+                        Icon(Lucide.Lightbulb, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_light))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_light_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(1024)
+                    }
+                )
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.MEDIUM,
+                    icon = {
+                        Icon(Lucide.Lightbulb, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_medium))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_medium_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(16_000)
+                    }
+                )
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.HIGH,
+                    icon = {
+                        Icon(Lucide.Lightbulb, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_heavy))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_heavy_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(32_000)
+                    }
+                )
+
+                Card(
+                    modifier = Modifier.imePadding(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                    ) {
+                        Text(stringResource(id = R.string.reasoning_custom))
+                        var input by remember(reasoningTokens) {
+                            mutableStateOf(reasoningTokens.toString())
+                        }
+                        OutlinedTextField(
+                            value = input,
+                            onValueChange = { newValue ->
+                                input = newValue
+                                val newTokens = newValue.toIntOrNull()
+                                if (newTokens != null) {
+                                    onUpdateReasoningTokens(newTokens)
+                                }
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         }
