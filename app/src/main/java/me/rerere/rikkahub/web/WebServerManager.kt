@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
@@ -23,6 +22,7 @@ data class WebServerState(
     val isRunning: Boolean = false,
     val port: Int = 8080,
     val serviceName: String = DEFAULT_SERVICE_NAME,
+    val hostname: String? = null,
     val error: String? = null
 )
 
@@ -62,22 +62,16 @@ class WebServerManager(
                     serviceName = serviceName
                 )
                 runCatching {
-                    withContext(Dispatchers.Main) {
-                        nsdRegistrar.register(
-                            port = port,
-                            serviceName = serviceName,
-                            onRegistered = { info ->
-                                val registeredName = info.serviceName
-                                if (registeredName.isNotBlank() &&
-                                    registeredName != _state.value.serviceName
-                                ) {
-                                    _state.value = _state.value.copy(
-                                        serviceName = registeredName
-                                    )
-                                }
-                            }
-                        )
-                    }
+                    nsdRegistrar.register(
+                        port = port,
+                        serviceName = serviceName,
+                        onRegistered = { info ->
+                            _state.value = _state.value.copy(
+                                serviceName = info.serviceName,
+                                hostname = info.hostname
+                            )
+                        }
+                    )
                 }.onFailure {
                     Log.w(TAG, "NSD register failed", it)
                 }
@@ -101,13 +95,11 @@ class WebServerManager(
                 server?.stop(1000, 2000)
                 server = null
                 runCatching {
-                    withContext(Dispatchers.Main) {
-                        nsdRegistrar.unregister()
-                    }
+                    nsdRegistrar.unregister()
                 }.onFailure {
                     Log.w(TAG, "NSD unregister failed", it)
                 }
-                _state.value = _state.value.copy(isRunning = false, error = null)
+                _state.value = _state.value.copy(isRunning = false, hostname = null, error = null)
                 Log.i(TAG, "Web server stopped")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to stop web server", e)

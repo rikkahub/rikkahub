@@ -258,6 +258,9 @@ dependencies {
     // mcp
     implementation(libs.modelcontextprotocol.kotlin.sdk)
 
+    // jmDNS (mDNS/Bonjour for .local hostname)
+    implementation(libs.jmdns)
+
     // modules
     implementation(project(":ai"))
     implementation(project(":web"))
