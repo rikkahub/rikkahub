@@ -407,7 +407,7 @@ internal fun AssistantBasicContent(
                             )
                         )
                     },
-                    modelId = assistant.chatModelId
+                    modelId = assistant.chatModelId?.toString()
                 )
             }
             HorizontalDivider()
