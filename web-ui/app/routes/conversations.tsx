@@ -19,60 +19,14 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "~/components/ui/sidebar";
-import Markdown from "~/components/markdown";
+import { MessagePart } from "~/components/message";
 import api from "~/services/api";
-
-type ConversationListDto = {
-  id: string;
-  assistantId: string;
-  title: string;
-  isPinned: boolean;
-  createAt: number;
-  updateAt: number;
-};
-
-type MessagePartDto = {
-  type?: string;
-  text?: string;
-  reasoning?: string;
-  toolName?: string;
-  input?: string;
-  output?: string | null;
-  url?: string;
-  fileName?: string;
-  mime?: string;
-  isPending?: boolean;
-  isExecuted?: boolean;
-  isFinished?: boolean;
-};
-
-type MessageDto = {
-  id: string;
-  role: string;
-  parts: MessagePartDto[];
-  createdAt: string;
-  finishedAt?: string | null;
-  translation?: string | null;
-};
-
-type MessageNodeDto = {
-  id: string;
-  messages: MessageDto[];
-  selectIndex: number;
-};
-
-type ConversationDto = {
-  id: string;
-  assistantId: string;
-  title: string;
-  messages: MessageNodeDto[];
-  truncateIndex: number;
-  chatSuggestions: string[];
-  isPinned: boolean;
-  createAt: number;
-  updateAt: number;
-  isGenerating: boolean;
-};
+import {
+  type ConversationListDto,
+  type ConversationDto,
+  type MessageDto,
+  getCurrentMessageDto,
+} from "~/types";
 
 export function meta() {
   return [
@@ -170,9 +124,7 @@ export default function ConversationsPage() {
   const activeConversation = conversations.find((item) => item.id === activeId);
   const selectedMessages = React.useMemo(() => {
     if (!detail) return [];
-    return detail.messages
-      .map((node) => node.messages[node.selectIndex] ?? node.messages[0])
-      .filter(Boolean) as MessageDto[];
+    return detail.messages.map(getCurrentMessageDto);
   }, [detail]);
 
   const handleSelect = React.useCallback(
@@ -280,74 +232,27 @@ export default function ConversationsPage() {
                   当前会话暂无消息
                 </div>
               )}
-            {selectedMessages.map((message) => (
-              <div
-                key={message.id}
-                className="flex flex-col gap-2 rounded-lg border bg-card p-3 text-sm shadow-sm"
-              >
-                <div className="text-xs uppercase text-muted-foreground">
-                  {message.role}
+            {selectedMessages.map((message) => {
+              const isUser = message.role === "USER";
+              return (
+                <div
+                  key={message.id}
+                  className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`flex flex-col gap-2 text-sm ${
+                      isUser
+                        ? "max-w-[85%] rounded-2xl bg-muted px-4 py-3"
+                        : "w-full"
+                    }`}
+                  >
+                    {message.parts.map((part, index) => (
+                      <MessagePart key={index} part={part} />
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  {message.parts.map((part, index) => {
-                    if (typeof part.text === "string" && part.text.length > 0) {
-                      return <Markdown key={index} content={part.text} />;
-                    }
-                    if (
-                      typeof part.reasoning === "string" &&
-                      part.reasoning.length > 0
-                    ) {
-                      return (
-                        <div
-                          key={index}
-                          className="whitespace-pre-wrap text-muted-foreground"
-                        >
-                          {part.reasoning}
-                        </div>
-                      );
-                    }
-                    if (part.toolName) {
-                      return (
-                        <div
-                          key={index}
-                          className="rounded-md border bg-muted/40 p-2 text-xs"
-                        >
-                          <div className="font-medium">{part.toolName}</div>
-                          {part.input && (
-                            <div className="mt-1 whitespace-pre-wrap">
-                              {part.input}
-                            </div>
-                          )}
-                          {part.output && (
-                            <div className="mt-1 whitespace-pre-wrap text-muted-foreground">
-                              {part.output}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-                    if (part.url) {
-                      return (
-                        <div
-                          key={index}
-                          className="text-xs text-muted-foreground"
-                        >
-                          {part.fileName ?? part.url}
-                        </div>
-                      );
-                    }
-                    return (
-                      <div
-                        key={index}
-                        className="text-xs text-muted-foreground"
-                      >
-                        [Unsupported part]
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </ScrollArea>
       </SidebarInset>
