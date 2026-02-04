@@ -32,7 +32,6 @@ fun startWebServer(
             allowHeader(HttpHeaders.Authorization)
             anyHost()
         }
-        install(ConditionalHeaders)
         install(SSE)
         install(DefaultHeaders)
         routing {
@@ -40,7 +39,6 @@ fun startWebServer(
                 default("index.html")
                 enableAutoHeadResponse()
                 singlePageApplication()
-                etag(ETagProvider.StrongSha256)
             }
         }
         module()

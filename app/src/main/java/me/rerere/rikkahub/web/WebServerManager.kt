@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.web
 
+import android.content.Context
 import android.util.Log
 import io.ktor.server.cio.CIOApplicationEngine
 import io.ktor.server.engine.EmbeddedServer
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
@@ -20,10 +22,12 @@ private const val TAG = "WebServerManager"
 data class WebServerState(
     val isRunning: Boolean = false,
     val port: Int = 8080,
+    val serviceName: String = DEFAULT_SERVICE_NAME,
     val error: String? = null
 )
 
 class WebServerManager(
+    private val context: Context,
     private val chatService: ChatService,
     private val conversationRepo: ConversationRepository,
     private val settingsStore: SettingsStore
@@ -31,11 +35,15 @@ class WebServerManager(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
+    private val nsdRegistrar = NsdServiceRegistrar(context)
 
     private val _state = MutableStateFlow(WebServerState())
     val state: StateFlow<WebServerState> = _state.asStateFlow()
 
-    fun start(port: Int = 8080) {
+    fun start(
+        port: Int = 8080,
+        serviceName: String = DEFAULT_SERVICE_NAME
+    ) {
         if (server != null) {
             Log.w(TAG, "Server already running")
             return
@@ -48,11 +56,40 @@ class WebServerManager(
                     configureWebApi(chatService, conversationRepo, settingsStore)
                 }.start(wait = false)
 
-                _state.value = WebServerState(isRunning = true, port = port)
+                _state.value = WebServerState(
+                    isRunning = true,
+                    port = port,
+                    serviceName = serviceName
+                )
+                runCatching {
+                    withContext(Dispatchers.Main) {
+                        nsdRegistrar.register(
+                            port = port,
+                            serviceName = serviceName,
+                            onRegistered = { info ->
+                                val registeredName = info.serviceName
+                                if (registeredName.isNotBlank() &&
+                                    registeredName != _state.value.serviceName
+                                ) {
+                                    _state.value = _state.value.copy(
+                                        serviceName = registeredName
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }.onFailure {
+                    Log.w(TAG, "NSD register failed", it)
+                }
                 Log.i(TAG, "Web server started successfully on port $port")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start web server", e)
-                _state.value = WebServerState(isRunning = false, error = e.message)
+                _state.value = WebServerState(
+                    isRunning = false,
+                    port = port,
+                    serviceName = serviceName,
+                    error = e.message
+                )
             }
         }
     }
@@ -63,7 +100,14 @@ class WebServerManager(
                 Log.i(TAG, "Stopping web server")
                 server?.stop(1000, 2000)
                 server = null
-                _state.value = WebServerState(isRunning = false)
+                runCatching {
+                    withContext(Dispatchers.Main) {
+                        nsdRegistrar.unregister()
+                    }
+                }.onFailure {
+                    Log.w(TAG, "NSD unregister failed", it)
+                }
+                _state.value = _state.value.copy(isRunning = false, error = null)
                 Log.i(TAG, "Web server stopped")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to stop web server", e)
@@ -72,8 +116,11 @@ class WebServerManager(
         }
     }
 
-    fun restart(port: Int = _state.value.port) {
+    fun restart(
+        port: Int = _state.value.port,
+        serviceName: String = _state.value.serviceName
+    ) {
         stop()
-        start(port)
+        start(port, serviceName)
     }
 }

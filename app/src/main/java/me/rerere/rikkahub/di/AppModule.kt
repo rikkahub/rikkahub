@@ -79,6 +79,7 @@ val appModule = module {
 
     single {
         WebServerManager(
+            context = get(),
             chatService = get(),
             conversationRepo = get(),
             settingsStore = get()
