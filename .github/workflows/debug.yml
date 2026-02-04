@@ -1,0 +1,48 @@
+name: Debug Build
+
+on:
+  workflow_dispatch:
+  push:                 # 修复：语法错误 ; 改为 :
+  pull_request:         # 修复：语法错误 ; 改为 :
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      # 删除了 "Prepare build files" 步骤
+      # 因为构建 Debug 包不需要注入自定义签名（KeyStore）
+      # Debug 包会自动使用 Android SDK 自带的默认 insecure 签名
+
+      - name: Gradle Build Debug
+        run: |
+          chmod +x gradlew
+          # 使用 assembleDebug 构建调试包
+          # -x lint 跳过代码检查以提高速度
+          ./gradlew assembleDebug -x lint
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: app-debug
+          # 注意：Debug 包的输出路径和 Release 不同
+          path: app/build/outputs/apk/debug/*.apk
