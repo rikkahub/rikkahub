@@ -218,3 +218,8 @@
 .markdown mark {
   @apply bg-yellow-200 dark:bg-yellow-800 px-1 rounded;
 }
+
+/* Citation Badge */
+.markdown .citation-badge {
+  @apply inline-flex items-center justify-center rounded-full bg-primary/15 px-1.5 py-1 text-[10px] leading-none font-mono text-primary cursor-pointer hover:bg-primary/25 transition-colors;
+}

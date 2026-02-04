@@ -17,6 +17,7 @@ import "./markdown.css";
 type MarkdownProps = {
   content: string;
   className?: string;
+  onClickCitation?: (id: string) => void;
 };
 
 function CodeBlock({
@@ -76,7 +77,7 @@ function CodeBlock({
   );
 }
 
-export default function Markdown({ content, className }: MarkdownProps) {
+export default function Markdown({ content, className, onClickCitation }: MarkdownProps) {
   return (
     <div className={cn("markdown", className)}>
       <ReactMarkdown
@@ -100,16 +101,38 @@ export default function Markdown({ content, className }: MarkdownProps) {
               </code>
             );
           },
-          a: ({ href, children, ...props }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              {...props}
-            >
-              {children}
-            </a>
-          ),
+          a: ({ href, children, ...props }) => {
+            const childText = typeof children === "string" ? children : "";
+
+            // Citation format: [citation,domain](id)
+            if (childText.startsWith("citation,")) {
+              const domain = childText.substring("citation,".length);
+              const id = href || "";
+
+              if (id.length === 6) {
+                return (
+                  <span
+                    className="citation-badge"
+                    onClick={() => onClickCitation?.(id)}
+                    title={domain}
+                  >
+                    {domain}
+                  </span>
+                );
+              }
+            }
+
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                {...props}
+              >
+                {children}
+              </a>
+            );
+          },
         }}
       >
         {content}
