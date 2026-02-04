@@ -15,6 +15,7 @@ import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.web.dto.ErrorResponse
 import me.rerere.rikkahub.web.routes.conversationRoutes
+import me.rerere.rikkahub.web.routes.settingsRoutes
 
 /**
  * Configure Web API for the Ktor application.
@@ -51,6 +52,7 @@ fun Application.configureWebApi(
     routing {
         route("/api") {
             conversationRoutes(chatService, conversationRepo, settingsStore)
+            settingsRoutes(settingsStore)
         }
     }
 }
