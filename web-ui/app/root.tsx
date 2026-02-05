@@ -10,6 +10,8 @@ import {
 import type { Route } from "./+types/root";
 import { useSettingsSubscription } from "~/stores/settings";
 import "./app.css";
+import { Toaster } from "./components/ui/sonner";
+import { ThemeProvider } from "./components/theme-provider";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -44,11 +46,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 function AppContent() {
   useSettingsSubscription();
-  return <Outlet />;
+  return (
+    <ThemeProvider>
+      <Outlet />
+      <Toaster />
+    </ThemeProvider>
+  );
 }
 
 export default function App() {
   return <AppContent />;
+}
+
+export function HydrateFallback() {
+  return (
+    <div className="flex items-center justify-center h-screen w-screen bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
