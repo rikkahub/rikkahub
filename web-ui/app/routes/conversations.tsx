@@ -55,7 +55,7 @@ export default function ConversationsPage() {
     setLoading(true);
     setError(null);
     api
-      .get<ConversationListDto[]>("/conversations")
+      .get<ConversationListDto[]>("conversations")
       .then((data) => {
         if (!active) return;
         const sorted = [...data].sort((a, b) => {
@@ -101,7 +101,7 @@ export default function ConversationsPage() {
     setDetailLoading(true);
     setDetailError(null);
     api
-      .get<ConversationDto>(`/conversations/${activeId}`)
+      .get<ConversationDto>(`conversations/${activeId}`)
       .then((data) => {
         if (!active) return;
         setDetail(data);

@@ -1,4 +1,4 @@
-import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
+import ky, { type Options, HTTPError } from "ky";
 
 interface ErrorResponse {
   error: string;
@@ -15,42 +15,68 @@ export class ApiError extends Error {
   }
 }
 
-const axiosInstance = axios.create({
-  baseURL: "/api",
+const kyInstance = ky.create({
+  prefixUrl: "/api",
   timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-axiosInstance.interceptors.response.use(
-  (response) => response.data,
-  (error: AxiosError<ErrorResponse>) => {
-    const data = error.response?.data;
-    const code = data?.code ?? error.response?.status ?? 500;
-    const message = data?.error ?? error.message;
-    return Promise.reject(new ApiError(message, code));
+async function handleError(error: unknown): Promise<never> {
+  if (error instanceof HTTPError) {
+    const { response } = error;
+    let errorData: ErrorResponse | undefined;
+    try {
+      errorData = await response.json();
+    } catch {
+      // Ignore JSON parse error
+    }
+    const code = errorData?.code ?? response.status;
+    const message = errorData?.error ?? error.message;
+    throw new ApiError(message, code);
   }
-);
+  throw error;
+}
 
 /**
  * API client with unwrapped response data
  */
 const api = {
-  get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    return axiosInstance.get(url, config) as Promise<T>;
+  async get<T>(url: string, options?: Options): Promise<T> {
+    try {
+      return await kyInstance.get(url, options).json<T>();
+    } catch (error) {
+      return handleError(error);
+    }
   },
-  post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-    return axiosInstance.post(url, data, config) as Promise<T>;
+  async post<T>(url: string, data?: unknown, options?: Options): Promise<T> {
+    try {
+      return await kyInstance.post(url, { ...options, json: data }).json<T>();
+    } catch (error) {
+      return handleError(error);
+    }
   },
-  put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-    return axiosInstance.put(url, data, config) as Promise<T>;
+  async put<T>(url: string, data?: unknown, options?: Options): Promise<T> {
+    try {
+      return await kyInstance.put(url, { ...options, json: data }).json<T>();
+    } catch (error) {
+      return handleError(error);
+    }
   },
-  patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-    return axiosInstance.patch(url, data, config) as Promise<T>;
+  async patch<T>(url: string, data?: unknown, options?: Options): Promise<T> {
+    try {
+      return await kyInstance.patch(url, { ...options, json: data }).json<T>();
+    } catch (error) {
+      return handleError(error);
+    }
   },
-  delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    return axiosInstance.delete(url, config) as Promise<T>;
+  async delete<T>(url: string, options?: Options): Promise<T> {
+    try {
+      return await kyInstance.delete(url, options).json<T>();
+    } catch (error) {
+      return handleError(error);
+    }
   },
 };
 
