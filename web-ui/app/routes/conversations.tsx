@@ -34,6 +34,7 @@ import {
 } from "~/types";
 import { MessageSquare } from "lucide-react";
 import { ChatInput } from "~/components/message/chat-input";
+import { useSettingsStore } from "~/stores/settings";
 
 export function meta() {
   return [
@@ -234,7 +235,10 @@ export default function ConversationsPage() {
               />
             )}
             {activeId && detailError && (
-              <ConversationEmptyState title="加载失败" description={detailError} />
+              <ConversationEmptyState
+                title="加载失败"
+                description={detailError}
+              />
             )}
             {!detailLoading &&
               !detailError &&

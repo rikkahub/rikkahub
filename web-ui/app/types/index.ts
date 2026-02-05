@@ -246,6 +246,46 @@ export interface ConversationDto {
 }
 
 // ============================================================================
+// Settings Types
+// ============================================================================
+
+/**
+ * Display settings
+ * @see app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt - DisplaySetting
+ */
+export interface DisplaySetting {
+  userNickname: string;
+  showUserAvatar: boolean;
+  showModelName: boolean;
+  showTokenUsage: boolean;
+  autoCloseThinking: boolean;
+  codeBlockAutoWrap: boolean;
+  codeBlockAutoCollapse: boolean;
+  showLineNumbers: boolean;
+  sendOnEnter: boolean;
+  enableAutoScroll: boolean;
+  fontSizeRatio: number;
+  [key: string]: unknown;
+}
+
+/**
+ * App settings (streamed via SSE)
+ * @see app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt - Settings
+ */
+export interface Settings {
+  dynamicColor: boolean;
+  themeId: string;
+  developerMode: boolean;
+  displaySetting: DisplaySetting;
+  enableWebSearch: boolean;
+  chatModelId: string;
+  assistantId: string;
+  providers: unknown[];
+  assistants: unknown[];
+  [key: string]: unknown;
+}
+
+// ============================================================================
 // Helper Types
 // ============================================================================
 
