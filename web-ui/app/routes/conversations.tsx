@@ -5,6 +5,12 @@ import { useNavigate, useParams } from "react-router";
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "~/components/message/conversation";
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -24,9 +30,9 @@ import api from "~/services/api";
 import {
   type ConversationListDto,
   type ConversationDto,
-  type MessageDto,
   getCurrentMessageDto,
 } from "~/types";
+import { MessageSquare } from "lucide-react";
 
 export function meta() {
   return [
@@ -138,7 +144,7 @@ export default function ConversationsPage() {
   );
 
   return (
-    <SidebarProvider defaultOpen>
+    <SidebarProvider defaultOpen className="h-svh overflow-hidden">
       <Sidebar collapsible="icon" variant="sidebar">
         <SidebarHeader>
           <div className="flex items-center justify-between px-1">
@@ -204,57 +210,68 @@ export default function ConversationsPage() {
           </Button>
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset className="flex min-h-svh flex-col">
+      <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <SidebarTrigger />
           <div className="text-sm text-muted-foreground">
             {activeConversation ? activeConversation.title : "请选择会话"}
           </div>
         </div>
-        <ScrollArea className="flex-1">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6">
+        <Conversation className="flex-1 min-h-0">
+          <ConversationContent className="mx-auto w-full max-w-3xl gap-4 px-4 py-6">
             {!activeId && (
-              <div className="text-sm text-muted-foreground">
-                请选择一个会话以查看消息
-              </div>
+              <ConversationEmptyState
+                icon={<MessageSquare className="size-10" />}
+                title="请选择会话"
+                description="选择左侧会话以查看消息"
+              />
             )}
-            {detailLoading && (
-              <div className="text-sm text-muted-foreground">加载中...</div>
+            {activeId && detailLoading && (
+              <ConversationEmptyState
+                title="加载中..."
+                description="正在加载会话详情"
+              />
             )}
-            {detailError && (
-              <div className="text-sm text-destructive">{detailError}</div>
+            {activeId && detailError && (
+              <ConversationEmptyState title="加载失败" description={detailError} />
             )}
             {!detailLoading &&
               !detailError &&
               activeId &&
               selectedMessages.length === 0 && (
-                <div className="text-sm text-muted-foreground">
-                  当前会话暂无消息
-                </div>
+                <ConversationEmptyState
+                  icon={<MessageSquare className="size-10" />}
+                  title="暂无消息"
+                  description="当前会话还没有消息"
+                />
               )}
-            {selectedMessages.map((message) => {
-              const isUser = message.role === "USER";
-              return (
-                <div
-                  key={message.id}
-                  className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-                >
+            {!detailLoading &&
+              !detailError &&
+              activeId &&
+              selectedMessages.map((message) => {
+                const isUser = message.role === "USER";
+                return (
                   <div
-                    className={`flex flex-col gap-2 text-sm ${
-                      isUser
-                        ? "max-w-[85%] rounded-2xl bg-muted px-4 py-3"
-                        : "w-full"
-                    }`}
+                    key={message.id}
+                    className={`flex ${isUser ? "justify-end" : "justify-start"}`}
                   >
-                    {message.parts.map((part, index) => (
-                      <MessagePart key={index} part={part} />
-                    ))}
+                    <div
+                      className={`flex flex-col gap-2 text-sm ${
+                        isUser
+                          ? "max-w-[85%] rounded-2xl bg-muted px-4 py-3"
+                          : "w-full"
+                      }`}
+                    >
+                      {message.parts.map((part, index) => (
+                        <MessagePart key={index} part={part} />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </ScrollArea>
+                );
+              })}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
       </SidebarInset>
     </SidebarProvider>
   );
