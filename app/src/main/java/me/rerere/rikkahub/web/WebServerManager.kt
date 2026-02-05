@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.startWebServer
@@ -30,7 +31,8 @@ class WebServerManager(
     private val context: Context,
     private val chatService: ChatService,
     private val conversationRepo: ConversationRepository,
-    private val settingsStore: SettingsStore
+    private val settingsStore: SettingsStore,
+    private val filesManager: FilesManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -53,7 +55,7 @@ class WebServerManager(
             try {
                 Log.i(TAG, "Starting web server on port $port")
                 server = startWebServer(port = port) {
-                    configureWebApi(chatService, conversationRepo, settingsStore)
+                    configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
                 }.start(wait = false)
 
                 _state.value = WebServerState(

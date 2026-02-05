@@ -82,7 +82,8 @@ val appModule = module {
             context = get(),
             chatService = get(),
             conversationRepo = get(),
-            settingsStore = get()
+            settingsStore = get(),
+            filesManager = get()
         )
     }
 }

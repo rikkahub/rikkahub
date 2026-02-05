@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.web
 
+import android.content.Context
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -10,11 +11,13 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.web.dto.ErrorResponse
 import me.rerere.rikkahub.web.routes.conversationRoutes
+import me.rerere.rikkahub.web.routes.filesRoutes
 import me.rerere.rikkahub.web.routes.settingsRoutes
 
 /**
@@ -24,14 +27,16 @@ import me.rerere.rikkahub.web.routes.settingsRoutes
  * Example usage:
  * ```
  * startWebServer(port = 8080) {
- *     configureWebApi(chatService, conversationRepo, settingsStore)
+ *     configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
  * }
  * ```
  */
 fun Application.configureWebApi(
+    context: Context,
     chatService: ChatService,
     conversationRepo: ConversationRepository,
-    settingsStore: SettingsStore
+    settingsStore: SettingsStore,
+    filesManager: FilesManager
 ) {
     install(ContentNegotiation) {
         json(JsonInstant)
@@ -53,6 +58,7 @@ fun Application.configureWebApi(
         route("/api") {
             conversationRoutes(chatService, conversationRepo, settingsStore)
             settingsRoutes(settingsStore)
+            filesRoutes(filesManager, context)
         }
     }
 }
