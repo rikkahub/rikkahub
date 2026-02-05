@@ -109,7 +109,68 @@ fun ReasoningPicker(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (modelId != null && ModelRegistry.GEMINI_3_SERIES.match(modelId)) {
+            if (modelId != null && ModelRegistry.GEMINI_3_PRO.match(modelId)) {
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.OFF,
+                    enabled = false,
+                    icon = {
+                        Icon(Lucide.LightbulbOff, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_off))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_off_desc))
+                    },
+                    onClick = {}
+                )
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.LOW,
+                    icon = {
+                        Icon(Lucide.Lightbulb, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_light))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_light_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(1024)
+                    }
+                )
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.HIGH || currentLevel == ReasoningLevel.MEDIUM,
+                    icon = {
+                        Icon(Lucide.Lightbulb, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_heavy))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_heavy_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(32_000)
+                    }
+                )
+            } else if (modelId != null && ModelRegistry.GEMINI_3_SERIES.match(modelId)) {
+                ReasoningLevelCard(
+                    selected = currentLevel == ReasoningLevel.OFF,
+                    enabled = true,
+                    icon = {
+                        Icon(Lucide.LightbulbOff, null)
+                    },
+                    title = {
+                        Text(stringResource(id = R.string.reasoning_off))
+                    },
+                    description = {
+                        Text(stringResource(id = R.string.reasoning_off_desc))
+                    },
+                    onClick = {
+                        onUpdateReasoningTokens(0)
+                    }
+                )
                 ReasoningLevelCard(
                     selected = currentLevel == ReasoningLevel.LOW,
                     icon = {
@@ -250,6 +311,7 @@ fun ReasoningPicker(
 private fun ReasoningLevelCard(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
+    enabled: Boolean = true,
     icon: @Composable () -> Unit = {},
     title: @Composable () -> Unit = {},
     description: @Composable () -> Unit = {},
@@ -271,6 +333,7 @@ private fun ReasoningLevelCard(
     )
     Card(
         onClick = onClick,
+        enabled = enabled,
         colors = CardDefaults.cardColors(
             containerColor = containerColor.value,
             contentColor = textColor.value,
