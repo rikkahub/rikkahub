@@ -33,6 +33,7 @@ import {
   getCurrentMessageDto,
 } from "~/types";
 import { MessageSquare } from "lucide-react";
+import { ChatInput } from "~/components/message/chat-input";
 
 export function meta() {
   return [
@@ -272,6 +273,7 @@ export default function ConversationsPage() {
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
+        <ChatInput />
       </SidebarInset>
     </SidebarProvider>
   );
