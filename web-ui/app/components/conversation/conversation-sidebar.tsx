@@ -110,7 +110,7 @@ export function ConversationSidebar({
   );
 
   return (
-    <Sidebar collapsible="icon" variant="sidebar">
+    <Sidebar collapsible="offcanvas" variant="sidebar">
       <SidebarHeader>
         <div className="flex items-center justify-between px-1">
           <div className="text-sm font-semibold">RikkaHub</div>
