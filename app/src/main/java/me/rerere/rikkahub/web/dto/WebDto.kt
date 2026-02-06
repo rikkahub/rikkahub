@@ -98,6 +98,25 @@ data class ConversationUpdateEvent(
 )
 
 @Serializable
+data class ConversationSnapshotEvent(
+    val type: String = "snapshot",
+    val seq: Long,
+    val conversation: ConversationDto
+)
+
+@Serializable
+data class ConversationNodeUpdateEvent(
+    val type: String = "node_update",
+    val seq: Long,
+    val conversationId: String,
+    val nodeId: String,
+    val nodeIndex: Int,
+    val node: MessageNodeDto,
+    val updateAt: Long,
+    val isGenerating: Boolean
+)
+
+@Serializable
 data class GenerationDoneEvent(
     val type: String = "done",
     val conversationId: String

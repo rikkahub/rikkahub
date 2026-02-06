@@ -18,7 +18,11 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
+import me.rerere.rikkahub.web.dto.ConversationDto
 import me.rerere.rikkahub.web.dto.ConversationListInvalidateEvent
+import me.rerere.rikkahub.web.dto.ConversationNodeUpdateEvent
+import me.rerere.rikkahub.web.dto.ConversationSnapshotEvent
+import me.rerere.rikkahub.web.dto.MessageNodeDto
 import me.rerere.rikkahub.web.dto.PagedResult
 import me.rerere.rikkahub.web.dto.RegenerateRequest
 import me.rerere.rikkahub.web.dto.SendMessageRequest
@@ -160,15 +164,87 @@ fun Route.conversationRoutes(
             chatService.addConversationReference(uuid)
 
             try {
+                var sequence = 0L
+                var previousDto: ConversationDto? = null
+
                 chatService.getConversationFlow(uuid).collect { conversation ->
                     val isGenerating = chatService.getGenerationJobStateFlow(uuid).first() != null
-                    val dto = conversation.toDto(isGenerating)
-                    val json = JsonInstant.encodeToString(dto)
-                    send(data = json, event = "update")
+                    val currentDto = conversation.toDto(isGenerating)
+                    sequence += 1
+
+                    val nodeDiff = previousDto?.singleNodeDiffOrNull(currentDto)
+                    if (nodeDiff != null) {
+                        val json = JsonInstant.encodeToString(
+                            ConversationNodeUpdateEvent(
+                                seq = sequence,
+                                conversationId = currentDto.id,
+                                nodeId = nodeDiff.node.id,
+                                nodeIndex = nodeDiff.nodeIndex,
+                                node = nodeDiff.node,
+                                updateAt = currentDto.updateAt,
+                                isGenerating = currentDto.isGenerating
+                            )
+                        )
+                        send(data = json, event = "node_update")
+                    } else {
+                        val json = JsonInstant.encodeToString(
+                            ConversationSnapshotEvent(
+                                seq = sequence,
+                                conversation = currentDto
+                            )
+                        )
+                        send(data = json, event = "snapshot")
+                    }
+
+                    previousDto = currentDto
                 }
             } finally {
                 chatService.removeConversationReference(uuid)
             }
         }
     }
+}
+
+private data class NodeDiff(
+    val nodeIndex: Int,
+    val node: MessageNodeDto
+)
+
+private fun ConversationDto.singleNodeDiffOrNull(current: ConversationDto): NodeDiff? {
+    if (id != current.id || assistantId != current.assistantId || createAt != current.createAt) {
+        return null
+    }
+
+    if (
+        title != current.title ||
+        truncateIndex != current.truncateIndex ||
+        chatSuggestions != current.chatSuggestions ||
+        isPinned != current.isPinned
+    ) {
+        return null
+    }
+
+    if (messages.size > current.messages.size) {
+        return null
+    }
+
+    var changedIndex = -1
+    val maxSize = maxOf(messages.size, current.messages.size)
+    for (index in 0 until maxSize) {
+        val previousNode = messages.getOrNull(index)
+        val currentNode = current.messages.getOrNull(index)
+        if (previousNode == currentNode) continue
+
+        if (changedIndex != -1) {
+            return null
+        }
+        changedIndex = index
+    }
+
+    if (changedIndex == -1) {
+        return null
+    }
+
+    val changedNode = current.messages.getOrNull(changedIndex) ?: return null
+    return NodeDiff(nodeIndex = changedIndex, node = changedNode)
 }

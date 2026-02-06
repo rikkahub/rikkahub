@@ -18,6 +18,8 @@ import { MessagePart } from "~/components/message";
 import api from "~/services/api";
 import {
   type ConversationDto,
+  type ConversationNodeUpdateEventDto,
+  type ConversationSnapshotEventDto,
   getCurrentMessageDto,
 } from "~/types";
 import { MessageSquare } from "lucide-react";
@@ -27,6 +29,43 @@ import {
   toConversationSummaryUpdate,
   useConversationList,
 } from "~/hooks/use-conversation-list";
+import { sse } from "~/services/api";
+
+type ConversationStreamEvent =
+  | ConversationSnapshotEventDto
+  | ConversationNodeUpdateEventDto;
+
+function applyNodeUpdate(
+  conversation: ConversationDto,
+  event: ConversationNodeUpdateEventDto,
+): ConversationDto {
+  if (conversation.id !== event.conversationId) {
+    return conversation;
+  }
+
+  const nextNodes = [...conversation.messages];
+  const indexById = nextNodes.findIndex((node) => node.id === event.nodeId);
+  const targetIndex = indexById >= 0 ? indexById : event.nodeIndex;
+
+  if (targetIndex < 0) {
+    return conversation;
+  }
+
+  if (targetIndex < nextNodes.length) {
+    nextNodes[targetIndex] = event.node;
+  } else if (targetIndex === nextNodes.length) {
+    nextNodes.push(event.node);
+  } else {
+    return conversation;
+  }
+
+  return {
+    ...conversation,
+    messages: nextNodes,
+    updateAt: event.updateAt,
+    isGenerating: event.isGenerating,
+  };
+}
 
 export function meta() {
   return [
@@ -68,6 +107,8 @@ export default function ConversationsPage() {
     setDetailLoading(true);
     setDetailError(null);
 
+    const abortController = new AbortController();
+
     api
       .get<ConversationDto>(`conversations/${activeId}`)
       .then((data) => {
@@ -85,8 +126,43 @@ export default function ConversationsPage() {
         setDetailLoading(false);
       });
 
+    void sse<ConversationStreamEvent>(
+      `conversations/${activeId}/stream`,
+      {
+        onMessage: ({ event, data }) => {
+          if (!active) return;
+
+          if (event === "snapshot" && data.type === "snapshot") {
+            setDetail(data.conversation);
+            updateConversationSummary(toConversationSummaryUpdate(data.conversation));
+            setDetailError(null);
+            setDetailLoading(false);
+            return;
+          }
+
+          if (event !== "node_update" || data.type !== "node_update") return;
+
+          setDetail((prev) => {
+            if (!prev) return prev;
+            const next = applyNodeUpdate(prev, data);
+            if (next === prev) return prev;
+            updateConversationSummary(toConversationSummaryUpdate(next));
+            return next;
+          });
+          setDetailError(null);
+          setDetailLoading(false);
+        },
+        onError: (streamError) => {
+          if (!active) return;
+          console.error("Conversation detail SSE error:", streamError);
+        },
+      },
+      { signal: abortController.signal },
+    );
+
     return () => {
       active = false;
+      abortController.abort();
     };
   }, [activeId, updateConversationSummary]);
 

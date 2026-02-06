@@ -52,3 +52,20 @@ export interface ConversationDto {
   updateAt: number;
   isGenerating: boolean;
 }
+
+export interface ConversationSnapshotEventDto {
+  type: "snapshot";
+  seq: number;
+  conversation: ConversationDto;
+}
+
+export interface ConversationNodeUpdateEventDto {
+  type: "node_update";
+  seq: number;
+  conversationId: string;
+  nodeId: string;
+  nodeIndex: number;
+  node: MessageNodeDto;
+  updateAt: number;
+  isGenerating: boolean;
+}
