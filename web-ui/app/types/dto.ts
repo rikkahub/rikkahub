@@ -15,6 +15,12 @@ export interface PagedResult<T> {
   hasMore: boolean;
 }
 
+export interface ConversationListInvalidateEventDto {
+  type: "invalidate";
+  assistantId: string;
+  timestamp: number;
+}
+
 /**
  * Message DTO (for API response)
  * @see app/src/main/java/me/rerere/rikkahub/web/dto/WebDto.kt - MessageDto

@@ -17,14 +17,16 @@ import {
 import { MessagePart } from "~/components/message";
 import api from "~/services/api";
 import {
-  type ConversationListDto,
   type ConversationDto,
-  type PagedResult,
   getCurrentMessageDto,
 } from "~/types";
 import { MessageSquare } from "lucide-react";
 import { ChatInput } from "~/components/message/chat-input";
 import { useSettingsStore } from "~/stores/settings";
+import {
+  toConversationSummaryUpdate,
+  useConversationList,
+} from "~/hooks/use-conversation-list";
 
 export function meta() {
   return [
@@ -38,96 +40,40 @@ export default function ConversationsPage() {
   const { id: routeId } = useParams();
   const settings = useSettingsStore((state) => state.settings);
   const currentAssistantId = settings?.assistantId ?? null;
-  const [conversations, setConversations] = React.useState<
-    ConversationListDto[]
-  >([]);
-  const [activeId, setActiveId] = React.useState<string | null>(
-    routeId ?? null,
-  );
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [hasMore, setHasMore] = React.useState(false);
-  const nextOffsetRef = React.useRef<number | null>(0);
+  const {
+    conversations,
+    activeId,
+    setActiveId,
+    loading,
+    error,
+    hasMore,
+    loadMore,
+    refreshList,
+    updateConversationSummary,
+  } = useConversationList({ currentAssistantId, routeId });
   const [detail, setDetail] = React.useState<ConversationDto | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = React.useState(0);
-
-  const PAGE_SIZE = 20;
-
-  React.useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError(null);
-    setConversations([]);
-    nextOffsetRef.current = 0;
-    setHasMore(false);
-    api
-      .get<PagedResult<ConversationListDto>>("conversations/paged", {
-        searchParams: { offset: 0, limit: PAGE_SIZE },
-      })
-      .then((data) => {
-        if (!active) return;
-        setConversations(data.items);
-        nextOffsetRef.current = data.nextOffset ?? null;
-        setHasMore(data.hasMore);
-        if (routeId && data.items.some((item) => item.id === routeId)) {
-          setActiveId(routeId);
-          return;
-        }
-        setActiveId((current) => current ?? data.items[0]?.id ?? null);
-      })
-      .catch((err: Error) => {
-        if (!active) return;
-        setError(err.message || "加载会话失败");
-      })
-      .finally(() => {
-        if (!active) return;
-        setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [currentAssistantId, refreshToken]);
-
-  const loadMore = React.useCallback(() => {
-    const offset = nextOffsetRef.current;
-    if (offset === null) return;
-    api
-      .get<PagedResult<ConversationListDto>>("conversations/paged", {
-        searchParams: { offset, limit: PAGE_SIZE },
-      })
-      .then((data) => {
-        setConversations((prev) => [...prev, ...data.items]);
-        nextOffsetRef.current = data.nextOffset ?? null;
-        setHasMore(data.hasMore);
-      })
-      .catch(() => {
-        setHasMore(false);
-      });
-  }, []);
-
-  React.useEffect(() => {
-    if (!routeId) return;
-    if (conversations.some((item) => item.id === routeId)) {
-      setActiveId(routeId);
-    }
-  }, [routeId, conversations]);
 
   React.useEffect(() => {
     if (!activeId) {
       setDetail(null);
+      setDetailError(null);
+      setDetailLoading(false);
       return;
     }
+
     let active = true;
+
     setDetailLoading(true);
     setDetailError(null);
+
     api
       .get<ConversationDto>(`conversations/${activeId}`)
       .then((data) => {
         if (!active) return;
         setDetail(data);
+        updateConversationSummary(toConversationSummaryUpdate(data));
       })
       .catch((err: Error) => {
         if (!active) return;
@@ -142,7 +88,7 @@ export default function ConversationsPage() {
     return () => {
       active = false;
     };
-  }, [activeId]);
+  }, [activeId, updateConversationSummary]);
 
   const activeConversation = conversations.find((item) => item.id === activeId);
   const selectedMessages = React.useMemo(() => {
@@ -169,9 +115,9 @@ export default function ConversationsPage() {
       if (routeId) {
         navigate("/", { replace: true });
       }
-      setRefreshToken((token) => token + 1);
+      refreshList();
     },
-    [navigate, routeId],
+    [navigate, refreshList, routeId],
   );
 
   return (

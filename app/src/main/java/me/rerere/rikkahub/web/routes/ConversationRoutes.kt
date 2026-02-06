@@ -9,6 +9,8 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.sse.sse
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -16,6 +18,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
+import me.rerere.rikkahub.web.dto.ConversationListInvalidateEvent
 import me.rerere.rikkahub.web.dto.PagedResult
 import me.rerere.rikkahub.web.dto.RegenerateRequest
 import me.rerere.rikkahub.web.dto.SendMessageRequest
@@ -67,6 +70,24 @@ fun Route.conversationRoutes(
                     nextOffset = page.nextOffset
                 )
             )
+        }
+
+        // SSE /api/conversations/stream - Stream conversation list invalidation events
+        sse("/stream") {
+            settingsStore.settingsFlow
+                .map { it.assistantId }
+                .distinctUntilChanged()
+                .collectLatest { assistantId ->
+                    conversationRepo.getConversationsOfAssistant(assistantId).collect {
+                        val json = JsonInstant.encodeToString(
+                            ConversationListInvalidateEvent(
+                                assistantId = assistantId.toString(),
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                        send(data = json, event = "invalidate")
+                    }
+                }
         }
 
         // GET /api/conversations/{id} - Get single conversation

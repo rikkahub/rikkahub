@@ -109,6 +109,13 @@ data class ErrorEvent(
     val message: String
 )
 
+@Serializable
+data class ConversationListInvalidateEvent(
+    val type: String = "invalidate",
+    val assistantId: String,
+    val timestamp: Long
+)
+
 // ========== Conversion Extensions ==========
 
 fun Conversation.toListDto() = ConversationListDto(
