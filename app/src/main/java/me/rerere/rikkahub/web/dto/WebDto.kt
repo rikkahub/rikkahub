@@ -44,6 +44,13 @@ data class ConversationListDto(
 )
 
 @Serializable
+data class PagedResult<T>(
+    val items: List<T>,
+    val nextOffset: Int? = null,
+    val hasMore: Boolean = nextOffset != null
+)
+
+@Serializable
 data class ConversationDto(
     val id: String,
     val assistantId: String,

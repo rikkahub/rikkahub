@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
+import me.rerere.rikkahub.web.dto.PagedResult
 import me.rerere.rikkahub.web.dto.RegenerateRequest
 import me.rerere.rikkahub.web.dto.SendMessageRequest
 import me.rerere.rikkahub.web.dto.ToolApprovalRequest
@@ -39,6 +40,33 @@ fun Route.conversationRoutes(
                 .first()
                 .map { it.toListDto() }
             call.respond(conversations)
+        }
+
+        // GET /api/conversations/paged?offset=0&limit=20 - List conversations with pagination
+        get("/paged") {
+            val settings = settingsStore.settingsFlow.first()
+            val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
+
+            if (offset < 0) {
+                throw BadRequestException("offset must be >= 0")
+            }
+            if (limit !in 1..100) {
+                throw BadRequestException("limit must be in 1..100")
+            }
+
+            val page = conversationRepo.getConversationsOfAssistantPage(
+                assistantId = settings.assistantId,
+                offset = offset,
+                limit = limit
+            )
+
+            call.respond(
+                PagedResult(
+                    items = page.items.map { it.toListDto() },
+                    nextOffset = page.nextOffset
+                )
+            )
         }
 
         // GET /api/conversations/{id} - Get single conversation

@@ -9,6 +9,12 @@ export interface ConversationListDto {
   updateAt: number;
 }
 
+export interface PagedResult<T> {
+  items: T[];
+  nextOffset?: number | null;
+  hasMore: boolean;
+}
+
 /**
  * Message DTO (for API response)
  * @see app/src/main/java/me/rerere/rikkahub/web/dto/WebDto.kt - MessageDto
