@@ -14,7 +14,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "~/components/ui/sidebar";
-import { MessageParts } from "~/components/message";
+import { ChatMessage } from "~/components/message/chat-message";
 import api from "~/services/api";
 import {
   type ConversationDto,
@@ -208,6 +208,16 @@ export default function ConversationsPage() {
     [activeId],
   );
 
+  const handleRegenerate = React.useCallback(
+    async (messageId: string) => {
+      if (!activeId) return;
+      await api.post<{ status: string }>(`conversations/${activeId}/regenerate`, {
+        messageId,
+      });
+    },
+    [activeId],
+  );
+
   return (
     <SidebarProvider defaultOpen className="h-svh overflow-hidden">
       <ConversationSidebar
@@ -264,29 +274,16 @@ export default function ConversationsPage() {
             {!detailLoading &&
               !detailError &&
               activeId &&
-              selectedMessages.map((message) => {
-                const isUser = message.role === "USER";
-                return (
-                  <div
-                    key={message.id}
-                    className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`flex flex-col gap-2 text-sm ${
-                        isUser
-                          ? "max-w-[85%] rounded-2xl bg-muted px-4 py-3"
-                          : "w-full"
-                      }`}
-                    >
-                      <MessageParts
-                        parts={message.parts}
-                        loading={detail?.isGenerating ?? false}
-                        onToolApproval={handleToolApproval}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+              selectedMessages.map((message, index) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  loading={(detail?.isGenerating ?? false) && index === selectedMessages.length - 1}
+                  isLastMessage={index === selectedMessages.length - 1}
+                  onRegenerate={handleRegenerate}
+                  onToolApproval={handleToolApproval}
+                />
+              ))}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>

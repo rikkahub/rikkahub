@@ -1,3 +1,5 @@
+import type { TokenUsage } from "./core";
+import type { UIMessageAnnotation } from "./annotations";
 import type { UIMessagePart } from "./parts";
 
 export interface ConversationListDto {
@@ -29,8 +31,11 @@ export interface MessageDto {
   id: string;
   role: string;
   parts: UIMessagePart[];
+  annotations?: UIMessageAnnotation[];
   createdAt: string;
   finishedAt?: string | null;
+  modelId?: string | null;
+  usage?: TokenUsage | null;
   translation?: string | null;
 }
 

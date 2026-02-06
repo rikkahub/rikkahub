@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.web.dto
 
 import kotlinx.serialization.Serializable
+import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
@@ -76,8 +78,11 @@ data class MessageDto(
     val id: String,
     val role: String,
     val parts: List<UIMessagePart>,
+    val annotations: List<UIMessageAnnotation> = emptyList(),
     val createdAt: String,
     val finishedAt: String? = null,
+    val modelId: String? = null,
+    val usage: TokenUsage? = null,
     val translation: String? = null
 )
 
@@ -169,8 +174,11 @@ fun UIMessage.toDto() = MessageDto(
     id = id.toString(),
     role = role.name,
     parts = parts,
+    annotations = annotations,
     createdAt = createdAt.toString(),
     finishedAt = finishedAt?.toString(),
+    modelId = modelId?.toString(),
+    usage = usage,
     translation = translation
 )
 
