@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.web.dto.ErrorResponse
+import me.rerere.rikkahub.web.routes.assetsRoutes
 import me.rerere.rikkahub.web.routes.conversationRoutes
 import me.rerere.rikkahub.web.routes.filesRoutes
 import me.rerere.rikkahub.web.routes.settingsRoutes
@@ -62,6 +63,7 @@ fun Application.configureWebApi(
             conversationRoutes(chatService, conversationRepo, settingsStore)
             settingsRoutes(settingsStore)
             filesRoutes(filesManager, context)
+            assetsRoutes(context)
         }
     }
 }

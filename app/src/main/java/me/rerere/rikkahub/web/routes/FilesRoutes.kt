@@ -4,6 +4,7 @@ import android.content.Context
 import io.ktor.http.ContentType
 import io.ktor.server.response.header
 import io.ktor.server.response.respondFile
+import io.ktor.server.response.respondOutputStream
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
@@ -79,6 +80,42 @@ fun Route.filesRoutes(
 
             call.response.header("Content-Type", contentType.toString())
             call.respondFile(file)
+        }
+    }
+}
+
+// GET /api/assets/{...} - Get file from app assets
+fun Route.assetsRoutes(context: Context) {
+    route("/assets") {
+        get("/{path...}") {
+            val relativePath = call.pathParameters.getAll("path")?.joinToString("/")
+                ?: throw BadRequestException("Missing asset path")
+
+            if (relativePath.contains("..") || relativePath.startsWith("/")) {
+                throw BadRequestException("Invalid asset path")
+            }
+
+            val contentType = when (relativePath.substringAfterLast('.').lowercase()) {
+                "jpg", "jpeg" -> ContentType.Image.JPEG
+                "png" -> ContentType.Image.PNG
+                "gif" -> ContentType.Image.GIF
+                "webp" -> ContentType("image", "webp")
+                "svg" -> ContentType.Image.SVG
+                "json" -> ContentType.Application.Json
+                "html" -> ContentType.Text.Html
+                "txt" -> ContentType.Text.Plain
+                else -> ContentType.Application.OctetStream
+            }
+
+            try {
+                val inputStream = context.assets.open(relativePath)
+                call.response.header("Content-Type", contentType.toString())
+                call.respondOutputStream {
+                    inputStream.use { it.copyTo(this) }
+                }
+            } catch (_: Exception) {
+                throw NotFoundException("Asset not found: $relativePath")
+            }
         }
     }
 }
