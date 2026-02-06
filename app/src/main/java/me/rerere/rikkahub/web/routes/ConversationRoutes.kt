@@ -25,12 +25,6 @@ import me.rerere.rikkahub.web.dto.toUIParts
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.uuid.Uuid
 
-private fun String?.toUuid(name: String = "id"): Uuid {
-    if (this == null) throw BadRequestException("Missing $name")
-    return runCatching { Uuid.parse(this) }.getOrNull()
-        ?: throw BadRequestException("Invalid $name")
-}
-
 fun Route.conversationRoutes(
     chatService: ChatService,
     conversationRepo: ConversationRepository,

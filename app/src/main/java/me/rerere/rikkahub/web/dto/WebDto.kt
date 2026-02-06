@@ -26,6 +26,11 @@ data class ToolApprovalRequest(
     val reason: String = ""
 )
 
+@Serializable
+data class UpdateAssistantRequest(
+    val assistantId: String
+)
+
 // ========== Response DTOs ==========
 
 @Serializable
