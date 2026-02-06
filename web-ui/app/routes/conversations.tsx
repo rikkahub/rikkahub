@@ -30,6 +30,7 @@ import {
   useConversationList,
 } from "~/hooks/use-conversation-list";
 import { sse } from "~/services/api";
+import { Spinner } from "~/components/ui/spinner";
 
 type ConversationStreamEvent =
   | ConversationSnapshotEventDto
@@ -284,6 +285,12 @@ export default function ConversationsPage() {
                   onToolApproval={handleToolApproval}
                 />
               ))}
+            {!detailLoading && !detailError && activeId && (detail?.isGenerating ?? false) && (
+              <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
+                <Spinner className="size-3.5" />
+                <span>正在生成回复...</span>
+              </div>
+            )}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>

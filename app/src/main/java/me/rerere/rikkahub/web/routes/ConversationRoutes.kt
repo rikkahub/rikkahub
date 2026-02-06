@@ -10,6 +10,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.sse.sse
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -167,9 +168,15 @@ fun Route.conversationRoutes(
                 var sequence = 0L
                 var previousDto: ConversationDto? = null
 
-                chatService.getConversationFlow(uuid).collect { conversation ->
-                    val isGenerating = chatService.getGenerationJobStateFlow(uuid).first() != null
-                    val currentDto = conversation.toDto(isGenerating)
+                combine(
+                    chatService.getConversationFlow(uuid),
+                    chatService
+                        .getGenerationJobStateFlow(uuid)
+                        .map { it != null }
+                        .distinctUntilChanged()
+                ) { conversation, isGenerating ->
+                    conversation.toDto(isGenerating)
+                }.collect { currentDto ->
                     sequence += 1
 
                     val nodeDiff = previousDto?.singleNodeDiffOrNull(currentDto)
