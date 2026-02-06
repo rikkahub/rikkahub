@@ -26,6 +26,7 @@
     "react-dom": "^19.2.4",
     "react-infinite-scroll-component": "^6.1.1",
     "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^4",
     "react-router": "7.12.0",
     "react-syntax-highlighter": "^16.1.0",
     "rehype-katex": "^7.0.1",
@@ -36,6 +37,7 @@
     "tailwind-merge": "^3.4.0",
     "use-stick-to-bottom": "^1.1.2",
     "uuid": "^13.0.0",
+    "vaul": "^1.1.2",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
   },
