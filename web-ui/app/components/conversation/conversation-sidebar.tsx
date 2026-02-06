@@ -48,7 +48,17 @@ function getAvatarContent(assistant: AssistantProfile) {
   if (avatar?.content && avatar.content.length > 0) {
     return avatar.content;
   }
-  return assistant.name.slice(0, 1).toUpperCase() || "A";
+
+  return getAssistantDisplayName(assistant).slice(0, 1).toUpperCase();
+}
+
+function getAssistantDisplayName(assistant: AssistantProfile) {
+  const name = assistant.name.trim();
+  if (name.length > 0) {
+    return name;
+  }
+
+  return "默认助手";
 }
 
 export function ConversationSidebar({
@@ -180,7 +190,9 @@ export function ConversationSidebar({
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full justify-start gap-2" type="button">
               <Drama className="size-4" />
-              <span className="truncate">{currentAssistant?.name || "选择助手"}</span>
+              <span className="truncate">
+                {currentAssistant ? getAssistantDisplayName(currentAssistant) : "选择助手"}
+              </span>
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[80svh] max-w-xl overflow-hidden p-0">
@@ -230,7 +242,7 @@ export function ConversationSidebar({
                           <AvatarFallback>{getAvatarContent(assistant)}</AvatarFallback>
                         </Avatar>
                         <span className="min-w-0 flex-1 truncate text-sm">
-                          {assistant.name || "未命名助手"}
+                          {getAssistantDisplayName(assistant)}
                         </span>
                         {selected && !switching && (
                           <Badge variant="secondary" className="gap-1">
