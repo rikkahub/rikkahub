@@ -7,7 +7,7 @@ import { cn } from "~/lib/utils"
 interface ChainOfThoughtProps<T> extends React.ComponentProps<typeof Card> {
   steps: T[]
   collapsedVisibleCount?: number
-  renderStep: (step: T, index: number) => React.ReactNode
+  renderStep: (step: T, index: number, info: { isFirst: boolean; isLast: boolean }) => React.ReactNode
   collapseLabel?: React.ReactNode
   showMoreLabel?: (hiddenCount: number) => React.ReactNode
 }
@@ -20,6 +20,8 @@ interface ChainOfThoughtStepBaseProps {
   children?: React.ReactNode
   contentVisible?: boolean
   className?: string
+  isFirst?: boolean
+  isLast?: boolean
 }
 
 interface ChainOfThoughtStepProps extends ChainOfThoughtStepBaseProps {
@@ -64,13 +66,15 @@ function ChainOfThought<T>({
         </button>
       )}
 
-      <div className="relative">
-        <div className="bg-border/80 pointer-events-none absolute left-3 top-[18px] bottom-[18px] w-px" />
-        <div className="relative">
-          {visibleSteps.map((step, index) => (
-            <React.Fragment key={index}>{renderStep(step, index)}</React.Fragment>
-          ))}
-        </div>
+      <div>
+        {visibleSteps.map((step, index) => (
+          <React.Fragment key={index}>
+            {renderStep(step, index, {
+              isFirst: index === 0,
+              isLast: index === visibleSteps.length - 1,
+            })}
+          </React.Fragment>
+        ))}
       </div>
     </Card>
   )
@@ -124,6 +128,8 @@ function ChainOfThoughtStepContent({
   onExpandedChange,
   contentVisible,
   className,
+  isFirst,
+  isLast,
 }: ChainOfThoughtStepContentProps) {
   const hasContent = Boolean(children)
   const clickable = Boolean(onClick || hasContent)
@@ -139,7 +145,7 @@ function ChainOfThoughtStepContent({
   }
 
   const rowClassName = cn(
-    "flex w-full items-center gap-2 px-1 py-2",
+    "flex w-full items-center gap-2 px-1 py-2 text-left",
     clickable &&
       "hover:bg-muted/60 focus-visible:ring-ring/50 cursor-pointer rounded-md outline-none focus-visible:ring-[3px]",
     className
@@ -162,28 +168,40 @@ function ChainOfThoughtStepContent({
   ) : null
 
   return (
-    <div className="w-full">
-      {clickable ? (
-        <button type="button" className={rowClassName} onClick={handleActivate}>
-          <span className="flex w-6 shrink-0 items-center justify-center">
-            <span className="bg-card flex size-5 items-center justify-center">{iconContent}</span>
-          </span>
-          <span className="min-w-0 flex-1">{label}</span>
-          {extra}
-          {indicator}
-        </button>
-      ) : (
-        <div className={rowClassName}>
-          <span className="flex w-6 shrink-0 items-center justify-center">
-            <span className="bg-card flex size-5 items-center justify-center">{iconContent}</span>
-          </span>
-          <span className="min-w-0 flex-1">{label}</span>
-          {extra}
-          {indicator}
+    <div className="flex w-full gap-2">
+      {/* Icon rail with per-step line segments */}
+      <div
+        className={cn(
+          "flex w-6 shrink-0 flex-col items-center",
+          clickable && "cursor-pointer"
+        )}
+        onClick={clickable ? handleActivate : undefined}
+      >
+        <div className={cn("h-2 w-px shrink-0", isFirst === false && "bg-border/80")} />
+        <div className="flex h-5 shrink-0 items-center justify-center">
+          {iconContent}
         </div>
-      )}
+        <div className={cn("w-px flex-1", isLast === false && "bg-border/80")} />
+      </div>
 
-      {contentVisible && hasContent && <div className="px-1 pb-2 pl-8 pt-1">{children}</div>}
+      {/* Content */}
+      <div className="min-w-0 flex-1">
+        {clickable ? (
+          <button type="button" className={rowClassName} onClick={handleActivate}>
+            <span className="min-w-0 flex-1">{label}</span>
+            {extra}
+            {indicator}
+          </button>
+        ) : (
+          <div className={rowClassName}>
+            <span className="min-w-0 flex-1">{label}</span>
+            {extra}
+            {indicator}
+          </div>
+        )}
+
+        {contentVisible && hasContent && <div className="px-1 pb-2 pt-1">{children}</div>}
+      </div>
     </div>
   )
 }

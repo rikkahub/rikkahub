@@ -14,7 +14,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "~/components/ui/sidebar";
-import { MessagePart } from "~/components/message";
+import { MessageParts } from "~/components/message";
 import api from "~/services/api";
 import {
   type ConversationDto,
@@ -196,6 +196,18 @@ export default function ConversationsPage() {
     [navigate, refreshList, routeId],
   );
 
+  const handleToolApproval = React.useCallback(
+    async (toolCallId: string, approved: boolean, reason: string) => {
+      if (!activeId) return;
+      await api.post<{ status: string }>(`conversations/${activeId}/tool-approval`, {
+        toolCallId,
+        approved,
+        reason,
+      });
+    },
+    [activeId],
+  );
+
   return (
     <SidebarProvider defaultOpen className="h-svh overflow-hidden">
       <ConversationSidebar
@@ -266,9 +278,11 @@ export default function ConversationsPage() {
                           : "w-full"
                       }`}
                     >
-                      {message.parts.map((part, index) => (
-                        <MessagePart key={index} part={part} />
-                      ))}
+                      <MessageParts
+                        parts={message.parts}
+                        loading={detail?.isGenerating ?? false}
+                        onToolApproval={handleToolApproval}
+                      />
                     </div>
                   </div>
                 );
