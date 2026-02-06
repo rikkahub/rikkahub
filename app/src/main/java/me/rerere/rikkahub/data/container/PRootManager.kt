@@ -1006,10 +1006,13 @@ fi
             Log.d(TAG, "[ToolEnv] Python configured: PYTHON_HOME=$pythonHome, pip available")
         }
 
+<<<<<<< HEAD
         // Node.js 模块路径（确保 npm 可用）
         val nodePath = listOf("/usr/local/lib/node_modules", "/usr/lib/node_modules")
         env["NODE_PATH"] = nodePath.joinToString(":")
 
+=======
+>>>>>>> 4893a0f2 (添加 Python 环境变量配置，解决 pip 找不到的问题)
         // 组合 PATH：工具路径 + 基础 PATH（确保基础命令可用）
         val finalPath = if (toolPaths.isNotEmpty()) {
             toolPaths.joinToString(":") + ":" + basePath
