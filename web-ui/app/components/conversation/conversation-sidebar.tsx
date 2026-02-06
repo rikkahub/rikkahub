@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Check, Drama } from "lucide-react";
 
+import { InfiniteScrollArea } from "~/components/extended/infinite-scroll-area";
 import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -32,6 +33,8 @@ export interface ConversationSidebarProps {
   activeId: string | null;
   loading: boolean;
   error: string | null;
+  hasMore: boolean;
+  loadMore: () => void;
   assistants: AssistantProfile[];
   assistantTags: AssistantTag[];
   currentAssistantId: string | null;
@@ -53,6 +56,8 @@ export function ConversationSidebar({
   activeId,
   loading,
   error,
+  hasMore,
+  loadMore,
   assistants,
   assistantTags,
   currentAssistantId,
@@ -123,7 +128,12 @@ export function ConversationSidebar({
       <SidebarContent className="min-h-0">
         <SidebarGroup className="flex min-h-0 flex-1 flex-col">
           <SidebarGroupLabel>Conversations</SidebarGroupLabel>
-          <ScrollArea className="min-h-0 flex-1">
+          <InfiniteScrollArea
+            dataLength={conversations.length}
+            next={loadMore}
+            hasMore={hasMore}
+            scrollTargetId="conversationScrollTarget"
+          >
             <SidebarMenu>
               {loading && (
                 <SidebarMenuItem>
@@ -154,7 +164,7 @@ export function ConversationSidebar({
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
-          </ScrollArea>
+          </InfiniteScrollArea>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>

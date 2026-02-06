@@ -19,6 +19,7 @@ import api from "~/services/api";
 import {
   type ConversationListDto,
   type ConversationDto,
+  type PagedResult,
   getCurrentMessageDto,
 } from "~/types";
 import { MessageSquare } from "lucide-react";
@@ -45,31 +46,36 @@ export default function ConversationsPage() {
   );
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [hasMore, setHasMore] = React.useState(false);
+  const nextOffsetRef = React.useRef<number | null>(0);
   const [detail, setDetail] = React.useState<ConversationDto | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
   const [refreshToken, setRefreshToken] = React.useState(0);
 
+  const PAGE_SIZE = 20;
+
   React.useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
+    setConversations([]);
+    nextOffsetRef.current = 0;
+    setHasMore(false);
     api
-      .get<ConversationListDto[]>("conversations")
+      .get<PagedResult<ConversationListDto>>("conversations/paged", {
+        searchParams: { offset: 0, limit: PAGE_SIZE },
+      })
       .then((data) => {
         if (!active) return;
-        const sorted = [...data].sort((a, b) => {
-          if (a.isPinned !== b.isPinned) {
-            return a.isPinned ? -1 : 1;
-          }
-          return b.updateAt - a.updateAt;
-        });
-        setConversations(sorted);
-        if (routeId && sorted.some((item) => item.id === routeId)) {
+        setConversations(data.items);
+        nextOffsetRef.current = data.nextOffset ?? null;
+        setHasMore(data.hasMore);
+        if (routeId && data.items.some((item) => item.id === routeId)) {
           setActiveId(routeId);
           return;
         }
-        setActiveId((current) => current ?? sorted[0]?.id ?? null);
+        setActiveId((current) => current ?? data.items[0]?.id ?? null);
       })
       .catch((err: Error) => {
         if (!active) return;
@@ -84,6 +90,23 @@ export default function ConversationsPage() {
       active = false;
     };
   }, [currentAssistantId, refreshToken]);
+
+  const loadMore = React.useCallback(() => {
+    const offset = nextOffsetRef.current;
+    if (offset === null) return;
+    api
+      .get<PagedResult<ConversationListDto>>("conversations/paged", {
+        searchParams: { offset, limit: PAGE_SIZE },
+      })
+      .then((data) => {
+        setConversations((prev) => [...prev, ...data.items]);
+        nextOffsetRef.current = data.nextOffset ?? null;
+        setHasMore(data.hasMore);
+      })
+      .catch(() => {
+        setHasMore(false);
+      });
+  }, []);
 
   React.useEffect(() => {
     if (!routeId) return;
@@ -158,6 +181,8 @@ export default function ConversationsPage() {
         activeId={activeId}
         loading={loading}
         error={error}
+        hasMore={hasMore}
+        loadMore={loadMore}
         assistants={settings?.assistants ?? []}
         assistantTags={settings?.assistantTags ?? []}
         currentAssistantId={currentAssistantId}

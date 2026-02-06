@@ -182,3 +182,24 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Styled scrollbar matching ScrollArea (radix) appearance */
+.styled-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.styled-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.styled-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.styled-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
