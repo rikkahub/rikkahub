@@ -483,6 +483,23 @@ class PRootManager(private val context: Context) {
             env["RUST_HOME"] = "/usr/local/rust"
         }
 
+        // Python (包括 pip)
+        val pythonBinDir = when {
+            File(upperLocalDir, "python3/bin/python3").exists() -> "python3/bin"
+            File(upperLocalDir, "python/bin/python3").exists() -> "python/bin"
+            File(upperLocalDir, "python/bin/python").exists() -> "python/bin"
+            else -> null
+        }
+        Log.d(TAG, "[ToolEnv] Python bin dir: $pythonBinDir")
+        if (pythonBinDir != null) {
+            val pythonHome = "/usr/local/${pythonBinDir.substringBefore("/")}"
+            toolPaths.add("$pythonHome/bin")
+            env["PYTHON_HOME"] = pythonHome
+            // 确保 pip 能找到
+            env["PIP_CACHE_DIR"] = "/tmp/pip-cache"
+            Log.d(TAG, "[ToolEnv] Python configured: PYTHON_HOME=$pythonHome, pip available")
+        }
+
         // 组合 PATH：工具路径 + 基础 PATH（确保基础命令可用）
         val finalPath = if (toolPaths.isNotEmpty()) {
             toolPaths.joinToString(":") + ":" + basePath
