@@ -43,6 +43,9 @@ fun Application.configureWebApi(
     }
 
     install(StatusPages) {
+        status(HttpStatusCode.NotFound) { call, status ->
+            call.respond(status, ErrorResponse("Not Found", status.value))
+        }
         exception<ApiException> { call, cause ->
             call.respond(cause.status, ErrorResponse(cause.message, cause.status.value))
         }
