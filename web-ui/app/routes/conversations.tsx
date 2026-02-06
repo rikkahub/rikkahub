@@ -2,13 +2,13 @@ import * as React from "react";
 
 import { useNavigate, useParams } from "react-router";
 
-import { ConversationSidebar } from "~/components/conversation/conversation-sidebar";
+import { ConversationSidebar } from "~/components/conversation-sidebar";
 import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
   ConversationScrollButton,
-} from "~/components/message/conversation";
+} from "~/components/extended/conversation";
 import {
   SidebarInset,
   SidebarProvider,
