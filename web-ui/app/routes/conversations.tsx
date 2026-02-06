@@ -2,8 +2,7 @@ import * as React from "react";
 
 import { useNavigate, useParams } from "react-router";
 
-import { Button } from "~/components/ui/button";
-import { ScrollArea } from "~/components/ui/scroll-area";
+import { ConversationSidebar } from "~/components/conversation/conversation-sidebar";
 import {
   Conversation,
   ConversationContent,
@@ -11,18 +10,8 @@ import {
   ConversationScrollButton,
 } from "~/components/message/conversation";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarHeader,
   SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarProvider,
-  SidebarSeparator,
   SidebarTrigger,
 } from "~/components/ui/sidebar";
 import { MessagePart } from "~/components/message";
@@ -46,6 +35,8 @@ export function meta() {
 export default function ConversationsPage() {
   const navigate = useNavigate();
   const { id: routeId } = useParams();
+  const settings = useSettingsStore((state) => state.settings);
+  const currentAssistantId = settings?.assistantId ?? null;
   const [conversations, setConversations] = React.useState<
     ConversationListDto[]
   >([]);
@@ -57,6 +48,7 @@ export default function ConversationsPage() {
   const [detail, setDetail] = React.useState<ConversationDto | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = React.useState(0);
 
   React.useEffect(() => {
     let active = true;
@@ -91,7 +83,7 @@ export default function ConversationsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [currentAssistantId, refreshToken]);
 
   React.useEffect(() => {
     if (!routeId) return;
@@ -145,73 +137,33 @@ export default function ConversationsPage() {
     [navigate, routeId],
   );
 
+  const handleAssistantChange = React.useCallback(
+    async (assistantId: string) => {
+      await api.post<{ status: string }>("settings/assistant", { assistantId });
+      setActiveId(null);
+      setDetail(null);
+      setDetailError(null);
+      if (routeId) {
+        navigate("/", { replace: true });
+      }
+      setRefreshToken((token) => token + 1);
+    },
+    [navigate, routeId],
+  );
+
   return (
     <SidebarProvider defaultOpen className="h-svh overflow-hidden">
-      <Sidebar collapsible="icon" variant="sidebar">
-        <SidebarHeader>
-          <div className="flex items-center justify-between px-1">
-            <div className="text-sm font-semibold">RikkaHub</div>
-            <Button size="icon" variant="ghost" className="md:hidden">
-              +
-            </Button>
-          </div>
-        </SidebarHeader>
-        <SidebarSeparator />
-        <SidebarContent className="min-h-0">
-          <SidebarGroup className="flex min-h-0 flex-1 flex-col">
-            <SidebarGroupLabel>Conversations</SidebarGroupLabel>
-            <ScrollArea className="min-h-0 flex-1">
-              <SidebarMenu>
-                {loading && (
-                  <SidebarMenuItem>
-                    <div className="px-2 py-2 text-xs text-muted-foreground">
-                      加载中...
-                    </div>
-                  </SidebarMenuItem>
-                )}
-                {error && (
-                  <SidebarMenuItem>
-                    <div className="px-2 py-2 text-xs text-destructive">
-                      {error}
-                    </div>
-                  </SidebarMenuItem>
-                )}
-                {!loading && !error && conversations.length === 0 && (
-                  <SidebarMenuItem>
-                    <div className="px-2 py-2 text-xs text-muted-foreground">
-                      暂无会话
-                    </div>
-                  </SidebarMenuItem>
-                )}
-                {conversations.map((item) => (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton
-                      isActive={item.id === activeId}
-                      onClick={() => handleSelect(item.id)}
-                    >
-                      <span className="flex w-full items-center gap-2">
-                        {item.isPinned && (
-                          <span className="text-xs text-muted-foreground">
-                            📌
-                          </span>
-                        )}
-                        <span className="flex-1 truncate">
-                          {item.title || "未命名会话"}
-                        </span>
-                      </span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </ScrollArea>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarFooter>
-          <Button variant="outline" size="sm" className="w-full">
-            新建会话
-          </Button>
-        </SidebarFooter>
-      </Sidebar>
+      <ConversationSidebar
+        conversations={conversations}
+        activeId={activeId}
+        loading={loading}
+        error={error}
+        assistants={settings?.assistants ?? []}
+        assistantTags={settings?.assistantTags ?? []}
+        currentAssistantId={currentAssistantId}
+        onSelect={handleSelect}
+        onAssistantChange={handleAssistantChange}
+      />
       <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <SidebarTrigger />
