@@ -147,8 +147,13 @@ function ChainOfThoughtStepContent({
   const rowClassName = cn(
     "flex w-full items-center gap-2 px-1 py-2 text-left",
     clickable &&
-      "hover:bg-muted/60 focus-visible:ring-ring/50 cursor-pointer rounded-md outline-none focus-visible:ring-[3px]",
+      "cursor-pointer outline-none",
     className
+  )
+
+  const stepClassName = cn(
+    "flex w-full gap-2 rounded-md",
+    clickable && "hover:bg-muted/60 focus-within:ring-ring/50 focus-within:ring-[3px]"
   )
 
   const iconContent = icon ? (
@@ -168,7 +173,7 @@ function ChainOfThoughtStepContent({
   ) : null
 
   return (
-    <div className="flex w-full gap-2">
+    <div className={stepClassName}>
       {/* Icon rail with per-step line segments */}
       <div
         className={cn(
