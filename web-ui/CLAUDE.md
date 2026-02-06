@@ -55,10 +55,16 @@ app/
 
 ### Key Concepts
 
-- **Type Alignment**: TypeScript types in `app/types/index.ts` are carefully aligned with Kotlin types from the Android app:
-  - `UIMessage`, `MessageNode`, `Conversation` match `ai/src/main/java/me/rerere/ai/ui/Message.kt`
-  - `MessageRole` matches `ai/src/main/java/me/rerere/ai/core/MessageRole.kt`
-  - DTOs (`ConversationDto`, `MessageDto`) match `app/src/main/java/me/rerere/rikkahub/web/dto/WebDto.kt`
+- **Type Alignment**: TypeScript types in `app/types/` are split into modules and aligned with Kotlin types from the Android app:
+  - `core.ts`: `MessageRole` → `ai/src/main/java/me/rerere/ai/core/MessageRole.kt`, `TokenUsage` → `ai/src/main/java/me/rerere/ai/core/Usage.kt`
+  - `parts.ts`: `UIMessagePart` (union of `TextPart`, `ImagePart`, `VideoPart`, `AudioPart`, `DocumentPart`, `ReasoningPart`, `ToolPart`), `ToolApprovalState` → `ai/src/main/java/me/rerere/ai/ui/Message.kt`
+  - `annotations.ts`: `UIMessageAnnotation` (`UrlCitationAnnotation`) → `ai/src/main/java/me/rerere/ai/ui/Message.kt`
+  - `message.ts`: `UIMessage` → `ai/src/main/java/me/rerere/ai/ui/Message.kt`
+  - `conversation.ts`: `MessageNode`, `Conversation` → `app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt`
+  - `dto.ts`: `ConversationDto`, `ConversationListDto`, `MessageDto`, `MessageNodeDto` → `app/src/main/java/me/rerere/rikkahub/web/dto/WebDto.kt`
+  - `settings.ts`: `DisplaySetting`, `Settings` → `app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt`, `AssistantProfile`, `AssistantTag`, `AssistantAvatar`
+  - `helpers.ts`: Utility functions (`getCurrentMessage`, `getCurrentMessages`, type guards like `isTextPart`, `isImagePart`, etc.)
+  - `index.ts`: Re-exports all modules
 
 - **Message Parts**: Messages are composed of typed parts (text, image, video, audio, document, reasoning, tool) that can be mixed in a single message. See `UIMessagePart` union type in `app/types/index.ts`.
 
