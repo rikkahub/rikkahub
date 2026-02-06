@@ -1,0 +1,201 @@
+import * as React from "react"
+import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react"
+
+import { Card } from "~/components/ui/card"
+import { cn } from "~/lib/utils"
+
+interface ChainOfThoughtProps<T> extends React.ComponentProps<typeof Card> {
+  steps: T[]
+  collapsedVisibleCount?: number
+  renderStep: (step: T, index: number) => React.ReactNode
+  collapseLabel?: React.ReactNode
+  showMoreLabel?: (hiddenCount: number) => React.ReactNode
+}
+
+interface ChainOfThoughtStepBaseProps {
+  icon?: React.ReactNode
+  label: React.ReactNode
+  extra?: React.ReactNode
+  onClick?: () => void
+  children?: React.ReactNode
+  contentVisible?: boolean
+  className?: string
+}
+
+interface ChainOfThoughtStepProps extends ChainOfThoughtStepBaseProps {
+  defaultExpanded?: boolean
+}
+
+interface ControlledChainOfThoughtStepProps extends ChainOfThoughtStepBaseProps {
+  expanded: boolean
+  onExpandedChange: (expanded: boolean) => void
+}
+
+function ChainOfThought<T>({
+  steps,
+  collapsedVisibleCount = 2,
+  renderStep,
+  collapseLabel = "Collapse",
+  showMoreLabel,
+  className,
+  ...props
+}: ChainOfThoughtProps<T>) {
+  const [expanded, setExpanded] = React.useState(false)
+  const canCollapse = steps.length > collapsedVisibleCount
+  const visibleSteps = expanded || !canCollapse ? steps : steps.slice(-collapsedVisibleCount)
+  const hiddenCount = Math.max(steps.length - collapsedVisibleCount, 0)
+
+  return (
+    <Card className={cn("gap-0 px-2 py-2", className)} {...props}>
+      {canCollapse && (
+        <button
+          type="button"
+          className="text-primary hover:bg-muted/60 focus-visible:ring-ring/50 mb-1 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-sm outline-none focus-visible:ring-[3px]"
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          <span className="flex w-6 items-center justify-center">
+            {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          </span>
+          <span>
+            {expanded
+              ? collapseLabel
+              : showMoreLabel?.(hiddenCount) ?? `Show ${hiddenCount} more steps`}
+          </span>
+        </button>
+      )}
+
+      <div className="relative">
+        <div className="bg-border/80 pointer-events-none absolute left-3 top-[18px] bottom-[18px] w-px" />
+        <div className="relative">
+          {visibleSteps.map((step, index) => (
+            <React.Fragment key={index}>{renderStep(step, index)}</React.Fragment>
+          ))}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function ChainOfThoughtStep({
+  defaultExpanded = false,
+  contentVisible,
+  ...props
+}: ChainOfThoughtStepProps) {
+  const [expanded, setExpanded] = React.useState(defaultExpanded)
+  return (
+    <ChainOfThoughtStepContent
+      {...props}
+      expanded={expanded}
+      onExpandedChange={setExpanded}
+      contentVisible={contentVisible ?? expanded}
+    />
+  )
+}
+
+function ControlledChainOfThoughtStep({
+  expanded,
+  onExpandedChange,
+  contentVisible,
+  ...props
+}: ControlledChainOfThoughtStepProps) {
+  return (
+    <ChainOfThoughtStepContent
+      {...props}
+      expanded={expanded}
+      onExpandedChange={onExpandedChange}
+      contentVisible={contentVisible ?? expanded}
+    />
+  )
+}
+
+interface ChainOfThoughtStepContentProps extends ChainOfThoughtStepBaseProps {
+  expanded: boolean
+  onExpandedChange: (expanded: boolean) => void
+  contentVisible: boolean
+}
+
+function ChainOfThoughtStepContent({
+  icon,
+  label,
+  extra,
+  onClick,
+  children,
+  expanded,
+  onExpandedChange,
+  contentVisible,
+  className,
+}: ChainOfThoughtStepContentProps) {
+  const hasContent = Boolean(children)
+  const clickable = Boolean(onClick || hasContent)
+
+  const handleActivate = () => {
+    if (onClick) {
+      onClick()
+      return
+    }
+    if (hasContent) {
+      onExpandedChange(!expanded)
+    }
+  }
+
+  const rowClassName = cn(
+    "flex w-full items-center gap-2 px-1 py-2",
+    clickable &&
+      "hover:bg-muted/60 focus-visible:ring-ring/50 cursor-pointer rounded-md outline-none focus-visible:ring-[3px]",
+    className
+  )
+
+  const iconContent = icon ? (
+    <div className="size-3.5">{icon}</div>
+  ) : (
+    <div className="bg-muted-foreground size-2 rounded-full" />
+  )
+
+  const indicator = onClick ? (
+    <ChevronRight className="text-muted-foreground size-4" />
+  ) : hasContent ? (
+    expanded ? (
+      <ChevronUp className="text-muted-foreground size-4" />
+    ) : (
+      <ChevronDown className="text-muted-foreground size-4" />
+    )
+  ) : null
+
+  return (
+    <div className="w-full">
+      {clickable ? (
+        <button type="button" className={rowClassName} onClick={handleActivate}>
+          <span className="flex w-6 shrink-0 items-center justify-center">
+            <span className="bg-card flex size-5 items-center justify-center">{iconContent}</span>
+          </span>
+          <span className="min-w-0 flex-1">{label}</span>
+          {extra}
+          {indicator}
+        </button>
+      ) : (
+        <div className={rowClassName}>
+          <span className="flex w-6 shrink-0 items-center justify-center">
+            <span className="bg-card flex size-5 items-center justify-center">{iconContent}</span>
+          </span>
+          <span className="min-w-0 flex-1">{label}</span>
+          {extra}
+          {indicator}
+        </div>
+      )}
+
+      {contentVisible && hasContent && <div className="px-1 pb-2 pl-8 pt-1">{children}</div>}
+    </div>
+  )
+}
+
+export {
+  ChainOfThought,
+  ChainOfThoughtStep,
+  ControlledChainOfThoughtStep,
+}
+
+export type {
+  ChainOfThoughtProps,
+  ChainOfThoughtStepProps,
+  ControlledChainOfThoughtStepProps,
+}
