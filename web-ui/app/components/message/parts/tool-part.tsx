@@ -22,6 +22,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "~/components/ui/drawer";
+import { useIsMobile } from "~/hooks/use-mobile";
 import type { TextPart as UITextPart, ToolPart as UIToolPart } from "~/types";
 
 import { ControlledChainOfThoughtStep } from "../chain-of-thought";
@@ -230,6 +231,7 @@ function ScrapeWebPreview({ content }: { content: unknown }) {
 }
 
 export function ToolPart({ tool, loading = false, onToolApproval, isFirst, isLast }: ToolPartProps) {
+  const isMobile = useIsMobile();
   const [expanded, setExpanded] = React.useState(true);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
 
@@ -364,7 +366,7 @@ export function ToolPart({ tool, loading = false, onToolApproval, isFirst, isLas
         )}
       </ControlledChainOfThoughtStep>
 
-      <Drawer direction="bottom" open={drawerOpen} onOpenChange={setDrawerOpen}>
+      <Drawer direction={isMobile ? "bottom" : "right"} open={drawerOpen} onOpenChange={setDrawerOpen}>
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>{title}</DrawerTitle>
