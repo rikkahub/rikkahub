@@ -131,7 +131,8 @@ private fun computeAIIconByName(name: String): String? {
         PATTERN_GROQ.containsMatchIn(lowerName) -> "groq.svg"
         PATTERN_TOKENPONY.containsMatchIn(lowerName) -> "tokenpony.svg"
         PATTERN_LING.containsMatchIn(lowerName) -> "ling.png"
-        PATTERN_MIMO.containsMatchIn(lowerName) -> "mimo.jpeg"
+        PATTERN_MIMO.containsMatchIn(lowerName) -> "xiaomimimo.svg"
+        PATTERN_LONGCAT.containsMatchIn(lowerName) -> "longcat-color.svg"
         PATTERN_RIKKAHUB.containsMatchIn(lowerName) -> "rikkahub.svg"
 
         PATTERN_SEARCH_LINKUP.containsMatchIn(lowerName) -> "linkup.png"
@@ -196,6 +197,7 @@ private val PATTERN_GROQ = Regex("groq")
 private val PATTERN_TOKENPONY = Regex("tokenpony|小马算力")
 private val PATTERN_LING = Regex("ling|ring|百灵")
 private val PATTERN_MIMO = Regex("mimo|xiaomi|小米")
+private val PATTERN_LONGCAT = Regex("longcat")
 
 private val PATTERN_SEARCH_LINKUP = Regex("linkup")
 private val PATTERN_SEARCH_BING = Regex("bing")
