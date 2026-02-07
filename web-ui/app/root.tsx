@@ -47,7 +47,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 function AppContent() {
   useSettingsSubscription();
   return (
-    <ThemeProvider>
+    <ThemeProvider defaultTheme="system">
       <Outlet />
       <Toaster />
     </ThemeProvider>
