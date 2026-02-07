@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 
-import { ModelList } from "~/components/message/model-list";
+import { ModelList } from "~/components/model-list";
 import { useSettingsStore } from "~/stores";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
@@ -340,8 +340,6 @@ export function ChatInput({
           />
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1">
-              <ModelList disabled={!canSwitchModel} className="max-w-[180px]" />
-
               <div className="relative" ref={uploadMenuRef}>
                 <input
                   ref={fileInputRef}
@@ -398,6 +396,7 @@ export function ChatInput({
                   </div>
                 ) : null}
               </div>
+              <ModelList disabled={!canSwitchModel} className="max-w-[180px]" />
             </div>
             <Button
               onClick={() => {

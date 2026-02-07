@@ -195,7 +195,7 @@ export function ModelList({
           <DialogDescription>切换当前助手使用的聊天模型</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 px-4 pb-4">
+        <div className="space-y-3 px-4 py-4">
           <div className="relative">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
             <Input
