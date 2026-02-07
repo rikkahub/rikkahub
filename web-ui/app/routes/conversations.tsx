@@ -21,8 +21,9 @@ import {
   toConversationSummaryUpdate,
   useConversationList,
 } from "~/hooks/use-conversation-list";
+import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import api, { sse } from "~/services/api";
-import { useChatInputStore, useSettingsStore } from "~/stores";
+import { useChatInputStore } from "~/stores";
 import {
   type ConversationDto,
   type MessageNodeDto,
@@ -537,8 +538,11 @@ export default function ConversationsPage() {
   const { id: routeId } = useParams();
   const isHomeRoute = !routeId;
 
-  const settings = useSettingsStore((state) => state.settings);
-  const currentAssistantId = settings?.assistantId ?? null;
+  const {
+    settings,
+    assistants,
+    currentAssistantId,
+  } = useCurrentAssistant();
   const {
     conversations,
     activeId,
@@ -711,7 +715,7 @@ export default function ConversationsPage() {
         error={error}
         hasMore={hasMore}
         loadMore={loadMore}
-        assistants={settings?.assistants ?? []}
+        assistants={assistants}
         assistantTags={settings?.assistantTags ?? []}
         currentAssistantId={currentAssistantId}
         onSelect={handleSelect}

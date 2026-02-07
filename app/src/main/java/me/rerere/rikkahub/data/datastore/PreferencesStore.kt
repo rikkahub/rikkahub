@@ -334,6 +334,20 @@ class SettingsStore(
             preferences[SELECT_ASSISTANT] = assistantId.toString()
         }
     }
+
+    suspend fun updateAssistantModel(assistantId: Uuid, modelId: Uuid) {
+        update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map { assistant ->
+                    if (assistant.id == assistantId) {
+                        assistant.copy(chatModelId = modelId)
+                    } else {
+                        assistant
+                    }
+                }
+            )
+        }
+    }
 }
 
 @Serializable

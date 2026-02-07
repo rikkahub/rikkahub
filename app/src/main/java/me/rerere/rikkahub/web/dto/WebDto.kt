@@ -42,6 +42,12 @@ data class UpdateAssistantRequest(
     val assistantId: String
 )
 
+@Serializable
+data class UpdateAssistantModelRequest(
+    val assistantId: String,
+    val modelId: String,
+)
+
 // ========== Response DTOs ==========
 
 @Serializable

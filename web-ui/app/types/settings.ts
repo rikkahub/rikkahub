@@ -31,9 +31,33 @@ export interface AssistantAvatar {
 
 export interface AssistantProfile {
   id: string;
+  chatModelId?: string | null;
   name: string;
   avatar?: AssistantAvatar;
   tags: string[];
+  [key: string]: unknown;
+}
+
+export type ModelType = "CHAT" | "IMAGE" | "EMBEDDING";
+export type ModelModality = "TEXT" | "IMAGE";
+export type ModelAbility = "TOOL" | "REASONING";
+
+export interface ProviderModel {
+  id: string;
+  modelId: string;
+  displayName: string;
+  type: ModelType;
+  inputModalities?: ModelModality[];
+  outputModalities?: ModelModality[];
+  abilities?: ModelAbility[];
+  [key: string]: unknown;
+}
+
+export interface ProviderProfile {
+  id: string;
+  enabled: boolean;
+  name: string;
+  models: ProviderModel[];
   [key: string]: unknown;
 }
 
@@ -49,7 +73,7 @@ export interface Settings {
   enableWebSearch: boolean;
   chatModelId: string;
   assistantId: string;
-  providers: unknown[];
+  providers: ProviderProfile[];
   assistants: AssistantProfile[];
   assistantTags: AssistantTag[];
   [key: string]: unknown;
