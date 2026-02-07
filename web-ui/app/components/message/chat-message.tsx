@@ -1,19 +1,32 @@
 import * as React from "react";
 
-import { ArrowDown, ArrowUp, Clock3, Copy, RefreshCw, Zap } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Copy,
+  Pencil,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
 
 import { useSettingsStore } from "~/stores";
-import type { MessageDto, TokenUsage, UIMessagePart } from "~/types";
+import type { MessageDto, MessageNodeDto, TokenUsage, UIMessagePart } from "~/types";
 
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { MessageParts } from "./message-part";
 
 interface ChatMessageProps {
+  node: MessageNodeDto;
   message: MessageDto;
   loading?: boolean;
   isLastMessage?: boolean;
+  onEdit?: (message: MessageDto) => void | Promise<void>;
   onRegenerate?: (messageId: string) => void | Promise<void>;
+  onSelectBranch?: (nodeId: string, selectIndex: number) => void | Promise<void>;
   onToolApproval?: (
     toolCallId: string,
     approved: boolean,
@@ -63,6 +76,17 @@ function buildCopyText(parts: UIMessagePart[]): string {
     .filter((value): value is string => Boolean(value && value.trim().length > 0))
     .join("\n\n")
     .trim();
+}
+
+function hasEditableContent(parts: UIMessagePart[]): boolean {
+  return parts.some(
+    (part) =>
+      part.type === "text" ||
+      part.type === "image" ||
+      part.type === "video" ||
+      part.type === "audio" ||
+      part.type === "document",
+  );
 }
 
 function formatNumber(value: number): string {
@@ -119,17 +143,24 @@ function getNerdStats(usage: TokenUsage, createdAt: string, finishedAt?: string 
 }
 
 function ChatMessageActionsRow({
+  node,
   message,
   loading,
   alignRight,
+  onEdit,
   onRegenerate,
+  onSelectBranch,
 }: {
+  node: MessageNodeDto;
   message: MessageDto;
   loading: boolean;
   alignRight: boolean;
+  onEdit?: (message: MessageDto) => void | Promise<void>;
   onRegenerate?: (messageId: string) => void | Promise<void>;
+  onSelectBranch?: (nodeId: string, selectIndex: number) => void | Promise<void>;
 }) {
   const [regenerating, setRegenerating] = React.useState(false);
+  const [switchingBranch, setSwitchingBranch] = React.useState(false);
 
   const handleCopy = React.useCallback(async () => {
     const text = buildCopyText(message.parts);
@@ -153,6 +184,26 @@ function ChatMessageActionsRow({
     }
   }, [message.id, message.role, onRegenerate]);
 
+  const handleSwitchBranch = React.useCallback(
+    async (selectIndex: number) => {
+      if (!onSelectBranch) return;
+      if (selectIndex < 0 || selectIndex > node.messages.length - 1) return;
+      if (selectIndex === node.selectIndex) return;
+
+      setSwitchingBranch(true);
+      try {
+        await onSelectBranch(node.id, selectIndex);
+      } finally {
+        setSwitchingBranch(false);
+      }
+    },
+    [node.id, node.messages.length, node.selectIndex, onSelectBranch],
+  );
+
+  const canSwitchBranch = Boolean(onSelectBranch) && node.messages.length > 1;
+  const canEdit = Boolean(onEdit) && (message.role === "USER" || message.role === "ASSISTANT") && hasEditableContent(message.parts);
+  const selectDisabled = loading || switchingBranch || regenerating;
+
   return (
     <div
       className={cn(
@@ -173,6 +224,22 @@ function ChatMessageActionsRow({
         <Copy className="size-3.5" />
       </Button>
 
+      {canEdit && (
+        <Button
+          aria-label="编辑消息"
+          disabled={loading || regenerating || switchingBranch}
+          onClick={() => {
+            void onEdit?.(message);
+          }}
+          size="icon-xs"
+          title="编辑"
+          type="button"
+          variant="ghost"
+        >
+          <Pencil className="size-3.5" />
+        </Button>
+      )}
+
       {onRegenerate && (
         <Button
           aria-label="重新生成"
@@ -187,6 +254,40 @@ function ChatMessageActionsRow({
         >
           <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
         </Button>
+      )}
+
+      {canSwitchBranch && (
+        <>
+          <Button
+            aria-label="上一分支"
+            disabled={selectDisabled || node.selectIndex <= 0}
+            onClick={() => {
+              void handleSwitchBranch(node.selectIndex - 1);
+            }}
+            size="icon-xs"
+            title="上一分支"
+            type="button"
+            variant="ghost"
+          >
+            <ChevronLeft className="size-3.5" />
+          </Button>
+          <span className="text-[11px] text-muted-foreground">
+            {node.selectIndex + 1}/{node.messages.length}
+          </span>
+          <Button
+            aria-label="下一分支"
+            disabled={selectDisabled || node.selectIndex >= node.messages.length - 1}
+            onClick={() => {
+              void handleSwitchBranch(node.selectIndex + 1);
+            }}
+            size="icon-xs"
+            title="下一分支"
+            type="button"
+            variant="ghost"
+          >
+            <ChevronRight className="size-3.5" />
+          </Button>
+        </>
       )}
     </div>
   );
@@ -226,10 +327,13 @@ function ChatMessageNerdLineRow({
 }
 
 export function ChatMessage({
+  node,
   message,
   loading = false,
   isLastMessage = false,
+  onEdit,
   onRegenerate,
+  onSelectBranch,
   onToolApproval,
 }: ChatMessageProps) {
   const isUser = message.role === "USER";
@@ -255,10 +359,13 @@ export function ChatMessage({
 
       {showActions && (
         <ChatMessageActionsRow
+          node={node}
           message={message}
           loading={loading}
           alignRight={isUser}
+          onEdit={onEdit}
           onRegenerate={onRegenerate}
+          onSelectBranch={onSelectBranch}
         />
       )}
 
@@ -266,4 +373,3 @@ export function ChatMessage({
     </div>
   );
 }
-

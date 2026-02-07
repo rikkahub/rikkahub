@@ -25,10 +25,11 @@ import api, { sse } from "~/services/api";
 import { useChatInputStore, useSettingsStore } from "~/stores";
 import {
   type ConversationDto,
+  type MessageNodeDto,
+  type MessageDto,
   type ConversationNodeUpdateEventDto,
   type ConversationSnapshotEventDto,
   type UIMessagePart,
-  getCurrentMessageDto,
 } from "~/types";
 import { MessageSquare } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
@@ -37,11 +38,164 @@ type ConversationStreamEvent =
   | ConversationSnapshotEventDto
   | ConversationNodeUpdateEventDto;
 
-type SelectedMessage = ReturnType<typeof getCurrentMessageDto>;
+interface SelectedNodeMessage {
+  node: MessageNodeDto;
+  message: MessageNodeDto["messages"][number];
+}
 type ConversationSummaryUpdater = (update: ReturnType<typeof toConversationSummaryUpdate>) => void;
+
+const EDIT_DRAFT_ATTACHMENT_MARK = "__from_message_attachment";
+const EDIT_DRAFT_SOURCE_INDEX = "__from_message_source_index";
+
+interface EditDraft {
+  text: string;
+  attachments: UIMessagePart[];
+  sourceParts: UIMessagePart[];
+  textPartIndex: number | null;
+}
+
+interface EditingSession {
+  messageId: string;
+  sourceParts: UIMessagePart[];
+  textPartIndex: number | null;
+}
 
 function createHomeDraftId() {
   return `home-${uuidv4()}`;
+}
+
+function isAttachmentPart(part: UIMessagePart): part is Extract<UIMessagePart, { type: "image" | "video" | "audio" | "document" }> {
+  return (
+    part.type === "image" ||
+    part.type === "video" ||
+    part.type === "audio" ||
+    part.type === "document"
+  );
+}
+
+function getLastTextPartIndex(parts: UIMessagePart[]): number | null {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    if (parts[index]?.type === "text") {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function getDraftSourceIndex(part: UIMessagePart): number | null {
+  const value = part.metadata?.[EDIT_DRAFT_SOURCE_INDEX];
+  return typeof value === "number" ? value : null;
+}
+
+function toEditDraft(message: MessageDto): EditDraft | null {
+  const textPartIndex = getLastTextPartIndex(message.parts);
+  const text =
+    textPartIndex !== null && message.parts[textPartIndex]?.type === "text"
+      ? message.parts[textPartIndex].text
+      : "";
+
+  const attachments = message.parts.flatMap((part, index) => {
+    if (!isAttachmentPart(part)) return [];
+
+    return [{
+      ...part,
+      metadata: {
+        ...(part.metadata ?? {}),
+        [EDIT_DRAFT_ATTACHMENT_MARK]: true,
+        [EDIT_DRAFT_SOURCE_INDEX]: index,
+      },
+    }];
+  });
+
+  if (text.trim().length === 0 && attachments.length === 0) {
+    return null;
+  }
+
+  return {
+    text,
+    attachments,
+    sourceParts: message.parts,
+    textPartIndex,
+  };
+}
+
+function shouldDeleteAttachmentFileOnRemove(part: UIMessagePart): boolean {
+  if (!part.metadata) return true;
+
+  return part.metadata[EDIT_DRAFT_ATTACHMENT_MARK] !== true;
+}
+
+function stripEditDraftMetadata(parts: UIMessagePart[]): UIMessagePart[] {
+  return parts.map((part) => {
+    if (!part.metadata) {
+      return part;
+    }
+
+    const hasEditMark =
+      EDIT_DRAFT_ATTACHMENT_MARK in part.metadata ||
+      EDIT_DRAFT_SOURCE_INDEX in part.metadata;
+    if (!hasEditMark) {
+      return part;
+    }
+
+    const nextMetadata = { ...part.metadata };
+    delete nextMetadata[EDIT_DRAFT_ATTACHMENT_MARK];
+    delete nextMetadata[EDIT_DRAFT_SOURCE_INDEX];
+
+    return {
+      ...part,
+      metadata: Object.keys(nextMetadata).length > 0 ? nextMetadata : undefined,
+    };
+  });
+}
+
+function buildEditedParts(session: EditingSession, draftParts: UIMessagePart[]): UIMessagePart[] {
+  const textPart = draftParts.find(
+    (part): part is Extract<UIMessagePart, { type: "text" }> => part.type === "text",
+  );
+  const editedText = textPart?.text ?? "";
+
+  const retainedAttachmentIndexes = new Set<number>();
+  const appendedAttachments: UIMessagePart[] = [];
+
+  draftParts.forEach((part) => {
+    if (!isAttachmentPart(part)) return;
+
+    if (part.metadata?.[EDIT_DRAFT_ATTACHMENT_MARK] === true) {
+      const sourceIndex = getDraftSourceIndex(part);
+      if (sourceIndex !== null) {
+        retainedAttachmentIndexes.add(sourceIndex);
+      }
+      return;
+    }
+
+    appendedAttachments.push(part);
+  });
+
+  const preservedParts: UIMessagePart[] = [];
+
+  session.sourceParts.forEach((part, index) => {
+    if (session.textPartIndex !== null && index === session.textPartIndex && part.type === "text") {
+      preservedParts.push({ ...part, text: editedText });
+      return;
+    }
+
+    if (isAttachmentPart(part)) {
+      if (retainedAttachmentIndexes.has(index)) {
+        preservedParts.push(part);
+      }
+      return;
+    }
+
+    preservedParts.push(part);
+  });
+
+  if (session.textPartIndex === null && textPart && textPart.text.trim().length > 0) {
+    return [textPart, ...preservedParts, ...appendedAttachments];
+  }
+
+  return [...preservedParts, ...appendedAttachments];
 }
 
 function applyNodeUpdate(
@@ -156,16 +310,19 @@ function useConversationDetail(activeId: string | null, updateSummary: Conversat
     };
   }, [activeId, resetDetail, updateSummary]);
 
-  const selectedMessages = React.useMemo<SelectedMessage[]>(() => {
+  const selectedNodeMessages = React.useMemo<SelectedNodeMessage[]>(() => {
     if (!detail) return [];
-    return detail.messages.map(getCurrentMessageDto);
+    return detail.messages.map((node) => ({
+      node,
+      message: node.messages[node.selectIndex] ?? node.messages[0],
+    }));
   }, [detail]);
 
   return {
     detail,
     detailLoading,
     detailError,
-    selectedMessages,
+    selectedNodeMessages,
     resetDetail,
   };
 }
@@ -247,6 +404,26 @@ function useDraftInputController({
     refreshList();
   }, [activeId, clearDraft, draftKey, getSubmitParts, navigate, refreshList, setHomeDraftId]);
 
+  const replaceDraft = React.useCallback(
+    (text: string, parts: UIMessagePart[]) => {
+      if (!draftKey) return;
+      clearDraft(draftKey);
+      setDraftText(draftKey, text);
+      addDraftParts(draftKey, parts);
+    },
+    [addDraftParts, clearDraft, draftKey, setDraftText],
+  );
+
+  const clearCurrentDraft = React.useCallback(() => {
+    if (!draftKey) return;
+    clearDraft(draftKey);
+  }, [clearDraft, draftKey]);
+
+  const getCurrentSubmitParts = React.useCallback(() => {
+    if (!draftKey) return [];
+    return getSubmitParts(draftKey);
+  }, [draftKey, getSubmitParts]);
+
   return {
     draftKey,
     inputText,
@@ -255,6 +432,9 @@ function useDraftInputController({
     handleAddInputParts,
     handleRemoveInputPart,
     handleSubmit,
+    replaceDraft,
+    clearCurrentDraft,
+    getCurrentSubmitParts,
   };
 }
 
@@ -263,18 +443,22 @@ function ConversationTimeline({
   isHomeRoute,
   detailLoading,
   detailError,
-  selectedMessages,
+  selectedNodeMessages,
   isGenerating,
+  onEdit,
   onRegenerate,
+  onSelectBranch,
   onToolApproval,
 }: {
   activeId: string | null;
   isHomeRoute: boolean;
   detailLoading: boolean;
   detailError: string | null;
-  selectedMessages: SelectedMessage[];
+  selectedNodeMessages: SelectedNodeMessage[];
   isGenerating: boolean;
+  onEdit: (message: MessageDto) => void | Promise<void>;
   onRegenerate: (messageId: string) => Promise<void>;
+  onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
   onToolApproval: (toolCallId: string, approved: boolean, reason: string) => Promise<void>;
 }) {
   return (
@@ -306,7 +490,7 @@ function ConversationTimeline({
             description={detailError}
           />
         )}
-        {!detailLoading && !detailError && activeId && selectedMessages.length === 0 && (
+        {!detailLoading && !detailError && activeId && selectedNodeMessages.length === 0 && (
           <ConversationEmptyState
             icon={<MessageSquare className="size-10" />}
             title="暂无消息"
@@ -316,13 +500,16 @@ function ConversationTimeline({
         {!detailLoading &&
           !detailError &&
           activeId &&
-          selectedMessages.map((message, index) => (
+          selectedNodeMessages.map(({ node, message }, index) => (
             <ChatMessage
               key={message.id}
+              node={node}
               message={message}
-              loading={isGenerating && index === selectedMessages.length - 1}
-              isLastMessage={index === selectedMessages.length - 1}
+              loading={isGenerating && index === selectedNodeMessages.length - 1}
+              isLastMessage={index === selectedNodeMessages.length - 1}
+              onEdit={onEdit}
               onRegenerate={onRegenerate}
+              onSelectBranch={onSelectBranch}
               onToolApproval={onToolApproval}
             />
           ))}
@@ -365,12 +552,13 @@ export default function ConversationsPage() {
   } = useConversationList({ currentAssistantId, routeId, autoSelectFirst: !isHomeRoute });
 
   const [homeDraftId, setHomeDraftId] = React.useState(() => createHomeDraftId());
+  const [editingSession, setEditingSession] = React.useState<EditingSession | null>(null);
 
   const {
     detail,
     detailLoading,
     detailError,
-    selectedMessages,
+    selectedNodeMessages,
     resetDetail,
   } = useConversationDetail(activeId, updateConversationSummary);
 
@@ -382,6 +570,9 @@ export default function ConversationsPage() {
     handleAddInputParts,
     handleRemoveInputPart,
     handleSubmit,
+    replaceDraft,
+    clearCurrentDraft,
+    getCurrentSubmitParts,
   } = useDraftInputController({
     activeId,
     isHomeRoute,
@@ -402,6 +593,10 @@ export default function ConversationsPage() {
     },
     [navigate, routeId, setActiveId],
   );
+
+  React.useEffect(() => {
+    setEditingSession(null);
+  }, [activeId]);
 
   const handleAssistantChange = React.useCallback(
     async (assistantId: string) => {
@@ -437,6 +632,60 @@ export default function ConversationsPage() {
     },
     [activeId],
   );
+
+  const handleSelectBranch = React.useCallback(
+    async (nodeId: string, selectIndex: number) => {
+      if (!activeId) return;
+      await api.post<{ status: string }>(`conversations/${activeId}/nodes/${nodeId}/select`, {
+        selectIndex,
+      });
+    },
+    [activeId],
+  );
+
+  const handleStartEdit = React.useCallback(
+    (message: MessageDto) => {
+      if (!activeId || (message.role !== "USER" && message.role !== "ASSISTANT")) return;
+
+      const draft = toEditDraft(message);
+      if (!draft) return;
+
+      setEditingSession({
+        messageId: message.id,
+        sourceParts: draft.sourceParts,
+        textPartIndex: draft.textPartIndex,
+      });
+      replaceDraft(draft.text, draft.attachments);
+    },
+    [activeId, replaceDraft],
+  );
+
+  const handleCancelEdit = React.useCallback(() => {
+    setEditingSession(null);
+    clearCurrentDraft();
+  }, [clearCurrentDraft]);
+
+  const handleSend = React.useCallback(async () => {
+    if (!editingSession) {
+      await handleSubmit();
+      return;
+    }
+
+    if (!activeId) return;
+
+    const draftParts = getCurrentSubmitParts();
+    if (draftParts.length === 0) return;
+
+    const nextParts = buildEditedParts(editingSession, draftParts);
+
+    await api.post<{ status: string }>(
+      `conversations/${activeId}/messages/${editingSession.messageId}/edit`,
+      { parts: stripEditDraftMetadata(nextParts) },
+    );
+
+    setEditingSession(null);
+    clearCurrentDraft();
+  }, [activeId, clearCurrentDraft, editingSession, getCurrentSubmitParts, handleSubmit]);
 
   const handleCreateConversation = React.useCallback(() => {
     setActiveId(null);
@@ -482,9 +731,11 @@ export default function ConversationsPage() {
           isHomeRoute={isHomeRoute}
           detailLoading={detailLoading}
           detailError={detailError}
-          selectedMessages={selectedMessages}
+          selectedNodeMessages={selectedNodeMessages}
           isGenerating={detail?.isGenerating ?? false}
+          onEdit={handleStartEdit}
           onRegenerate={handleRegenerate}
+          onSelectBranch={handleSelectBranch}
           onToolApproval={handleToolApproval}
         />
 
@@ -496,10 +747,13 @@ export default function ConversationsPage() {
           disabled={detailLoading || Boolean(detailError)}
           onValueChange={handleInputTextChange}
           onAddParts={handleAddInputParts}
+          isEditing={Boolean(editingSession)}
+          onCancelEdit={editingSession ? handleCancelEdit : undefined}
+          shouldDeleteFileOnRemove={shouldDeleteAttachmentFileOnRemove}
           onRemovePart={(index) => {
             handleRemoveInputPart(index);
           }}
-          onSend={handleSubmit}
+          onSend={handleSend}
           onStop={activeId ? handleStop : undefined}
         />
       </SidebarInset>

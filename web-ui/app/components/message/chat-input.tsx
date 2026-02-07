@@ -26,11 +26,14 @@ export interface ChatInputProps {
   ready?: boolean;
   disabled?: boolean;
   isGenerating?: boolean;
+  isEditing?: boolean;
   onValueChange: (value: string) => void;
   onAddParts: (parts: UIMessagePart[]) => void;
+  shouldDeleteFileOnRemove?: (part: UIMessagePart) => boolean;
   onRemovePart: (index: number, part: UIMessagePart) => Promise<void> | void;
   onSend: () => Promise<void> | void;
   onStop?: () => Promise<void> | void;
+  onCancelEdit?: () => void;
   className?: string;
 }
 
@@ -109,11 +112,14 @@ export function ChatInput({
   ready = true,
   disabled = false,
   isGenerating = false,
+  isEditing = false,
   onValueChange,
   onAddParts,
+  shouldDeleteFileOnRemove,
   onRemovePart,
   onSend,
   onStop,
+  onCancelEdit,
   className,
 }: ChatInputProps) {
   const sendOnEnter = useSettingsStore((state) => state.settings?.displaySetting.sendOnEnter ?? true);
@@ -258,6 +264,22 @@ export function ChatInput({
     >
       <div className="mx-auto w-full max-w-3xl px-4 py-4">
         <div className="relative flex flex-col gap-2 rounded-2xl border bg-muted/50 p-2 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring">
+          {isEditing ? (
+            <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+              <span className="text-primary">正在编辑消息，发送后会创建新分支</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={onCancelEdit}
+                disabled={submitting || uploading}
+              >
+                取消编辑
+              </Button>
+            </div>
+          ) : null}
+
           {attachments.length > 0 ? (
             <div className="flex flex-wrap gap-2 px-2 pt-1">
               {attachments.map((part, index) => {
@@ -283,7 +305,7 @@ export function ChatInput({
                         if (!ready || disabled || isGenerating || submitting) return;
 
                         const fileId = getPartFileId(part);
-                        if (fileId != null) {
+                        if (fileId != null && (shouldDeleteFileOnRemove?.(part) ?? true)) {
                           try {
                             await api.delete<{ status: string }>(`files/${fileId}`);
                           } catch (deleteError) {
