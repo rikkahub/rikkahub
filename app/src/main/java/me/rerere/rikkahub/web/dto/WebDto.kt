@@ -53,6 +53,20 @@ data class PagedResult<T>(
 )
 
 @Serializable
+data class UploadedFileDto(
+    val id: Long,
+    val url: String,
+    val fileName: String,
+    val mime: String,
+    val size: Long
+)
+
+@Serializable
+data class UploadFilesResponseDto(
+    val files: List<UploadedFileDto>
+)
+
+@Serializable
 data class ConversationDto(
     val id: String,
     val assistantId: String,

@@ -17,6 +17,19 @@ export interface PagedResult<T> {
   hasMore: boolean;
 }
 
+
+export interface UploadedFileDto {
+  id: number;
+  url: string;
+  fileName: string;
+  mime: string;
+  size: number;
+}
+
+export interface UploadFilesResponseDto {
+  files: UploadedFileDto[];
+}
+
 export interface ConversationListInvalidateEventDto {
   type: "invalidate";
   assistantId: string;

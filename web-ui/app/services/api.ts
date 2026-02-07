@@ -18,9 +18,6 @@ export class ApiError extends Error {
 const kyInstance = ky.create({
   prefixUrl: "/api",
   timeout: 30000,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
 async function handleError(error: unknown): Promise<never> {
@@ -53,6 +50,13 @@ const api = {
   async post<T>(url: string, data?: unknown, options?: Options): Promise<T> {
     try {
       return await kyInstance.post(url, { ...options, json: data }).json<T>();
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+  async postMultipart<T>(url: string, formData: FormData, options?: Options): Promise<T> {
+    try {
+      return await kyInstance.post(url, { ...options, body: formData }).json<T>();
     } catch (error) {
       return handleError(error);
     }
