@@ -1,9 +1,8 @@
 import * as React from "react";
 
-import { Check, Drama } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { InfiniteScrollArea } from "~/components/extended/infinite-scroll-area";
-import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -26,6 +25,7 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "~/components/ui/sidebar";
+import { UIAvatar } from "~/components/ui/ui-avatar";
 import type { AssistantProfile, AssistantTag, ConversationListDto } from "~/types";
 
 export interface ConversationSidebarProps {
@@ -41,15 +41,6 @@ export interface ConversationSidebarProps {
   onSelect: (id: string) => void;
   onAssistantChange: (assistantId: string) => Promise<void>;
   onCreateConversation?: () => void;
-}
-
-function getAvatarContent(assistant: AssistantProfile) {
-  const avatar = assistant.avatar;
-  if (avatar?.content && avatar.content.length > 0) {
-    return avatar.content;
-  }
-
-  return getAssistantDisplayName(assistant).slice(0, 1).toUpperCase();
 }
 
 function getAssistantDisplayName(assistant: AssistantProfile) {
@@ -189,10 +180,19 @@ export function ConversationSidebar({
         >
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full justify-start gap-2" type="button">
-              <Drama className="size-4" />
-              <span className="truncate">
-                {currentAssistant ? getAssistantDisplayName(currentAssistant) : "选择助手"}
-              </span>
+              {currentAssistant ? (
+                <>
+                  <UIAvatar
+                    key={currentAssistant.id}
+                    size="sm"
+                    name={getAssistantDisplayName(currentAssistant)}
+                    avatar={currentAssistant.avatar}
+                  />
+                  <span className="truncate">{getAssistantDisplayName(currentAssistant)}</span>
+                </>
+              ) : (
+                <span className="truncate">选择助手</span>
+              )}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[80svh] max-w-xl overflow-hidden p-0">
@@ -230,6 +230,7 @@ export function ConversationSidebar({
                   {filteredAssistants.map((assistant) => {
                     const selected = assistant.id === currentAssistantId;
                     const switching = switchingAssistantId === assistant.id;
+                    const displayName = getAssistantDisplayName(assistant);
                     return (
                       <button
                         key={assistant.id}
@@ -238,12 +239,8 @@ export function ConversationSidebar({
                         onClick={() => void handleAssistantSelect(assistant.id)}
                         disabled={switchingAssistantId !== null}
                       >
-                        <Avatar size="sm">
-                          <AvatarFallback>{getAvatarContent(assistant)}</AvatarFallback>
-                        </Avatar>
-                        <span className="min-w-0 flex-1 truncate text-sm">
-                          {getAssistantDisplayName(assistant)}
-                        </span>
+                        <UIAvatar size="sm" name={displayName} avatar={assistant.avatar} />
+                        <span className="min-w-0 flex-1 truncate text-sm">{displayName}</span>
                         {selected && !switching && (
                           <Badge variant="secondary" className="gap-1">
                             <Check className="size-3" />
