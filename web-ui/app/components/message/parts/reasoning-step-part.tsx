@@ -111,12 +111,9 @@ export function ReasoningStepPart({
     >
       <div
         ref={contentRef}
-        className={preview ? "relative max-h-24 overflow-y-auto" : undefined}
+        className={preview ? "styled-scrollbar relative max-h-24 overflow-y-auto" : undefined}
       >
         <Markdown content={reasoning.reasoning} className="text-sm" />
-        {preview && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-card to-transparent" />
-        )}
       </div>
     </ControlledChainOfThoughtStep>
   );
