@@ -4,6 +4,7 @@
  */
 export interface DisplaySetting {
   userNickname: string;
+  userAvatar?: AssistantAvatar;
   showUserAvatar: boolean;
   showModelName: boolean;
   showTokenUsage: boolean;

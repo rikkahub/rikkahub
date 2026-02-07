@@ -715,6 +715,8 @@ export default function ConversationsPage() {
         error={error}
         hasMore={hasMore}
         loadMore={loadMore}
+        userName={settings?.displaySetting.userNickname?.trim() || "用户"}
+        userAvatar={settings?.displaySetting.userAvatar}
         assistants={assistants}
         assistantTags={settings?.assistantTags ?? []}
         currentAssistantId={currentAssistantId}

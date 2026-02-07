@@ -34,7 +34,7 @@ import {
 } from "~/components/ui/sidebar";
 import { UIAvatar } from "~/components/ui/ui-avatar";
 import { useTheme, type Theme } from "~/components/theme-provider";
-import type { AssistantProfile, AssistantTag, ConversationListDto } from "~/types";
+import type { AssistantAvatar, AssistantProfile, AssistantTag, ConversationListDto } from "~/types";
 
 const THEME_OPTIONS: Array<{
   value: Theme;
@@ -65,6 +65,8 @@ export interface ConversationSidebarProps {
   error: string | null;
   hasMore: boolean;
   loadMore: () => void;
+  userName: string;
+  userAvatar?: AssistantAvatar | null;
   assistants: AssistantProfile[];
   assistantTags: AssistantTag[];
   currentAssistantId: string | null;
@@ -89,6 +91,8 @@ export function ConversationSidebar({
   error,
   hasMore,
   loadMore,
+  userName,
+  userAvatar,
   assistants,
   assistantTags,
   currentAssistantId,
@@ -155,20 +159,29 @@ export function ConversationSidebar({
   return (
     <Sidebar collapsible="offcanvas" variant="sidebar">
       <SidebarHeader>
-        <div className="flex items-center justify-between px-1">
-          <div className="text-sm font-semibold">RikkaHub</div>
-          <Button size="icon" variant="ghost" className="md:hidden">
-            +
+        <div className="flex items-center justify-end px-1">
+          <Button size="icon" variant="ghost" className="md:hidden" onClick={onCreateConversation}>
+            <Plus className="size-4" />
           </Button>
         </div>
+
+        <div className="flex items-center gap-3 rounded-lg px-2.5 py-2.5">
+          <UIAvatar size="default" name={userName} avatar={userAvatar} className="ring-1 ring-sidebar-border/70" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium leading-none">{userName}</div>
+            <div className="mt-1 truncate text-xs text-muted-foreground">欢迎回来</div>
+          </div>
+        </div>
       </SidebarHeader>
-      <SidebarSeparator />
       <SidebarContent className="min-h-0">
-        <SidebarGroup className="flex min-h-0 flex-1 flex-col">
+        <SidebarGroup>
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onCreateConversation}>
             <Plus className="size-4" />
             新建对话
           </Button>
+        </SidebarGroup>
+
+        <SidebarGroup className="flex min-h-0 flex-1 flex-col">
           <SidebarGroupLabel>Conversations</SidebarGroupLabel>
           <InfiniteScrollArea
             dataLength={conversations.length}
@@ -307,39 +320,42 @@ export function ConversationSidebar({
           </DialogContent>
         </Dialog>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="self-start"
-              type="button"
-              aria-label={`颜色模式：${currentThemeOption.label}`}
-              title={`颜色模式：${currentThemeOption.label}`}
-            >
-              <CurrentThemeIcon className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-44" side="top" align="end">
-            <DropdownMenuLabel>颜色模式</DropdownMenuLabel>
-            {THEME_OPTIONS.map((option) => {
-              const selected = option.value === currentTheme;
-              const ThemeOptionIcon = option.icon;
-              return (
-                <DropdownMenuItem
-                  key={option.value}
-                  onClick={() => {
-                    setTheme(option.value);
-                  }}
-                >
-                  <ThemeOptionIcon className="size-4" />
-                  <span className="flex-1">{option.label}</span>
-                  <Check className={selected ? "size-4" : "size-4 opacity-0"} />
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                type="button"
+                aria-label={`颜色模式：${currentThemeOption.label}`}
+                title={`颜色模式：${currentThemeOption.label}`}
+              >
+                <CurrentThemeIcon className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-44" side="top" align="end">
+              <DropdownMenuLabel>颜色模式</DropdownMenuLabel>
+              {THEME_OPTIONS.map((option) => {
+                const selected = option.value === currentTheme;
+                const ThemeOptionIcon = option.icon;
+                return (
+                  <DropdownMenuItem
+                    key={option.value}
+                    onClick={() => {
+                      setTheme(option.value);
+                    }}
+                  >
+                    <ThemeOptionIcon className="size-4" />
+                    <span className="flex-1">{option.label}</span>
+                    <Check className={selected ? "size-4" : "size-4 opacity-0"} />
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="ml-auto text-xs font-light text-muted-foreground">RikkaHub</div>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

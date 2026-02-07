@@ -172,9 +172,9 @@ export function ModelList({
     <Dialog open={open} onOpenChange={setOpen}>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="sm"
-        className={cn("h-8 max-w-[200px] justify-start gap-2", className)}
+        className={cn("h-8 max-w-[200px] justify-start gap-2 rounded-full px-2 text-muted-foreground hover:text-foreground", className)}
         disabled={disabled || !currentAssistant}
         onClick={() => {
           setOpen(true);

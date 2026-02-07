@@ -15,6 +15,12 @@ import {
 import { ModelList } from "~/components/model-list";
 import { useSettingsStore } from "~/stores";
 import { Button } from "~/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
 import { Textarea } from "~/components/ui/textarea";
 import { resolveFileUrl } from "~/lib/files";
 import { cn } from "~/lib/utils";
@@ -127,8 +133,6 @@ export function ChatInput({
 
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-  const uploadMenuRef = React.useRef<HTMLDivElement | null>(null);
-
   const [submitting, setSubmitting] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [uploadMenuOpen, setUploadMenuOpen] = React.useState(false);
@@ -141,22 +145,6 @@ export function ChatInput({
   const canUpload = ready && !disabled && !isGenerating && !uploading && !submitting;
   const canSwitchModel = ready && !disabled && !isGenerating && !uploading && !submitting;
   const actionDisabled = submitting || uploading || (!canStop && !canSend);
-
-  React.useEffect(() => {
-    if (!uploadMenuOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!uploadMenuRef.current) return;
-      if (!uploadMenuRef.current.contains(event.target as Node)) {
-        setUploadMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-    };
-  }, [uploadMenuOpen]);
 
   React.useEffect(() => {
     if (!canUpload) {
@@ -340,7 +328,7 @@ export function ChatInput({
           />
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1">
-              <div className="relative" ref={uploadMenuRef}>
+              <DropdownMenu open={uploadMenuOpen} onOpenChange={setUploadMenuOpen}>
                 <input
                   ref={fileInputRef}
                   className="hidden"
@@ -357,45 +345,35 @@ export function ChatInput({
                   onChange={handleImageInputChange}
                   type="file"
                 />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={!canUpload}
-                  className="size-8 rounded-full text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    setUploadMenuOpen((open) => !open);
-                  }}
-                >
-                  <Plus className={cn("size-4 transition-transform", uploadMenuOpen && "rotate-45")} />
-                </Button>
-
-                {uploadMenuOpen ? (
-                  <div className="absolute bottom-10 left-0 z-20 min-w-36 rounded-lg border bg-popover p-1 shadow-md">
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                      type="button"
-                      onClick={() => {
-                        imageInputRef.current?.click();
-                        setUploadMenuOpen(false);
-                      }}
-                    >
-                      <Image className="size-4" />
-                      上传图片
-                    </button>
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                      type="button"
-                      onClick={() => {
-                        fileInputRef.current?.click();
-                        setUploadMenuOpen(false);
-                      }}
-                    >
-                      <File className="size-4" />
-                      上传文档
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={!canUpload}
+                    className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+                  >
+                    <Plus className={cn("size-4 transition-transform", uploadMenuOpen && "rotate-45")} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="min-w-36" side="top" align="start">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      imageInputRef.current?.click();
+                    }}
+                  >
+                    <Image className="size-4" />
+                    上传图片
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    <File className="size-4" />
+                    上传文档
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <ModelList disabled={!canSwitchModel} className="max-w-[180px]" />
             </div>
             <Button
