@@ -30,7 +30,6 @@ import me.rerere.rikkahub.web.dto.SendMessageRequest
 import me.rerere.rikkahub.web.dto.ToolApprovalRequest
 import me.rerere.rikkahub.web.dto.toDto
 import me.rerere.rikkahub.web.dto.toListDto
-import me.rerere.rikkahub.web.dto.toUIParts
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.uuid.Uuid
 
@@ -121,7 +120,7 @@ fun Route.conversationRoutes(
             val request = call.receive<SendMessageRequest>()
 
             chatService.initializeConversation(uuid)
-            chatService.sendMessage(uuid, request.toUIParts(), answer = true)
+            chatService.sendMessage(uuid, request.parts, answer = true)
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }

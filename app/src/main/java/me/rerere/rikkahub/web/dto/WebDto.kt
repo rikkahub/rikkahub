@@ -12,8 +12,7 @@ import me.rerere.rikkahub.data.model.MessageNode
 
 @Serializable
 data class SendMessageRequest(
-    val content: String,
-    val parts: List<UIMessagePart>? = null
+    val parts: List<UIMessagePart>
 )
 
 @Serializable
@@ -196,6 +195,3 @@ fun UIMessage.toDto() = MessageDto(
     translation = translation
 )
 
-fun SendMessageRequest.toUIParts(): List<UIMessagePart> {
-    return parts ?: listOf(UIMessagePart.Text(content))
-}
