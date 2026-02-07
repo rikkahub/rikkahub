@@ -24,7 +24,7 @@ import {
 } from "~/types";
 import { MessageSquare } from "lucide-react";
 import { ChatInput } from "~/components/message/chat-input";
-import { useSettingsStore } from "~/stores/settings";
+import { useSettingsStore } from "~/stores";
 import {
   toConversationSummaryUpdate,
   useConversationList,
@@ -294,7 +294,11 @@ export default function ConversationsPage() {
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
-        <ChatInput />
+        <ChatInput
+          conversationId={activeId ?? null}
+          isGenerating={detail?.isGenerating ?? false}
+          disabled={!activeId || detailLoading || Boolean(detailError)}
+        />
       </SidebarInset>
     </SidebarProvider>
   );

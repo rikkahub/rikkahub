@@ -8,7 +8,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
-import { useSettingsSubscription } from "~/stores/settings";
+import { useSettingsSubscription } from "~/stores";
 import "./app.css";
 import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./components/theme-provider";

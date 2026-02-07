@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { ArrowDown, ArrowUp, Clock3, Copy, RefreshCw, Zap } from "lucide-react";
 
-import { useSettingsStore } from "~/stores/settings";
+import { useSettingsStore } from "~/stores";
 import type { MessageDto, TokenUsage, UIMessagePart } from "~/types";
 
 import { cn } from "~/lib/utils";
