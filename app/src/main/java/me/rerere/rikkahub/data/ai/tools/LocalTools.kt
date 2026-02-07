@@ -70,6 +70,7 @@ sealed class LocalToolOption {
 class LocalTools(
     private val context: Context,
     private val prootManager: me.rerere.rikkahub.data.container.PRootManager,
+    private val backgroundProcessManager: me.rerere.rikkahub.data.container.BackgroundProcessManager,
     val subAgentExecutor: me.rerere.rikkahub.data.ai.subagent.SubAgentExecutor? = null,
 ) {
     val javascriptTool by lazy {
@@ -414,9 +415,10 @@ class LocalTools(
     fun createContainerShellTool(sandboxId: Uuid): Tool {
         return Tool(
             name = "container_shell",
-            description = """完整 Linux Shell（Alpine），支持 apk、git、wget。超时 5 分钟。
+            description = """完整 Linux Shell（Alpine），支持 apk、git、wget、Python3。超时 5 分钟。
 如需 Python：apk add python3 py3-pip && python3 -c 'code'
-如 apk 安装失败，先配置 DNS：echo 'nameserver 8.8.8.8' > /etc/resolv.conf""".trimIndent(),
+如 apk 安装失败，先配置 DNS：echo 'nameserver 8.8.8.8' > /etc/resolv.conf
+Matplotlib 绘图：保存到沙箱自动路径（无需手动指定），返回 file:/// 路径供客户端渲染。中文注释无需指定字体。""".trimIndent(),
             parameters = {
                 InputSchema.Obj(
                     properties = buildJsonObject {
@@ -458,6 +460,340 @@ class LocalTools(
                 listOf(UIMessagePart.Text(result.toString()))
             }
         )
+    }
+
+    /**
+     * 容器后台执行工具（非阻塞）
+     * 适用于启动长期运行的服务（如 uvicorn、nginx、数据库等）
+     */
+    fun createContainerShellBgTool(sandboxId: Uuid): Tool {
+        return Tool(
+            name = "container_shell_bg",
+            description = """在容器后台执行Shell命令并立即返回，不等待命令完成。
+适用于启动长期运行的服务（如 uvicorn、nginx、redis-server 等）。
+启动后返回进程ID，可用于后续查询状态、查看日志或终止进程。
+
+【重要】使用时机：
+✅ 启动需要持续运行的服务（uvicorn、nginx、redis-server、数据库）
+✅ 启动开发服务器（npm run dev、python manage.py runserver）
+✅ 命令不会自动退出，需要持续监听端口或处理请求
+
+❌ 不要用于：
+- 一次性执行的命令（编译、测试、文件操作）
+- 短时间内会完成的脚本
+- 需要立即获取输出结果的命令
+
+【示例】
+- 启动FastAPI：python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
+- 启动Redis：redis-server
+- 启动npm开发服务器：npm run dev
+- 启动数据库：postgres -D /usr/local/pgdata
+
+【进程管理】
+启动后可使用 container_process 工具：
+- 查看进程状态：action=list
+- 查看进程日志：action=logs, processId=<进程ID>
+- 终止进程：action=kill, processId=<进程ID>""".trimIndent(),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("command", buildJsonObject {
+                            put("type", "string")
+                            put("description", "要后台执行的Shell命令")
+                        })
+                        put("tag", buildJsonObject {
+                            put("type", "string")
+                            put("description", "可选的进程标签，便于识别（如 'web-server', 'database'）")
+                        })
+                    },
+                    required = listOf("command")
+                )
+            },
+            execute = { args ->
+                val command = args.jsonObject["command"]?.jsonPrimitive?.contentOrNull
+                    ?: return@Tool listOf(UIMessagePart.Text(buildJsonObject {
+                        put("success", JsonPrimitive(false))
+                        put("error", JsonPrimitive("Missing required parameter: command"))
+                    }.toString()))
+
+                val tag = args.jsonObject["tag"]?.jsonPrimitive?.contentOrNull
+
+                // 调用 BackgroundProcessManager
+                val result = backgroundProcessManager.startBackgroundProcess(
+                    sandboxId = sandboxId.toString(),
+                    command = command,
+                    tag = tag
+                )
+
+                val response = buildJsonObject {
+                    put("success", JsonPrimitive(result.success))
+                    put("processId", JsonPrimitive(result.processId))
+                    put("status", JsonPrimitive(result.status.name))
+                    put("message", JsonPrimitive(result.message))
+                    if (result.stdoutFile != null) {
+                        put("stdoutFile", JsonPrimitive(result.stdoutFile))
+                    }
+                    if (result.stderrFile != null) {
+                        put("stderrFile", JsonPrimitive(result.stderrFile))
+                    }
+                    if (result.pid != null) {
+                        put("pid", JsonPrimitive(result.pid))
+                    }
+
+                    if (result.success) {
+                        put("hint", JsonPrimitive("""
+                            |进程已启动在后台。
+                            |使用 container_process 工具管理：
+                            |- 查看状态：action=list
+                            |- 查看日志：action=logs, processId=${result.processId}
+                            |- 终止进程：action=kill, processId=${result.processId}
+                        """.trimMargin()))
+                    }
+                }
+
+                listOf(UIMessagePart.Text(response.toString()))
+            }
+        )
+    }
+
+    /**
+     * 容器进程管理工具
+     */
+    fun createContainerProcessTool(sandboxId: Uuid): Tool {
+        return Tool(
+            name = "container_process",
+            description = """管理容器中启动的后台进程。
+
+支持的操作：
+- list: 列出所有后台进程
+- status: 查看指定进程状态
+- logs: 查看进程输出日志（stdout/stderr）
+- kill: 终止指定进程
+- clean: 清理已结束的进程记录
+
+【操作说明】
+1. list - 列出所有后台进程
+   参数：无
+   返回：所有进程的列表（processId, command, status, tag, createdAt, pid等）
+
+2. status - 查看指定进程状态
+   参数：processId（必需）
+   返回：进程的详细信息（包括运行时长、退出码等）
+
+3. logs - 查看进程日志
+   参数：processId（必需）, stream（可选，stdout或stderr，默认stdout）, offset（可选，默认0）, limit（可选，默认1000）
+   返回：日志内容
+
+4. kill - 终止进程
+   参数：processId（必需）
+   返回：终止结果
+
+5. clean - 清理已结束的进程
+   参数：无
+   返回：清理的进程数量""".trimIndent(),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("action", buildJsonObject {
+                            put("type", "string")
+                            put("enum", buildJsonArray {
+                                add("list")
+                                add("status")
+                                add("logs")
+                                add("kill")
+                                add("clean")
+                            })
+                            put("description", "操作类型")
+                        })
+                        put("processId", buildJsonObject {
+                            put("type", "string")
+                            put("description", "进程ID（status/logs/kill操作必需）")
+                        })
+                        put("stream", buildJsonObject {
+                            put("type", "string")
+                            put("enum", buildJsonArray {
+                                add("stdout")
+                                add("stderr")
+                            })
+                            put("description", "日志流类型（logs操作，默认stdout）")
+                        })
+                        put("offset", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "日志偏移量（logs操作，默认0）")
+                        })
+                        put("limit", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "最大日志行数（logs操作，默认1000）")
+                        })
+                    },
+                    required = listOf("action")
+                )
+            },
+            execute = { args ->
+                val action = args.jsonObject["action"]?.jsonPrimitive?.contentOrNull
+                    ?: return@Tool listOf(UIMessagePart.Text(buildJsonObject {
+                        put("success", JsonPrimitive(false))
+                        put("error", JsonPrimitive("Missing required parameter: action"))
+                    }.toString()))
+
+                val response = when (action) {
+                    "list" -> handleListProcesses(sandboxId.toString())
+                    "status" -> handleGetProcessStatus(args.jsonObject, sandboxId.toString())
+                    "logs" -> runBlocking { handleReadLogs(args.jsonObject) }
+                    "kill" -> runBlocking { handleKillProcess(args.jsonObject) }
+                    "clean" -> runBlocking { handleCleanup(sandboxId.toString()) }
+                    else -> buildJsonObject {
+                        put("success", JsonPrimitive(false))
+                        put("error", JsonPrimitive("Unknown action: $action"))
+                    }
+                }
+
+                listOf(UIMessagePart.Text(response.toString()))
+            }
+        )
+    }
+
+    /**
+     * 处理 list 操作
+     */
+    private fun handleListProcesses(sandboxId: String): JsonObject {
+        val processes = backgroundProcessManager.getProcessesBySandbox(sandboxId)
+
+        val processesJson = buildJsonArray {
+            processes.forEach { info ->
+                add(buildJsonObject {
+                    put("processId", info.processId)
+                    put("command", info.command)
+                    put("status", info.status.name)
+                    put("tag", JsonPrimitive(info.tag ?: ""))
+                    put("createdAt", info.createdAt)
+                    put("startedAt", JsonPrimitive(info.startedAt ?: 0))
+                    put("pid", JsonPrimitive(info.pid ?: -1))
+                    info.exitCode?.let { put("exitCode", it) }
+                })
+            }
+        }
+
+        return buildJsonObject {
+            put("success", JsonPrimitive(true))
+            put("count", JsonPrimitive(processes.size))
+            put("processes", processesJson)
+        }
+    }
+
+    /**
+     * 处理 status 操作
+     */
+    private fun handleGetProcessStatus(args: JsonObject, sandboxId: String): JsonObject {
+        val processId = args["processId"]?.jsonPrimitive?.contentOrNull
+            ?: return buildJsonObject {
+                put("success", JsonPrimitive(false))
+                put("error", JsonPrimitive("Missing required parameter: processId"))
+            }
+
+        val info = backgroundProcessManager.getProcess(processId)
+            ?: return buildJsonObject {
+                put("success", JsonPrimitive(false))
+                put("error", JsonPrimitive("Process not found: $processId"))
+            }
+
+        // 计算运行时长
+        val duration = when {
+            info.exitedAt != null && info.startedAt != null -> info.exitedAt - info.startedAt
+            info.startedAt != null -> System.currentTimeMillis() - info.startedAt
+            else -> 0
+        }
+
+        return buildJsonObject {
+            put("success", JsonPrimitive(true))
+            put("processId", info.processId)
+            put("command", info.command)
+            put("status", info.status.name)
+            put("tag", JsonPrimitive(info.tag ?: ""))
+            put("createdAt", info.createdAt)
+            put("startedAt", JsonPrimitive(info.startedAt ?: 0))
+            put("exitedAt", JsonPrimitive(info.exitedAt ?: 0))
+            put("pid", JsonPrimitive(info.pid ?: -1))
+            put("exitCode", JsonPrimitive(info.exitCode ?: -1))
+            put("durationMs", duration)
+            put("stdoutFile", info.stdoutPath)
+            put("stderrFile", info.stderrPath)
+        }
+    }
+
+    /**
+     * 处理 logs 操作
+     */
+    private suspend fun handleReadLogs(args: JsonObject): JsonObject {
+        val processId = args["processId"]?.jsonPrimitive?.contentOrNull
+            ?: return buildJsonObject {
+                put("success", JsonPrimitive(false))
+                put("error", JsonPrimitive("Missing required parameter: processId"))
+            }
+
+        val stream = args["stream"]?.jsonPrimitive?.contentOrNull ?: "stdout"
+        val offset = args["offset"]?.jsonPrimitive?.intOrNull ?: 0
+        val limit = args["limit"]?.jsonPrimitive?.intOrNull ?: 1000
+
+        val result = backgroundProcessManager.readProcessLogs(
+            processId = processId,
+            stream = stream,
+            offset = offset,
+            limit = limit
+        )
+
+        return if (result.error != null) {
+            buildJsonObject {
+                put("success", JsonPrimitive(false as Boolean))
+                put("error", JsonPrimitive(result.error))
+            }
+        } else {
+            buildJsonObject {
+                put("success", JsonPrimitive(true))
+                put("processId", processId)
+                put("stream", stream)
+                put("offset", offset)
+                put("limit", limit)
+                put("totalLines", result.totalLines)
+                put("hasMore", result.hasMore)
+                put("lines", buildJsonArray {
+                    result.lines.forEach { add(it) }
+                })
+            }
+        }
+    }
+
+    /**
+     * 处理 kill 操作
+     */
+    private suspend fun handleKillProcess(args: JsonObject): JsonObject {
+        val processId = args["processId"]?.jsonPrimitive?.contentOrNull
+            ?: return buildJsonObject {
+                put("success", JsonPrimitive(false))
+                put("error", JsonPrimitive("Missing required parameter: processId"))
+            }
+
+        val result = backgroundProcessManager.killProcess(processId)
+
+        return buildJsonObject {
+            put("success", JsonPrimitive(result.success))
+            put("processId", processId)
+            put("status", result.status.name)
+            put("message", result.message)
+        }
+    }
+
+    /**
+     * 处理 clean 操作
+     */
+    private suspend fun handleCleanup(sandboxId: String): JsonObject {
+        // 清理24小时前已结束的进程
+        val cleanedCount = backgroundProcessManager.cleanupOldProcesses(24 * 60 * 60 * 1000L)
+
+        return buildJsonObject {
+            put("success", JsonPrimitive(true))
+            put("message", JsonPrimitive("Cleaned up $cleanedCount old process records"))
+        }
     }
 
     /**
@@ -590,6 +926,8 @@ class LocalTools(
         // ✅ 容器工具（独立开关）
         if (sandboxId != null && options.contains(LocalToolOption.Container) && prootManager.isRunning) {
             tools.add(createContainerShellTool(sandboxId))
+            tools.add(createContainerShellBgTool(sandboxId))
+            tools.add(createContainerProcessTool(sandboxId))
         }
 
         // ✅ Workflow TODO 工具 - 独立开关控制（不再依赖 WorkflowState）
@@ -634,24 +972,20 @@ class LocalTools(
         return options.mapNotNull { option ->
             when (option) {
                 LocalToolOption.JavascriptEngine -> "JavaScript Engine"
-                LocalToolOption.SandboxFs -> "Sandbox Tools (5): sandbox_file, sandbox_python, sandbox_shell, sandbox_data, sandbox_dev"
-                LocalToolOption.ChaquoPy -> {
-                    val baseDesc = "ChaquoPy Tools (4): sandbox_python, sandbox_shell, sandbox_data, sandbox_dev, + Workflow"
-                    baseDesc
-                }
+                LocalToolOption.ChaquoPy -> "ChaquoPy Tools (4): sandbox_python, sandbox_shell, sandbox_data, sandbox_dev"
                 LocalToolOption.Container -> {
                     if (prootManager.isRunning) {
-                        "Container Tools (1): container_shell"
+                        "Container Tools (3): container_shell, container_shell_bg, container_process"
                     } else {
                         null // 容器未运行时不显示
                     }
                 }
-                LocalToolOption.Matplotlib -> null // Deprecated, now part of SandboxFs
                 LocalToolOption.TimeInfo -> "Time Info"
                 LocalToolOption.Clipboard -> "Clipboard Tool"
                 LocalToolOption.WorkflowTodo -> "Workflow TODO"
                 LocalToolOption.SubAgent -> "SubAgent"
                 LocalToolOption.SandboxFile -> "Sandbox File"
+                else -> null // 忽略已废弃的选项
             }
         }.joinToString(", ")
     }
@@ -1387,8 +1721,9 @@ private data class ContainerSecurityResult(
 private val PROTECTED_SYSTEM_PATHS = setOf(
     "/bin", "/sbin", "/usr/bin", "/usr/sbin",
     "/lib", "/lib64", "/usr/lib", "/usr/lib64",
-    "/etc", "/dev", "/proc", "/sys", "/run", "/tmp",
-    "/usr/local/bin", "/usr/local/sbin"
+    "/etc", "/dev", "/proc", "/sys", "/run", "/tmp"
+    // 移除 /usr/local/bin 和 /usr/local/sbin 的保护
+    // 允许用户自由管理开发工具（Python, Node.js, Go 等）
 )
 
 /**
@@ -1435,8 +1770,8 @@ private fun checkContainerCommandSecurity(command: String): ContainerSecurityRes
                 return ContainerSecurityResult(
                     isAllowed = false,
                     errorMessage = "Cannot modify system path: $path. " +
-                        "System paths ($protectedPath and subdirectories) are protected. " +
-                        "You can only delete user-installed dev tools in /usr/local (except /usr/local/bin/sbin), /home, /root, or /opt."
+                        "System path $protectedPath is protected for system stability. " +
+                        "You can delete user-installed tools in /usr/local (python, node, go, rust, etc.)"
                 )
             }
         }

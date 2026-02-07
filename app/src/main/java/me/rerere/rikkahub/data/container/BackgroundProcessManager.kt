@@ -30,15 +30,12 @@ import javax.inject.Singleton
  */
 @Singleton
 class BackgroundProcessManager @Inject constructor(
-    private val context: Context
-) {
-    // 运行时获取PRootManager，避免循环依赖
+    private val context: Context,
     private val prootManager: PRootManager
-        get() = org.koin.core.context.GlobalContext.get().get()
+) {
     companion object {
         private const val TAG = "BackgroundProcessManager"
-        // 日志文件大小限制（10MB），internal 以便 PRootManager 访问
-        internal const val MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+        private const val MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
         private const val PROCESS_CHECK_INTERVAL_MS = 5000L    // 进程检查间隔
         private const val MAX_RUNNING_PROCESSES_PER_SANDBOX = 10 // 每个沙箱最多运行10个进程
     }
@@ -319,22 +316,10 @@ class BackgroundProcessManager @Inject constructor(
                 .filter { it.exitedAt != null && (now - it.exitedAt!!) > olderThan }
                 .map { it.processId }
 
-            toRemove.forEach { processId ->
-                val info = processes[processId]
-                // 删除对应的日志文件
-                info?.let {
-                    try {
-                        File(it.stdoutPath).delete()
-                        File(it.stderrPath).delete()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to delete log files for process $processId", e)
-                    }
-                }
-                processes.remove(processId)
-            }
+            toRemove.forEach { processes.remove(it) }
             _processStates.value = processes.values.toList()
 
-            Log.i(TAG, "Cleaned up ${toRemove.size} old processes and their log files")
+            Log.i(TAG, "Cleaned up ${toRemove.size} old processes")
             toRemove.size
         } catch (e: Exception) {
             Log.e(TAG, "Error cleaning up old processes", e)
@@ -387,40 +372,6 @@ class BackgroundProcessManager @Inject constructor(
     }
 
     /**
-     * 标记所有运行中的进程为已停止（容器停止时调用）
-     * 与 stopAllProcesses 不同，此方法不尝试 kill 进程（因为容器已杀死它们）
-     */
-    fun markAllProcessesStopped() {
-        val updatedProcesses = processes.values.map { process ->
-            if (process.status == ProcessStatus.RUNNING || process.status == ProcessStatus.STARTING) {
-                process.copy(
-                    status = ProcessStatus.STOPPED,
-                    exitedAt = System.currentTimeMillis(),
-                    exitCode = -1
-                )
-            } else {
-                process
-            }
-        }
-
-        updatedProcesses.forEach { process ->
-            processes[process.processId] = process
-        }
-
-        _processStates.value = processes.values.toList()
-        Log.d(TAG, "All processes marked as stopped")
-    }
-
-    /**
-     * 清理所有进程状态（容器销毁时调用）
-     */
-    fun clearAllProcesses() {
-        processes.clear()
-        _processStates.value = emptyList()
-        Log.d(TAG, "All process states cleared")
-    }
-
-    /**
      * 生成进程ID
      */
     private fun generateProcessId(): String {
@@ -449,45 +400,12 @@ class BackgroundProcessManager @Inject constructor(
 
     /**
      * 更新进程状态
-     * 定期检查运行中的进程是否还在存活，标记已死亡的进程
      */
     private suspend fun updateProcessStates() {
-        val updatedProcesses = processes.values.map { process ->
-            if (process.status == ProcessStatus.RUNNING && process.pid != null) {
-                // 检查进程是否仍然存活
-                if (!isProcessAlive(process.pid)) {
-                    // 进程已死亡，标记为失败
-                    process.copy(
-                        status = ProcessStatus.FAILED,
-                        exitedAt = System.currentTimeMillis(),
-                        exitCode = -1
-                    )
-                } else {
-                    process
-                }
-            } else {
-                process
-            }
-        }
-
-        // 更新内存中的进程状态
-        updatedProcesses.forEach { process ->
-            processes[process.processId] = process
-        }
-
+        // 这里应该定期检查进程是否还在运行
+        // 由于进程对象由PRootManager管理，这里简化处理
+        // 实际状态会在PRootManager的监控中更新
         _processStates.value = processes.values.toList()
-    }
-
-    /**
-     * 检查进程是否存活
-     * 通过检查 /proc/[pid] 目录是否存在来判断
-     */
-    private fun isProcessAlive(pid: Int): Boolean {
-        return try {
-            File("/proc/$pid").exists()
-        } catch (e: Exception) {
-            false
-        }
     }
 
     /**
