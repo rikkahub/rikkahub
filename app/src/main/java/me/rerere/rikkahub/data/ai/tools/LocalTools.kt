@@ -416,9 +416,9 @@ class LocalTools(
         return Tool(
             name = "container_shell",
             description = """完整 Linux Shell（Alpine），支持 apk、git、wget、Python3。超时 5 分钟。
-如需 Python：apk add python3 py3-pip && python3 -c 'code'
-如 apk 安装失败，先配置 DNS：echo 'nameserver 8.8.8.8' > /etc/resolv.conf
-Matplotlib 绘图：保存到沙箱自动路径（无需手动指定），返回 file:/// 路径供客户端渲染。中文注释无需指定字体。""".trimIndent(),
+【重要】安装开发工具：使用 apk add 安装（如 apk add python3、apk add nodejs、apk add g++ 等）。所有开发工具都应通过 apk 包管理器安装，不要尝试解压 ZIP 包。
+【禁止】禁止使用此工具启动服务（如 uvicorn、npm start、redis-server 等），启动服务会导致客户端卡死 5 分钟。如需启动服务，请使用 container_shell_bg 工具。
+【故障排查】如 apk 安装失败，先配置 DNS：echo 'nameserver 8.8.8.8' > /etc/resolv.conf""".trimIndent(),
             parameters = {
                 InputSchema.Obj(
                     properties = buildJsonObject {
@@ -473,8 +473,8 @@ Matplotlib 绘图：保存到沙箱自动路径（无需手动指定），返回
 适用于启动长期运行的服务（如 uvicorn、nginx、redis-server 等）。
 启动后返回进程ID，可用于后续查询状态、查看日志或终止进程。
 
-【重要】使用时机：
-✅ 启动需要持续运行的服务（uvicorn、nginx、redis-server、数据库）
+【使用场景】
+✅ 启动需要持续运行的服务（Web服务器、数据库、缓存等）
 ✅ 启动开发服务器（npm run dev、python manage.py runserver）
 ✅ 命令不会自动退出，需要持续监听端口或处理请求
 
@@ -483,17 +483,12 @@ Matplotlib 绘图：保存到沙箱自动路径（无需手动指定），返回
 - 短时间内会完成的脚本
 - 需要立即获取输出结果的命令
 
-【示例】
-- 启动FastAPI：python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
-- 启动Redis：redis-server
-- 启动npm开发服务器：npm run dev
-- 启动数据库：postgres -D /usr/local/pgdata
-
 【进程管理】
-启动后可使用 container_process 工具：
+启动后可使用 container_process 工具管理进程：
 - 查看进程状态：action=list
 - 查看进程日志：action=logs, processId=<进程ID>
-- 终止进程：action=kill, processId=<进程ID>""".trimIndent(),
+- 终止进程：action=kill, processId=<进程ID>
+- 清理已结束进程：action=clean""".trimIndent(),
             parameters = {
                 InputSchema.Obj(
                     properties = buildJsonObject {
