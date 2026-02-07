@@ -11,6 +11,7 @@ import type {
 export interface UseConversationListOptions {
   currentAssistantId: string | null;
   routeId?: string | null;
+  autoSelectFirst?: boolean;
   pageSize?: number;
   maxRefreshLimit?: number;
 }
@@ -38,6 +39,7 @@ export interface UseConversationListResult {
 export function useConversationList({
   currentAssistantId,
   routeId = null,
+  autoSelectFirst = true,
   pageSize = 20,
   maxRefreshLimit = 100,
 }: UseConversationListOptions): UseConversationListResult {
@@ -195,7 +197,7 @@ export function useConversationList({
         nextOffsetRef.current = data.nextOffset ?? null;
         setHasMore(data.hasMore);
 
-        if (routeId && data.items.some((item) => item.id === routeId)) {
+        if (routeId) {
           setActiveId(routeId);
           return;
         }
@@ -204,7 +206,7 @@ export function useConversationList({
           if (current && data.items.some((item) => item.id === current)) {
             return current;
           }
-          return data.items[0]?.id ?? null;
+          return autoSelectFirst ? data.items[0]?.id ?? null : null;
         });
       })
       .catch((err: Error) => {
@@ -219,7 +221,16 @@ export function useConversationList({
     return () => {
       active = false;
     };
-  }, [currentAssistantId, maxRefreshLimit, pageSize, refreshConversations, refreshToken, routeId, sortConversations]);
+  }, [
+    autoSelectFirst,
+    currentAssistantId,
+    maxRefreshLimit,
+    pageSize,
+    refreshConversations,
+    refreshToken,
+    routeId,
+    sortConversations,
+  ]);
 
   const loadMore = React.useCallback(() => {
     const offset = nextOffsetRef.current;
@@ -246,10 +257,13 @@ export function useConversationList({
 
   React.useEffect(() => {
     if (!routeId) return;
-    if (conversations.some((item) => item.id === routeId)) {
-      setActiveId(routeId);
-    }
-  }, [conversations, routeId]);
+    setActiveId(routeId);
+  }, [routeId]);
+
+  React.useEffect(() => {
+    if (routeId || autoSelectFirst) return;
+    setActiveId(null);
+  }, [autoSelectFirst, routeId]);
 
   return {
     conversations,

@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 
-import { useChatInputStore, useSettingsStore } from "~/stores";
+import { useSettingsStore } from "~/stores";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { resolveFileUrl } from "~/lib/files";
@@ -21,10 +21,16 @@ import api from "~/services/api";
 import type { UIMessagePart, UploadFilesResponseDto } from "~/types";
 
 export interface ChatInputProps {
-  conversationId: string | null;
+  value: string;
+  attachments: UIMessagePart[];
+  ready?: boolean;
   disabled?: boolean;
   isGenerating?: boolean;
-  onSubmitted?: () => void;
+  onValueChange: (value: string) => void;
+  onAddParts: (parts: UIMessagePart[]) => void;
+  onRemovePart: (index: number, part: UIMessagePart) => Promise<void> | void;
+  onSend: () => Promise<void> | void;
+  onStop?: () => Promise<void> | void;
   className?: string;
 }
 
@@ -92,31 +98,25 @@ function partIcon(part: UIMessagePart) {
   }
 }
 
-
 function getPartFileId(part: UIMessagePart): number | null {
   const value = part.metadata?.fileId;
   return typeof value === "number" ? value : null;
 }
 
 export function ChatInput({
-  conversationId,
+  value,
+  attachments,
+  ready = true,
   disabled = false,
   isGenerating = false,
-  onSubmitted,
+  onValueChange,
+  onAddParts,
+  onRemovePart,
+  onSend,
+  onStop,
   className,
 }: ChatInputProps) {
   const sendOnEnter = useSettingsStore((state) => state.settings?.displaySetting.sendOnEnter ?? true);
-  const draft = useChatInputStore(
-    React.useCallback(
-      (state) => (conversationId ? state.drafts[conversationId] : undefined),
-      [conversationId],
-    ),
-  );
-  const setText = useChatInputStore((state) => state.setText);
-  const addParts = useChatInputStore((state) => state.addParts);
-  const removePartAt = useChatInputStore((state) => state.removePartAt);
-  const getSubmitParts = useChatInputStore((state) => state.getSubmitParts);
-  const clearDraft = useChatInputStore((state) => state.clearDraft);
 
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -127,13 +127,11 @@ export function ChatInput({
   const [uploadMenuOpen, setUploadMenuOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const text = draft?.text ?? "";
-  const attachments = draft?.parts ?? [];
-  const isEmpty = text.trim().length === 0 && attachments.length === 0;
+  const isEmpty = value.trim().length === 0 && attachments.length === 0;
 
-  const canStop = Boolean(conversationId) && isGenerating && !disabled;
-  const canSend = Boolean(conversationId) && !isGenerating && !disabled && !isEmpty;
-  const canUpload = Boolean(conversationId) && !disabled && !isGenerating && !uploading && !submitting;
+  const canStop = ready && Boolean(onStop) && isGenerating && !disabled;
+  const canSend = ready && !isGenerating && !disabled && !isEmpty;
+  const canUpload = ready && !disabled && !isGenerating && !uploading && !submitting;
   const actionDisabled = submitting || uploading || (!canStop && !canSend);
 
   React.useEffect(() => {
@@ -160,7 +158,7 @@ export function ChatInput({
 
   const uploadFiles = React.useCallback(
     async (fileList: FileList | null) => {
-      if (!conversationId || !fileList || fileList.length === 0) {
+      if (!ready || !fileList || fileList.length === 0) {
         return;
       }
 
@@ -174,7 +172,7 @@ export function ChatInput({
       try {
         const response = await api.postMultipart<UploadFilesResponseDto>("files/upload", formData);
         const parts = response.files.map(toMessagePart);
-        addParts(conversationId, parts);
+        onAddParts(parts);
       } catch (uploadError) {
         const message = uploadError instanceof Error ? uploadError.message : "上传失败";
         setError(message);
@@ -182,11 +180,11 @@ export function ChatInput({
         setUploading(false);
       }
     },
-    [addParts, conversationId],
+    [onAddParts, ready],
   );
 
   const handlePrimaryAction = React.useCallback(async () => {
-    if (!conversationId || actionDisabled) {
+    if (actionDisabled) {
       return;
     }
 
@@ -194,41 +192,30 @@ export function ChatInput({
     setError(null);
 
     try {
-      if (isGenerating) {
-        await api.post<{ status: string }>(`conversations/${conversationId}/stop`);
+      if (canStop) {
+        await onStop?.();
         return;
       }
 
-      const parts = getSubmitParts(conversationId);
-      if (parts.length === 0) {
-        return;
+      if (canSend) {
+        await onSend();
       }
-
-      await api.post<{ status: string }>(`conversations/${conversationId}/messages`, {
-        content: text,
-        parts,
-      });
-
-      clearDraft(conversationId);
-      onSubmitted?.();
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "发送失败";
       setError(message);
     } finally {
       setSubmitting(false);
     }
-  }, [actionDisabled, clearDraft, conversationId, getSubmitParts, isGenerating, onSubmitted, text]);
+  }, [actionDisabled, canSend, canStop, onSend, onStop]);
 
   const handleTextChange = React.useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      if (!conversationId) return;
-
-      setText(conversationId, event.target.value);
+      onValueChange(event.target.value);
       if (error) {
         setError(null);
       }
     },
-    [conversationId, error, setText],
+    [error, onValueChange],
   );
 
   const handleKeyDown = React.useCallback(
@@ -260,7 +247,7 @@ export function ChatInput({
   );
 
   const sendHint = sendOnEnter ? "按 Enter 发送，Shift + Enter 换行" : "按 Enter 换行";
-  const placeholder = conversationId ? "输入消息..." : "请先选择会话";
+  const placeholder = ready ? "输入消息..." : "请先选择会话";
 
   return (
     <div
@@ -293,7 +280,7 @@ export function ChatInput({
                     <button
                       className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                       onClick={async () => {
-                        if (!conversationId || disabled || isGenerating || submitting) return;
+                        if (!ready || disabled || isGenerating || submitting) return;
 
                         const fileId = getPartFileId(part);
                         if (fileId != null) {
@@ -306,7 +293,7 @@ export function ChatInput({
                           }
                         }
 
-                        removePartAt(conversationId, index);
+                        await onRemovePart(index, part);
                       }}
                       type="button"
                     >
@@ -319,11 +306,11 @@ export function ChatInput({
           ) : null}
 
           <Textarea
-            value={text}
+            value={value}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            disabled={!conversationId || disabled}
+            disabled={!ready || disabled}
             className="min-h-[60px] max-h-[200px] resize-none border-0 bg-transparent p-2 text-sm shadow-none focus-visible:ring-0"
             rows={2}
           />
