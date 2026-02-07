@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Singleton
 
 /**
@@ -54,6 +55,9 @@ class PRootManager(private val context: Context) {
     private var globalContainer: ContainerState? = null
     private var currentProcess: Process? = null
     private val processMutex = Mutex()  // 保护 currentProcess 的并发访问
+
+    // 后台进程管理
+    private val backgroundProcesses = ConcurrentHashMap<String, BackgroundProcessRecord>()
 
     // 状态流
     private val _containerState = MutableStateFlow<ContainerStateEnum>(ContainerStateEnum.NotInitialized)
@@ -1205,6 +1209,298 @@ class PRootManager(private val context: Context) {
         lifecycle.addObserver(observer)
         autoManagementObserver = observer
     }
+
+    // ==================== Background Process Management ====================
+
+    /**
+     * 后台执行命令（非阻塞）
+     *
+     * @param sandboxId 沙箱ID
+     * @param command 要执行的命令列表
+     * @param processId 进程ID
+     * @param stdoutFile 标准输出日志文件
+     * @param stderrFile 标准错误日志文件
+     * @param env 环境变量
+     * @return ExecutionResult
+     */
+    suspend fun execInBackground(
+        sandboxId: String,
+        command: List<String>,
+        processId: String,
+        stdoutFile: File,
+        stderrFile: File,
+        env: Map<String, String> = emptyMap()
+    ): ExecutionResult = withContext(Dispatchers.IO) {
+        try {
+            val container = globalContainer ?: return@withContext ExecutionResult(
+                exitCode = -1,
+                stdout = "",
+                stderr = "Global container not created"
+            )
+
+            // 构建 PRoot 命令
+            val prootCmd = buildProotCommand(sandboxId, command, env, container)
+
+            Log.d(TAG, "[ExecInBackground] Starting process: $processId")
+            Log.d(TAG, "[ExecInBackground] Command: ${command.joinToString(" ")}")
+
+            // 创建进程
+            val processBuilder = ProcessBuilder(prootCmd)
+            processBuilder.redirectErrorStream(false)
+
+            // 设置环境变量
+            val processEnv = processBuilder.environment()
+            setupProcessEnvironment(processEnv, env)
+
+            val process = processBuilder.start()
+
+            // 获取进程PID
+            val pid = getProcessPid(process)
+
+            // 启动异步线程读取输出并写入文件
+            val stdoutJob = GlobalScope.launch(Dispatchers.IO) {
+                try {
+                    process.inputStream.bufferedReader().use { reader ->
+                        stdoutFile.bufferedWriter().use { writer ->
+                            var line: String?
+                            while (reader.readLine().also { line = it } != null) {
+                                writer.write(line)
+                                writer.newLine()
+                                writer.flush()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "[ExecInBackground] Error reading stdout for $processId", e)
+                }
+            }
+
+            val stderrJob = GlobalScope.launch(Dispatchers.IO) {
+                try {
+                    process.errorStream.bufferedReader().use { reader ->
+                        stderrFile.bufferedWriter().use { writer ->
+                            var line: String?
+                            while (reader.readLine().also { line = it } != null) {
+                                writer.write(line)
+                                writer.newLine()
+                                writer.flush()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "[ExecInBackground] Error reading stderr for $processId", e)
+                }
+            }
+
+            // 存储后台进程记录
+            val record = BackgroundProcessRecord(
+                processId = processId,
+                process = process,
+                stdoutJob = stdoutJob,
+                stderrJob = stderrJob,
+                createdAt = System.currentTimeMillis()
+            )
+            backgroundProcesses[processId] = record
+
+            Log.d(TAG, "[ExecInBackground] Process started: $processId, PID: $pid")
+
+            ExecutionResult(
+                exitCode = 0,
+                stdout = "Process started with PID: $pid",
+                stderr = ""
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "[ExecInBackground] Failed to start process: $processId", e)
+            ExecutionResult(
+                exitCode = -1,
+                stdout = "",
+                stderr = "Failed to start background process: ${e.message}"
+            )
+        }
+    }
+
+    /**
+     * 终止后台进程
+     */
+    suspend fun killBackgroundProcess(processId: String): ExecutionResult = withContext(Dispatchers.IO) {
+        try {
+            val record = backgroundProcesses[processId]
+                ?: return@withContext ExecutionResult(
+                    exitCode = -1,
+                    stdout = "",
+                    stderr = "Background process not found: $processId"
+                )
+
+            Log.d(TAG, "[KillBackgroundProcess] Killing process: $processId")
+
+            // 销毁进程
+            record.process?.destroyForcibly()
+
+            // 等待进程结束
+            record.process?.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+
+            // 取消输出读取Job
+            record.stdoutJob?.cancel()
+            record.stderrJob?.cancel()
+
+            // 移除记录
+            backgroundProcesses.remove(processId)
+
+            Log.d(TAG, "[KillBackgroundProcess] Process killed: $processId")
+
+            ExecutionResult(
+                exitCode = 0,
+                stdout = "Process killed successfully",
+                stderr = ""
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "[KillBackgroundProcess] Error killing process: $processId", e)
+            ExecutionResult(
+                exitCode = -1,
+                stdout = "",
+                stderr = "Error: ${e.message}"
+            )
+        }
+    }
+
+    /**
+     * 检查后台进程是否还在运行
+     */
+    fun isBackgroundProcessAlive(processId: String): Boolean {
+        val record = backgroundProcesses[processId] ?: return false
+        return record.process?.isAlive == true
+    }
+
+    /**
+     * 获取后台进程的退出码
+     */
+    fun getBackgroundProcessExitCode(processId: String): Int? {
+        val record = backgroundProcesses[processId] ?: return null
+        val process = record.process ?: return null
+        return if (!process.isAlive) {
+            process.exitValue()
+        } else {
+            null
+        }
+    }
+
+    /**
+     * 清理已结束的后台进程
+     */
+    suspend fun cleanupFinishedBackgroundProcesses() = withContext(Dispatchers.IO) {
+        val finished = mutableListOf<String>()
+
+        backgroundProcesses.keys.forEach { processId ->
+            val record = backgroundProcesses[processId]
+            if (record?.process?.isAlive == false) {
+                finished.add(processId)
+                record.stdoutJob?.cancel()
+                record.stderrJob?.cancel()
+            }
+        }
+
+        finished.forEach { backgroundProcesses.remove(it) }
+
+        if (finished.isNotEmpty()) {
+            Log.d(TAG, "Cleaned up ${finished.size} finished background processes")
+        }
+    }
+
+    /**
+     * 获取Java进程的PID
+     */
+    private fun getProcessPid(process: Process): Int? {
+        return try {
+            // 通过反射获取PID（不同Android版本可能不同）
+            val pidField = process.javaClass.getDeclaredField("pid")
+            pidField.isAccessible = true
+            pidField.getInt(process)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to get process PID", e)
+            null
+        }
+    }
+
+    /**
+     * 设置进程环境变量
+     */
+    private fun setupProcessEnvironment(
+        processEnv: MutableMap<String, String>,
+        customEnv: Map<String, String>
+    ) {
+        processEnv["HOME"] = "/root"
+        processEnv["TMPDIR"] = "/tmp"
+        processEnv["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
+        processEnv["PREFIX"] = "/usr"
+        processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+        // 检查 termux-exec 是否可用
+        val nativeLibDir = context.applicationInfo.nativeLibraryDir
+        val termuxExecLib = File(nativeLibDir, "libtermux-exec.so")
+        val hasTermuxExec = termuxExecLib.exists()
+
+        if (hasTermuxExec) {
+            processEnv["LD_PRELOAD"] = termuxExecLib.absolutePath
+        }
+
+        // 合并自定义环境变量
+        processEnv.putAll(customEnv)
+    }
+
+    /**
+     * 构建PRoot命令
+     */
+    private fun buildProotCommand(
+        sandboxId: String,
+        command: List<String>,
+        env: Map<String, String>,
+        container: ContainerState
+    ): List<String> {
+        val prootBinary = File(prootDir, "proot").absolutePath
+        val sandboxDir = File(context.filesDir, "sandboxes/$sandboxId")
+
+        return buildList {
+            add(prootBinary)
+
+            // 绑定挂载系统目录（必要）
+            add("-b")
+            add("/dev")
+            add("-b")
+            add("/proc")
+            add("-b")
+            add("/sys")
+
+            // 绑定挂载对话的沙箱目录到 /workspace
+            add("-b")
+            add("${sandboxDir.absolutePath}:/workspace")
+
+            // 绑定挂载容器的 upper 层到 /usr/local（pip 安装位置）
+            add("-b")
+            add("${container.upperDir}/usr/local:/usr/local")
+
+            // 绑定挂载 upper 层到 /root（用户级 pip 配置）
+            add("-b")
+            add("${container.upperDir}/root:/root")
+
+            // 额外绑定挂载 usr/lib 以确保库文件可访问
+            add("-b")
+            add("${container.upperDir}/usr/lib:/usr/lib!")
+
+            // 根目录使用基础 rootfs（只读）- 必须在 -b 之后
+            add("-R")
+            add(rootfsDir.absolutePath)
+
+            // 设置工作目录
+            add("-w")
+            add("/workspace")
+
+            // 启用符号链接修复
+            add("--link2symlink")
+
+            // 执行的命令
+            addAll(command)
+        }
+    }
 }
 
 // ==================== Data Classes ====================
@@ -1231,3 +1527,20 @@ sealed class ContainerStateEnum {
     object Stopped : ContainerStateEnum()
     data class Error(val message: String) : ContainerStateEnum()
 }
+
+/**
+ * 后台进程记录（内部使用）
+ *
+ * @property processId 进程ID
+ * @property process Java Process对象
+ * @property stdoutJob stdout读取Job
+ * @property stderrJob stderr读取Job
+ * @property createdAt 创建时间戳
+ */
+data class BackgroundProcessRecord(
+    val processId: String,
+    val process: Process?,
+    val stdoutJob: kotlinx.coroutines.Job?,
+    val stderrJob: kotlinx.coroutines.Job?,
+    val createdAt: Long
+)
