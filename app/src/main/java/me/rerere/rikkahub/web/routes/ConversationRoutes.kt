@@ -23,9 +23,11 @@ import me.rerere.rikkahub.web.dto.ConversationDto
 import me.rerere.rikkahub.web.dto.ConversationListInvalidateEvent
 import me.rerere.rikkahub.web.dto.ConversationNodeUpdateEvent
 import me.rerere.rikkahub.web.dto.ConversationSnapshotEvent
+import me.rerere.rikkahub.web.dto.EditMessageRequest
 import me.rerere.rikkahub.web.dto.MessageNodeDto
 import me.rerere.rikkahub.web.dto.PagedResult
 import me.rerere.rikkahub.web.dto.RegenerateRequest
+import me.rerere.rikkahub.web.dto.SelectMessageNodeRequest
 import me.rerere.rikkahub.web.dto.SendMessageRequest
 import me.rerere.rikkahub.web.dto.ToolApprovalRequest
 import me.rerere.rikkahub.web.dto.toDto
@@ -121,6 +123,30 @@ fun Route.conversationRoutes(
 
             chatService.initializeConversation(uuid)
             chatService.sendMessage(uuid, request.parts, answer = true)
+
+            call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
+        }
+
+        // POST /api/conversations/{id}/messages/{messageId}/edit - Edit a message as a new branch version
+        post("/{id}/messages/{messageId}/edit") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val messageId = call.parameters["messageId"].toUuid("message id")
+            val request = call.receive<EditMessageRequest>()
+
+            chatService.initializeConversation(uuid)
+            chatService.editMessage(uuid, messageId, request.parts)
+
+            call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
+        }
+
+        // POST /api/conversations/{id}/nodes/{nodeId}/select - Switch branch selection for a message node
+        post("/{id}/nodes/{nodeId}/select") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val nodeId = call.parameters["nodeId"].toUuid("node id")
+            val request = call.receive<SelectMessageNodeRequest>()
+
+            chatService.initializeConversation(uuid)
+            chatService.selectMessageNode(uuid, nodeId, request.selectIndex)
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }

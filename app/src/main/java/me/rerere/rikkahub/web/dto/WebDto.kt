@@ -28,6 +28,16 @@ data class ToolApprovalRequest(
 )
 
 @Serializable
+data class EditMessageRequest(
+    val parts: List<UIMessagePart>
+)
+
+@Serializable
+data class SelectMessageNodeRequest(
+    val selectIndex: Int
+)
+
+@Serializable
 data class UpdateAssistantRequest(
     val assistantId: String
 )
@@ -194,4 +204,3 @@ fun UIMessage.toDto() = MessageDto(
     usage = usage,
     translation = translation
 )
-

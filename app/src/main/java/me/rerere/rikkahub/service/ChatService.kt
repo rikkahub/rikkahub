@@ -38,6 +38,7 @@ import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.finishReasoning
+import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.ai.ui.truncate
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
@@ -66,9 +67,13 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.web.BadRequestException
+import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
@@ -276,8 +281,11 @@ class ChatService(
 
     // 发送消息
     fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+        if (content.isEmptyInputMessage()) return
+
         // 取消现有的生成任务
         getGenerationJob(conversationId)?.cancel()
+        val processedContent = preprocessUserInputParts(content)
 
         val job = appScope.launch {
             try {
@@ -287,7 +295,7 @@ class ChatService(
                 val newConversation = currentConversation.copy(
                     messageNodes = currentConversation.messageNodes + UIMessage(
                         role = MessageRole.USER,
-                        parts = content,
+                        parts = processedContent,
                     ).toMessageNode(),
                 )
                 saveConversation(conversationId, newConversation)
@@ -310,6 +318,25 @@ class ChatService(
             appScope.launch {
                 delay(500)
                 checkAllConversationsReferences()
+            }
+        }
+    }
+
+    private fun preprocessUserInputParts(parts: List<UIMessagePart>): List<UIMessagePart> {
+        val assistant = settingsStore.settingsFlow.value.getCurrentAssistant()
+        return parts.map { part ->
+            when (part) {
+                is UIMessagePart.Text -> {
+                    part.copy(
+                        text = part.text.replaceRegexes(
+                            assistant = assistant,
+                            scope = AssistantAffectScope.USER,
+                            visual = false
+                        )
+                    )
+                }
+
+                else -> part
             }
         }
     }
@@ -993,6 +1020,65 @@ class ChatService(
         }
 
         updateConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+    }
+
+    suspend fun editMessage(
+        conversationId: Uuid,
+        messageId: Uuid,
+        parts: List<UIMessagePart>
+    ) {
+        if (parts.isEmptyInputMessage()) return
+        val processedParts = preprocessUserInputParts(parts)
+
+        val currentConversation = getConversationFlow(conversationId).value
+        var edited = false
+
+        val updatedNodes = currentConversation.messageNodes.map { node ->
+            if (!node.messages.any { it.id == messageId }) {
+                return@map node
+            }
+            edited = true
+
+            node.copy(
+                messages = node.messages + UIMessage(
+                    role = node.role,
+                    parts = processedParts,
+                ),
+                selectIndex = node.messages.size
+            )
+        }
+
+        if (!edited) return
+
+        saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+    }
+
+    suspend fun selectMessageNode(
+        conversationId: Uuid,
+        nodeId: Uuid,
+        selectIndex: Int
+    ) {
+        val currentConversation = getConversationFlow(conversationId).value
+        val targetNode = currentConversation.messageNodes.firstOrNull { it.id == nodeId }
+            ?: throw NotFoundException("Message node not found")
+
+        if (selectIndex !in targetNode.messages.indices) {
+            throw BadRequestException("Invalid selectIndex")
+        }
+
+        if (targetNode.selectIndex == selectIndex) {
+            return
+        }
+
+        val updatedNodes = currentConversation.messageNodes.map { node ->
+            if (node.id == nodeId) {
+                node.copy(selectIndex = selectIndex)
+            } else {
+                node
+            }
+        }
+
+        saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
     fun clearTranslationField(conversationId: Uuid, messageId: Uuid) {
