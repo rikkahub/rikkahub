@@ -80,6 +80,7 @@ val appModule = module {
     single {
         WebServerManager(
             context = get(),
+            appScope = get(),
             chatService = get(),
             conversationRepo = get(),
             settingsStore = get(),

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -29,13 +30,12 @@ data class WebServerState(
 
 class WebServerManager(
     private val context: Context,
+    private val appScope: AppScope,
     private val chatService: ChatService,
     private val conversationRepo: ConversationRepository,
     private val settingsStore: SettingsStore,
     private val filesManager: FilesManager
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
     private val nsdRegistrar = NsdServiceRegistrar(context)
 
@@ -51,7 +51,7 @@ class WebServerManager(
             return
         }
 
-        scope.launch {
+        appScope.launch {
             try {
                 Log.i(TAG, "Starting web server on port $port")
                 server = startWebServer(port = port) {
@@ -91,7 +91,7 @@ class WebServerManager(
     }
 
     fun stop() {
-        scope.launch {
+        appScope.launch {
             try {
                 Log.i(TAG, "Stopping web server")
                 server?.stop(1000, 2000)
