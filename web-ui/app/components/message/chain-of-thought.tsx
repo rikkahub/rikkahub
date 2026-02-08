@@ -48,7 +48,7 @@ function ChainOfThought<T>({
   const hiddenCount = Math.max(steps.length - collapsedVisibleCount, 0)
 
   return (
-    <Card className={cn("gap-0 px-2 py-2 bg-muted/30 border-muted shadow-none", className)} {...props}>
+    <Card className={cn("gap-0 px-2 py-2 bg-muted/50 border-muted shadow-none", className)} {...props}>
       {canCollapse && (
         <button
           type="button"
