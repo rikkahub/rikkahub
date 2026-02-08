@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Brain, Sparkles } from "lucide-react";
 
-import Markdown from "~/components/markdown";
+import Markdown from "~/components/markdown/markdown";
 import type { ReasoningPart as UIReasoningPart } from "~/types";
 
 import { ControlledChainOfThoughtStep } from "../chain-of-thought";

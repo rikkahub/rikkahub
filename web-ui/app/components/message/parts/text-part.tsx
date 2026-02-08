@@ -1,4 +1,4 @@
-import Markdown from "~/components/markdown";
+import Markdown from "~/components/markdown/markdown";
 
 interface TextPartProps {
   text: string;

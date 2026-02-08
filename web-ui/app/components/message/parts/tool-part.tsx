@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 
-import Markdown from "~/components/markdown";
+import Markdown from "~/components/markdown/markdown";
 import { Button } from "~/components/ui/button";
 import {
   Drawer,

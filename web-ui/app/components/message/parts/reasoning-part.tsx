@@ -1,6 +1,6 @@
 import * as React from "react";
 import { ChevronDown, ChevronRight, Brain } from "lucide-react";
-import Markdown from "~/components/markdown";
+import Markdown from "~/components/markdown/markdown";
 
 interface ReasoningPartProps {
   reasoning: string;
