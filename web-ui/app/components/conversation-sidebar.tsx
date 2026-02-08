@@ -52,7 +52,7 @@ import {
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
 import { UIAvatar } from "~/components/ui/ui-avatar";
-import { useTheme, type Theme } from "~/components/theme-provider";
+import { useTheme, type ColorTheme, type Theme } from "~/components/theme-provider";
 import type { AssistantAvatar, AssistantProfile, AssistantTag, ConversationListDto } from "~/types";
 
 const THEME_OPTIONS: Array<{
@@ -74,6 +74,28 @@ const THEME_OPTIONS: Array<{
     value: "system",
     label: "跟随系统",
     icon: Laptop,
+  },
+];
+
+const COLOR_THEME_OPTIONS: Array<{
+  value: ColorTheme;
+  label: string;
+}> = [
+  {
+    value: "default",
+    label: "默认",
+  },
+  {
+    value: "claude",
+    label: "Claude",
+  },
+  {
+    value: "t3-chat",
+    label: "T3 Chat",
+  },
+  {
+    value: "mono",
+    label: "Mono",
   },
 ];
 
@@ -431,7 +453,7 @@ export function ConversationSidebar({
   onDelete,
   onCreateConversation,
 }: ConversationSidebarProps) {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, colorTheme, setColorTheme } = useTheme();
 
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([]);
@@ -707,6 +729,22 @@ export function ConversationSidebar({
                     }}
                   >
                     <ThemeOptionIcon className="size-4" />
+                    <span className="flex-1">{option.label}</span>
+                    <Check className={selected ? "size-4" : "size-4 opacity-0"} />
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>主题色</DropdownMenuLabel>
+              {COLOR_THEME_OPTIONS.map((option) => {
+                const selected = option.value === colorTheme;
+                return (
+                  <DropdownMenuItem
+                    key={option.value}
+                    onClick={() => {
+                      setColorTheme(option.value);
+                    }}
+                  >
                     <span className="flex-1">{option.label}</span>
                     <Check className={selected ? "size-4" : "size-4 opacity-0"} />
                   </DropdownMenuItem>
