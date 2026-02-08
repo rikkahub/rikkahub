@@ -33,6 +33,7 @@ export interface AssistantAvatar {
 export interface AssistantProfile {
   id: string;
   chatModelId?: string | null;
+  thinkingBudget?: number | null;
   name: string;
   avatar?: AssistantAvatar;
   tags: string[];

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { ModelList } from "~/components/model-list";
+import { ReasoningPickerButton } from "~/components/reasoning-picker";
 import { SearchPickerButton } from "~/components/search-picker";
 import { useSettingsStore } from "~/stores";
 import { Button } from "~/components/ui/button";
@@ -448,6 +449,7 @@ export function ChatInput({
                 </DropdownMenuContent>
               </DropdownMenu>
               <ModelList disabled={!canSwitchModel} className="max-w-64" />
+              <ReasoningPickerButton disabled={!canSwitchModel} />
               <SearchPickerButton disabled={!canSwitchModel} />
             </div>
             <Button

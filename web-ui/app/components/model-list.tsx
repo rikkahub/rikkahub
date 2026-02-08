@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Check, LoaderCircle, Search } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, Search } from "lucide-react";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { cn } from "~/lib/utils";
@@ -174,7 +174,7 @@ export function ModelList({
         type="button"
         variant="ghost"
         size="sm"
-        className={cn("h-8 max-w-[200px] justify-start gap-2 rounded-full px-2 text-muted-foreground hover:text-foreground", className)}
+        className={cn("rounded-full px-0 text-muted-foreground hover:text-foreground sm:h-8 sm:max-w-64 sm:justify-start sm:gap-2 sm:px-2", className)}
         disabled={disabled || !currentAssistant}
         onClick={() => {
           setOpen(true);
@@ -186,7 +186,8 @@ export function ModelList({
           className="bg-transparent"
           imageClassName="h-full w-full"
         />
-        <span className="truncate">{currentModelLabel}</span>
+        <span className="hidden min-w-0 flex-1 truncate text-left sm:block">{currentModelLabel}</span>
+        <ChevronDown className="hidden size-3.5 shrink-0 sm:block" />
       </Button>
 
       <DialogContent className="gap-0 p-0 sm:max-w-2xl">

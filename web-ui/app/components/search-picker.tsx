@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Earth, LoaderCircle, Search } from "lucide-react";
+import { ChevronDown, Earth, LoaderCircle, Search } from "lucide-react";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { cn } from "~/lib/utils";
@@ -211,11 +211,11 @@ export function SearchPickerButton({
       <Button
         type="button"
         variant="ghost"
-        size="icon"
+        size="sm"
         disabled={!canUse || loading}
         className={cn(
-          "size-8 rounded-full",
-          checked ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:text-foreground",
+          "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
+          checked && "text-primary hover:bg-primary/10",
           className,
         )}
         onClick={() => {
@@ -236,6 +236,9 @@ export function SearchPickerButton({
         ) : (
           <Earth className="size-4" />
         )}
+        <span className="hidden sm:block">
+          <ChevronDown className="size-3.5" />
+        </span>
       </Button>
 
       <Dialog
