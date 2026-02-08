@@ -550,13 +550,13 @@ function ConversationSuggestions({
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-1">
+    <div className="mx-auto w-full max-w-3xl px-4">
       <div className="flex gap-2 overflow-x-auto">
         {suggestions.map((suggestion, index) => (
           <button
             key={`${suggestion}-${index}`}
             type="button"
-            className="shrink-0 rounded-full border bg-transparent px-3 py-1 text-xs text-foreground transition-colors hover:bg-muted/40"
+            className="shrink-0 rounded-lg border bg-transparent px-3 py-1 text-xs text-foreground transition-colors hover:bg-muted/40"
             onClick={() => {
               onClickSuggestion(suggestion);
             }}

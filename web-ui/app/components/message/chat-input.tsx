@@ -298,14 +298,14 @@ export function ChatInput({
   return (
     <div
       className={cn(
-        "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+        "bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60",
         className,
       )}
     >
       <div className="mx-auto w-full max-w-3xl px-4 py-4">
         <div
           className={cn(
-            "relative flex flex-col gap-2 rounded-2xl border bg-muted/50 p-2 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring",
+            "relative flex flex-col gap-2 rounded-lg border bg-muted/50 p-2 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring",
             dragActive && "border-primary/40 bg-primary/5 ring-2 ring-primary/30",
           )}
           onDragEnter={handleDragEnter}

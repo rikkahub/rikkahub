@@ -431,7 +431,7 @@ export function ChatMessage({
         <div
           className={cn(
             "flex flex-col gap-2 text-sm",
-            isUser ? "max-w-[85%] rounded-2xl bg-muted px-4 py-3" : "w-full",
+            isUser ? "max-w-[85%] rounded-lg bg-muted px-4 py-3" : "w-full",
           )}
         >
           <MessageParts parts={message.parts} loading={loading} onToolApproval={onToolApproval} />
