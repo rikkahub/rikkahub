@@ -113,6 +113,12 @@ function getPartFileId(part: UIMessagePart): number | null {
   return typeof value === "number" ? value : null;
 }
 
+function hasFilesInDataTransfer(dataTransfer: DataTransfer | null): boolean {
+  if (!dataTransfer) return false;
+  if (dataTransfer.files.length > 0) return true;
+  return Array.from(dataTransfer.items).some((item) => item.kind === "file");
+}
+
 export function ChatInput({
   value,
   attachments,
@@ -137,6 +143,8 @@ export function ChatInput({
   const [uploading, setUploading] = React.useState(false);
   const [uploadMenuOpen, setUploadMenuOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [dragActive, setDragActive] = React.useState(false);
+  const dragDepthRef = React.useRef(0);
 
   const isEmpty = value.trim().length === 0 && attachments.length === 0;
 
@@ -149,6 +157,8 @@ export function ChatInput({
   React.useEffect(() => {
     if (!canUpload) {
       setUploadMenuOpen(false);
+      setDragActive(false);
+      dragDepthRef.current = 0;
     }
   }, [canUpload]);
 
@@ -242,6 +252,52 @@ export function ChatInput({
     [uploadFiles],
   );
 
+  const handleDragEnter = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canUpload || !hasFilesInDataTransfer(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dragDepthRef.current += 1;
+      setDragActive(true);
+    },
+    [canUpload],
+  );
+
+  const handleDragOver = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canUpload || !hasFilesInDataTransfer(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      if (!dragActive) {
+        setDragActive(true);
+      }
+    },
+    [canUpload, dragActive],
+  );
+
+  const handleDragLeave = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setDragActive(false);
+    }
+  }, []);
+
+  const handleDrop = React.useCallback(
+    async (event: React.DragEvent<HTMLDivElement>) => {
+      if (!hasFilesInDataTransfer(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dragDepthRef.current = 0;
+      setDragActive(false);
+      if (!canUpload) return;
+      await uploadFiles(event.dataTransfer.files);
+    },
+    [canUpload, uploadFiles],
+  );
+
   const sendHint = sendOnEnter ? "按 Enter 发送，Shift + Enter 换行" : "按 Enter 换行";
   const placeholder = ready ? "输入消息..." : "请先选择会话";
 
@@ -253,7 +309,23 @@ export function ChatInput({
       )}
     >
       <div className="mx-auto w-full max-w-3xl px-4 py-4">
-        <div className="relative flex flex-col gap-2 rounded-2xl border bg-muted/50 p-2 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring">
+        <div
+          className={cn(
+            "relative flex flex-col gap-2 rounded-2xl border bg-muted/50 p-2 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring",
+            dragActive && "border-primary/40 bg-primary/5 ring-2 ring-primary/30",
+          )}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={(event) => {
+            void handleDrop(event);
+          }}
+        >
+          {dragActive ? (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-background/80 px-4 text-center text-sm font-medium text-primary">
+              拖拽文件到这里上传
+            </div>
+          ) : null}
           {isEditing ? (
             <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
               <span className="text-primary">正在编辑消息，发送后会创建新分支</span>
