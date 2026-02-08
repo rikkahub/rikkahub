@@ -11,7 +11,7 @@ import {
 } from "~/components/extended/conversation";
 import { ChatInput } from "~/components/message/chat-input";
 import { ChatMessage } from "~/components/message/chat-message";
-import { Spinner } from "~/components/ui/spinner";
+import { TypingIndicator } from "~/components/ui/typing-indicator";
 import {
   SidebarInset,
   SidebarProvider,
@@ -522,9 +522,8 @@ function ConversationTimeline({
             />
           ))}
         {!detailLoading && !detailError && activeId && isGenerating && (
-          <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
-            <Spinner className="size-3.5" />
-            <span>正在生成回复...</span>
+          <div className="flex items-start py-2">
+            <TypingIndicator className="px-1 py-2" />
           </div>
         )}
       </ConversationContent>
