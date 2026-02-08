@@ -53,6 +53,23 @@ data class UpdateAssistantModelRequest(
     val modelId: String,
 )
 
+@Serializable
+data class UpdateSearchEnabledRequest(
+    val enabled: Boolean,
+)
+
+@Serializable
+data class UpdateSearchServiceRequest(
+    val index: Int,
+)
+
+@Serializable
+data class UpdateBuiltInToolRequest(
+    val modelId: String,
+    val tool: String,
+    val enabled: Boolean,
+)
+
 // ========== Response DTOs ==========
 
 @Serializable
