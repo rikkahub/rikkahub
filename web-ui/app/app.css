@@ -173,23 +173,36 @@
   }
 }
 
-/* Styled scrollbar matching ScrollArea (radix) appearance */
+/* Global scrollbar style, matching ScrollArea (radix) appearance */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* Keep the utility class for compatibility with existing usage. */
 .styled-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
-}
-
-.styled-scrollbar::-webkit-scrollbar {
-  width: 10px;
-}
-
-.styled-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.styled-scrollbar::-webkit-scrollbar-thumb {
-  background-color: var(--border);
-  border-radius: 9999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
 }
