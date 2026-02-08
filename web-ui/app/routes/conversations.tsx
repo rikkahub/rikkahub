@@ -470,13 +470,6 @@ function ConversationTimeline({
   return (
     <Conversation className="flex-1 min-h-0">
       <ConversationContent className="mx-auto w-full max-w-3xl gap-4 px-4 py-6">
-        {!activeId && isHomeRoute && (
-          <ConversationEmptyState
-            icon={<MessageSquare className="size-10" />}
-            title="开始新对话"
-            description="输入消息后将自动创建会话"
-          />
-        )}
         {!activeId && !isHomeRoute && (
           <ConversationEmptyState
             icon={<MessageSquare className="size-10" />}
