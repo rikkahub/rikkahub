@@ -1,7 +1,21 @@
 import * as React from "react";
 
 import dayjs from "dayjs";
-import { Check, Laptop, Moon, Pin, Plus, Sun } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Check,
+  Laptop,
+  Moon,
+  MoreHorizontal,
+  MoveRight,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  RefreshCw,
+  Sun,
+  Trash2,
+} from "lucide-react";
 
 import { InfiniteScrollArea } from "~/components/extended/infinite-scroll-area";
 import { Badge } from "~/components/ui/badge";
@@ -18,6 +32,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -29,9 +47,9 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
 } from "~/components/ui/sidebar";
 import { UIAvatar } from "~/components/ui/ui-avatar";
 import { useTheme, type Theme } from "~/components/theme-provider";
@@ -121,6 +139,11 @@ export interface ConversationSidebarProps {
   currentAssistantId: string | null;
   onSelect: (id: string) => void;
   onAssistantChange: (assistantId: string) => Promise<void>;
+  onPin?: (id: string) => Promise<void>;
+  onRegenerateTitle?: (id: string) => Promise<void>;
+  onMoveToAssistant?: (id: string, assistantId: string) => Promise<void>;
+  onUpdateTitle?: (id: string, title: string) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
   onCreateConversation?: () => void;
 }
 
@@ -131,6 +154,260 @@ function getAssistantDisplayName(assistant: AssistantProfile) {
   }
 
   return "默认助手";
+}
+
+interface ConversationListRowProps {
+  conversation: ConversationListDto;
+  isActive: boolean;
+  assistants: AssistantProfile[];
+  onSelect: (id: string) => void;
+  onPin?: (id: string) => Promise<void>;
+  onRegenerateTitle?: (id: string) => Promise<void>;
+  onMoveToAssistant?: (id: string, assistantId: string) => Promise<void>;
+  onUpdateTitle?: (id: string, title: string) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
+}
+
+function ConversationListRow({
+  conversation,
+  isActive,
+  assistants,
+  onSelect,
+  onPin,
+  onRegenerateTitle,
+  onMoveToAssistant,
+  onUpdateTitle,
+  onDelete,
+}: ConversationListRowProps) {
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [pendingAction, setPendingAction] = React.useState<string | null>(null);
+
+  const moveTargets = React.useMemo(
+    () => assistants.filter((assistant) => assistant.id !== conversation.assistantId),
+    [assistants, conversation.assistantId],
+  );
+
+  const hasMenuAction = Boolean(
+    onPin || onRegenerateTitle || onMoveToAssistant || onUpdateTitle || onDelete,
+  );
+
+  const runAction = React.useCallback(
+    async (
+      actionId: string,
+      action: () => Promise<void>,
+      messages?: { success?: string; error?: string },
+    ) => {
+      setPendingAction(actionId);
+      try {
+        await action();
+        setMenuOpen(false);
+        if (messages?.success) {
+          toast.success(messages.success);
+        }
+      } catch (error) {
+        console.error("Conversation action failed", error);
+        toast.error(messages?.error ?? "操作失败，请稍后重试");
+      } finally {
+        setPendingAction(null);
+      }
+    },
+    [],
+  );
+
+  return (
+    <SidebarMenuItem>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <SidebarMenuButton
+          isActive={isActive}
+          onClick={() => onSelect(conversation.id)}
+          onContextMenu={(event) => {
+            if (!hasMenuAction) return;
+            event.preventDefault();
+            setMenuOpen(true);
+          }}
+        >
+          <span className="flex w-full items-center gap-2">
+            <span className="flex-1 truncate">{conversation.title || "未命名会话"}</span>
+            {conversation.isPinned && <Pin className="size-3 text-primary" aria-hidden />}
+            {conversation.isGenerating && (
+              <span
+                className="inline-block size-2 rounded-full bg-emerald-500"
+                aria-label="生成中"
+                title="生成中"
+              />
+            )}
+          </span>
+        </SidebarMenuButton>
+
+        {hasMenuAction && (
+          <>
+            <DropdownMenuTrigger asChild>
+              <SidebarMenuAction
+                showOnHover
+                aria-label="会话操作"
+                title="会话操作"
+                disabled={pendingAction !== null}
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+              >
+                <MoreHorizontal className="size-4" />
+              </SidebarMenuAction>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="start" className="w-48">
+              {onPin && (
+                <DropdownMenuItem
+                  disabled={pendingAction !== null}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    void runAction(
+                      "pin",
+                      async () => {
+                        await onPin(conversation.id);
+                      },
+                      {
+                        success: conversation.isPinned ? "已取消置顶" : "已置顶",
+                        error: conversation.isPinned ? "取消置顶失败" : "置顶失败",
+                      },
+                    );
+                  }}
+                >
+                  {conversation.isPinned ? (
+                    <PinOff className="size-4" />
+                  ) : (
+                    <Pin className="size-4" />
+                  )}
+                  <span>{conversation.isPinned ? "取消置顶" : "置顶"}</span>
+                </DropdownMenuItem>
+              )}
+
+              {onRegenerateTitle && (
+                <DropdownMenuItem
+                  disabled={pendingAction !== null}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    void runAction(
+                      "regenerate-title",
+                      async () => {
+                        await onRegenerateTitle(conversation.id);
+                      },
+                      {
+                        success: "已请求重新生成标题",
+                        error: "重新生成标题失败",
+                      },
+                    );
+                  }}
+                >
+                  <RefreshCw className="size-4" />
+                  <span>重新生成标题</span>
+                </DropdownMenuItem>
+              )}
+
+              {onUpdateTitle && (
+                <DropdownMenuItem
+                  disabled={pendingAction !== null}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    const nextTitle = window.prompt("请输入新标题", conversation.title)?.trim();
+                    if (nextTitle == null) {
+                      return;
+                    }
+                    if (nextTitle.length === 0) {
+                      toast.error("标题不能为空");
+                      return;
+                    }
+                    if (nextTitle === conversation.title) {
+                      return;
+                    }
+                    void runAction(
+                      "update-title",
+                      async () => {
+                        await onUpdateTitle(conversation.id, nextTitle);
+                      },
+                      {
+                        success: "标题已更新",
+                        error: "更新标题失败",
+                      },
+                    );
+                  }}
+                >
+                  <Pencil className="size-4" />
+                  <span>手动编辑标题</span>
+                </DropdownMenuItem>
+              )}
+
+              {onMoveToAssistant && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    disabled={pendingAction !== null || moveTargets.length === 0}
+                  >
+                    <MoveRight className="size-4" />
+                    <span>移动到助手</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {moveTargets.length === 0 ? (
+                      <DropdownMenuItem disabled>没有可用助手</DropdownMenuItem>
+                    ) : (
+                      moveTargets.map((assistant) => (
+                        <DropdownMenuItem
+                          key={assistant.id}
+                          disabled={pendingAction !== null}
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            void runAction(
+                              `move:${assistant.id}`,
+                              async () => {
+                                await onMoveToAssistant(conversation.id, assistant.id);
+                              },
+                              {
+                                success: `已移动到 ${getAssistantDisplayName(assistant)}`,
+                                error: "移动会话失败",
+                              },
+                            );
+                          }}
+                        >
+                          {getAssistantDisplayName(assistant)}
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+
+              {onDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={pendingAction !== null}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      if (!window.confirm("确定删除这个会话吗？")) {
+                        return;
+                      }
+                      void runAction(
+                        "delete",
+                        async () => {
+                          await onDelete(conversation.id);
+                        },
+                        {
+                          success: "会话已删除",
+                          error: "删除会话失败",
+                        },
+                      );
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                    <span>删除会话</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </>
+        )}
+      </DropdownMenu>
+    </SidebarMenuItem>
+  );
 }
 
 export function ConversationSidebar({
@@ -147,6 +424,11 @@ export function ConversationSidebar({
   currentAssistantId,
   onSelect,
   onAssistantChange,
+  onPin,
+  onRegenerateTitle,
+  onMoveToAssistant,
+  onUpdateTitle,
+  onDelete,
   onCreateConversation,
 }: ConversationSidebarProps) {
   const { theme, setTheme } = useTheme();
@@ -283,23 +565,18 @@ export function ConversationSidebar({
                 }
                 const item = listItem.conversation;
                 return (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton
-                      isActive={item.id === activeId}
-                      onClick={() => onSelect(item.id)}
-                    >
-                      <span className="flex w-full items-center gap-2">
-                        <span className="flex-1 truncate">{item.title || "未命名会话"}</span>
-                        {item.isGenerating && (
-                          <span
-                            className="inline-block size-2 rounded-full bg-emerald-500"
-                            aria-label="生成中"
-                            title="生成中"
-                          />
-                        )}
-                      </span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  <ConversationListRow
+                    key={item.id}
+                    conversation={item}
+                    isActive={item.id === activeId}
+                    assistants={assistants}
+                    onSelect={onSelect}
+                    onPin={onPin}
+                    onRegenerateTitle={onRegenerateTitle}
+                    onMoveToAssistant={onMoveToAssistant}
+                    onUpdateTitle={onUpdateTitle}
+                    onDelete={onDelete}
+                  />
                 );
               })}
             </SidebarMenu>

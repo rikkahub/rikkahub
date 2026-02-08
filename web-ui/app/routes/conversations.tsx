@@ -768,6 +768,64 @@ export default function ConversationsPage() {
     clearCurrentDraft();
   }, [activeId, clearCurrentDraft, editingSession, getCurrentSubmitParts, handleSubmit]);
 
+  const handleTogglePinConversation = React.useCallback(
+    async (conversationId: string) => {
+      await api.post<{ status: string }>(`conversations/${conversationId}/pin`);
+      refreshList();
+    },
+    [refreshList],
+  );
+
+  const handleRegenerateConversationTitle = React.useCallback(
+    async (conversationId: string) => {
+      await api.post<{ status: string }>(`conversations/${conversationId}/regenerate-title`);
+      refreshList();
+    },
+    [refreshList],
+  );
+
+  const handleMoveConversation = React.useCallback(
+    async (conversationId: string, assistantId: string) => {
+      await api.post<{ status: string }>(`conversations/${conversationId}/move`, { assistantId });
+      if (conversationId === activeId) {
+        setActiveId(null);
+        resetDetail();
+        setHomeDraftId(createHomeDraftId());
+        if (routeId === conversationId) {
+          navigate("/", { replace: true });
+        }
+      }
+      refreshList();
+    },
+    [activeId, navigate, refreshList, resetDetail, routeId, setActiveId],
+  );
+
+  const handleUpdateConversationTitle = React.useCallback(
+    async (conversationId: string, title: string) => {
+      await api.post<{ status: string }>(`conversations/${conversationId}/title`, { title });
+      refreshList();
+    },
+    [refreshList],
+  );
+
+  const handleDeleteConversation = React.useCallback(
+    async (conversationId: string) => {
+      await api.delete<Record<string, never>>(`conversations/${conversationId}`, {
+        parseJson: (raw) => (raw ? JSON.parse(raw) : {}),
+      });
+      if (conversationId === activeId) {
+        setActiveId(null);
+        resetDetail();
+        setHomeDraftId(createHomeDraftId());
+        if (routeId === conversationId) {
+          navigate("/", { replace: true });
+        }
+      }
+      refreshList();
+    },
+    [activeId, navigate, refreshList, resetDetail, routeId, setActiveId],
+  );
+
   const handleCreateConversation = React.useCallback(() => {
     setActiveId(null);
     resetDetail();
@@ -799,6 +857,11 @@ export default function ConversationsPage() {
         currentAssistantId={currentAssistantId}
         onSelect={handleSelect}
         onAssistantChange={handleAssistantChange}
+        onPin={handleTogglePinConversation}
+        onRegenerateTitle={handleRegenerateConversationTitle}
+        onMoveToAssistant={handleMoveConversation}
+        onUpdateTitle={handleUpdateConversationTitle}
+        onDelete={handleDeleteConversation}
         onCreateConversation={handleCreateConversation}
       />
       <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
