@@ -43,6 +43,16 @@ data class SelectMessageNodeRequest(
 )
 
 @Serializable
+data class MoveConversationRequest(
+    val assistantId: String
+)
+
+@Serializable
+data class UpdateConversationTitleRequest(
+    val title: String
+)
+
+@Serializable
 data class UpdateAssistantRequest(
     val assistantId: String
 )

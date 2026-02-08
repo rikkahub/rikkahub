@@ -27,11 +27,13 @@ import me.rerere.rikkahub.web.dto.EditMessageRequest
 import me.rerere.rikkahub.web.dto.ForkConversationRequest
 import me.rerere.rikkahub.web.dto.ForkConversationResponse
 import me.rerere.rikkahub.web.dto.MessageNodeDto
+import me.rerere.rikkahub.web.dto.MoveConversationRequest
 import me.rerere.rikkahub.web.dto.PagedResult
 import me.rerere.rikkahub.web.dto.RegenerateRequest
 import me.rerere.rikkahub.web.dto.SelectMessageNodeRequest
 import me.rerere.rikkahub.web.dto.SendMessageRequest
 import me.rerere.rikkahub.web.dto.ToolApprovalRequest
+import me.rerere.rikkahub.web.dto.UpdateConversationTitleRequest
 import me.rerere.rikkahub.web.dto.toDto
 import me.rerere.rikkahub.web.dto.toListDto
 import me.rerere.rikkahub.utils.JsonInstant
@@ -122,6 +124,61 @@ fun Route.conversationRoutes(
 
             conversationRepo.deleteConversation(conversation)
             call.respond(HttpStatusCode.NoContent)
+        }
+
+        // POST /api/conversations/{id}/pin - Toggle pinned status
+        post("/{id}/pin") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val conversation = conversationRepo.getConversationById(uuid)
+                ?: throw NotFoundException("Conversation not found")
+
+            chatService.saveConversation(uuid, conversation.copy(isPinned = !conversation.isPinned))
+            call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
+        }
+
+        // POST /api/conversations/{id}/regenerate-title - Regenerate conversation title
+        post("/{id}/regenerate-title") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val conversation = conversationRepo.getConversationById(uuid)
+                ?: throw NotFoundException("Conversation not found")
+
+            chatService.generateTitle(uuid, conversation, force = true)
+            call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
+        }
+
+        // POST /api/conversations/{id}/title - Update conversation title
+        post("/{id}/title") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val request = call.receive<UpdateConversationTitleRequest>()
+            val title = request.title.trim()
+
+            if (title.isEmpty()) {
+                throw BadRequestException("Title must not be blank")
+            }
+
+            val conversation = conversationRepo.getConversationById(uuid)
+                ?: throw NotFoundException("Conversation not found")
+
+            chatService.saveConversation(uuid, conversation.copy(title = title))
+            call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
+        }
+
+        // POST /api/conversations/{id}/move - Move conversation to another assistant
+        post("/{id}/move") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val request = call.receive<MoveConversationRequest>()
+            val targetAssistantId = request.assistantId.toUuid("assistant id")
+
+            val settings = settingsStore.settingsFlow.first()
+            if (settings.assistants.none { it.id == targetAssistantId }) {
+                throw BadRequestException("Assistant not found")
+            }
+
+            val conversation = conversationRepo.getConversationById(uuid)
+                ?: throw NotFoundException("Conversation not found")
+
+            chatService.saveConversation(uuid, conversation.copy(assistantId = targetAssistantId))
+            call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
 
         // POST /api/conversations/{id}/messages - Send a message
