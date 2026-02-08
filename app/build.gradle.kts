@@ -199,6 +199,9 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
 
+    // ktor server (for web api in app module)
+    implementation(libs.ktor.server.content.negotiation)
+
     // ucrop
     implementation(libs.ucrop)
 
@@ -255,8 +258,12 @@ dependencies {
     // mcp
     implementation(libs.modelcontextprotocol.kotlin.sdk)
 
+    // jmDNS (mDNS/Bonjour for .local hostname)
+    implementation(libs.jmdns)
+
     // modules
     implementation(project(":ai"))
+    implementation(project(":web"))
     implementation(project(":document"))
     implementation(project(":highlight"))
     implementation(project(":search"))

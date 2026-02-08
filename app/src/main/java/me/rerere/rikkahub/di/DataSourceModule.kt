@@ -20,6 +20,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.migrations.Migration_6_7
 import me.rerere.rikkahub.data.db.migrations.Migration_11_12
+import me.rerere.rikkahub.data.db.migrations.Migration_13_14
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3Sync
@@ -39,7 +40,7 @@ val dataSourceModule = module {
 
     single {
         Room.databaseBuilder(get(), AppDatabase::class.java, "rikka_hub")
-            .addMigrations(Migration_6_7, Migration_11_12)
+            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14)
             .build()
     }
 

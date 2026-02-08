@@ -39,10 +39,8 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
@@ -266,70 +264,15 @@ class ChatVM(
         if (content.isEmptyInputMessage()) return
         analytics.logEvent("ai_send_message", null)
 
-        val assistant = settings.value.assistants.find { it.id == settings.value.assistantId }
-        val processedContent = if (assistant != null) {
-            content.map { part ->
-                when (part) {
-                    is UIMessagePart.Text -> {
-                        part.copy(
-                            text = part.text.replaceRegexes(
-                                assistant = assistant,
-                                scope = AssistantAffectScope.USER,
-                                visual = false
-                            )
-                        )
-                    }
-
-                    else -> part
-                }
-            }
-        } else {
-            content
-        }
-
-        chatService.sendMessage(_conversationId, processedContent, answer)
+        chatService.sendMessage(_conversationId, content, answer)
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
         if (parts.isEmptyInputMessage()) return
         analytics.logEvent("ai_edit_message", null)
 
-        val assistant = settings.value.assistants.find { it.id == settings.value.assistantId }
-        val processedParts = if (assistant != null) {
-            parts.map { part ->
-                when (part) {
-                    is UIMessagePart.Text -> {
-                        part.copy(
-                            text = part.text.replaceRegexes(
-                                assistant = assistant,
-                                scope = AssistantAffectScope.USER,
-                                visual = false
-                            )
-                        )
-                    }
-
-                    else -> part
-                }
-            }
-        } else {
-            parts
-        }
-
-        val newConversation = conversation.value.copy(
-            messageNodes = conversation.value.messageNodes.map { node ->
-                if (!node.messages.any { it.id == messageId }) {
-                    return@map node // 如果这个node没有这个消息，则不修改
-                }
-                node.copy(
-                    messages = node.messages + UIMessage(
-                        role = node.role,
-                        parts = processedParts,
-                    ), selectIndex = node.messages.size
-                )
-            },
-        )
         viewModelScope.launch {
-            chatService.saveConversation(_conversationId, newConversation)
+            chatService.editMessage(_conversationId, messageId, parts)
         }
     }
 
@@ -361,106 +304,12 @@ class ChatVM(
     }
 
     suspend fun forkMessage(message: UIMessage): Conversation {
-        val node = conversation.value.getMessageNodeByMessage(message)
-        val nodes = conversation.value.messageNodes.subList(
-            0, conversation.value.messageNodes.indexOf(node) + 1
-        ).map { messageNode ->
-            messageNode.copy(
-                id = Uuid.random(),  // 生成新的节点 ID
-                messages = messageNode.messages.map { msg ->
-                    msg.copy(
-                        parts = msg.parts.map { part ->
-                            when (part) {
-                                is UIMessagePart.Image -> {
-                                    val url = part.url
-                                    if (url.startsWith("file:")) {
-                                        val copied = filesManager.createChatFilesByContents(
-                                            listOf(url.toUri())
-                                        ).firstOrNull()
-                                        if (copied != null) part.copy(url = copied.toString()) else part
-                                    } else part
-                                }
-
-                                is UIMessagePart.Document -> {
-                                    val url = part.url
-                                    if (url.startsWith("file:")) {
-                                        val copied = filesManager.createChatFilesByContents(
-                                            listOf(url.toUri())
-                                        ).firstOrNull()
-                                        if (copied != null) part.copy(url = copied.toString()) else part
-                                    } else part
-                                }
-
-                                is UIMessagePart.Video -> {
-                                    val url = part.url
-                                    if (url.startsWith("file:")) {
-                                        val copied = filesManager.createChatFilesByContents(
-                                            listOf(url.toUri())
-                                        ).firstOrNull()
-                                        if (copied != null) part.copy(url = copied.toString()) else part
-                                    } else part
-                                }
-
-                                is UIMessagePart.Audio -> {
-                                    val url = part.url
-                                    if (url.startsWith("file:")) {
-                                        val copied = filesManager.createChatFilesByContents(
-                                            listOf(url.toUri())
-                                        ).firstOrNull()
-                                        if (copied != null) part.copy(url = copied.toString()) else part
-                                    } else part
-                                }
-
-                                else -> part
-                            }
-                        }
-                    )
-                }
-            )
-        }
-        val newConversation = Conversation(
-            id = Uuid.random(),
-            assistantId = settings.value.assistantId,
-            messageNodes = nodes
-        )
-        chatService.saveConversation(newConversation.id, newConversation)
-        return newConversation
+        return chatService.forkConversationAtMessage(_conversationId, message.id)
     }
 
     fun deleteMessage(message: UIMessage) {
-        deleteMessageInternal(message)
-        saveConversationAsync()
-    }
-
-    private fun deleteMessageInternal(message: UIMessage) {
-        val conversation = conversation.value
-        val node = conversation.getMessageNodeByMessage(message) ?: return
-        val nodeIndex = conversation.messageNodes.indexOf(node)
-        if (nodeIndex == -1) return
-        val newConversation = if (node.messages.size == 1) {
-            conversation.copy(
-                messageNodes = conversation.messageNodes.filterIndexed { index, _ -> index != nodeIndex })
-        } else {
-            val updatedNodes = conversation.messageNodes.mapNotNull { node ->
-                val newMessages = node.messages.filter { it.id != message.id }
-                if (newMessages.isEmpty()) {
-                    null
-                } else {
-                    val newSelectIndex = if (node.selectIndex >= newMessages.size) {
-                        newMessages.lastIndex
-                    } else {
-                        node.selectIndex
-                    }
-                    node.copy(
-                        messages = newMessages,
-                        selectIndex = newSelectIndex
-                    )
-                }
-            }
-            conversation.copy(messageNodes = updatedNodes)
-        }
         viewModelScope.launch {
-            chatService.saveConversation(_conversationId, newConversation)
+            chatService.deleteMessage(_conversationId, message)
         }
     }
 

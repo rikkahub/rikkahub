@@ -27,7 +27,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         MessageNodeEntity::class,
         ManagedFileEntity::class
     ],
-    version = 13,
+    version = 14,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),

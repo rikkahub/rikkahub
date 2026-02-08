@@ -494,13 +494,9 @@ private fun MarkdownNode(
 
         MarkdownElementTypes.CODE_BLOCK -> {
             val code = node.getTextInNode(content)
-            HighlightCodeBlock(
-                code = code,
-                language = "plaintext",
-                modifier = Modifier
-                    .padding(bottom = 4.dp)
-                    .fillMaxWidth(),
-                completeCodeBlock = true
+            Text(
+                text = code,
+                modifier = modifier,
             )
         }
 
