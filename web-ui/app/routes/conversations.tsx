@@ -397,11 +397,12 @@ function useDraftInputController({
     }
 
     const conversationId = uuidv4();
-    navigate(`/c/${conversationId}`);
     setHomeDraftId(createHomeDraftId());
 
     await api.post<{ status: string }>(`conversations/${conversationId}/messages`, { parts });
     clearDraft(draftKey);
+
+    navigate(`/c/${conversationId}`);
     refreshList();
   }, [activeId, clearDraft, draftKey, getSubmitParts, navigate, refreshList, setHomeDraftId]);
 
