@@ -1211,6 +1211,11 @@ class ChatService(
         updateConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
+    // 停止当前会话生成任务（不清理会话缓存）
+    fun stopGeneration(conversationId: Uuid) {
+        getGenerationJob(conversationId)?.cancel()
+    }
+
     // 清理对话相关资源
     fun cleanupConversation(conversationId: Uuid) {
         getGenerationJob(conversationId)?.cancel()
