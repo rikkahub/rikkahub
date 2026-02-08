@@ -15,6 +15,7 @@ import { TypingIndicator } from "~/components/ui/typing-indicator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar";
 import { toConversationSummaryUpdate, useConversationList } from "~/hooks/use-conversation-list";
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
+import { useCurrentModel } from "~/hooks/use-current-model";
 import api, { sse } from "~/services/api";
 import { useChatInputStore } from "~/stores";
 import {
@@ -54,6 +55,32 @@ interface EditingSession {
 
 function createHomeDraftId() {
   return `home-${uuidv4()}`;
+}
+
+function getAssistantDisplayName(name: string | null | undefined) {
+  const normalized = name?.trim() ?? "";
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return "默认助手";
+}
+
+function getModelDisplayName(
+  displayName: string | null | undefined,
+  modelId: string | null | undefined,
+) {
+  const normalizedDisplayName = displayName?.trim() ?? "";
+  if (normalizedDisplayName.length > 0) {
+    return normalizedDisplayName;
+  }
+
+  const normalizedModelId = modelId?.trim() ?? "";
+  if (normalizedModelId.length > 0) {
+    return normalizedModelId;
+  }
+
+  return "未命名模型";
 }
 
 function isAttachmentPart(
@@ -551,7 +578,8 @@ export default function ConversationsPage() {
   const { id: routeId } = useParams();
   const isHomeRoute = !routeId;
 
-  const { settings, assistants, currentAssistantId } = useCurrentAssistant();
+  const { settings, assistants, currentAssistantId, currentAssistant } = useCurrentAssistant();
+  const { currentModel, currentProvider } = useCurrentModel();
   const {
     conversations,
     activeId,
@@ -776,8 +804,15 @@ export default function ConversationsPage() {
       <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <SidebarTrigger />
-          <div className="text-sm text-muted-foreground">
-            {activeConversation ? activeConversation.title : "请选择会话"}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm text-muted-foreground">
+              {activeConversation ? activeConversation.title : "请选择会话"}
+            </div>
+            {currentModel && currentProvider ? (
+              <div className="truncate text-xs text-muted-foreground/80">
+                {`${getAssistantDisplayName(currentAssistant?.name)} / ${getModelDisplayName(currentModel.displayName, currentModel.modelId)} (${currentProvider.name})`}
+              </div>
+            ) : null}
           </div>
         </div>
 
