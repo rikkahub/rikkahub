@@ -65,11 +65,7 @@ export function groupMessageParts(parts: UIMessagePart[]): MessagePartBlock[] {
 interface MessagePartsProps {
   parts: UIMessagePart[];
   loading?: boolean;
-  onToolApproval?: (
-    toolCallId: string,
-    approved: boolean,
-    reason: string,
-  ) => void | Promise<void>;
+  onToolApproval?: (toolCallId: string, approved: boolean, reason: string) => void | Promise<void>;
 }
 
 function renderContentPart(part: UIMessagePart) {
@@ -86,23 +82,18 @@ function renderContentPart(part: UIMessagePart) {
       return <DocumentPart url={part.url} fileName={part.fileName} mime={part.mime} />;
     case "reasoning":
       return (
-        <ReasoningFallbackPart
-          reasoning={part.reasoning}
-          isFinished={part.finishedAt != null}
-        />
+        <ReasoningFallbackPart reasoning={part.reasoning} isFinished={part.finishedAt != null} />
       );
     case "tool":
       return (
-        <div className="text-xs text-muted-foreground">[Tool step should render in chain-of-thought]</div>
+        <div className="text-xs text-muted-foreground">
+          [Tool step should render in chain-of-thought]
+        </div>
       );
   }
 }
 
-export function MessageParts({
-  parts,
-  loading = false,
-  onToolApproval,
-}: MessagePartsProps) {
+export function MessageParts({ parts, loading = false, onToolApproval }: MessagePartsProps) {
   const groupedParts = React.useMemo(() => groupMessageParts(parts), [parts]);
 
   return (
@@ -121,7 +112,14 @@ export function MessageParts({
               renderStep={(step, stepIndex, { isFirst, isLast }) => {
                 if (step.type === "reasoning") {
                   const stepKey = step.reasoning.createdAt ?? `${blockIndex}-${stepIndex}`;
-                  return <ReasoningStepPart key={stepKey} reasoning={step.reasoning} isFirst={isFirst} isLast={isLast} />;
+                  return (
+                    <ReasoningStepPart
+                      key={stepKey}
+                      reasoning={step.reasoning}
+                      isFirst={isFirst}
+                      isLast={isLast}
+                    />
+                  );
                 }
 
                 const stepKey = step.tool.toolCallId || `${blockIndex}-${stepIndex}`;
@@ -153,19 +151,9 @@ export function MessageParts({
 interface MessagePartProps {
   part: UIMessagePart;
   loading?: boolean;
-  onToolApproval?: (
-    toolCallId: string,
-    approved: boolean,
-    reason: string,
-  ) => void | Promise<void>;
+  onToolApproval?: (toolCallId: string, approved: boolean, reason: string) => void | Promise<void>;
 }
 
 export function MessagePart({ part, loading, onToolApproval }: MessagePartProps) {
-  return (
-    <MessageParts
-      parts={[part]}
-      loading={loading}
-      onToolApproval={onToolApproval}
-    />
-  );
+  return <MessageParts parts={[part]} loading={loading} onToolApproval={onToolApproval} />;
 }

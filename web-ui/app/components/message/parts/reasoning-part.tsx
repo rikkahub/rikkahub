@@ -19,11 +19,7 @@ export function ReasoningPart({ reasoning, isFinished = true }: ReasoningPartPro
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted/50"
         onClick={() => setExpanded(!expanded)}
       >
-        {expanded ? (
-          <ChevronDown className="h-4 w-4" />
-        ) : (
-          <ChevronRight className="h-4 w-4" />
-        )}
+        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         <Brain className="h-4 w-4" />
         <span>{isFinished ? "Thinking" : "Thinking..."}</span>
       </button>

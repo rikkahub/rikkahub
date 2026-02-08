@@ -21,7 +21,9 @@ export function useCurrentAssistant(): UseCurrentAssistantResult {
       return null;
     }
 
-    return assistants.find((assistant) => assistant.id === currentAssistantId) ?? assistants[0] ?? null;
+    return (
+      assistants.find((assistant) => assistant.id === currentAssistantId) ?? assistants[0] ?? null
+    );
   }, [assistants, currentAssistantId]);
 
   return {

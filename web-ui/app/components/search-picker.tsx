@@ -93,14 +93,8 @@ function getServiceLabel(service: SearchServiceOption): string {
   return SEARCH_SERVICE_LABELS[type] ?? type;
 }
 
-export function SearchPickerButton({
-  disabled = false,
-  className,
-}: SearchPickerButtonProps) {
-  const {
-    settings,
-    currentAssistant,
-  } = useCurrentAssistant();
+export function SearchPickerButton({ disabled = false, className }: SearchPickerButtonProps) {
+  const { settings, currentAssistant } = useCurrentAssistant();
 
   const [open, setOpen] = React.useState(false);
   const [updatingSearchEnabled, setUpdatingSearchEnabled] = React.useState(false);
@@ -144,67 +138,76 @@ export function SearchPickerButton({
     }
   }, [open]);
 
-  const handleToggleSearchEnabled = React.useCallback(async (enabled: boolean) => {
-    if (!canUse) {
-      return;
-    }
+  const handleToggleSearchEnabled = React.useCallback(
+    async (enabled: boolean) => {
+      if (!canUse) {
+        return;
+      }
 
-    setUpdatingSearchEnabled(true);
-    setError(null);
+      setUpdatingSearchEnabled(true);
+      setError(null);
 
-    try {
-      await api.post<{ status: string }>("settings/search/enabled", { enabled });
-    } catch (toggleError) {
-      const message = toggleError instanceof Error ? toggleError.message : "更新网络搜索失败";
-      setError(message);
-    } finally {
-      setUpdatingSearchEnabled(false);
-    }
-  }, [canUse]);
+      try {
+        await api.post<{ status: string }>("settings/search/enabled", { enabled });
+      } catch (toggleError) {
+        const message = toggleError instanceof Error ? toggleError.message : "更新网络搜索失败";
+        setError(message);
+      } finally {
+        setUpdatingSearchEnabled(false);
+      }
+    },
+    [canUse],
+  );
 
-  const handleSelectService = React.useCallback(async (index: number) => {
-    if (!canUse || !settings) {
-      return;
-    }
+  const handleSelectService = React.useCallback(
+    async (index: number) => {
+      if (!canUse || !settings) {
+        return;
+      }
 
-    if (index === settings.searchServiceSelected) {
-      return;
-    }
+      if (index === settings.searchServiceSelected) {
+        return;
+      }
 
-    setUpdatingServiceIndex(index);
-    setError(null);
+      setUpdatingServiceIndex(index);
+      setError(null);
 
-    try {
-      await api.post<{ status: string }>("settings/search/service", { index });
-    } catch (serviceError) {
-      const message = serviceError instanceof Error ? serviceError.message : "切换搜索服务失败";
-      setError(message);
-    } finally {
-      setUpdatingServiceIndex(null);
-    }
-  }, [canUse, settings]);
+      try {
+        await api.post<{ status: string }>("settings/search/service", { index });
+      } catch (serviceError) {
+        const message = serviceError instanceof Error ? serviceError.message : "切换搜索服务失败";
+        setError(message);
+      } finally {
+        setUpdatingServiceIndex(null);
+      }
+    },
+    [canUse, settings],
+  );
 
-  const handleToggleBuiltInSearch = React.useCallback(async (enabled: boolean) => {
-    if (!canUse || !currentModel) {
-      return;
-    }
+  const handleToggleBuiltInSearch = React.useCallback(
+    async (enabled: boolean) => {
+      if (!canUse || !currentModel) {
+        return;
+      }
 
-    setUpdatingBuiltInSearch(true);
-    setError(null);
+      setUpdatingBuiltInSearch(true);
+      setError(null);
 
-    try {
-      await api.post<{ status: string }>("settings/model/built-in-tool", {
-        modelId: currentModel.id,
-        tool: SEARCH_TOOL_NAME,
-        enabled,
-      });
-    } catch (toolError) {
-      const message = toolError instanceof Error ? toolError.message : "更新内置搜索失败";
-      setError(message);
-    } finally {
-      setUpdatingBuiltInSearch(false);
-    }
-  }, [canUse, currentModel]);
+      try {
+        await api.post<{ status: string }>("settings/model/built-in-tool", {
+          modelId: currentModel.id,
+          tool: SEARCH_TOOL_NAME,
+          enabled,
+        });
+      } catch (toolError) {
+        const message = toolError instanceof Error ? toolError.message : "更新内置搜索失败";
+        setError(message);
+      } finally {
+        setUpdatingBuiltInSearch(false);
+      }
+    },
+    [canUse, currentModel],
+  );
 
   return (
     <>
@@ -276,7 +279,12 @@ export function SearchPickerButton({
                 </div>
                 <Switch
                   checked={builtInSearchEnabled}
-                  disabled={disabled || updatingBuiltInSearch || updatingSearchEnabled || updatingServiceIndex !== null}
+                  disabled={
+                    disabled ||
+                    updatingBuiltInSearch ||
+                    updatingSearchEnabled ||
+                    updatingServiceIndex !== null
+                  }
                   onCheckedChange={(nextChecked) => {
                     void handleToggleBuiltInSearch(nextChecked);
                   }}
@@ -298,7 +306,12 @@ export function SearchPickerButton({
                   </div>
                   <Switch
                     checked={searchEnabled}
-                    disabled={disabled || updatingSearchEnabled || updatingBuiltInSearch || updatingServiceIndex !== null}
+                    disabled={
+                      disabled ||
+                      updatingSearchEnabled ||
+                      updatingBuiltInSearch ||
+                      updatingServiceIndex !== null
+                    }
                     onCheckedChange={(nextChecked) => {
                       void handleToggleSearchEnabled(nextChecked);
                     }}
@@ -320,7 +333,12 @@ export function SearchPickerButton({
                               "hover:bg-muted flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition",
                               selected && "border-primary bg-primary/5",
                             )}
-                            disabled={disabled || updatingSearchEnabled || updatingBuiltInSearch || updatingServiceIndex !== null}
+                            disabled={
+                              disabled ||
+                              updatingSearchEnabled ||
+                              updatingBuiltInSearch ||
+                              updatingServiceIndex !== null
+                            }
                             onClick={() => {
                               void handleSelectService(index);
                             }}
@@ -332,8 +350,12 @@ export function SearchPickerButton({
                               imageClassName="h-full w-full"
                             />
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium">{getServiceLabel(service)}</div>
-                              <div className="text-muted-foreground truncate text-xs">{getServiceType(service) ?? "unknown"}</div>
+                              <div className="truncate text-sm font-medium">
+                                {getServiceLabel(service)}
+                              </div>
+                              <div className="text-muted-foreground truncate text-xs">
+                                {getServiceType(service) ?? "unknown"}
+                              </div>
                             </div>
                             {switching ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
                           </button>

@@ -1,36 +1,40 @@
-import * as React from "react"
-import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react"
+import * as React from "react";
+import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
-import { Card } from "~/components/ui/card"
-import { cn } from "~/lib/utils"
+import { Card } from "~/components/ui/card";
+import { cn } from "~/lib/utils";
 
 interface ChainOfThoughtProps<T> extends React.ComponentProps<typeof Card> {
-  steps: T[]
-  collapsedVisibleCount?: number
-  renderStep: (step: T, index: number, info: { isFirst: boolean; isLast: boolean }) => React.ReactNode
-  collapseLabel?: React.ReactNode
-  showMoreLabel?: (hiddenCount: number) => React.ReactNode
+  steps: T[];
+  collapsedVisibleCount?: number;
+  renderStep: (
+    step: T,
+    index: number,
+    info: { isFirst: boolean; isLast: boolean },
+  ) => React.ReactNode;
+  collapseLabel?: React.ReactNode;
+  showMoreLabel?: (hiddenCount: number) => React.ReactNode;
 }
 
 interface ChainOfThoughtStepBaseProps {
-  icon?: React.ReactNode
-  label: React.ReactNode
-  extra?: React.ReactNode
-  onClick?: () => void
-  children?: React.ReactNode
-  contentVisible?: boolean
-  className?: string
-  isFirst?: boolean
-  isLast?: boolean
+  icon?: React.ReactNode;
+  label: React.ReactNode;
+  extra?: React.ReactNode;
+  onClick?: () => void;
+  children?: React.ReactNode;
+  contentVisible?: boolean;
+  className?: string;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
 interface ChainOfThoughtStepProps extends ChainOfThoughtStepBaseProps {
-  defaultExpanded?: boolean
+  defaultExpanded?: boolean;
 }
 
 interface ControlledChainOfThoughtStepProps extends ChainOfThoughtStepBaseProps {
-  expanded: boolean
-  onExpandedChange: (expanded: boolean) => void
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
 }
 
 function ChainOfThought<T>({
@@ -42,13 +46,16 @@ function ChainOfThought<T>({
   className,
   ...props
 }: ChainOfThoughtProps<T>) {
-  const [expanded, setExpanded] = React.useState(false)
-  const canCollapse = steps.length > collapsedVisibleCount
-  const visibleSteps = expanded || !canCollapse ? steps : steps.slice(-collapsedVisibleCount)
-  const hiddenCount = Math.max(steps.length - collapsedVisibleCount, 0)
+  const [expanded, setExpanded] = React.useState(false);
+  const canCollapse = steps.length > collapsedVisibleCount;
+  const visibleSteps = expanded || !canCollapse ? steps : steps.slice(-collapsedVisibleCount);
+  const hiddenCount = Math.max(steps.length - collapsedVisibleCount, 0);
 
   return (
-    <Card className={cn("gap-0 px-2 py-2 bg-muted/50 border-muted shadow-none", className)} {...props}>
+    <Card
+      className={cn("gap-0 px-2 py-2 bg-muted/50 border-muted shadow-none", className)}
+      {...props}
+    >
       {canCollapse && (
         <button
           type="button"
@@ -61,7 +68,7 @@ function ChainOfThought<T>({
           <span>
             {expanded
               ? collapseLabel
-              : showMoreLabel?.(hiddenCount) ?? `Show ${hiddenCount} more steps`}
+              : (showMoreLabel?.(hiddenCount) ?? `Show ${hiddenCount} more steps`)}
           </span>
         </button>
       )}
@@ -77,7 +84,7 @@ function ChainOfThought<T>({
         ))}
       </div>
     </Card>
-  )
+  );
 }
 
 function ChainOfThoughtStep({
@@ -85,7 +92,7 @@ function ChainOfThoughtStep({
   contentVisible,
   ...props
 }: ChainOfThoughtStepProps) {
-  const [expanded, setExpanded] = React.useState(defaultExpanded)
+  const [expanded, setExpanded] = React.useState(defaultExpanded);
   return (
     <ChainOfThoughtStepContent
       {...props}
@@ -93,7 +100,7 @@ function ChainOfThoughtStep({
       onExpandedChange={setExpanded}
       contentVisible={contentVisible ?? expanded}
     />
-  )
+  );
 }
 
 function ControlledChainOfThoughtStep({
@@ -109,13 +116,13 @@ function ControlledChainOfThoughtStep({
       onExpandedChange={onExpandedChange}
       contentVisible={contentVisible ?? expanded}
     />
-  )
+  );
 }
 
 interface ChainOfThoughtStepContentProps extends ChainOfThoughtStepBaseProps {
-  expanded: boolean
-  onExpandedChange: (expanded: boolean) => void
-  contentVisible: boolean
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  contentVisible: boolean;
 }
 
 function ChainOfThoughtStepContent({
@@ -131,36 +138,35 @@ function ChainOfThoughtStepContent({
   isFirst,
   isLast,
 }: ChainOfThoughtStepContentProps) {
-  const hasContent = Boolean(children)
-  const clickable = Boolean(onClick || hasContent)
+  const hasContent = Boolean(children);
+  const clickable = Boolean(onClick || hasContent);
 
   const handleActivate = () => {
     if (onClick) {
-      onClick()
-      return
+      onClick();
+      return;
     }
     if (hasContent) {
-      onExpandedChange(!expanded)
+      onExpandedChange(!expanded);
     }
-  }
+  };
 
   const rowClassName = cn(
     "flex w-full items-center gap-2 px-1 py-2 text-left",
-    clickable &&
-      "cursor-pointer outline-none",
-    className
-  )
+    clickable && "cursor-pointer outline-none",
+    className,
+  );
 
   const stepClassName = cn(
     "flex w-full gap-2 rounded-md",
-    clickable && "hover:bg-muted/60 focus-within:ring-ring/50 focus-within:ring-[3px]"
-  )
+    clickable && "hover:bg-muted/60 focus-within:ring-ring/50 focus-within:ring-[3px]",
+  );
 
   const iconContent = icon ? (
     <div className="size-3.5">{icon}</div>
   ) : (
     <div className="bg-muted-foreground size-2 rounded-full" />
-  )
+  );
 
   const indicator = onClick ? (
     <ChevronRight className="text-muted-foreground size-4" />
@@ -170,22 +176,17 @@ function ChainOfThoughtStepContent({
     ) : (
       <ChevronDown className="text-muted-foreground size-4" />
     )
-  ) : null
+  ) : null;
 
   return (
     <div className={stepClassName}>
       {/* Icon rail with per-step line segments */}
       <div
-        className={cn(
-          "flex w-6 shrink-0 flex-col items-center",
-          clickable && "cursor-pointer"
-        )}
+        className={cn("flex w-6 shrink-0 flex-col items-center", clickable && "cursor-pointer")}
         onClick={clickable ? handleActivate : undefined}
       >
         <div className={cn("h-2 w-px shrink-0", isFirst === false && "bg-border/80")} />
-        <div className="flex h-5 shrink-0 items-center justify-center">
-          {iconContent}
-        </div>
+        <div className="flex h-5 shrink-0 items-center justify-center">{iconContent}</div>
         <div className={cn("w-px flex-1", isLast === false && "bg-border/80")} />
       </div>
 
@@ -208,17 +209,9 @@ function ChainOfThoughtStepContent({
         {contentVisible && hasContent && <div className="px-1 pb-2 pt-1">{children}</div>}
       </div>
     </div>
-  )
+  );
 }
 
-export {
-  ChainOfThought,
-  ChainOfThoughtStep,
-  ControlledChainOfThoughtStep,
-}
+export { ChainOfThought, ChainOfThoughtStep, ControlledChainOfThoughtStep };
 
-export type {
-  ChainOfThoughtProps,
-  ChainOfThoughtStepProps,
-  ControlledChainOfThoughtStepProps,
-}
+export type { ChainOfThoughtProps, ChainOfThoughtStepProps, ControlledChainOfThoughtStepProps };

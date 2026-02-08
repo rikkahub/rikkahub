@@ -30,11 +30,7 @@ import { ControlledChainOfThoughtStep } from "../chain-of-thought";
 interface ToolPartProps {
   tool: UIToolPart;
   loading?: boolean;
-  onToolApproval?: (
-    toolCallId: string,
-    approved: boolean,
-    reason: string,
-  ) => void | Promise<void>;
+  onToolApproval?: (toolCallId: string, approved: boolean, reason: string) => void | Promise<void>;
   isFirst?: boolean;
   isLast?: boolean;
 }
@@ -139,13 +135,7 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-function SearchWebPreview({
-  args,
-  content,
-}: {
-  args: unknown;
-  content: unknown;
-}) {
+function SearchWebPreview({ args, content }: { args: unknown; content: unknown }) {
   const query = getStringField(args, "query") ?? "";
   const answer = getStringField(content, "answer");
   const items = getArrayField(content, "items");
@@ -183,9 +173,7 @@ function SearchWebPreview({
               >
                 <div className="line-clamp-1 font-medium text-sm">{title || url}</div>
                 {text && (
-                  <div className="mt-1 line-clamp-3 text-muted-foreground text-xs">
-                    {text}
-                  </div>
+                  <div className="mt-1 line-clamp-3 text-muted-foreground text-xs">{text}</div>
                 )}
                 <div className="mt-2 line-clamp-1 text-primary text-xs">{url}</div>
               </a>
@@ -230,7 +218,13 @@ function ScrapeWebPreview({ content }: { content: unknown }) {
   );
 }
 
-export function ToolPart({ tool, loading = false, onToolApproval, isFirst, isLast }: ToolPartProps) {
+export function ToolPart({
+  tool,
+  loading = false,
+  onToolApproval,
+  isFirst,
+  isLast,
+}: ToolPartProps) {
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = React.useState(true);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -246,17 +240,14 @@ export function ToolPart({ tool, loading = false, onToolApproval, isFirst, isLas
     [tool.output],
   );
 
-  const outputContent = React.useMemo(
-    () => safeJsonParse(outputText),
-    [outputText],
-  );
+  const outputContent = React.useMemo(() => safeJsonParse(outputText), [outputText]);
 
   const memoryAction = getStringField(args, "action");
   const title = getToolTitle(tool.toolName, args);
   const isPending = tool.approvalState.type === "pending";
   const isDenied = tool.approvalState.type === "denied";
   const deniedReason =
-    tool.approvalState.type === "denied" ? tool.approvalState.reason ?? "" : "";
+    tool.approvalState.type === "denied" ? (tool.approvalState.reason ?? "") : "";
   const isExecuted = tool.output.length > 0;
 
   const hasExtraContent =
@@ -300,26 +291,14 @@ export function ToolPart({ tool, loading = false, onToolApproval, isFirst, isLas
             <Icon className="h-4 w-4 text-primary" />
           )
         }
-        label={
-          <span className="text-foreground line-clamp-2 text-sm font-medium">{title}</span>
-        }
+        label={<span className="text-foreground line-clamp-2 text-sm font-medium">{title}</span>}
         extra={
           isPending && onToolApproval ? (
             <div className="flex items-center gap-1">
-              <Button
-                onClick={handleDeny}
-                size="icon-xs"
-                type="button"
-                variant="secondary"
-              >
+              <Button onClick={handleDeny} size="icon-xs" type="button" variant="secondary">
                 <X className="h-3.5 w-3.5" />
               </Button>
-              <Button
-                onClick={handleApprove}
-                size="icon-xs"
-                type="button"
-                variant="secondary"
-              >
+              <Button onClick={handleApprove} size="icon-xs" type="button" variant="secondary">
                 <Check className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -330,19 +309,17 @@ export function ToolPart({ tool, loading = false, onToolApproval, isFirst, isLas
         {hasExtraContent && (
           <div className="space-y-1">
             {tool.toolName === TOOL_NAMES.MEMORY &&
-              (memoryAction === MEMORY_ACTIONS.CREATE ||
-                memoryAction === MEMORY_ACTIONS.EDIT) && (
+              (memoryAction === MEMORY_ACTIONS.CREATE || memoryAction === MEMORY_ACTIONS.EDIT) && (
                 <div className="line-clamp-3 text-muted-foreground text-xs">
                   {getStringField(outputContent, "content")}
                 </div>
               )}
 
-            {tool.toolName === TOOL_NAMES.SEARCH_WEB &&
-              getStringField(outputContent, "answer") && (
-                <div className="line-clamp-3 text-muted-foreground text-xs">
-                  {getStringField(outputContent, "answer")}
-                </div>
-              )}
+            {tool.toolName === TOOL_NAMES.SEARCH_WEB && getStringField(outputContent, "answer") && (
+              <div className="line-clamp-3 text-muted-foreground text-xs">
+                {getStringField(outputContent, "answer")}
+              </div>
+            )}
 
             {tool.toolName === TOOL_NAMES.SEARCH_WEB &&
               getArrayField(outputContent, "items").length > 0 && (
@@ -366,7 +343,11 @@ export function ToolPart({ tool, loading = false, onToolApproval, isFirst, isLas
         )}
       </ControlledChainOfThoughtStep>
 
-      <Drawer direction={isMobile ? "bottom" : "right"} open={drawerOpen} onOpenChange={setDrawerOpen}>
+      <Drawer
+        direction={isMobile ? "bottom" : "right"}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+      >
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>{title}</DrawerTitle>
@@ -390,9 +371,7 @@ export function ToolPart({ tool, loading = false, onToolApproval, isFirst, isLas
                     <JsonBlock value={outputContent} />
                   </div>
                 )}
-                {!isExecuted && (
-                  <div className="text-muted-foreground text-sm">工具尚未执行</div>
-                )}
+                {!isExecuted && <div className="text-muted-foreground text-sm">工具尚未执行</div>}
               </div>
             )}
           </div>

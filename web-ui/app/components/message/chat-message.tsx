@@ -16,12 +16,7 @@ import {
 } from "lucide-react";
 
 import { useSettingsStore } from "~/stores";
-import type {
-  MessageDto,
-  MessageNodeDto,
-  TokenUsage,
-  UIMessagePart,
-} from "~/types";
+import type { MessageDto, MessageNodeDto, TokenUsage, UIMessagePart } from "~/types";
 
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
@@ -44,11 +39,7 @@ interface ChatMessageProps {
   onSelectBranch?: (nodeId: string, selectIndex: number) => void | Promise<void>;
   onDelete?: (messageId: string) => void | Promise<void>;
   onFork?: (messageId: string) => void | Promise<void>;
-  onToolApproval?: (
-    toolCallId: string,
-    approved: boolean,
-    reason: string,
-  ) => void | Promise<void>;
+  onToolApproval?: (toolCallId: string, approved: boolean, reason: string) => void | Promise<void>;
 }
 
 function hasRenderablePart(part: UIMessagePart): boolean {
@@ -249,7 +240,10 @@ function ChatMessageActionsRow({
   }, [message.id, onFork]);
 
   const canSwitchBranch = Boolean(onSelectBranch) && node.messages.length > 1;
-  const canEdit = Boolean(onEdit) && (message.role === "USER" || message.role === "ASSISTANT") && hasEditableContent(message.parts);
+  const canEdit =
+    Boolean(onEdit) &&
+    (message.role === "USER" || message.role === "ASSISTANT") &&
+    hasEditableContent(message.parts);
   const actionDisabled = loading || switchingBranch || regenerating || deleting || forking;
 
   return (
@@ -440,11 +434,7 @@ export function ChatMessage({
             isUser ? "max-w-[85%] rounded-2xl bg-muted px-4 py-3" : "w-full",
           )}
         >
-          <MessageParts
-            parts={message.parts}
-            loading={loading}
-            onToolApproval={onToolApproval}
-          />
+          <MessageParts parts={message.parts} loading={loading} onToolApproval={onToolApproval} />
         </div>
       </div>
 

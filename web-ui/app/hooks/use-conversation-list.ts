@@ -77,15 +77,9 @@ export function useConversationList({
   );
 
   const refreshConversations = React.useCallback(
-    (
-      previous: ConversationListDto[],
-      incoming: ConversationListDto[],
-      replaceCount: number,
-    ) => {
+    (previous: ConversationListDto[], incoming: ConversationListDto[], replaceCount: number) => {
       const incomingIds = new Set(incoming.map((item) => item.id));
-      const tail = previous
-        .slice(replaceCount)
-        .filter((item) => !incomingIds.has(item.id));
+      const tail = previous.slice(replaceCount).filter((item) => !incomingIds.has(item.id));
       return sortConversations([...incoming, ...tail]);
     },
     [sortConversations],
@@ -206,7 +200,7 @@ export function useConversationList({
           if (current && data.items.some((item) => item.id === current)) {
             return current;
           }
-          return autoSelectFirst ? data.items[0]?.id ?? null : null;
+          return autoSelectFirst ? (data.items[0]?.id ?? null) : null;
         });
       })
       .catch((err: Error) => {
@@ -278,7 +272,9 @@ export function useConversationList({
   };
 }
 
-export function toConversationSummaryUpdate(conversation: ConversationDto): ConversationSummaryUpdate {
+export function toConversationSummaryUpdate(
+  conversation: ConversationDto,
+): ConversationSummaryUpdate {
   return {
     id: conversation.id,
     title: conversation.title,

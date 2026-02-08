@@ -3,8 +3,7 @@ import InfiniteScroll from "react-infinite-scroll-component";
 
 import { cn } from "~/lib/utils";
 
-export interface InfiniteScrollAreaProps
-  extends Omit<React.ComponentProps<"div">, "id"> {
+export interface InfiniteScrollAreaProps extends Omit<React.ComponentProps<"div">, "id"> {
   /** Total count of currently loaded items (used by InfiniteScroll internally) */
   dataLength: number;
   /** Callback to load the next page */
@@ -18,9 +17,7 @@ export interface InfiniteScrollAreaProps
 }
 
 const defaultLoader = (
-  <div className="px-2 py-2 text-center text-xs text-muted-foreground">
-    加载更多...
-  </div>
+  <div className="px-2 py-2 text-center text-xs text-muted-foreground">加载更多...</div>
 );
 
 function InfiniteScrollArea({

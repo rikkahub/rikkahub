@@ -1,16 +1,6 @@
 import * as React from "react";
 
-import {
-  File,
-  Image,
-  LoaderCircle,
-  Mic,
-  Plus,
-  Send,
-  Square,
-  Video,
-  X,
-} from "lucide-react";
+import { File, Image, LoaderCircle, Mic, Plus, Send, Square, Video, X } from "lucide-react";
 
 import { ModelList } from "~/components/model-list";
 import { ReasoningPickerButton } from "~/components/reasoning-picker";
@@ -137,7 +127,9 @@ export function ChatInput({
   onCancelEdit,
   className,
 }: ChatInputProps) {
-  const sendOnEnter = useSettingsStore((state) => state.settings?.displaySetting.sendOnEnter ?? true);
+  const sendOnEnter = useSettingsStore(
+    (state) => state.settings?.displaySetting.sendOnEnter ?? true,
+  );
 
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -373,7 +365,8 @@ export function ChatInput({
                           try {
                             await api.delete<{ status: string }>(`files/${fileId}`);
                           } catch (deleteError) {
-                            const message = deleteError instanceof Error ? deleteError.message : "删除附件失败";
+                            const message =
+                              deleteError instanceof Error ? deleteError.message : "删除附件失败";
                             setError(message);
                             return;
                           }
@@ -426,7 +419,9 @@ export function ChatInput({
                     disabled={!canUpload}
                     className="size-8 rounded-full text-muted-foreground hover:text-foreground"
                   >
-                    <Plus className={cn("size-4 transition-transform", uploadMenuOpen && "rotate-45")} />
+                    <Plus
+                      className={cn("size-4 transition-transform", uploadMenuOpen && "rotate-45")}
+                    />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="min-w-36" side="top" align="start">

@@ -67,4 +67,3 @@ export type UIMessagePart =
   | DocumentPart
   | ReasoningPart
   | ToolPart;
-

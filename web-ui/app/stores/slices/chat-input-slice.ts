@@ -1,10 +1,6 @@
 import type { StateCreator } from "zustand";
 
-import type {
-  AppStoreState,
-  ChatInputSlice,
-  Draft,
-} from "~/stores/slices/types";
+import type { AppStoreState, ChatInputSlice, Draft } from "~/stores/slices/types";
 import type { UIMessagePart } from "~/types";
 
 const EMPTY_DRAFT: Draft = {

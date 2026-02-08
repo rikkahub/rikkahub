@@ -24,7 +24,7 @@ export function useSettingsSubscription() {
           console.error("Settings SSE error:", error);
         },
       },
-      { signal: abortControllerRef.current.signal }
+      { signal: abortControllerRef.current.signal },
     );
 
     return () => {

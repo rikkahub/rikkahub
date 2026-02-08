@@ -95,7 +95,10 @@ function getReasoningLevel(budget: number | null | undefined): ReasoningLevel {
   return closest.key;
 }
 
-function getCurrentModel(settings: { providers: { models: ProviderModel[] }[] } | null, modelId: string | null): ProviderModel | null {
+function getCurrentModel(
+  settings: { providers: { models: ProviderModel[] }[] } | null,
+  modelId: string | null,
+): ProviderModel | null {
   if (!settings || !modelId) {
     return null;
   }
@@ -110,14 +113,8 @@ function getCurrentModel(settings: { providers: { models: ProviderModel[] }[] } 
   return null;
 }
 
-export function ReasoningPickerButton({
-  disabled = false,
-  className,
-}: ReasoningPickerButtonProps) {
-  const {
-    settings,
-    currentAssistant,
-  } = useCurrentAssistant();
+export function ReasoningPickerButton({ disabled = false, className }: ReasoningPickerButtonProps) {
+  const { settings, currentAssistant } = useCurrentAssistant();
 
   const [open, setOpen] = React.useState(false);
   const [updatingBudget, setUpdatingBudget] = React.useState<number | null>(null);
@@ -135,7 +132,8 @@ export function ReasoningPickerButton({
 
   const currentBudget = currentAssistant?.thinkingBudget ?? PRESET_BUDGETS.AUTO;
   const currentLevel = getReasoningLevel(currentBudget);
-  const currentPreset = REASONING_PRESETS.find((preset) => preset.key === currentLevel) ?? REASONING_PRESETS[0];
+  const currentPreset =
+    REASONING_PRESETS.find((preset) => preset.key === currentLevel) ?? REASONING_PRESETS[0];
   const loading = updatingBudget !== null;
 
   React.useEffect(() => {
@@ -151,26 +149,29 @@ export function ReasoningPickerButton({
     }
   }, [currentBudget, open]);
 
-  const updateThinkingBudget = React.useCallback(async (thinkingBudget: number) => {
-    if (!canUse || !currentAssistant) {
-      return;
-    }
+  const updateThinkingBudget = React.useCallback(
+    async (thinkingBudget: number) => {
+      if (!canUse || !currentAssistant) {
+        return;
+      }
 
-    setUpdatingBudget(thinkingBudget);
-    setError(null);
+      setUpdatingBudget(thinkingBudget);
+      setError(null);
 
-    try {
-      await api.post<{ status: string }>("settings/assistant/thinking-budget", {
-        assistantId: currentAssistant.id,
-        thinkingBudget,
-      });
-    } catch (updateError) {
-      const message = updateError instanceof Error ? updateError.message : "更新推理预算失败";
-      setError(message);
-    } finally {
-      setUpdatingBudget(null);
-    }
-  }, [canUse, currentAssistant]);
+      try {
+        await api.post<{ status: string }>("settings/assistant/thinking-budget", {
+          assistantId: currentAssistant.id,
+          thinkingBudget,
+        });
+      } catch (updateError) {
+        const message = updateError instanceof Error ? updateError.message : "更新推理预算失败";
+        setError(message);
+      } finally {
+        setUpdatingBudget(null);
+      }
+    },
+    [canUse, currentAssistant],
+  );
 
   if (!canReasoning) {
     return null;
@@ -194,10 +195,10 @@ export function ReasoningPickerButton({
         <span>{currentPreset.label}</span>
         <span className="hidden sm:block">
           {loading ? (
-          <LoaderCircle className="size-3.5 animate-spin" />
-        ) : (
-          <ChevronDown className="size-3.5" />
-        )}
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : (
+            <ChevronDown className="size-3.5" />
+          )}
         </span>
       </Button>
 
@@ -290,7 +291,9 @@ export function ReasoningPickerButton({
                   应用
                 </Button>
               </div>
-              <div className="text-muted-foreground text-xs">示例：0（关闭）、-1（自动）、1024、16000、32000</div>
+              <div className="text-muted-foreground text-xs">
+                示例：0（关闭）、-1（自动）、1024、16000、32000
+              </div>
             </div>
           </div>
         </DialogContent>

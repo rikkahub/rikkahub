@@ -113,7 +113,8 @@ export function ConversationSidebar({
   const CurrentThemeIcon = currentThemeOption.icon;
 
   const currentAssistant = React.useMemo(
-    () => assistants.find((assistant) => assistant.id === currentAssistantId) ?? assistants[0] ?? null,
+    () =>
+      assistants.find((assistant) => assistant.id === currentAssistantId) ?? assistants[0] ?? null,
     [assistants, currentAssistantId],
   );
 
@@ -160,7 +161,12 @@ export function ConversationSidebar({
     <Sidebar collapsible="offcanvas" variant="sidebar">
       <SidebarHeader>
         <div className="flex items-center gap-3 rounded-lg px-2.5 py-2.5">
-          <UIAvatar size="default" name={userName} avatar={userAvatar} className="ring-1 ring-sidebar-border/70" />
+          <UIAvatar
+            size="default"
+            name={userName}
+            avatar={userAvatar}
+            className="ring-1 ring-sidebar-border/70"
+          />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium leading-none">{userName}</div>
             <div className="mt-1 truncate text-xs text-muted-foreground">欢迎回来</div>
@@ -169,7 +175,12 @@ export function ConversationSidebar({
       </SidebarHeader>
       <SidebarContent className="min-h-0">
         <SidebarGroup>
-          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onCreateConversation}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            onClick={onCreateConversation}
+          >
             <Plus className="size-4" />
             新建对话
           </Button>

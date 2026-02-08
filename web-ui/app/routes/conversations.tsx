@@ -12,15 +12,8 @@ import {
 import { ChatInput } from "~/components/message/chat-input";
 import { ChatMessage } from "~/components/message/chat-message";
 import { TypingIndicator } from "~/components/ui/typing-indicator";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "~/components/ui/sidebar";
-import {
-  toConversationSummaryUpdate,
-  useConversationList,
-} from "~/hooks/use-conversation-list";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar";
+import { toConversationSummaryUpdate, useConversationList } from "~/hooks/use-conversation-list";
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import api, { sse } from "~/services/api";
 import { useChatInputStore } from "~/stores";
@@ -35,9 +28,7 @@ import {
 import { MessageSquare } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 
-type ConversationStreamEvent =
-  | ConversationSnapshotEventDto
-  | ConversationNodeUpdateEventDto;
+type ConversationStreamEvent = ConversationSnapshotEventDto | ConversationNodeUpdateEventDto;
 
 interface SelectedNodeMessage {
   node: MessageNodeDto;
@@ -65,7 +56,9 @@ function createHomeDraftId() {
   return `home-${uuidv4()}`;
 }
 
-function isAttachmentPart(part: UIMessagePart): part is Extract<UIMessagePart, { type: "image" | "video" | "audio" | "document" }> {
+function isAttachmentPart(
+  part: UIMessagePart,
+): part is Extract<UIMessagePart, { type: "image" | "video" | "audio" | "document" }> {
   return (
     part.type === "image" ||
     part.type === "video" ||
@@ -99,14 +92,16 @@ function toEditDraft(message: MessageDto): EditDraft | null {
   const attachments = message.parts.flatMap((part, index) => {
     if (!isAttachmentPart(part)) return [];
 
-    return [{
-      ...part,
-      metadata: {
-        ...(part.metadata ?? {}),
-        [EDIT_DRAFT_ATTACHMENT_MARK]: true,
-        [EDIT_DRAFT_SOURCE_INDEX]: index,
+    return [
+      {
+        ...part,
+        metadata: {
+          ...(part.metadata ?? {}),
+          [EDIT_DRAFT_ATTACHMENT_MARK]: true,
+          [EDIT_DRAFT_SOURCE_INDEX]: index,
+        },
       },
-    }];
+    ];
   });
 
   if (text.trim().length === 0 && attachments.length === 0) {
@@ -134,8 +129,7 @@ function stripEditDraftMetadata(parts: UIMessagePart[]): UIMessagePart[] {
     }
 
     const hasEditMark =
-      EDIT_DRAFT_ATTACHMENT_MARK in part.metadata ||
-      EDIT_DRAFT_SOURCE_INDEX in part.metadata;
+      EDIT_DRAFT_ATTACHMENT_MARK in part.metadata || EDIT_DRAFT_SOURCE_INDEX in part.metadata;
     if (!hasEditMark) {
       return part;
     }
@@ -345,10 +339,7 @@ function useDraftInputController({
 }) {
   const draftKey = activeId ?? (isHomeRoute ? homeDraftId : null);
   const draft = useChatInputStore(
-    React.useCallback(
-      (state) => (draftKey ? state.drafts[draftKey] : undefined),
-      [draftKey],
-    ),
+    React.useCallback((state) => (draftKey ? state.drafts[draftKey] : undefined), [draftKey]),
   );
 
   const setDraftText = useChatInputStore((state) => state.setText);
@@ -467,7 +458,6 @@ function ConversationTimeline({
   onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
   onToolApproval: (toolCallId: string, approved: boolean, reason: string) => Promise<void>;
 }) {
-
   return (
     <Conversation className="flex-1 min-h-0">
       <ConversationContent className="mx-auto w-full max-w-3xl gap-4 px-4 py-6">
@@ -479,16 +469,10 @@ function ConversationTimeline({
           />
         )}
         {activeId && detailLoading && (
-          <ConversationEmptyState
-            title="加载中..."
-            description="正在加载会话详情"
-          />
+          <ConversationEmptyState title="加载中..." description="正在加载会话详情" />
         )}
         {activeId && detailError && (
-          <ConversationEmptyState
-            title="加载失败"
-            description={detailError}
-          />
+          <ConversationEmptyState title="加载失败" description={detailError} />
         )}
         {!detailLoading && !detailError && activeId && selectedNodeMessages.length === 0 && (
           <ConversationEmptyState
@@ -559,10 +543,7 @@ function ConversationSuggestions({
 }
 
 export function meta() {
-  return [
-    { title: "RikkaHub Web" },
-    { name: "description", content: "RikkaHub web client" },
-  ];
+  return [{ title: "RikkaHub Web" }, { name: "description", content: "RikkaHub web client" }];
 }
 
 export default function ConversationsPage() {
@@ -570,11 +551,7 @@ export default function ConversationsPage() {
   const { id: routeId } = useParams();
   const isHomeRoute = !routeId;
 
-  const {
-    settings,
-    assistants,
-    currentAssistantId,
-  } = useCurrentAssistant();
+  const { settings, assistants, currentAssistantId } = useCurrentAssistant();
   const {
     conversations,
     activeId,
@@ -590,13 +567,8 @@ export default function ConversationsPage() {
   const [homeDraftId, setHomeDraftId] = React.useState(() => createHomeDraftId());
   const [editingSession, setEditingSession] = React.useState<EditingSession | null>(null);
 
-  const {
-    detail,
-    detailLoading,
-    detailError,
-    selectedNodeMessages,
-    resetDetail,
-  } = useConversationDetail(activeId, updateConversationSummary);
+  const { detail, detailLoading, detailError, selectedNodeMessages, resetDetail } =
+    useConversationDetail(activeId, updateConversationSummary);
 
   const {
     draftKey,
@@ -623,14 +595,13 @@ export default function ConversationsPage() {
 
   React.useEffect(() => {
     const base = "RikkaHub Web";
-    document.title = activeConversation?.title
-      ? `${activeConversation.title} - ${base}`
-      : base;
+    document.title = activeConversation?.title ? `${activeConversation.title} - ${base}` : base;
     return () => {
       document.title = base;
     };
   }, [activeConversation?.title]);
-  const showSuggestions = Boolean(activeId) && !detailLoading && !detailError && chatSuggestions.length > 0;
+  const showSuggestions =
+    Boolean(activeId) && !detailLoading && !detailError && chatSuggestions.length > 0;
 
   const handleSelect = React.useCallback(
     (id: string) => {
@@ -702,9 +673,12 @@ export default function ConversationsPage() {
   const handleForkMessage = React.useCallback(
     async (messageId: string) => {
       if (!activeId) return;
-      const response = await api.post<{ conversationId: string }>(`conversations/${activeId}/fork`, {
-        messageId,
-      });
+      const response = await api.post<{ conversationId: string }>(
+        `conversations/${activeId}/fork`,
+        {
+          messageId,
+        },
+      );
       setActiveId(response.conversationId);
       navigate(`/c/${response.conversationId}`);
       refreshList();

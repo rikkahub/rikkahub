@@ -103,7 +103,7 @@ export interface SSECallbacks<T> {
 async function sse<T>(
   url: string,
   callbacks: SSECallbacks<T>,
-  options?: Options & { signal?: AbortSignal }
+  options?: Options & { signal?: AbortSignal },
 ): Promise<void> {
   const response = await kyInstance.get(url, {
     ...options,

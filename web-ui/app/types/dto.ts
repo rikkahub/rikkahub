@@ -17,7 +17,6 @@ export interface PagedResult<T> {
   hasMore: boolean;
 }
 
-
 export interface UploadedFileDto {
   id: number;
   url: string;

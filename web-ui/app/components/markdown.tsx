@@ -5,10 +5,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import {
-  oneLight,
-  oneDark,
-} from "react-syntax-highlighter/dist/esm/styles/prism";
+import { oneLight, oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "~/lib/utils";
 import { Check, Copy } from "lucide-react";
 import "katex/dist/katex.min.css";
@@ -32,9 +29,7 @@ function preProcess(content: string): string {
 
   // Check if position is inside a code block
   const isInCodeBlock = (position: number): boolean => {
-    return codeBlocks.some(
-      (range) => position >= range.start && position < range.end
-    );
+    return codeBlocks.some((range) => position >= range.start && position < range.end);
   };
 
   // Replace inline formulas \( ... \) to $ ... $, skip code blocks
@@ -45,19 +40,16 @@ function preProcess(content: string): string {
         return match;
       }
       return `$${group1}$`;
-    }
+    },
   );
 
   // Replace block formulas \[ ... \] to $$ ... $$, skip code blocks
-  result = result.replace(
-    new RegExp(BLOCK_LATEX_REGEX.source, "gs"),
-    (match, group1, offset) => {
-      if (isInCodeBlock(offset)) {
-        return match;
-      }
-      return `$$${group1}$$`;
+  result = result.replace(new RegExp(BLOCK_LATEX_REGEX.source, "gs"), (match, group1, offset) => {
+    if (isInCodeBlock(offset)) {
+      return match;
     }
-  );
+    return `$$${group1}$$`;
+  });
 
   // Replace thinking tags with blockquote format
   result = result.replace(THINKING_REGEX, (_, thinkContent) => {
@@ -77,17 +69,10 @@ type MarkdownProps = {
   onClickCitation?: (id: string) => void;
 };
 
-function CodeBlock({
-  language,
-  children,
-}: {
-  language: string;
-  children: string;
-}) {
+function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = React.useState(false);
   const isDark =
-    typeof window !== "undefined" &&
-    document.documentElement.classList.contains("dark");
+    typeof window !== "undefined" && document.documentElement.classList.contains("dark");
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(children);
@@ -99,11 +84,7 @@ function CodeBlock({
     <div className="code-block">
       <div className="code-block-header">
         <span className="code-block-language">{language || "text"}</span>
-        <button
-          onClick={handleCopy}
-          className="code-block-copy"
-          aria-label="Copy code"
-        >
+        <button onClick={handleCopy} className="code-block-copy" aria-label="Copy code">
           {copied ? (
             <>
               <Check className="h-3 w-3" />
@@ -146,8 +127,7 @@ export default function Markdown({ content, className, onClickCitation }: Markdo
           pre: ({ children }) => <>{children}</>,
           code: ({ className, children, ...props }) => {
             const match = /language-(\w+)/.exec(className || "");
-            const isBlock =
-              typeof children === "string" && children.includes("\n");
+            const isBlock = typeof children === "string" && children.includes("\n");
 
             if (match || isBlock) {
               const code = String(children).replace(/\n$/, "");
@@ -182,12 +162,7 @@ export default function Markdown({ content, className, onClickCitation }: Markdo
             }
 
             return (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                {...props}
-              >
+              <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
                 {children}
               </a>
             );

@@ -44,4 +44,3 @@ export function VideoPart({ url }: VideoPartProps) {
     </div>
   );
 }
-

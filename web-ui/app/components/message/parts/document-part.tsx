@@ -12,10 +12,7 @@ function getDocumentIcon(mime: string) {
   if (mime === "application/pdf") {
     return <FileText className="h-4 w-4" />;
   }
-  if (
-    mime ===
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-  ) {
+  if (mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     return <FileText className="h-4 w-4" />;
   }
   return <File className="h-4 w-4" />;
@@ -38,4 +35,3 @@ export function DocumentPart({ url, fileName, mime }: DocumentPartProps) {
     </a>
   );
 }
-
