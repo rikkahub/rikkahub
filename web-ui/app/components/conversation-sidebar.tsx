@@ -53,7 +53,13 @@ import {
 } from "~/components/ui/sidebar";
 import { UIAvatar } from "~/components/ui/ui-avatar";
 import { useTheme, type ColorTheme, type Theme } from "~/components/theme-provider";
-import type { AssistantAvatar, AssistantProfile, AssistantTag, ConversationListDto } from "~/types";
+import { ConversationSearchButton } from "~/components/conversation-search-button";
+import type {
+  AssistantAvatar,
+  AssistantProfile,
+  AssistantTag,
+  ConversationListDto,
+} from "~/types";
 
 const THEME_OPTIONS: Array<{
   value: Theme;
@@ -512,6 +518,7 @@ export function ConversationSidebar({
     [currentAssistantId, onAssistantChange],
   );
 
+
   return (
     <Sidebar collapsible="offcanvas" variant="sidebar">
       <SidebarHeader>
@@ -530,15 +537,19 @@ export function ConversationSidebar({
       </SidebarHeader>
       <SidebarContent className="min-h-0">
         <SidebarGroup>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
-            onClick={onCreateConversation}
-          >
-            <Plus className="size-4" />
-            新建对话
-          </Button>
+          <div className="space-y-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start"
+              onClick={onCreateConversation}
+            >
+              <Plus className="size-4" />
+              新建对话
+            </Button>
+
+            <ConversationSearchButton onSelect={onSelect} />
+          </div>
         </SidebarGroup>
 
         <SidebarGroup className="flex min-h-0 flex-1 flex-col">
