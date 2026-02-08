@@ -446,7 +446,7 @@ export function ChatInput({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <ModelList disabled={!canSwitchModel} className="max-w-[180px]" />
+              <ModelList disabled={!canSwitchModel} className="max-w-64" />
             </div>
             <Button
               onClick={() => {
