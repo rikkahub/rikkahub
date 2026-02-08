@@ -29,6 +29,12 @@ bun run build
 # Type checking
 bun run typecheck
 
+# Format code
+bun run fmt
+
+# Check formatting
+bun run fmt:check
+
 # Start production server
 bun run start
 ```
