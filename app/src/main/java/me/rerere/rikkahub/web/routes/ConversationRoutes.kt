@@ -46,10 +46,13 @@ fun Route.conversationRoutes(
         // GET /api/conversations - List conversations of current assistant
         get {
             val settings = settingsStore.settingsFlow.first()
+            val generationJobs = chatService.getConversationJobs().first()
             val conversations = conversationRepo
                 .getConversationsOfAssistant(settings.assistantId)
                 .first()
-                .map { it.toListDto() }
+                .map { conversation ->
+                    conversation.toListDto(isGenerating = generationJobs[conversation.id] != null)
+                }
             call.respond(conversations)
         }
 
@@ -71,10 +74,13 @@ fun Route.conversationRoutes(
                 offset = offset,
                 limit = limit
             )
+            val generationJobs = chatService.getConversationJobs().first()
 
             call.respond(
                 PagedResult(
-                    items = page.items.map { it.toListDto() },
+                    items = page.items.map { conversation ->
+                        conversation.toListDto(isGenerating = generationJobs[conversation.id] != null)
+                    },
                     nextOffset = page.nextOffset
                 )
             )

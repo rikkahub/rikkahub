@@ -85,7 +85,8 @@ data class ConversationListDto(
     val title: String,
     val isPinned: Boolean,
     val createAt: Long,
-    val updateAt: Long
+    val updateAt: Long,
+    val isGenerating: Boolean = false
 )
 
 @Serializable
@@ -204,13 +205,14 @@ data class ConversationListInvalidateEvent(
 
 // ========== Conversion Extensions ==========
 
-fun Conversation.toListDto() = ConversationListDto(
+fun Conversation.toListDto(isGenerating: Boolean = false) = ConversationListDto(
     id = id.toString(),
     assistantId = assistantId.toString(),
     title = title,
     isPinned = isPinned,
     createAt = createAt.toEpochMilli(),
-    updateAt = updateAt.toEpochMilli()
+    updateAt = updateAt.toEpochMilli(),
+    isGenerating = isGenerating
 )
 
 fun Conversation.toDto(isGenerating: Boolean = false) = ConversationDto(
