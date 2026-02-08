@@ -447,6 +447,7 @@ function ConversationTimeline({
   selectedNodeMessages,
   isGenerating,
   onEdit,
+  onDelete,
   onRegenerate,
   onSelectBranch,
   onToolApproval,
@@ -458,6 +459,7 @@ function ConversationTimeline({
   selectedNodeMessages: SelectedNodeMessage[];
   isGenerating: boolean;
   onEdit: (message: MessageDto) => void | Promise<void>;
+  onDelete: (messageId: string) => Promise<void>;
   onRegenerate: (messageId: string) => Promise<void>;
   onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
   onToolApproval: (toolCallId: string, approved: boolean, reason: string) => Promise<void>;
@@ -510,6 +512,7 @@ function ConversationTimeline({
               loading={isGenerating && index === selectedNodeMessages.length - 1}
               isLastMessage={index === selectedNodeMessages.length - 1}
               onEdit={onEdit}
+              onDelete={onDelete}
               onRegenerate={onRegenerate}
               onSelectBranch={onSelectBranch}
               onToolApproval={onToolApproval}
@@ -692,6 +695,14 @@ export default function ConversationsPage() {
     [activeId],
   );
 
+  const handleDeleteMessage = React.useCallback(
+    async (messageId: string) => {
+      if (!activeId) return;
+      await api.delete<{ status: string }>(`conversations/${activeId}/messages/${messageId}`);
+    },
+    [activeId],
+  );
+
   const handleStartEdit = React.useCallback(
     (message: MessageDto) => {
       if (!activeId || (message.role !== "USER" && message.role !== "ASSISTANT")) return;
@@ -795,6 +806,7 @@ export default function ConversationsPage() {
           selectedNodeMessages={selectedNodeMessages}
           isGenerating={detail?.isGenerating ?? false}
           onEdit={handleStartEdit}
+          onDelete={handleDeleteMessage}
           onRegenerate={handleRegenerate}
           onSelectBranch={handleSelectBranch}
           onToolApproval={handleToolApproval}
