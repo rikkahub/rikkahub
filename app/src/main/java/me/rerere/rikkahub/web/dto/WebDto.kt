@@ -33,6 +33,11 @@ data class EditMessageRequest(
 )
 
 @Serializable
+data class ForkConversationRequest(
+    val messageId: String
+)
+
+@Serializable
 data class SelectMessageNodeRequest(
     val selectIndex: Int
 )
@@ -113,6 +118,11 @@ data class MessageDto(
     val modelId: String? = null,
     val usage: TokenUsage? = null,
     val translation: String? = null
+)
+
+@Serializable
+data class ForkConversationResponse(
+    val conversationId: String
 )
 
 // ========== Error Response ==========

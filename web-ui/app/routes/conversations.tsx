@@ -448,6 +448,7 @@ function ConversationTimeline({
   isGenerating,
   onEdit,
   onDelete,
+  onFork,
   onRegenerate,
   onSelectBranch,
   onToolApproval,
@@ -460,6 +461,7 @@ function ConversationTimeline({
   isGenerating: boolean;
   onEdit: (message: MessageDto) => void | Promise<void>;
   onDelete: (messageId: string) => Promise<void>;
+  onFork: (messageId: string) => Promise<void>;
   onRegenerate: (messageId: string) => Promise<void>;
   onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
   onToolApproval: (toolCallId: string, approved: boolean, reason: string) => Promise<void>;
@@ -513,6 +515,7 @@ function ConversationTimeline({
               isLastMessage={index === selectedNodeMessages.length - 1}
               onEdit={onEdit}
               onDelete={onDelete}
+              onFork={onFork}
               onRegenerate={onRegenerate}
               onSelectBranch={onSelectBranch}
               onToolApproval={onToolApproval}
@@ -703,6 +706,19 @@ export default function ConversationsPage() {
     [activeId],
   );
 
+  const handleForkMessage = React.useCallback(
+    async (messageId: string) => {
+      if (!activeId) return;
+      const response = await api.post<{ conversationId: string }>(`conversations/${activeId}/fork`, {
+        messageId,
+      });
+      setActiveId(response.conversationId);
+      navigate(`/c/${response.conversationId}`);
+      refreshList();
+    },
+    [activeId, navigate, refreshList, setActiveId],
+  );
+
   const handleStartEdit = React.useCallback(
     (message: MessageDto) => {
       if (!activeId || (message.role !== "USER" && message.role !== "ASSISTANT")) return;
@@ -807,6 +823,7 @@ export default function ConversationsPage() {
           isGenerating={detail?.isGenerating ?? false}
           onEdit={handleStartEdit}
           onDelete={handleDeleteMessage}
+          onFork={handleForkMessage}
           onRegenerate={handleRegenerate}
           onSelectBranch={handleSelectBranch}
           onToolApproval={handleToolApproval}

@@ -8,6 +8,7 @@ import {
   Clock3,
   Copy,
   Ellipsis,
+  GitFork,
   Pencil,
   RefreshCw,
   Trash2,
@@ -36,6 +37,7 @@ interface ChatMessageProps {
   onRegenerate?: (messageId: string) => void | Promise<void>;
   onSelectBranch?: (nodeId: string, selectIndex: number) => void | Promise<void>;
   onDelete?: (messageId: string) => void | Promise<void>;
+  onFork?: (messageId: string) => void | Promise<void>;
   onToolApproval?: (
     toolCallId: string,
     approved: boolean,
@@ -160,6 +162,7 @@ function ChatMessageActionsRow({
   onRegenerate,
   onSelectBranch,
   onDelete,
+  onFork,
 }: {
   node: MessageNodeDto;
   message: MessageDto;
@@ -169,10 +172,12 @@ function ChatMessageActionsRow({
   onRegenerate?: (messageId: string) => void | Promise<void>;
   onSelectBranch?: (nodeId: string, selectIndex: number) => void | Promise<void>;
   onDelete?: (messageId: string) => void | Promise<void>;
+  onFork?: (messageId: string) => void | Promise<void>;
 }) {
   const [regenerating, setRegenerating] = React.useState(false);
   const [switchingBranch, setSwitchingBranch] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
+  const [forking, setForking] = React.useState(false);
 
   const handleCopy = React.useCallback(async () => {
     const text = buildCopyText(message.parts);
@@ -226,9 +231,20 @@ function ChatMessageActionsRow({
     }
   }, [message.id, onDelete]);
 
+  const handleFork = React.useCallback(async () => {
+    if (!onFork) return;
+
+    setForking(true);
+    try {
+      await onFork(message.id);
+    } finally {
+      setForking(false);
+    }
+  }, [message.id, onFork]);
+
   const canSwitchBranch = Boolean(onSelectBranch) && node.messages.length > 1;
   const canEdit = Boolean(onEdit) && (message.role === "USER" || message.role === "ASSISTANT") && hasEditableContent(message.parts);
-  const actionDisabled = loading || switchingBranch || regenerating || deleting;
+  const actionDisabled = loading || switchingBranch || regenerating || deleting || forking;
 
   return (
     <div
@@ -332,6 +348,17 @@ function ChatMessageActionsRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align={alignRight ? "end" : "start"}>
+            {onFork && (
+              <DropdownMenuItem
+                disabled={actionDisabled}
+                onSelect={() => {
+                  void handleFork();
+                }}
+              >
+                <GitFork className="size-3.5" />
+                创建分叉
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               variant="destructive"
               disabled={actionDisabled}
@@ -391,6 +418,7 @@ export function ChatMessage({
   onRegenerate,
   onSelectBranch,
   onDelete,
+  onFork,
   onToolApproval,
 }: ChatMessageProps) {
   const isUser = message.role === "USER";
@@ -424,6 +452,7 @@ export function ChatMessage({
           onRegenerate={onRegenerate}
           onSelectBranch={onSelectBranch}
           onDelete={onDelete}
+          onFork={onFork}
         />
       )}
 

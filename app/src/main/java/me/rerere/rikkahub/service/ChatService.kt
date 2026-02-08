@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -1053,6 +1054,43 @@ class ChatService(
         saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
+    suspend fun forkConversationAtMessage(
+        conversationId: Uuid,
+        messageId: Uuid
+    ): Conversation {
+        val currentConversation = getConversationFlow(conversationId).value
+        val targetNodeIndex = currentConversation.messageNodes.indexOfFirst { node ->
+            node.messages.any { it.id == messageId }
+        }
+        if (targetNodeIndex == -1) {
+            throw NotFoundException("Message not found")
+        }
+
+        val copiedNodes = currentConversation.messageNodes
+            .subList(0, targetNodeIndex + 1)
+            .map { node ->
+                node.copy(
+                    id = Uuid.random(),
+                    messages = node.messages.map { message ->
+                        message.copy(
+                            parts = message.parts.map { part ->
+                                part.copyWithForkedFileUrl()
+                            }
+                        )
+                    }
+                )
+            }
+
+        val forkConversation = Conversation(
+            id = Uuid.random(),
+            assistantId = currentConversation.assistantId,
+            messageNodes = copiedNodes,
+        )
+
+        saveConversation(forkConversation.id, forkConversation)
+        return forkConversation
+    }
+
     suspend fun selectMessageNode(
         conversationId: Uuid,
         nodeId: Uuid,
@@ -1135,6 +1173,22 @@ class ChatService(
         }
 
         return conversation.copy(messageNodes = updatedNodes)
+    }
+
+    private fun UIMessagePart.copyWithForkedFileUrl(): UIMessagePart {
+        fun copyLocalFileIfNeeded(url: String): String {
+            if (!url.startsWith("file:")) return url
+            val copied = filesManager.createChatFilesByContents(listOf(url.toUri())).firstOrNull()
+            return copied?.toString() ?: url
+        }
+
+        return when (this) {
+            is UIMessagePart.Image -> copy(url = copyLocalFileIfNeeded(url))
+            is UIMessagePart.Document -> copy(url = copyLocalFileIfNeeded(url))
+            is UIMessagePart.Video -> copy(url = copyLocalFileIfNeeded(url))
+            is UIMessagePart.Audio -> copy(url = copyLocalFileIfNeeded(url))
+            else -> this
+        }
     }
 
     fun clearTranslationField(conversationId: Uuid, messageId: Uuid) {

@@ -24,6 +24,8 @@ import me.rerere.rikkahub.web.dto.ConversationListInvalidateEvent
 import me.rerere.rikkahub.web.dto.ConversationNodeUpdateEvent
 import me.rerere.rikkahub.web.dto.ConversationSnapshotEvent
 import me.rerere.rikkahub.web.dto.EditMessageRequest
+import me.rerere.rikkahub.web.dto.ForkConversationRequest
+import me.rerere.rikkahub.web.dto.ForkConversationResponse
 import me.rerere.rikkahub.web.dto.MessageNodeDto
 import me.rerere.rikkahub.web.dto.PagedResult
 import me.rerere.rikkahub.web.dto.RegenerateRequest
@@ -137,6 +139,18 @@ fun Route.conversationRoutes(
             chatService.editMessage(uuid, messageId, request.parts)
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
+        }
+
+        // POST /api/conversations/{id}/fork - Create a forked conversation up to message
+        post("/{id}/fork") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val request = call.receive<ForkConversationRequest>()
+            val messageId = request.messageId.toUuid("message id")
+
+            chatService.initializeConversation(uuid)
+            val fork = chatService.forkConversationAtMessage(uuid, messageId)
+
+            call.respond(HttpStatusCode.Created, ForkConversationResponse(conversationId = fork.id.toString()))
         }
 
         // DELETE /api/conversations/{id}/messages/{messageId} - Delete a message
