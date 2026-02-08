@@ -219,6 +219,13 @@ export function ConversationSidebar({
                     <span className="flex w-full items-center gap-2">
                       {item.isPinned && <span className="text-xs text-muted-foreground">📌</span>}
                       <span className="flex-1 truncate">{item.title || "未命名会话"}</span>
+                      {item.isGenerating && (
+                        <span
+                          className="inline-block size-2 rounded-full bg-emerald-500"
+                          aria-label="生成中"
+                          title="生成中"
+                        />
+                      )}
                     </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

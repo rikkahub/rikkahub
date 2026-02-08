@@ -22,6 +22,7 @@ interface ConversationSummaryUpdate {
   isPinned: boolean;
   createAt: number;
   updateAt: number;
+  isGenerating: boolean;
 }
 
 export interface UseConversationListResult {
@@ -109,6 +110,7 @@ export function useConversationList({
                   isPinned: update.isPinned,
                   createAt: update.createAt,
                   updateAt: update.updateAt,
+                  isGenerating: update.isGenerating,
                 }
               : item,
           ),
@@ -281,5 +283,6 @@ export function toConversationSummaryUpdate(
     isPinned: conversation.isPinned,
     createAt: conversation.createAt,
     updateAt: conversation.updateAt,
+    isGenerating: conversation.isGenerating,
   };
 }

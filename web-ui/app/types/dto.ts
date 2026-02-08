@@ -9,6 +9,7 @@ export interface ConversationListDto {
   isPinned: boolean;
   createAt: number;
   updateAt: number;
+  isGenerating: boolean;
 }
 
 export interface PagedResult<T> {
