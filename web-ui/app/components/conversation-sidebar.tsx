@@ -103,6 +103,10 @@ const COLOR_THEME_OPTIONS: Array<{
     value: "mono",
     label: "Mono",
   },
+  {
+    value: "bubblegum",
+    label: "Bubblegum",
+  },
 ];
 
 type ConversationListItem =
