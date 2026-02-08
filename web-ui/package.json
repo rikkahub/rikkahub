@@ -7,8 +7,8 @@
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "fmt": "oxfmt app",
+    "fmt:check": "oxfmt app --check"
   },
   "dependencies": {
     "@react-router/node": "7.12.0",
