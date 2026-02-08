@@ -54,6 +54,12 @@ data class UpdateAssistantModelRequest(
 )
 
 @Serializable
+data class UpdateAssistantThinkingBudgetRequest(
+    val assistantId: String,
+    val thinkingBudget: Int?,
+)
+
+@Serializable
 data class UpdateSearchEnabledRequest(
     val enabled: Boolean,
 )

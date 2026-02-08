@@ -353,6 +353,20 @@ class SettingsStore(
             )
         }
     }
+
+    suspend fun updateAssistantThinkingBudget(assistantId: Uuid, thinkingBudget: Int?) {
+        update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map { assistant ->
+                    if (assistant.id == assistantId) {
+                        assistant.copy(thinkingBudget = thinkingBudget)
+                    } else {
+                        assistant
+                    }
+                }
+            )
+        }
+    }
 }
 
 @Serializable
