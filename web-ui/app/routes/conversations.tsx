@@ -462,6 +462,7 @@ function ConversationTimeline({
   onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
   onToolApproval: (toolCallId: string, approved: boolean, reason: string) => Promise<void>;
 }) {
+
   return (
     <Conversation className="flex-1 min-h-0">
       <ConversationContent className="mx-auto w-full max-w-3xl gap-4 px-4 py-6">
@@ -521,8 +522,40 @@ function ConversationTimeline({
           </div>
         )}
       </ConversationContent>
+
       <ConversationScrollButton />
     </Conversation>
+  );
+}
+
+function ConversationSuggestions({
+  suggestions,
+  onClickSuggestion,
+}: {
+  suggestions: string[];
+  onClickSuggestion: (suggestion: string) => void;
+}) {
+  if (suggestions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-3xl px-4 pb-1">
+      <div className="flex gap-2 overflow-x-auto">
+        {suggestions.map((suggestion, index) => (
+          <button
+            key={`${suggestion}-${index}`}
+            type="button"
+            className="shrink-0 rounded-full border bg-transparent px-3 py-1 text-xs text-foreground transition-colors hover:bg-muted/40"
+            onClick={() => {
+              onClickSuggestion(suggestion);
+            }}
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -587,6 +620,8 @@ export default function ConversationsPage() {
   });
 
   const activeConversation = conversations.find((item) => item.id === activeId);
+  const chatSuggestions = detail?.chatSuggestions ?? [];
+  const showSuggestions = Boolean(activeId) && !detailLoading && !detailError && chatSuggestions.length > 0;
 
   const handleSelect = React.useCallback(
     (id: string) => {
@@ -669,6 +704,16 @@ export default function ConversationsPage() {
     clearCurrentDraft();
   }, [clearCurrentDraft]);
 
+  const handleClickSuggestion = React.useCallback(
+    (suggestion: string) => {
+      if (editingSession) {
+        setEditingSession(null);
+      }
+      handleInputTextChange(suggestion);
+    },
+    [editingSession, handleInputTextChange],
+  );
+
   const handleSend = React.useCallback(async () => {
     if (!editingSession) {
       await handleSubmit();
@@ -745,6 +790,13 @@ export default function ConversationsPage() {
           onToolApproval={handleToolApproval}
         />
 
+        {showSuggestions ? (
+          <ConversationSuggestions
+            suggestions={chatSuggestions}
+            onClickSuggestion={handleClickSuggestion}
+          />
+        ) : null}
+
         <ChatInput
           value={inputText}
           attachments={inputAttachments}
@@ -761,6 +813,7 @@ export default function ConversationsPage() {
           }}
           onSend={handleSend}
           onStop={activeId ? handleStop : undefined}
+          className={showSuggestions ? "pt-1" : undefined}
         />
       </SidebarInset>
     </SidebarProvider>
