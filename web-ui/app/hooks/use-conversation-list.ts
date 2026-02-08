@@ -41,7 +41,7 @@ export function useConversationList({
   currentAssistantId,
   routeId = null,
   autoSelectFirst = true,
-  pageSize = 20,
+  pageSize = 30,
   maxRefreshLimit = 100,
 }: UseConversationListOptions): UseConversationListResult {
   const [conversations, setConversations] = React.useState<ConversationListDto[]>([]);

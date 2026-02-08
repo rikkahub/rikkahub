@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { Check, Laptop, Moon, Plus, Sun } from "lucide-react";
+import dayjs from "dayjs";
+import { Check, Laptop, Moon, Pin, Plus, Sun } from "lucide-react";
 
 import { InfiniteScrollArea } from "~/components/extended/infinite-scroll-area";
 import { Badge } from "~/components/ui/badge";
@@ -57,6 +58,54 @@ const THEME_OPTIONS: Array<{
     icon: Laptop,
   },
 ];
+
+type ConversationListItem =
+  | { type: "pinned-header" }
+  | { type: "date-header"; date: string; label: string }
+  | { type: "item"; conversation: ConversationListDto };
+
+function getDateLabel(date: dayjs.Dayjs): string {
+  const today = dayjs().startOf("day");
+  const yesterday = today.subtract(1, "day");
+
+  if (date.isSame(today, "day")) return "今天";
+  if (date.isSame(yesterday, "day")) return "昨天";
+
+  const native = date.toDate();
+  const sameYear = date.year() === today.year();
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+  return formatter.format(native);
+}
+
+function groupConversations(conversations: ConversationListDto[]): ConversationListItem[] {
+  const items: ConversationListItem[] = [];
+  const pinned = conversations.filter((c) => c.isPinned);
+  const unpinned = conversations.filter((c) => !c.isPinned);
+
+  if (pinned.length > 0) {
+    items.push({ type: "pinned-header" });
+    for (const c of pinned) {
+      items.push({ type: "item", conversation: c });
+    }
+  }
+
+  let lastDate: string | null = null;
+  for (const c of unpinned) {
+    const date = dayjs(c.updateAt).startOf("day");
+    const dateKey = date.format("YYYY-MM-DD");
+    if (dateKey !== lastDate) {
+      items.push({ type: "date-header", date: dateKey, label: getDateLabel(date) });
+      lastDate = dateKey;
+    }
+    items.push({ type: "item", conversation: c });
+  }
+
+  return items;
+}
 
 export interface ConversationSidebarProps {
   conversations: ConversationListDto[];
@@ -117,6 +166,8 @@ export function ConversationSidebar({
       assistants.find((assistant) => assistant.id === currentAssistantId) ?? assistants[0] ?? null,
     [assistants, currentAssistantId],
   );
+
+  const groupedItems = React.useMemo(() => groupConversations(conversations), [conversations]);
 
   const filteredAssistants = React.useMemo(() => {
     if (selectedTagIds.length === 0) {
@@ -210,26 +261,47 @@ export function ConversationSidebar({
                   <div className="px-2 py-2 text-xs text-muted-foreground">暂无会话</div>
                 </SidebarMenuItem>
               )}
-              {conversations.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={item.id === activeId}
-                    onClick={() => onSelect(item.id)}
-                  >
-                    <span className="flex w-full items-center gap-2">
-                      {item.isPinned && <span className="text-xs text-muted-foreground">📌</span>}
-                      <span className="flex-1 truncate">{item.title || "未命名会话"}</span>
-                      {item.isGenerating && (
-                        <span
-                          className="inline-block size-2 rounded-full bg-emerald-500"
-                          aria-label="生成中"
-                          title="生成中"
-                        />
-                      )}
-                    </span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {groupedItems.map((listItem) => {
+                if (listItem.type === "pinned-header") {
+                  return (
+                    <SidebarMenuItem key="pinned_header">
+                      <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-semibold text-primary">
+                        <Pin className="size-3" />
+                        置顶
+                      </div>
+                    </SidebarMenuItem>
+                  );
+                }
+                if (listItem.type === "date-header") {
+                  return (
+                    <SidebarMenuItem key={`date_${listItem.date}`}>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-primary">
+                        {listItem.label}
+                      </div>
+                    </SidebarMenuItem>
+                  );
+                }
+                const item = listItem.conversation;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      isActive={item.id === activeId}
+                      onClick={() => onSelect(item.id)}
+                    >
+                      <span className="flex w-full items-center gap-2">
+                        <span className="flex-1 truncate">{item.title || "未命名会话"}</span>
+                        {item.isGenerating && (
+                          <span
+                            className="inline-block size-2 rounded-full bg-emerald-500"
+                            aria-label="生成中"
+                            title="生成中"
+                          />
+                        )}
+                      </span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </InfiniteScrollArea>
         </SidebarGroup>
