@@ -16,7 +16,12 @@ import {
 } from "lucide-react";
 
 import { useSettingsStore } from "~/stores";
-import type { MessageDto, MessageNodeDto, TokenUsage, UIMessagePart } from "~/types";
+import type {
+  MessageDto,
+  MessageNodeDto,
+  TokenUsage,
+  UIMessagePart,
+} from "~/types";
 
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
@@ -26,6 +31,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import { ChatMessageAnnotationsRow } from "./chat-message-annotations";
 import { MessageParts } from "./message-part";
 
 interface ChatMessageProps {
@@ -455,6 +461,8 @@ export function ChatMessage({
           onFork={onFork}
         />
       )}
+
+      <ChatMessageAnnotationsRow annotations={message.annotations} alignRight={isUser} />
 
       <ChatMessageNerdLineRow message={message} alignRight={isUser} />
     </div>

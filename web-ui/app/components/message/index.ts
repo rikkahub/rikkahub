@@ -1,5 +1,6 @@
 export { MessagePart } from "./message-part";
 export { MessageParts } from "./message-part";
+export { ChatMessageAnnotationsRow } from "./chat-message-annotations";
 export { TextPart } from "./parts/text-part";
 export { ReasoningPart } from "./parts/reasoning-part";
 export { ReasoningStepPart } from "./parts/reasoning-step-part";
