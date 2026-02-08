@@ -371,39 +371,8 @@ class ChatVM(
     }
 
     fun deleteMessage(message: UIMessage) {
-        deleteMessageInternal(message)
-        saveConversationAsync()
-    }
-
-    private fun deleteMessageInternal(message: UIMessage) {
-        val conversation = conversation.value
-        val node = conversation.getMessageNodeByMessage(message) ?: return
-        val nodeIndex = conversation.messageNodes.indexOf(node)
-        if (nodeIndex == -1) return
-        val newConversation = if (node.messages.size == 1) {
-            conversation.copy(
-                messageNodes = conversation.messageNodes.filterIndexed { index, _ -> index != nodeIndex })
-        } else {
-            val updatedNodes = conversation.messageNodes.mapNotNull { node ->
-                val newMessages = node.messages.filter { it.id != message.id }
-                if (newMessages.isEmpty()) {
-                    null
-                } else {
-                    val newSelectIndex = if (node.selectIndex >= newMessages.size) {
-                        newMessages.lastIndex
-                    } else {
-                        node.selectIndex
-                    }
-                    node.copy(
-                        messages = newMessages,
-                        selectIndex = newSelectIndex
-                    )
-                }
-            }
-            conversation.copy(messageNodes = updatedNodes)
-        }
         viewModelScope.launch {
-            chatService.saveConversation(_conversationId, newConversation)
+            chatService.deleteMessage(_conversationId, message)
         }
     }
 

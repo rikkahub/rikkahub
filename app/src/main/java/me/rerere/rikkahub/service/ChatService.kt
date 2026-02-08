@@ -1081,6 +1081,62 @@ class ChatService(
         saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
+    suspend fun deleteMessage(
+        conversationId: Uuid,
+        messageId: Uuid,
+        failIfMissing: Boolean = true,
+    ) {
+        val currentConversation = getConversationFlow(conversationId).value
+        val updatedConversation = buildConversationAfterMessageDelete(currentConversation, messageId)
+
+        if (updatedConversation == null) {
+            if (failIfMissing) {
+                throw NotFoundException("Message not found")
+            }
+            return
+        }
+
+        saveConversation(conversationId, updatedConversation)
+    }
+
+    suspend fun deleteMessage(
+        conversationId: Uuid,
+        message: UIMessage,
+    ) {
+        deleteMessage(conversationId, message.id, failIfMissing = false)
+    }
+
+    private fun buildConversationAfterMessageDelete(
+        conversation: Conversation,
+        messageId: Uuid,
+    ): Conversation? {
+        val targetNodeIndex = conversation.messageNodes.indexOfFirst { node ->
+            node.messages.any { it.id == messageId }
+        }
+        if (targetNodeIndex == -1) {
+            return null
+        }
+
+        val updatedNodes = conversation.messageNodes.mapIndexedNotNull { index, node ->
+            if (index != targetNodeIndex) {
+                return@mapIndexedNotNull node
+            }
+
+            val nextMessages = node.messages.filterNot { it.id == messageId }
+            if (nextMessages.isEmpty()) {
+                return@mapIndexedNotNull null
+            }
+
+            val nextSelectIndex = node.selectIndex.coerceAtMost(nextMessages.lastIndex)
+            node.copy(
+                messages = nextMessages,
+                selectIndex = nextSelectIndex,
+            )
+        }
+
+        return conversation.copy(messageNodes = updatedNodes)
+    }
+
     fun clearTranslationField(conversationId: Uuid, messageId: Uuid) {
         val currentConversation = getConversationFlow(conversationId).value
         val updatedNodes = currentConversation.messageNodes.map { node ->
