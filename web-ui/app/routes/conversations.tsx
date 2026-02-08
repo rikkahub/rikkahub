@@ -621,6 +621,16 @@ export default function ConversationsPage() {
 
   const activeConversation = conversations.find((item) => item.id === activeId);
   const chatSuggestions = detail?.chatSuggestions ?? [];
+
+  React.useEffect(() => {
+    const base = "RikkaHub Web";
+    document.title = activeConversation?.title
+      ? `${activeConversation.title} - ${base}`
+      : base;
+    return () => {
+      document.title = base;
+    };
+  }, [activeConversation?.title]);
   const showSuggestions = Boolean(activeId) && !detailLoading && !detailError && chatSuggestions.length > 0;
 
   const handleSelect = React.useCallback(
