@@ -52,15 +52,15 @@ import {
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
 import { UIAvatar } from "~/components/ui/ui-avatar";
-import { useTheme, type ColorTheme, type CustomThemeCss, type Theme } from "~/components/theme-provider";
+import {
+  useTheme,
+  type ColorTheme,
+  type CustomThemeCss,
+  type Theme,
+} from "~/components/theme-provider";
 import { ConversationSearchButton } from "~/components/conversation-search-button";
 import { CustomThemeDialog } from "~/components/custom-theme-dialog";
-import type {
-  AssistantAvatar,
-  AssistantProfile,
-  AssistantTag,
-  ConversationListDto,
-} from "~/types";
+import type { AssistantAvatar, AssistantProfile, AssistantTag, ConversationListDto } from "~/types";
 
 const THEME_OPTIONS: Array<{
   value: Theme;

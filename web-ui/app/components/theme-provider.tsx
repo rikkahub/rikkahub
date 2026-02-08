@@ -4,7 +4,14 @@ export type ThemeMode = "dark" | "light" | "system";
 export type Theme = ThemeMode;
 export type ColorTheme = "default" | "claude" | "t3-chat" | "mono" | "bubblegum" | "custom";
 
-export const COLOR_THEMES: ColorTheme[] = ["default", "claude", "t3-chat", "mono", "bubblegum", "custom"];
+export const COLOR_THEMES: ColorTheme[] = [
+  "default",
+  "claude",
+  "t3-chat",
+  "mono",
+  "bubblegum",
+  "custom",
+];
 
 const COLOR_THEME_STORAGE_SUFFIX = "-color";
 const CUSTOM_THEME_LIGHT_STORAGE_SUFFIX = "-custom-light";

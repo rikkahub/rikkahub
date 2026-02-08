@@ -116,11 +116,15 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
               ) : null}
 
               {!searching && !error && query.trim().length === 0 ? (
-                <div className="px-2 py-6 text-center text-sm text-muted-foreground">输入关键词开始搜索</div>
+                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  输入关键词开始搜索
+                </div>
               ) : null}
 
               {!searching && !error && query.trim().length > 0 && results.length === 0 ? (
-                <div className="px-2 py-6 text-center text-sm text-muted-foreground">没有找到匹配会话</div>
+                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  没有找到匹配会话
+                </div>
               ) : null}
 
               {!searching &&

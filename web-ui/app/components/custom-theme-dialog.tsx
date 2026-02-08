@@ -21,7 +21,12 @@ type CustomThemeDialogProps = {
   onSave: (css: CustomThemeCss) => void;
 };
 
-export function CustomThemeDialog({ open, onOpenChange, initialCss, onSave }: CustomThemeDialogProps) {
+export function CustomThemeDialog({
+  open,
+  onOpenChange,
+  initialCss,
+  onSave,
+}: CustomThemeDialogProps) {
   const [lightDraft, setLightDraft] = React.useState(initialCss.light);
   const [darkDraft, setDarkDraft] = React.useState(initialCss.dark);
 
