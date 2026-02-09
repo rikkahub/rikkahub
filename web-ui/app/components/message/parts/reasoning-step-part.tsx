@@ -84,7 +84,7 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
           <Brain className="h-4 w-4 text-primary" />
         )
       }
-      label={<span className="text-foreground text-sm font-medium">深度思考</span>}
+      label={<span className="text-foreground text-xs font-medium">深度思考</span>}
       extra={
         duration ? <span className="text-muted-foreground text-xs">{duration}</span> : undefined
       }
@@ -94,7 +94,7 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
         ref={contentRef}
         className={preview ? "styled-scrollbar relative max-h-24 overflow-y-auto" : undefined}
       >
-        <Markdown content={reasoning.reasoning} className="text-sm" />
+        <Markdown content={reasoning.reasoning} className="text-xs" />
       </div>
     </ControlledChainOfThoughtStep>
   );

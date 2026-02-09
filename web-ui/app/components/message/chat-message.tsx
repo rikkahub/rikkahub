@@ -395,7 +395,7 @@ function ChatMessageNerdLineRow({
   return (
     <div
       className={cn(
-        "flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground",
+        "flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground/50",
         alignRight ? "justify-end" : "justify-start",
       )}
     >
@@ -426,7 +426,7 @@ export function ChatMessage({
   const showActions = isLastMessage ? !loading : hasMessageContent;
 
   return (
-    <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
+    <div className={cn("flex flex-col gap-4", isUser ? "items-end" : "items-start")}>
       <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
         <div
           className={cn(
