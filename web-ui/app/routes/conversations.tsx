@@ -16,6 +16,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/s
 import { toConversationSummaryUpdate, useConversationList } from "~/hooks/use-conversation-list";
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { useCurrentModel } from "~/hooks/use-current-model";
+import { cn } from "~/lib/utils";
 import api, { sse } from "~/services/api";
 import { useChatInputStore } from "~/stores";
 import {
@@ -27,6 +28,7 @@ import {
   type UIMessagePart,
 } from "~/types";
 import { MessageSquare } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { v4 as uuidv4 } from "uuid";
 
 type ConversationStreamEvent = ConversationSnapshotEventDto | ConversationNodeUpdateEventDto;
@@ -628,6 +630,7 @@ export default function ConversationsPage() {
       document.title = base;
     };
   }, [activeConversation?.title]);
+  const isNewChat = isHomeRoute && !activeId;
   const showSuggestions =
     Boolean(activeId) && !detailLoading && !detailError && chatSuggestions.length > 0;
 
@@ -879,46 +882,76 @@ export default function ConversationsPage() {
           </div>
         </div>
 
-        <ConversationTimeline
-          activeId={activeId}
-          isHomeRoute={isHomeRoute}
-          detailLoading={detailLoading}
-          detailError={detailError}
-          selectedNodeMessages={selectedNodeMessages}
-          isGenerating={detail?.isGenerating ?? false}
-          onEdit={handleStartEdit}
-          onDelete={handleDeleteMessage}
-          onFork={handleForkMessage}
-          onRegenerate={handleRegenerate}
-          onSelectBranch={handleSelectBranch}
-          onToolApproval={handleToolApproval}
-        />
+        <div
+          className={cn(
+            "flex flex-1 flex-col min-h-0 overflow-hidden",
+            isNewChat && "justify-center",
+          )}
+        >
+          {!isNewChat && (
+            <>
+              <ConversationTimeline
+                activeId={activeId}
+                isHomeRoute={isHomeRoute}
+                detailLoading={detailLoading}
+                detailError={detailError}
+                selectedNodeMessages={selectedNodeMessages}
+                isGenerating={detail?.isGenerating ?? false}
+                onEdit={handleStartEdit}
+                onDelete={handleDeleteMessage}
+                onFork={handleForkMessage}
+                onRegenerate={handleRegenerate}
+                onSelectBranch={handleSelectBranch}
+                onToolApproval={handleToolApproval}
+              />
 
-        {showSuggestions ? (
-          <ConversationSuggestions
-            suggestions={chatSuggestions}
-            onClickSuggestion={handleClickSuggestion}
-          />
-        ) : null}
+              {showSuggestions ? (
+                <ConversationSuggestions
+                  suggestions={chatSuggestions}
+                  onClickSuggestion={handleClickSuggestion}
+                />
+              ) : null}
+            </>
+          )}
 
-        <ChatInput
-          value={inputText}
-          attachments={inputAttachments}
-          ready={draftKey !== null}
-          isGenerating={detail?.isGenerating ?? false}
-          disabled={detailLoading || Boolean(detailError)}
-          onValueChange={handleInputTextChange}
-          onAddParts={handleAddInputParts}
-          isEditing={Boolean(editingSession)}
-          onCancelEdit={editingSession ? handleCancelEdit : undefined}
-          shouldDeleteFileOnRemove={shouldDeleteAttachmentFileOnRemove}
-          onRemovePart={(index) => {
-            handleRemoveInputPart(index);
-          }}
-          onSend={handleSend}
-          onStop={activeId ? handleStop : undefined}
-          className={showSuggestions ? "pt-1" : undefined}
-        />
+          <motion.div
+            layout="position"
+            transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
+          >
+            <AnimatePresence>
+              {isNewChat && (
+                <motion.div
+                  key="welcome"
+                  className="mb-4 text-center"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <p className="text-lg text-muted-foreground">有什么可以帮助你的？</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <ChatInput
+              value={inputText}
+              attachments={inputAttachments}
+              ready={draftKey !== null}
+              isGenerating={detail?.isGenerating ?? false}
+              disabled={detailLoading || Boolean(detailError)}
+              onValueChange={handleInputTextChange}
+              onAddParts={handleAddInputParts}
+              isEditing={Boolean(editingSession)}
+              onCancelEdit={editingSession ? handleCancelEdit : undefined}
+              shouldDeleteFileOnRemove={shouldDeleteAttachmentFileOnRemove}
+              onRemovePart={(index) => {
+                handleRemoveInputPart(index);
+              }}
+              onSend={handleSend}
+              onStop={activeId ? handleStop : undefined}
+              className={showSuggestions ? "pt-1" : undefined}
+            />
+          </motion.div>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );
