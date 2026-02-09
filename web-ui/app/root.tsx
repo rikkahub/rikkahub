@@ -90,14 +90,24 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   return (
-    <main className="pt-16 p-4 container mx-auto">
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre className="w-full p-4 overflow-x-auto">
-          <code>{stack}</code>
-        </pre>
-      )}
+    <main className="flex items-center justify-center min-h-screen bg-background p-4">
+      <div className="max-w-md w-full space-y-6 text-center">
+        <div className="space-y-3">
+          <h1 className="text-6xl font-bold text-primary">{message}</h1>
+          <p className="text-lg text-muted-foreground">{details}</p>
+        </div>
+        {stack && (
+          <pre className="text-left text-xs bg-muted p-4 rounded-lg overflow-x-auto max-h-[400px] overflow-y-auto">
+            <code className="text-muted-foreground">{stack}</code>
+          </pre>
+        )}
+        <button
+          onClick={() => window.location.href = '/'}
+          className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90 transition-colors"
+        >
+          Back to Home
+        </button>
+      </div>
     </main>
   );
 }
