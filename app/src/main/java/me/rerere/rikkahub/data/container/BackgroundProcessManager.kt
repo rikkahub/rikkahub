@@ -30,9 +30,11 @@ import javax.inject.Singleton
  */
 @Singleton
 class BackgroundProcessManager @Inject constructor(
-    private val context: Context,
-    private val prootManager: PRootManager
+    private val context: Context
 ) {
+    // 运行时获取PRootManager，避免循环依赖
+    private val prootManager: PRootManager
+        get() = org.koin.core.context.GlobalContext.get().get()
     companion object {
         private const val TAG = "BackgroundProcessManager"
         private const val MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB

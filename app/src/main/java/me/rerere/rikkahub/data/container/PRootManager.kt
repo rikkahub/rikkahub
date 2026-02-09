@@ -39,8 +39,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class PRootManager(
-    private val context: Context,
-    private val backgroundProcessManager: BackgroundProcessManager? = null
+    private val context: Context
 ) {
 
     companion object {
@@ -223,9 +222,6 @@ class PRootManager(
                 currentProcess = null
             }
 
-            // 通知 BackgroundProcessManager 标记所有进程为已停止
-            backgroundProcessManager?.markAllProcessesStopped()
-
             _containerState.value = ContainerStateEnum.Stopped
             Result.success(Unit)
         } catch (e: Exception) {
@@ -268,9 +264,6 @@ class PRootManager(
             if (configDir.exists()) {
                 configDir.deleteRecursively()
             }
-
-            // 通知 BackgroundProcessManager 清理所有进程状态
-            backgroundProcessManager?.clearAllProcesses()
 
             globalContainer = null
             _containerState.value = ContainerStateEnum.NotInitialized
