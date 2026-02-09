@@ -8,12 +8,16 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import io.ktor.server.sse.heartbeat
 import io.ktor.server.sse.sse
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
@@ -37,6 +41,7 @@ import me.rerere.rikkahub.web.dto.UpdateConversationTitleRequest
 import me.rerere.rikkahub.web.dto.toDto
 import me.rerere.rikkahub.web.dto.toListDto
 import me.rerere.rikkahub.utils.JsonInstant
+import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
 fun Route.conversationRoutes(
@@ -286,6 +291,10 @@ fun Route.conversationRoutes(
 
             chatService.initializeConversation(uuid)
             chatService.addConversationReference(uuid)
+
+            heartbeat {
+                period = 1.seconds
+            }
 
             try {
                 var sequence = 0L
