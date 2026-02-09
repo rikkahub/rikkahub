@@ -525,7 +525,8 @@ class PRootManager(private val context: Context) {
         val upperDir = File(containerDir, "upper").apply { mkdirs() }
         
         // 创建 bind mount 所需的子目录
-        File(upperDir, "usr/local").apply { parentFile?.mkdirs() }
+        File(upperDir, "usr/local").apply { mkdirs() }
+        File(upperDir, "usr/lib").apply { mkdirs() }
         File(upperDir, "root").apply { mkdirs() }
 
         globalContainer = ContainerState(
