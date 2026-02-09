@@ -38,7 +38,10 @@ import javax.inject.Singleton
  *                   Error          NotInitialized (销毁后)
  */
 @Singleton
-class PRootManager(private val context: Context) {
+class PRootManager(
+    private val context: Context,
+    private val backgroundProcessManager: BackgroundProcessManager? = null
+) {
 
     companion object {
         private const val TAG = "PRootManager"
@@ -219,7 +222,10 @@ class PRootManager(private val context: Context) {
                 currentProcess?.destroyForcibly()
                 currentProcess = null
             }
-            
+
+            // 通知 BackgroundProcessManager 标记所有进程为已停止
+            backgroundProcessManager?.markAllProcessesStopped()
+
             _containerState.value = ContainerStateEnum.Stopped
             Result.success(Unit)
         } catch (e: Exception) {
@@ -229,7 +235,7 @@ class PRootManager(private val context: Context) {
 
     /**
      * 销毁容器（任意状态 → NotInitialized）
-     * 删除 upper 层，需要重新初始化
+     * 删除 upper 层和 rootfs，需要重新初始化
      */
     suspend fun destroy(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
@@ -238,8 +244,8 @@ class PRootManager(private val context: Context) {
                 currentProcess?.destroyForcibly()
                 currentProcess = null
             }
-            
-            // 删除 upper 层（保留 rootfs）
+
+            // 删除 upper 层（可写层）
             val upperDir = File(containerDir, "upper")
             if (upperDir.exists()) {
                 upperDir.deleteRecursively()
@@ -251,14 +257,24 @@ class PRootManager(private val context: Context) {
                 workDir.deleteRecursively()
             }
 
+            // 删除 rootfs（只读层）- 彻底重置，防止污染
+            if (rootfsDir.exists()) {
+                rootfsDir.deleteRecursively()
+                Log.d(TAG, "Rootfs deleted for complete reset")
+            }
+
             // 清理可能残留的开发工具配置文件
             val configDir = File(context.filesDir, "container/config")
             if (configDir.exists()) {
                 configDir.deleteRecursively()
             }
 
+            // 通知 BackgroundProcessManager 清理所有进程状态
+            backgroundProcessManager?.clearAllProcesses()
+
             globalContainer = null
             _containerState.value = ContainerStateEnum.NotInitialized
+            Log.d(TAG, "Container destroyed completely")
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

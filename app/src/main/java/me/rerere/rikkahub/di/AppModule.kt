@@ -60,11 +60,11 @@ val appModule = module {
     }
 
     single {
-        PRootManager(get())
+        BackgroundProcessManager(get(), get())
     }
 
     single {
-        BackgroundProcessManager(get(), get())
+        PRootManager(get(), get())
     }
 
     single {

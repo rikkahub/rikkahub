@@ -372,6 +372,40 @@ class BackgroundProcessManager @Inject constructor(
     }
 
     /**
+     * 标记所有运行中的进程为已停止（容器停止时调用）
+     * 与 stopAllProcesses 不同，此方法不尝试 kill 进程（因为容器已杀死它们）
+     */
+    fun markAllProcessesStopped() {
+        val updatedProcesses = processes.values.map { process ->
+            if (process.status == ProcessStatus.RUNNING || process.status == ProcessStatus.STARTING) {
+                process.copy(
+                    status = ProcessStatus.STOPPED,
+                    exitedAt = System.currentTimeMillis(),
+                    exitCode = -1
+                )
+            } else {
+                process
+            }
+        }
+
+        updatedProcesses.forEach { process ->
+            processes[process.processId] = process
+        }
+
+        _processStates.value = processes.values.toList()
+        Log.d(TAG, "All processes marked as stopped")
+    }
+
+    /**
+     * 清理所有进程状态（容器销毁时调用）
+     */
+    fun clearAllProcesses() {
+        processes.clear()
+        _processStates.value = emptyList()
+        Log.d(TAG, "All process states cleared")
+    }
+
+    /**
      * 生成进程ID
      */
     private fun generateProcessId(): String {
@@ -400,12 +434,45 @@ class BackgroundProcessManager @Inject constructor(
 
     /**
      * 更新进程状态
+     * 定期检查运行中的进程是否还在存活，标记已死亡的进程
      */
     private suspend fun updateProcessStates() {
-        // 这里应该定期检查进程是否还在运行
-        // 由于进程对象由PRootManager管理，这里简化处理
-        // 实际状态会在PRootManager的监控中更新
+        val updatedProcesses = processes.values.map { process ->
+            if (process.status == ProcessStatus.RUNNING && process.pid != null) {
+                // 检查进程是否仍然存活
+                if (!isProcessAlive(process.pid)) {
+                    // 进程已死亡，标记为失败
+                    process.copy(
+                        status = ProcessStatus.FAILED,
+                        exitedAt = System.currentTimeMillis(),
+                        exitCode = -1
+                    )
+                } else {
+                    process
+                }
+            } else {
+                process
+            }
+        }
+
+        // 更新内存中的进程状态
+        updatedProcesses.forEach { process ->
+            processes[process.processId] = process
+        }
+
         _processStates.value = processes.values.toList()
+    }
+
+    /**
+     * 检查进程是否存活
+     * 通过检查 /proc/[pid] 目录是否存在来判断
+     */
+    private fun isProcessAlive(pid: Int): Boolean {
+        return try {
+            File("/proc/$pid").exists()
+        } catch (e: Exception) {
+            false
+        }
     }
 
     /**
