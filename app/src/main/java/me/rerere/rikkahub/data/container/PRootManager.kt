@@ -181,7 +181,15 @@ class PRootManager(private val context: Context) {
                 }
                 is ContainerStateEnum.Stopped -> {
                     // 从停止状态恢复
-                    createGlobalContainer()
+                    if (globalContainer == null) {
+                        createGlobalContainer()
+                    } else {
+                        // 确保子目录存在（以防万一目录被删除）
+                        val upperDir = File(containerDir, "upper")
+                        File(upperDir, "usr/local").apply { mkdirs() }
+                        File(upperDir, "usr/lib").apply { mkdirs() }
+                        File(upperDir, "root").apply { mkdirs() }
+                    }
                     _containerState.value = ContainerStateEnum.Running
                     return@withContext Result.success(Unit)
                 }
@@ -1109,6 +1117,11 @@ class PRootManager(private val context: Context) {
 
             if (upperDir.exists()) {
                 Log.d(TAG, "[RestoreState] Found existing upper directory, restoring container state")
+
+                // 确保子目录存在（兼容旧版本升级或部分目录被删除的情况）
+                File(upperDir, "usr/local").apply { mkdirs() }
+                File(upperDir, "usr/lib").apply { mkdirs() }
+                File(upperDir, "root").apply { mkdirs() }
 
                 // 创建 globalContainer（不启动进程）
                 if (globalContainer == null) {
