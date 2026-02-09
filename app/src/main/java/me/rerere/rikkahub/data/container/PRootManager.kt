@@ -46,6 +46,10 @@ class PRootManager(
         private const val TAG = "PRootManager"
         private const val DEFAULT_TIMEOUT_MS = 300_000L // 5分钟
         private const val DEFAULT_MAX_MEMORY_MB = 6144  // 6GB for compilation tasks
+
+        // Rootfs 版本控制 - 每次更新 alpine rootfs 时递增此版本号
+        private const val ROOTFS_VERSION = 1
+        private const val ROOTFS_VERSION_FILE = "rootfs_version.txt"
     }
 
     // 目录
@@ -891,7 +895,15 @@ class PRootManager(
     }
 
     private suspend fun extractAlpineRootfs() = withContext(Dispatchers.IO) {
-        if (!rootfsDir.exists() || rootfsDir.listFiles()?.isEmpty() == true) {
+        // 检查是否需要更新 rootfs（版本控制）
+        val needUpdate = checkRootfsNeedsUpdate()
+
+        if (!rootfsDir.exists() || rootfsDir.listFiles()?.isEmpty() == true || needUpdate) {
+            if (needUpdate && rootfsDir.exists()) {
+                Log.d(TAG, "Rootfs version mismatch or update required, deleting old rootfs...")
+                rootfsDir.deleteRecursively()
+            }
+
             Log.d(TAG, "Extracting Alpine rootfs to $rootfsDir")
             try {
                 // 根据架构选择正确的 rootfs 文件
@@ -930,6 +942,10 @@ class PRootManager(
                 inputStream.use { input ->
                     extractTarGz(input, rootfsDir)
                 }
+
+                // 写入版本文件
+                writeRootfsVersion()
+
                 val fileCount = rootfsDir.walkTopDown().count()
                 Log.d(TAG, "Alpine rootfs extracted successfully, total files: $fileCount")
             } catch (e: Exception) {
@@ -938,6 +954,43 @@ class PRootManager(
             }
         } else {
             Log.d(TAG, "Alpine rootfs already exists at $rootfsDir")
+        }
+    }
+
+    /**
+     * 检查 rootfs 是否需要更新
+     * 通过对比本地版本文件和代码中的版本号
+     */
+    private fun checkRootfsNeedsUpdate(): Boolean {
+        val versionFile = File(rootfsDir, ROOTFS_VERSION_FILE)
+        if (!versionFile.exists()) {
+            Log.d(TAG, "Rootfs version file not found, needs update")
+            return true
+        }
+
+        return try {
+            val localVersion = versionFile.readText().trim().toIntOrNull() ?: 0
+            val needsUpdate = localVersion < ROOTFS_VERSION
+            if (needsUpdate) {
+                Log.d(TAG, "Rootfs version outdated: local=$localVersion, required=$ROOTFS_VERSION")
+            }
+            needsUpdate
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read rootfs version, assuming needs update", e)
+            true
+        }
+    }
+
+    /**
+     * 写入 rootfs 版本文件
+     */
+    private fun writeRootfsVersion() {
+        try {
+            val versionFile = File(rootfsDir, ROOTFS_VERSION_FILE)
+            versionFile.writeText(ROOTFS_VERSION.toString())
+            Log.d(TAG, "Rootfs version file written: $ROOTFS_VERSION")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to write rootfs version file", e)
         }
     }
 
@@ -1280,13 +1333,28 @@ class PRootManager(
             // 获取进程PID
             val pid = getProcessPid(process)
 
-            // 启动异步线程读取输出并写入文件
+            // 启动异步线程读取输出并写入文件（带大小限制）
+            val maxLogSize = BackgroundProcessManager.MAX_LOG_FILE_SIZE.toLong()
+
             val stdoutJob = GlobalScope.launch(Dispatchers.IO) {
                 try {
                     process.inputStream.bufferedReader().use { reader ->
                         stdoutFile.bufferedWriter().use { writer ->
                             var line: String?
+                            var currentSize = 0L
                             while (reader.readLine().also { line = it } != null) {
+                                val lineBytes = line!!.toByteArray().size + 1 // +1 for newline
+                                currentSize += lineBytes
+
+                                // 检查日志大小限制
+                                if (currentSize > maxLogSize) {
+                                    writer.write("[Log truncated: exceeded max size ${maxLogSize / 1024 / 1024}MB]")
+                                    writer.newLine()
+                                    writer.flush()
+                                    Log.w(TAG, "[ExecInBackground] stdout log truncated for $processId (exceeded ${maxLogSize} bytes)")
+                                    break
+                                }
+
                                 writer.write(line)
                                 writer.newLine()
                                 writer.flush()
@@ -1303,7 +1371,20 @@ class PRootManager(
                     process.errorStream.bufferedReader().use { reader ->
                         stderrFile.bufferedWriter().use { writer ->
                             var line: String?
+                            var currentSize = 0L
                             while (reader.readLine().also { line = it } != null) {
+                                val lineBytes = line!!.toByteArray().size + 1 // +1 for newline
+                                currentSize += lineBytes
+
+                                // 检查日志大小限制
+                                if (currentSize > maxLogSize) {
+                                    writer.write("[Log truncated: exceeded max size ${maxLogSize / 1024 / 1024}MB]")
+                                    writer.newLine()
+                                    writer.flush()
+                                    Log.w(TAG, "[ExecInBackground] stderr log truncated for $processId (exceeded ${maxLogSize} bytes)")
+                                    break
+                                }
+
                                 writer.write(line)
                                 writer.newLine()
                                 writer.flush()

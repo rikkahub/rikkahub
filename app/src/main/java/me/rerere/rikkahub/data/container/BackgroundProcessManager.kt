@@ -37,7 +37,8 @@ class BackgroundProcessManager @Inject constructor(
         get() = org.koin.core.context.GlobalContext.get().get()
     companion object {
         private const val TAG = "BackgroundProcessManager"
-        private const val MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+        // 日志文件大小限制（10MB），internal 以便 PRootManager 访问
+        internal const val MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
         private const val PROCESS_CHECK_INTERVAL_MS = 5000L    // 进程检查间隔
         private const val MAX_RUNNING_PROCESSES_PER_SANDBOX = 10 // 每个沙箱最多运行10个进程
     }
@@ -318,10 +319,22 @@ class BackgroundProcessManager @Inject constructor(
                 .filter { it.exitedAt != null && (now - it.exitedAt!!) > olderThan }
                 .map { it.processId }
 
-            toRemove.forEach { processes.remove(it) }
+            toRemove.forEach { processId ->
+                val info = processes[processId]
+                // 删除对应的日志文件
+                info?.let {
+                    try {
+                        File(it.stdoutPath).delete()
+                        File(it.stderrPath).delete()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to delete log files for process $processId", e)
+                    }
+                }
+                processes.remove(processId)
+            }
             _processStates.value = processes.values.toList()
 
-            Log.i(TAG, "Cleaned up ${toRemove.size} old processes")
+            Log.i(TAG, "Cleaned up ${toRemove.size} old processes and their log files")
             toRemove.size
         } catch (e: Exception) {
             Log.e(TAG, "Error cleaning up old processes", e)
