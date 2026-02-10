@@ -105,6 +105,9 @@ fun Route.conversationRoutes(
 
         // SSE /api/conversations/stream - Stream conversation list invalidation events
         sse("/stream") {
+            heartbeat {
+                period = 15.seconds
+            }
             settingsStore.settingsFlow
                 .map { it.assistantId }
                 .distinctUntilChanged()

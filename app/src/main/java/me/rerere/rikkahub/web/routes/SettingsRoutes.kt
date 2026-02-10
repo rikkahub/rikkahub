@@ -6,6 +6,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.route
+import io.ktor.server.sse.heartbeat
 import io.ktor.server.sse.sse
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ModelType
@@ -21,6 +22,7 @@ import me.rerere.rikkahub.web.dto.UpdateBuiltInToolRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchEnabledRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchServiceRequest
 import java.util.Locale
+import kotlin.time.Duration.Companion.seconds
 
 fun Route.settingsRoutes(
     settingsStore: SettingsStore
@@ -123,6 +125,9 @@ fun Route.settingsRoutes(
         }
 
         sse("/stream") {
+            heartbeat {
+                period = 15.seconds
+            }
             settingsStore.settingsFlow
                 .collect { settings ->
                     val json = JsonInstant.encodeToString(settings)
