@@ -157,7 +157,488 @@ class PRootManager(
             Log.d(TAG, "Creating global container...")
             createGlobalContainer()
             Log.d(TAG, "Global container created successfully")
-            
+
+            // [修复 npm] 补丁代码写入独立 wrapper
+            try {
+                Log.i(TAG, "Repairing node and npm paths...")
+
+                // JS 补丁代码：通过 heredoc 传入 node stdin，无 execve 参数长度限制
+                val patchCode = """
+try {
+process.stdout.write('PATCH_INIT\n');
+process.on('uncaughtException', function(err) {
+    process.stdout.write('UNCAUGHT: ' + err.message + '\n' + (err.stack || '') + '\n');
+    process.exit(4);
+});
+process.on('unhandledRejection', function(reason, promise) {
+    process.stdout.write('UNHANDLED_REJECTION: ' + (reason instanceof Error ? reason.message + '\n' + reason.stack : String(reason)) + '\n');
+});
+process.on('exit', function(code) {
+    process.stdout.write('PROCESS_EXIT: ' + code + '\n');
+});
+var _origExit = process.exit;
+process.exit = function(code) {
+    if (code !== 0) {
+        process.stdout.write('EXIT_CALL: code=' + code + ' stack=' + new Error().stack + '\n');
+    }
+    _origExit.call(process, code);
+};
+var _origStderrWrite = process.stderr.write;
+process.stderr.write = function(chunk) {
+    process.stdout.write('STDERR: ' + chunk);
+    return _origStderrWrite.apply(process.stderr, arguments);
+};
+var _origEmit = process.emit;
+process.emit = function(event) {
+    if (event === 'log') {
+        var args = Array.prototype.slice.call(arguments, 1);
+        var detail = args.map(function(a) {
+            if (a === undefined) return '';
+            if (a instanceof Error) return '[Error:' + a.message + '] ' + (a.stack || '');
+            if (typeof a === 'object') { try { return JSON.stringify(a); } catch(e) { return String(a); } }
+            return String(a);
+        }).join(' ');
+        process.stdout.write('NPMLOG: ' + detail + '\n');
+    }
+    return _origEmit.apply(process, arguments);
+};
+var _origConsoleError = console.error;
+console.error = function() {
+    var args = Array.prototype.slice.call(arguments);
+    var detail = args.map(function(a) {
+        if (a === undefined) return '[undefined]';
+        if (a === null) return '[null]';
+        if (a === '') return '[empty-string]';
+        if (a instanceof Error) return '[Error:' + a.message + '] ' + (a.stack || '');
+        if (typeof a === 'object') { try { return JSON.stringify(a); } catch(e) { return String(a); } }
+        return String(a);
+    }).join(' ');
+    process.stdout.write('CERR[' + args.length + ']: ' + detail + '\n');
+    return _origConsoleError.apply(console, arguments);
+};
+var _origConsoleWarn = console.warn;
+console.warn = function() {
+    var args = Array.prototype.slice.call(arguments);
+    var detail = args.map(function(a) {
+        if (a === undefined) return '[undefined]';
+        if (a === null) return '[null]';
+        if (a === '') return '[empty-string]';
+        if (a instanceof Error) return '[Error:' + a.message + '] ' + (a.stack || '');
+        if (typeof a === 'object') { try { return JSON.stringify(a); } catch(e) { return String(a); } }
+        return String(a);
+    }).join(' ');
+    process.stdout.write('CWARN[' + args.length + ']: ' + detail + '\n');
+    return _origConsoleWarn.apply(console, arguments);
+};
+var Module = require('module');
+var fs = require('fs');
+var path = require('path');
+var origFindPath = Module._findPath;
+Module._findPath = function(request, paths, isMain) {
+    var result = origFindPath.call(Module, request, paths, isMain);
+    if (result) return result;
+    for (var i = 0; i < paths.length; i++) {
+        var basePath = path.resolve(paths[i], request);
+        var tries = [basePath, basePath + '.js', basePath + '.json',
+                     path.join(basePath, 'index.js'), path.join(basePath, 'index.json')];
+        try {
+            var pkgContent = fs.readFileSync(path.join(basePath, 'package.json'), 'utf8');
+            var pkg = JSON.parse(pkgContent);
+            if (pkg.main) {
+                var mainPath = path.resolve(basePath, pkg.main);
+                tries.splice(1, 0, mainPath, mainPath + '.js', mainPath + '/index.js');
+            }
+        } catch(e) {}
+        for (var j = 0; j < tries.length; j++) {
+            try {
+                var fd = fs.openSync(tries[j], 'r');
+                var s = fs.fstatSync(fd);
+                fs.closeSync(fd);
+                if (s.isFile()) {
+                    Module._pathCache[request + '\x00' + paths.join('\x00')] = tries[j];
+                    return tries[j];
+                }
+            } catch(e) {}
+        }
+    }
+    return false;
+};
+var origStatSync = fs.statSync;
+fs.statSync = function(p, options) {
+    try { return origStatSync.call(fs, p, options); }
+    catch (err) {
+        if (err.code === 'ENOENT') {
+            try {
+                var fd = fs.openSync(p, 'r');
+                var stats = fs.fstatSync(fd);
+                fs.closeSync(fd);
+                return stats;
+            } catch (z) {}
+        }
+        throw err;
+    }
+};
+var origLstatSync = fs.lstatSync;
+fs.lstatSync = function(p, options) {
+    try { return origLstatSync.call(fs, p, options); }
+    catch (err) {
+        if (err.code === 'ENOENT') {
+            try {
+                var fd = fs.openSync(p, 'r');
+                var stats = fs.fstatSync(fd);
+                fs.closeSync(fd);
+                return stats;
+            } catch (z) {}
+        }
+        throw err;
+    }
+};
+var origRealpathSync = fs.realpathSync;
+fs.realpathSync = function(p, options) {
+    try { return origRealpathSync.call(fs, p, options); }
+    catch (err) {
+        if (err.code === 'ENOENT') {
+            try {
+                var fd = fs.openSync(p, 'r');
+                fs.closeSync(fd);
+                return path.resolve(p);
+            } catch(e) {
+                try { fs.readdirSync(p); return path.resolve(p); }
+                catch(e2) {}
+            }
+        }
+        throw err;
+    }
+};
+var origExistsSync = fs.existsSync;
+fs.existsSync = function(p) {
+    var result = origExistsSync.call(fs, p);
+    if (!result) {
+        try {
+            var fd = fs.openSync(p, 'r');
+            fs.closeSync(fd);
+            return true;
+        } catch(e) {
+            try { fs.readdirSync(p); return true; }
+            catch(e2) { return false; }
+        }
+    }
+    return result;
+};
+var origAccessSync = fs.accessSync;
+fs.accessSync = function(p, mode) {
+    try { return origAccessSync.call(fs, p, mode); }
+    catch (err) {
+        if (err.code === 'ENOENT') {
+            try { var fd = fs.openSync(p, 'r'); fs.closeSync(fd); return; } catch(z) {}
+        }
+        throw err;
+    }
+};
+var _stat = fs.stat;
+fs.stat = function(p, o, cb) {
+    if (typeof o === 'function') { cb = o; o = {}; }
+    _stat.call(fs, p, o, function(e, s) {
+        if (e && e.code === 'ENOENT') { try { var f = fs.openSync(p,'r'); s = fs.fstatSync(f); fs.closeSync(f); return cb(null,s); } catch(x) {} }
+        cb(e, s);
+    });
+};
+var _lstat = fs.lstat;
+fs.lstat = function(p, o, cb) {
+    if (typeof o === 'function') { cb = o; o = {}; }
+    _lstat.call(fs, p, o, function(e, s) {
+        if (e && e.code === 'ENOENT') { try { var f = fs.openSync(p,'r'); s = fs.fstatSync(f); fs.closeSync(f); return cb(null,s); } catch(x) {} }
+        cb(e, s);
+    });
+};
+var _realpath = fs.realpath;
+fs.realpath = function(p, o, cb) {
+    if (typeof o === 'function') { cb = o; o = {}; }
+    _realpath.call(fs, p, o, function(e, r) {
+        if (e && e.code === 'ENOENT') { try { var f = fs.openSync(p,'r'); fs.closeSync(f); return cb(null,path.resolve(p)); } catch(x) { try { fs.readdirSync(p); return cb(null,path.resolve(p)); } catch(x2) {} } }
+        cb(e, r);
+    });
+};
+var _access = fs.access;
+fs.access = function(p, m, cb) {
+    if (typeof m === 'function') { cb = m; m = fs.constants.F_OK; }
+    _access.call(fs, p, m, function(e) {
+        if (e && e.code === 'ENOENT') { try { var f = fs.openSync(p,'r'); fs.closeSync(f); return cb(null); } catch(x) {} }
+        cb(e);
+    });
+};
+if (fs.promises) {
+    var fsp = fs.promises;
+    var _pStat = fsp.stat; fsp.stat = function(p,o) { return _pStat.call(fsp,p,o).catch(function(e) { if(e.code==='ENOENT'){try{var f=fs.openSync(p,'r');var s=fs.fstatSync(f);fs.closeSync(f);return s;}catch(x){}} throw e; }); };
+    var _pLstat = fsp.lstat; fsp.lstat = function(p,o) { return _pLstat.call(fsp,p,o).catch(function(e) { if(e.code==='ENOENT'){try{var f=fs.openSync(p,'r');var s=fs.fstatSync(f);fs.closeSync(f);return s;}catch(x){}} throw e; }); };
+    var _pRealpath = fsp.realpath; fsp.realpath = function(p,o) { return _pRealpath.call(fsp,p,o).catch(function(e) { if(e.code==='ENOENT'){try{var f=fs.openSync(p,'r');fs.closeSync(f);return path.resolve(p);}catch(x){try{fs.readdirSync(p);return path.resolve(p);}catch(x2){}}} throw e; }); };
+    var _pAccess = fsp.access; fsp.access = function(p,m) { return _pAccess.call(fsp,p,m).catch(function(e) { if(e.code==='ENOENT'){try{var f=fs.openSync(p,'r');fs.closeSync(f);return;}catch(x){}} throw e; }); };
+}
+var _origMkdirSync = fs.mkdirSync;
+fs.mkdirSync = function(p, options) {
+    try {
+        return _origMkdirSync.call(fs, p, options);
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            var cp = require('child_process');
+            var cmd = 'mkdir ';
+            if (options && options.recursive) cmd += '-p ';
+            cmd += '"' + p.replace(/"/g, '\\"') + '"';
+            try {
+                cp.execSync(cmd, { stdio: 'pipe' });
+                return undefined;
+            } catch (e) {
+                if (e.message && e.message.indexOf('File exists') >= 0) {
+                    var errExists = new Error('EEXIST: file already exists, mkdir \'' + p + '\'');
+                    errExists.code = 'EEXIST';
+                    errExists.syscall = 'mkdir';
+                    errExists.path = p;
+                    throw errExists;
+                }
+                throw err;
+            }
+        }
+        throw err;
+    }
+};
+if (fs.promises) {
+    var _origPromisesMkdir = fs.promises.mkdir;
+    fs.promises.mkdir = async function(p, options) {
+        try {
+            return await _origPromisesMkdir(p, options);
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return new Promise(function(resolve, reject) {
+                    try {
+                        fs.mkdirSync(p, options);
+                        resolve(undefined);
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }
+            throw err;
+        }
+    };
+}
+var target = process.env._PATCH_TARGET;
+if (target) {
+    process.argv = [process.argv[0], target].concat(
+        process.argv.slice(1).filter(function(a) { return a !== '-'; })
+    );
+    try { process.stdout.write('ENV_CWD: ' + process.cwd() + '\n'); } catch(e) { process.stdout.write('ENV_CWD_ERROR: ' + e.message + '\n'); }
+    try { var os = require('os'); process.stdout.write('ENV_HOME: ' + os.homedir() + '\n'); } catch(e) { process.stdout.write('ENV_HOME_ERROR: ' + e.message + '\n'); }
+    try { var os = require('os'); process.stdout.write('ENV_TMPDIR: ' + os.tmpdir() + '\n'); } catch(e) { process.stdout.write('ENV_TMPDIR_ERROR: ' + e.message + '\n'); }
+    // 主线程预扫描 npm 文件树（主线程的 openSync 能正常工作）
+    var _FM = {};
+    var _PM = {};
+    function _scanFiles(dir, dep) {
+        if (dep > 15) return;
+        try {
+            var ent = fs.readdirSync(dir);
+            for (var i = 0; i < ent.length; i++) {
+                var fp = path.join(dir, ent[i]);
+                try {
+                    var fd = fs.openSync(fp, 'r');
+                    var st = fs.fstatSync(fd);
+                    fs.closeSync(fd);
+                    if (st.isFile()) _FM[fp] = 1;
+                    else if (st.isDirectory()) _scanFiles(fp, dep + 1);
+                } catch(e) {
+                    try { fs.readdirSync(fp); _scanFiles(fp, dep + 1); } catch(e2) {}
+                }
+            }
+        } catch(e) {}
+    }
+    function _scanPkgs(dir) {
+        var nm = path.join(dir, 'node_modules');
+        try {
+            var ent = fs.readdirSync(nm);
+            for (var i = 0; i < ent.length; i++) {
+                var n = ent[i]; if (n[0] === '.') continue;
+                if (n[0] === '@') {
+                    try { var se = fs.readdirSync(path.join(nm, n));
+                        for (var j = 0; j < se.length; j++) { _loadPkg(path.join(nm, n, se[j]), n + '/' + se[j]); _scanPkgs(path.join(nm, n, se[j])); }
+                    } catch(e) {}
+                } else { _loadPkg(path.join(nm, n), n); _scanPkgs(path.join(nm, n)); }
+            }
+        } catch(e) {}
+    }
+    function _loadPkg(pd, pn) {
+        try {
+            var fd = fs.openSync(path.join(pd, 'package.json'), 'r');
+            var buf = Buffer.alloc(65536); var n = fs.readSync(fd, buf); fs.closeSync(fd);
+            var pk = JSON.parse(buf.slice(0, n).toString());
+            if (!_PM[pn]) _PM[pn] = [];
+            _PM[pn].push({ d: pd, e: pk.exports || null, m: pk.main || null, i: pk.imports || null });
+        } catch(e) {}
+    }
+    process.stdout.write('PRESCAN...\n');
+    _scanFiles('/usr/lib/node_modules/npm', 0);
+    _scanPkgs('/usr/lib/node_modules/npm');
+    process.stdout.write('PRESCAN_DONE: ' + Object.keys(_FM).length + 'f ' + Object.keys(_PM).length + 'p\n');
+    var _samples = [
+        '/usr/lib/node_modules/npm/node_modules/chalk/package.json',
+        '/usr/lib/node_modules/npm/node_modules/chalk/source/index.js',
+        '/usr/lib/node_modules/npm/node_modules/chalk/source/vendor/ansi-styles/index.js'
+    ];
+    _samples.forEach(function(s) { process.stdout.write('FM_HAS[' + s + ']: ' + (_FM[s] ? 'YES' : 'NO') + '\n'); });
+    var _fmKeys = Object.keys(_FM);
+    var _chalkKeys = _fmKeys.filter(function(k) { return k.indexOf('chalk') >= 0 && k.indexOf('vendor') >= 0; }).slice(0, 3);
+    process.stdout.write('FM_SAMPLE: ' + JSON.stringify(_chalkKeys) + '\n');
+    // 注册 ESM 加载器（Worker 线程只查地图，不做文件操作）
+    try {
+        var _mod = require('node:module');
+        if (typeof _mod.register === 'function') {
+            var _L = [];
+            _L.push('import { dirname, join, resolve as pathResolve } from "node:path";');
+            _L.push('import { fileURLToPath, pathToFileURL } from "node:url";');
+            _L.push('var _FM,_PM;');
+            _L.push('export function initialize(d){_FM=d.fm;_PM=d.pm;}');
+            _L.push('function fe(p){return !!_FM[p];}');
+            _L.push('function ge(pk,sub){');
+            _L.push('  if(sub){if(pk.e){var m=pk.e["./"+sub];if(m)return typeof m==="string"?m:(m.node||m.import||m.default||sub);}return sub;}');
+            _L.push('  if(pk.e){var e=pk.e["."]; if(!e)e=pk.e; if(typeof e==="string")return e; if(e&&typeof e==="object"){var v=e.node||e.import||e.default; if(v&&typeof v==="object")v=v.node||v.import||v.default; if(typeof v==="string")return v;}}');
+            _L.push('  return pk.m||"index.js";');
+            _L.push('}');
+            _L.push('export async function resolve(spec,ctx,next){');
+            _L.push('  try{return await next(spec,ctx);}');
+            _L.push('  catch(err){');
+            _L.push('    if(err.code!=="ERR_MODULE_NOT_FOUND")throw err;');
+            _L.push('    if(spec.startsWith("node:"))throw err;');
+            _L.push('    if(spec.startsWith("#")){');
+            _L.push('      if(!ctx.parentURL)throw err;');
+            _L.push('      var pf=fileURLToPath(ctx.parentURL);');
+            _L.push('      var pd=dirname(pf);');
+            _L.push('      while(pd.length>1){');
+            _L.push('        var pkgPath=join(pd,"package.json");');
+            _L.push('        if(fe(pkgPath)){');
+            _L.push('          var pkList=[];');
+            _L.push('          for(var pn in _PM){for(var pi of _PM[pn]){if(pi.d===pd)pkList.push(pi);}}');
+            _L.push('          if(pkList.length>0){');
+            _L.push('            var pk=pkList[0];');
+            _L.push('            if(pk.i&&pk.i[spec]){');
+            _L.push('              var tgt=pk.i[spec];');
+            _L.push('              if(typeof tgt==="string"){');
+            _L.push('                var rv=pathResolve(pd,tgt);');
+            _L.push('                if(fe(rv))return{url:pathToFileURL(rv).href,shortCircuit:true};');
+            _L.push('              }else if(tgt&&typeof tgt==="object"){');
+            _L.push('                var v=tgt.node||tgt.import||tgt.default;');
+            _L.push('                if(typeof v==="string"){');
+            _L.push('                  var rv2=pathResolve(pd,v);');
+            _L.push('                  if(fe(rv2))return{url:pathToFileURL(rv2).href,shortCircuit:true};');
+            _L.push('                }');
+            _L.push('              }');
+            _L.push('            }');
+            _L.push('          }');
+            _L.push('          break;');
+            _L.push('        }');
+            _L.push('        var prev=pd;pd=dirname(pd);if(pd===prev)break;');
+            _L.push('      }');
+            _L.push('      throw err;');
+            _L.push('    }');
+            _L.push('    if(spec.startsWith(".")||spec.startsWith("/")){');
+            _L.push('      if(!ctx.parentURL)throw err;');
+            _L.push('      var pd=dirname(fileURLToPath(ctx.parentURL));');
+            _L.push('      var r=pathResolve(pd,spec);');
+            _L.push('      var cs=[r,r+".js",r+".mjs",r+".json",join(r,"index.js"),join(r,"index.mjs")];');
+            _L.push('      for(var c of cs){if(fe(c))return{url:pathToFileURL(c).href,shortCircuit:true};}');
+            _L.push('      throw err;');
+            _L.push('    }');
+            _L.push('    if(spec.startsWith("file:"))throw err;');
+            _L.push('    var pts=spec.split("/");');
+            _L.push('    var pn=spec.startsWith("@")?pts.slice(0,2).join("/"):pts[0];');
+            _L.push('    var sp=spec.startsWith("@")?pts.slice(2).join("/"):pts.slice(1).join("/");');
+            _L.push('    if(!_PM[pn])throw err;');
+            _L.push('    var idir=ctx.parentURL?dirname(fileURLToPath(ctx.parentURL)):"/";');
+            _L.push('    var best=null,bestLen=-1;');
+            _L.push('    for(var pi of _PM[pn]){var nmBase=dirname(pi.d);if(idir.startsWith(dirname(nmBase))){if(nmBase.length>bestLen){bestLen=nmBase.length;best=pi;}}}');
+            _L.push('    if(!best&&_PM[pn].length>0)best=_PM[pn][0];');
+            _L.push('    if(!best)throw err;');
+            _L.push('    var en=ge(best,sp);if(typeof en!=="string")en="index.js";');
+            _L.push('    var rv=pathResolve(best.d,en);');
+            _L.push('    var cs=[rv,rv+".js",rv+".mjs",join(rv,"index.js"),join(rv,"index.mjs")];');
+            _L.push('    for(var c of cs){if(fe(c))return{url:pathToFileURL(c).href,shortCircuit:true};}');
+            _L.push('    throw err;');
+            _L.push('  }');
+            _L.push('}');
+            var _esmCode = _L.join('\n');
+            _mod.register('data:text/javascript,' + encodeURIComponent(_esmCode), { data: { fm: _FM, pm: _PM } });
+            process.stdout.write('ESM_LOADER_OK\n');
+        } else {
+            process.stdout.write('ESM_LOADER_SKIP: register not available\n');
+        }
+    } catch(esmErr) {
+        process.stdout.write('ESM_LOADER_ERROR: ' + esmErr.message + '\n');
+    }
+    process.stdout.write('REQUIRING: ' + target + '\n');
+    require(target);
+    process.stdout.write('REQUIRE_OK\n');
+}
+} catch(e) {
+    process.stdout.write('NPM_PATCH_ERROR: ' + e.message + '\n' + (e.stack || '') + '\n');
+    process.exit(2);
+}
+""".trimStart()
+
+                // 在 host 层写入 npm/npx 包装脚本（heredoc 方式，不经过 execve 参数）
+                val upperLocalBin = File(containerDir, "upper/usr/local/bin")
+                upperLocalBin.mkdirs()
+
+                File(upperLocalBin, "npm").apply {
+                    writeText("#!/bin/sh\nexport _PATCH_TARGET=/usr/lib/node_modules/npm/bin/npm-cli.js\nnode - \"\$@\" << 'ENDPATCH'\n${patchCode}ENDPATCH\n")
+                    setExecutable(true, false)
+                }
+                File(upperLocalBin, "npx").apply {
+                    writeText("#!/bin/sh\nexport _PATCH_TARGET=/usr/lib/node_modules/npm/bin/npx-cli.js\nnode - \"\$@\" << 'ENDPATCH'\n${patchCode}ENDPATCH\n")
+                    setExecutable(true, false)
+                }
+
+                // 创建 node wrapper（放在 /usr/local/bin，避免覆盖系统二进制）
+                File(upperLocalBin, "node").apply {
+                    writeText("""#!/bin/sh
+# PRoot Node.js Wrapper - Auto-load compatibility patches
+if [ "${'$'}1" = "-" ]; then
+    # stdin mode (used by npm/npx wrappers)
+    exec /usr/bin/node "${'$'}@"
+else
+    # Normal mode: inject patch via stdin, then run target script
+    # Save current working directory for Node.js to restore
+    export _NODE_WRAPPER_CWD="${'$'}(pwd)"
+    exec /usr/bin/node - "${'$'}@" << 'NODEPATCH'
+${patchCode}
+// Restore working directory (lost in stdin mode)
+if (process.env._NODE_WRAPPER_CWD) {
+    try {
+        process.chdir(process.env._NODE_WRAPPER_CWD);
+    } catch (e) {
+        console.error('Warning: Failed to restore cwd:', e.message);
+    }
+}
+// Load target script if specified
+if (process.argv.length > 2 && process.argv[2] !== '-') {
+    var targetScript = process.argv[2];
+    var path = require('path');
+    // Normalize path: if not absolute and doesn't start with ./ or ../, prepend ./
+    if (!path.isAbsolute(targetScript) && !targetScript.startsWith('./') && !targetScript.startsWith('../')) {
+        targetScript = './' + targetScript;
+    }
+    // Resolve to absolute path
+    targetScript = path.resolve(targetScript);
+    process.argv = [process.argv[0], targetScript].concat(process.argv.slice(3));
+    require(targetScript);
+}
+NODEPATCH
+fi
+""")
+                    setExecutable(true, false)
+                }
+
+                Log.i(TAG, "Node/NPM path repair completed (heredoc stdin patch)")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to repair node/npm paths", e)
+            }
+
             _containerState.value = ContainerStateEnum.Running
             Log.d(TAG, "Container initialization completed successfully!")
             Result.success(Unit)
@@ -525,6 +1006,10 @@ class PRootManager(
             Log.d(TAG, "[ToolEnv] Python configured: PYTHON_HOME=$pythonHome, pip available")
         }
 
+        // Node.js 模块路径（确保 npm 可用）
+        val nodePath = listOf("/usr/local/lib/node_modules", "/usr/lib/node_modules")
+        env["NODE_PATH"] = nodePath.joinToString(":")
+
         // 组合 PATH：工具路径 + 基础 PATH（确保基础命令可用）
         val finalPath = if (toolPaths.isNotEmpty()) {
             toolPaths.joinToString(":") + ":" + basePath
@@ -610,6 +1095,13 @@ class PRootManager(
                 // 使用 ! 后缀表示不追踪符号链接，确保覆盖 rootfs 中的同名目录
                 add("-b")
                 add("${container.upperDir}/usr/lib:/usr/lib!")
+
+                // [修复 npm] 如果 node_modules 已安装，额外挂载到 /usr/local/lib（不带 !）
+                val nodeModulesDir = File(container.upperDir, "usr/lib/node_modules")
+                if (nodeModulesDir.exists()) {
+                    add("-b")
+                    add("${nodeModulesDir.absolutePath}:/usr/local/lib/node_modules")
+                }
 
                 // 根目录使用基础 rootfs（只读）- 必须在 -b 之后
                 add("-R")
@@ -1589,6 +2081,13 @@ class PRootManager(
             // 额外绑定挂载 usr/lib 以确保库文件可访问
             add("-b")
             add("${container.upperDir}/usr/lib:/usr/lib!")
+
+            // [修复 npm] 如果 node_modules 已安装，额外挂载到 /usr/local/lib（不带 !）
+            val nodeModulesDir = File(container.upperDir, "usr/lib/node_modules")
+            if (nodeModulesDir.exists()) {
+                add("-b")
+                add("${nodeModulesDir.absolutePath}:/usr/local/lib/node_modules")
+            }
 
             // 根目录使用基础 rootfs（只读）- 必须在 -b 之后
             add("-R")

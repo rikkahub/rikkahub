@@ -415,8 +415,12 @@ class LocalTools(
     fun createContainerShellTool(sandboxId: Uuid): Tool {
         return Tool(
             name = "container_shell",
-            description = """完整 Linux Shell（Alpine），支持 apk、git、wget、Python3。超时 5 分钟。
-【重要】安装开发工具：使用 apk add 安装（如 apk add python3、apk add nodejs、apk add g++ 等）。所有开发工具都应通过 apk 包管理器安装，不要尝试解压 ZIP 包。
+            description = """完整 Linux Shell（Alpine），支持 apk、git、wget、Python3、Node.js。超时 5 分钟。
+【重要】安装开发工具：使用 apk add 安装（如 apk add python3、apk add nodejs npm、apk add g++ 等）。所有开发工具都应通过 apk 包管理器安装，不要尝试解压 ZIP 包。
+【Node.js & npm】已自动修复 PRoot 兼容性，安装后可直接使用：
+  - 安装：apk add nodejs npm
+  - 使用：node script.js、npm install <package>、npm init
+  - 示例：npm install lodash && echo "console.log(require('lodash').VERSION)" > test.js && node test.js
 【禁止】禁止使用此工具启动服务（如 uvicorn、npm start、redis-server 等），启动服务会导致客户端卡死 5 分钟。如需启动服务，请使用 container_shell_bg 工具。
 【故障排查】如 apk 安装失败，先配置 DNS：echo 'nameserver 8.8.8.8' > /etc/resolv.conf""".trimIndent(),
             parameters = {
