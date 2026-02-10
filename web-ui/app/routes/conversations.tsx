@@ -9,7 +9,7 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "~/components/extended/conversation";
-import { ChatInput } from "~/components/message/chat-input";
+import { ChatInput } from "~/components/input/chat-input";
 import { ChatMessage } from "~/components/message/chat-message";
 import { TypingIndicator } from "~/components/ui/typing-indicator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar";

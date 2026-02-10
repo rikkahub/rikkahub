@@ -3,10 +3,10 @@ import * as React from "react";
 import { File, Image, LoaderCircle, Mic, Plus, Send, Square, Video, X, Zap } from "lucide-react";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
-import { ModelList } from "~/components/model-list";
-import { ReasoningPickerButton } from "~/components/reasoning-picker";
-import { SearchPickerButton } from "~/components/search-picker";
-import { McpPickerButton } from "~/components/mcp-picker";
+import { ModelList } from "~/components/input/model-list";
+import { ReasoningPickerButton } from "~/components/input/reasoning-picker";
+import { SearchPickerButton } from "~/components/input/search-picker";
+import { McpPickerButton } from "~/components/input/mcp-picker";
 import { useSettingsStore } from "~/stores";
 import { Button } from "~/components/ui/button";
 import {
