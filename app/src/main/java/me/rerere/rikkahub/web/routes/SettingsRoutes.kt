@@ -18,6 +18,7 @@ import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.web.dto.UpdateAssistantModelRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantThinkingBudgetRequest
+import me.rerere.rikkahub.web.dto.UpdateAssistantMcpServersRequest
 import me.rerere.rikkahub.web.dto.UpdateBuiltInToolRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchEnabledRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchServiceRequest
@@ -67,6 +68,25 @@ fun Route.settingsRoutes(
             }
 
             settingsStore.updateAssistantThinkingBudget(assistantId, thinkingBudget)
+            call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
+        }
+
+        post("/assistant/mcp") {
+            val request = call.receive<UpdateAssistantMcpServersRequest>()
+            val assistantId = request.assistantId.toUuid("assistantId")
+
+            val settings = settingsStore.settingsFlow.value
+            if (settings.assistants.none { it.id == assistantId }) {
+                throw NotFoundException("Assistant not found")
+            }
+
+            val validServerIds = settings.mcpServers.map { it.id }.toSet()
+            val requestedServerIds = request.mcpServerIds.map { it.toUuid("mcpServerIds") }.toSet()
+            if (!validServerIds.containsAll(requestedServerIds)) {
+                throw BadRequestException("mcpServerIds contains unknown server id")
+            }
+
+            settingsStore.updateAssistantMcpServers(assistantId, requestedServerIds)
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
         }
 

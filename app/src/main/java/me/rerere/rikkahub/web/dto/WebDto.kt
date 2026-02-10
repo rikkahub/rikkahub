@@ -70,6 +70,12 @@ data class UpdateAssistantThinkingBudgetRequest(
 )
 
 @Serializable
+data class UpdateAssistantMcpServersRequest(
+    val assistantId: String,
+    val mcpServerIds: List<String>,
+)
+
+@Serializable
 data class UpdateSearchEnabledRequest(
     val enabled: Boolean,
 )

@@ -6,6 +6,7 @@ import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { ModelList } from "~/components/model-list";
 import { ReasoningPickerButton } from "~/components/reasoning-picker";
 import { SearchPickerButton } from "~/components/search-picker";
+import { McpPickerButton } from "~/components/mcp-picker";
 import { useSettingsStore } from "~/stores";
 import { Button } from "~/components/ui/button";
 import {
@@ -493,6 +494,7 @@ export function ChatInput({
               />
               <ModelList disabled={!canSwitchModel} className="max-w-64" />
               <ReasoningPickerButton disabled={!canSwitchModel} />
+              <McpPickerButton disabled={!canSwitchModel} />
               <SearchPickerButton disabled={!canSwitchModel} />
             </div>
             <Button
