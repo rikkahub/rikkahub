@@ -1,7 +1,8 @@
 import * as React from "react";
 
-import { File, Image, LoaderCircle, Mic, Plus, Send, Square, Video, X } from "lucide-react";
+import { File, Image, LoaderCircle, Mic, Plus, Send, Square, Video, X, Zap } from "lucide-react";
 
+import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { ModelList } from "~/components/model-list";
 import { ReasoningPickerButton } from "~/components/reasoning-picker";
 import { SearchPickerButton } from "~/components/search-picker";
@@ -130,9 +131,33 @@ export function ChatInput({
   const sendOnEnter = useSettingsStore(
     (state) => state.settings?.displaySetting.sendOnEnter ?? true,
   );
+  const { currentAssistant } = useCurrentAssistant();
+
+  const quickMessages = React.useMemo(() => {
+    const source = currentAssistant?.quickMessages;
+    if (!Array.isArray(source)) {
+      return [] as QuickMessageOption[];
+    }
+
+    return source
+      .map((item) => {
+        const title = typeof item?.title === "string" ? item.title.trim() : "";
+        const content = typeof item?.content === "string" ? item.content.trim() : "";
+        if (!content) {
+          return null;
+        }
+
+        return {
+          title: title || "快捷消息",
+          content,
+        };
+      })
+      .filter((item): item is QuickMessageOption => item !== null);
+  }, [currentAssistant?.quickMessages]);
 
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [uploadMenuOpen, setUploadMenuOpen] = React.useState(false);
@@ -146,6 +171,7 @@ export function ChatInput({
   const canSend = ready && !isGenerating && !disabled && !isEmpty;
   const canUpload = ready && !disabled && !isGenerating && !uploading && !submitting;
   const canSwitchModel = ready && !disabled && !isGenerating && !uploading && !submitting;
+  const canUseQuickMessage = ready && !disabled && !uploading && !submitting;
   const actionDisabled = submitting || uploading || (!canStop && !canSend);
 
   React.useEffect(() => {
@@ -216,6 +242,22 @@ export function ChatInput({
       }
     },
     [error, onValueChange],
+  );
+
+  const handleQuickMessageSelect = React.useCallback(
+    (content: string) => {
+      if (!canUseQuickMessage || !content) {
+        return;
+      }
+
+      const needLineBreak = value.length > 0 && !value.endsWith("\n");
+      onValueChange(`${value}${needLineBreak ? "\n" : ""}${content}`);
+      if (error) {
+        setError(null);
+      }
+      textareaRef.current?.focus();
+    },
+    [canUseQuickMessage, error, onValueChange, value],
   );
 
   const handleKeyDown = React.useCallback(
@@ -385,6 +427,7 @@ export function ChatInput({
           ) : null}
 
           <Textarea
+            ref={textareaRef}
             value={value}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
@@ -443,6 +486,11 @@ export function ChatInput({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <QuickMessageButton
+                quickMessages={quickMessages}
+                disabled={!canUseQuickMessage}
+                onSelect={handleQuickMessageSelect}
+              />
               <ModelList disabled={!canSwitchModel} className="max-w-64" />
               <ReasoningPickerButton disabled={!canSwitchModel} />
               <SearchPickerButton disabled={!canSwitchModel} />
@@ -474,5 +522,63 @@ export function ChatInput({
         {error ? <p className="mt-1 text-center text-xs text-destructive">{error}</p> : null}
       </div>
     </div>
+  );
+}
+
+type QuickMessageOption = {
+  title: string;
+  content: string;
+};
+
+interface QuickMessageButtonProps {
+  quickMessages: QuickMessageOption[];
+  disabled?: boolean;
+  onSelect: (content: string) => void;
+}
+
+function QuickMessageButton({
+  quickMessages,
+  disabled = false,
+  onSelect,
+}: QuickMessageButtonProps) {
+  if (quickMessages.length === 0) {
+    return null;
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={disabled}
+          className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+        >
+          <Zap className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-72" side="top" align="start">
+        {quickMessages.map((quickMessage, index) => {
+          const key = `${quickMessage.title}-${index}`;
+          return (
+            <DropdownMenuItem
+              key={key}
+              className="items-start"
+              onClick={() => {
+                onSelect(quickMessage.content);
+              }}
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">{quickMessage.title}</div>
+                <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                  {quickMessage.content}
+                </div>
+              </div>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

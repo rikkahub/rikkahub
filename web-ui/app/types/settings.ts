@@ -30,6 +30,11 @@ export interface AssistantAvatar {
   [key: string]: unknown;
 }
 
+export interface AssistantQuickMessage {
+  title: string;
+  content: string;
+}
+
 export interface AssistantProfile {
   id: string;
   chatModelId?: string | null;
@@ -37,6 +42,7 @@ export interface AssistantProfile {
   name: string;
   avatar?: AssistantAvatar;
   tags: string[];
+  quickMessages?: AssistantQuickMessage[];
   [key: string]: unknown;
 }
 
