@@ -301,6 +301,29 @@ class ChatCompletionsAPIMessageTest {
         }
     }
 
+    @Test
+    fun `assistant with only reasoning and empty text should be filtered out`() {
+        val messages = listOf(
+            UIMessage.user("Question 1"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "thinking"),
+                    UIMessagePart.Text("")
+                )
+            ),
+            UIMessage.user("Question 2")
+        )
+
+        val result = invokeBuildMessages(messages)
+
+        assertEquals(2, result.size)
+        assertEquals("user", result[0].jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("Question 1", result[0].jsonObject["content"]?.jsonPrimitive?.content)
+        assertEquals("user", result[1].jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("Question 2", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(

@@ -164,8 +164,16 @@ data class UIMessage(
 
     fun getTools() = parts.filterIsInstance<UIMessagePart.Tool>()
 
-    fun isValidToUpload() = parts.any {
-        it !is UIMessagePart.Reasoning
+    fun isValidToUpload() = parts.any { part ->
+        when (part) {
+            is UIMessagePart.Text -> part.text.isNotBlank()
+            is UIMessagePart.Image -> part.url.isNotBlank()
+            is UIMessagePart.Video -> part.url.isNotBlank()
+            is UIMessagePart.Audio -> part.url.isNotBlank()
+            is UIMessagePart.Document -> part.url.isNotBlank()
+            is UIMessagePart.Reasoning -> false
+            else -> true
+        }
     }
 
     inline fun <reified P : UIMessagePart> hasPart(): Boolean {
