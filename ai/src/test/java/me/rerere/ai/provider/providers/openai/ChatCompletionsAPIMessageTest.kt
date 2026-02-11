@@ -324,6 +324,28 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("Question 2", result[1].jsonObject["content"]?.jsonPrimitive?.content)
     }
 
+    @Test
+    fun `latest assistant with reasoning and empty text should keep reasoning content`() {
+        val messages = listOf(
+            UIMessage.user("Question 1"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "thinking"),
+                    UIMessagePart.Text("")
+                )
+            )
+        )
+
+        val result = invokeBuildMessages(messages)
+
+        assertEquals(2, result.size)
+        assertEquals("user", result[0].jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
+        assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(

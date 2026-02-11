@@ -124,11 +124,24 @@ class MessageTest {
     // ==================== isValidToUpload Tests ====================
 
     @Test
-    fun `isValidToUpload should be false for reasoning with empty text`() {
+    fun `isValidToUpload should be true for non-empty reasoning with empty text`() {
         val message = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
                 UIMessagePart.Reasoning(reasoning = "thinking"),
+                UIMessagePart.Text("")
+            )
+        )
+
+        assertTrue(message.isValidToUpload())
+    }
+
+    @Test
+    fun `isValidToUpload should be false for blank reasoning with empty text`() {
+        val message = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(reasoning = "   "),
                 UIMessagePart.Text("")
             )
         )

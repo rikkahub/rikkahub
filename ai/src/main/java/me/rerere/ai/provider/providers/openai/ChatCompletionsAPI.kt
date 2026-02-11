@@ -412,13 +412,13 @@ class ChatCompletionsAPI(
 
                 is PartGroup.Tools -> {
                     // 输出 assistant 消息（包含累积的内容 + tool_calls）
-                    add(
-                        buildAssistantMessageJson(
-                            contentParts = contentBuffer,
-                            tools = group.tools,
-                            reasoningPart = reasoningPart
-                        )
-                    )
+                    buildAssistantMessageJson(
+                        contentParts = contentBuffer,
+                        tools = group.tools,
+                        reasoningPart = reasoningPart
+                    )?.let { assistantMessage ->
+                        add(assistantMessage)
+                    }
                     contentBuffer.clear()
                     reasoningPart = null // 清空，下一个 group 可能有新的 reasoning
 
@@ -439,13 +439,13 @@ class ChatCompletionsAPI(
 
         // 输出剩余内容
         if (contentBuffer.isNotEmpty() || reasoningPart != null) {
-            add(
-                buildAssistantMessageJson(
-                    contentParts = contentBuffer,
-                    tools = emptyList(),
-                    reasoningPart = reasoningPart
-                )
-            )
+            buildAssistantMessageJson(
+                contentParts = contentBuffer,
+                tools = emptyList(),
+                reasoningPart = reasoningPart
+            )?.let { assistantMessage ->
+                add(assistantMessage)
+            }
         }
     }
 
@@ -453,65 +453,79 @@ class ChatCompletionsAPI(
         contentParts: List<UIMessagePart>,
         tools: List<UIMessagePart.Tool>,
         reasoningPart: UIMessagePart.Reasoning?
-    ) = buildJsonObject {
-        put("role", "assistant")
-
-        // reasoning_content
-        reasoningPart?.let {
-            put("reasoning_content", it.reasoning)
+    ): JsonObject? {
+        val hasUsableContent = contentParts.any { part ->
+            when (part) {
+                is UIMessagePart.Text -> part.text.isNotBlank()
+                is UIMessagePart.Image -> part.url.isNotBlank()
+                else -> false
+            }
+        }
+        val hasReasoning = !reasoningPart?.reasoning.isNullOrBlank()
+        if (!hasUsableContent && !hasReasoning && tools.isEmpty()) {
+            return null
         }
 
-        // content
-        if (contentParts.isEmpty()) {
-            put("content", "")
-        } else if (contentParts.size == 1 && contentParts[0] is UIMessagePart.Text) {
-            put("content", (contentParts[0] as UIMessagePart.Text).text)
-        } else {
-            putJsonArray("content") {
-                contentParts.forEach { part ->
-                    when (part) {
-                        is UIMessagePart.Text -> {
-                            add(buildJsonObject {
-                                put("type", "text")
-                                put("text", part.text)
-                            })
-                        }
+        return buildJsonObject {
+            put("role", "assistant")
 
-                        is UIMessagePart.Image -> {
-                            add(buildJsonObject {
-                                part.encodeBase64().onSuccess { encodedImage ->
-                                    put("type", "image_url")
-                                    put("image_url", buildJsonObject {
-                                        put("url", encodedImage.base64)
-                                    })
-                                }.onFailure {
-                                    it.printStackTrace()
+            // reasoning_content
+            if (hasReasoning) {
+                put("reasoning_content", reasoningPart.reasoning)
+            }
+
+            // content
+            if (contentParts.isEmpty()) {
+                put("content", "")
+            } else if (contentParts.size == 1 && contentParts[0] is UIMessagePart.Text) {
+                put("content", (contentParts[0] as UIMessagePart.Text).text)
+            } else {
+                putJsonArray("content") {
+                    contentParts.forEach { part ->
+                        when (part) {
+                            is UIMessagePart.Text -> {
+                                add(buildJsonObject {
                                     put("type", "text")
-                                    put("text", "")
-                                }
-                            })
-                        }
+                                    put("text", part.text)
+                                })
+                            }
 
-                        else -> {}
+                            is UIMessagePart.Image -> {
+                                add(buildJsonObject {
+                                    part.encodeBase64().onSuccess { encodedImage ->
+                                        put("type", "image_url")
+                                        put("image_url", buildJsonObject {
+                                            put("url", encodedImage.base64)
+                                        })
+                                    }.onFailure {
+                                        it.printStackTrace()
+                                        put("type", "text")
+                                        put("text", "")
+                                    }
+                                })
+                            }
+
+                            else -> {}
+                        }
                     }
                 }
             }
-        }
 
-        // tool_calls
-        if (tools.isNotEmpty()) {
-            put("tool_calls", buildJsonArray {
-                tools.forEach { tool ->
-                    add(buildJsonObject {
-                        put("id", tool.toolCallId)
-                        put("type", "function")
-                        put("function", buildJsonObject {
-                            put("name", tool.toolName)
-                            put("arguments", tool.input)
+            // tool_calls
+            if (tools.isNotEmpty()) {
+                put("tool_calls", buildJsonArray {
+                    tools.forEach { tool ->
+                        add(buildJsonObject {
+                            put("id", tool.toolCallId)
+                            put("type", "function")
+                            put("function", buildJsonObject {
+                                put("name", tool.toolName)
+                                put("arguments", tool.input)
+                            })
                         })
-                    })
-                }
-            })
+                    }
+                })
+            }
         }
     }
 
