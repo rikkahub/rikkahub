@@ -1,0 +1,21 @@
+{
+  "chat": {
+    "attachment_image": "图片",
+    "attachment_video": "视频",
+    "attachment_audio": "音频",
+    "attachment_file": "附件",
+    "quick_message_default_title": "快捷消息",
+    "upload_failed": "上传失败",
+    "send_failed": "发送失败",
+    "drop_to_upload": "拖拽文件到这里上传",
+    "editing_tip": "正在编辑消息，发送后会创建新分支",
+    "cancel_edit": "取消编辑",
+    "delete_attachment_failed": "删除附件失败",
+    "upload_image": "上传图片",
+    "upload_document": "上传文档",
+    "placeholder_ready": "输入消息...",
+    "placeholder_not_ready": "请先选择会话",
+    "send_hint_enter": "按 Enter 发送，Shift + Enter 换行",
+    "send_hint_newline": "按 Enter 换行"
+  }
+}

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   Check,
   Laptop,
+  Languages,
   Moon,
   MoreHorizontal,
   MoveRight,
@@ -16,6 +17,7 @@ import {
   Sun,
   Trash2,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { InfiniteScrollArea } from "~/components/extended/infinite-scroll-area";
 import { Badge } from "~/components/ui/badge";
@@ -113,6 +115,11 @@ const COLOR_THEME_OPTIONS: Array<{
     label: "自定义",
   },
 ];
+
+const LANGUAGE_OPTIONS = [
+  { value: "zh-CN", label: "简体中文" },
+  { value: "en-US", label: "English" },
+] as const;
 
 type ConversationListItem =
   | { type: "pinned-header" }
@@ -446,6 +453,50 @@ function ConversationListRow({
   );
 }
 
+function resolveLanguage(language: string): (typeof LANGUAGE_OPTIONS)[number]["value"] {
+  return language.startsWith("zh") ? "zh-CN" : "en-US";
+}
+
+function LanguageSwitcher() {
+  const { i18n } = useTranslation();
+  const currentLanguage = resolveLanguage(i18n.resolvedLanguage ?? i18n.language);
+  const currentOption =
+    LANGUAGE_OPTIONS.find((option) => option.value === currentLanguage) ?? LANGUAGE_OPTIONS[0];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon-sm"
+          type="button"
+          aria-label={`语言：${currentOption.label}`}
+          title={`语言：${currentOption.label}`}
+        >
+          <Languages className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-40" side="top" align="end">
+        <DropdownMenuLabel>语言</DropdownMenuLabel>
+        {LANGUAGE_OPTIONS.map((option) => {
+          const selected = option.value === currentLanguage;
+          return (
+            <DropdownMenuItem
+              key={option.value}
+              onClick={() => {
+                void i18n.changeLanguage(option.value);
+              }}
+            >
+              <span className="flex-1">{option.label}</span>
+              <Check className={selected ? "size-4" : "size-4 opacity-0"} />
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function ConversationSidebar({
   conversations,
   activeId,
@@ -740,6 +791,8 @@ export function ConversationSidebar({
         />
 
         <div className="flex items-center gap-2">
+          <LanguageSwitcher />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

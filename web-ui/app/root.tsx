@@ -10,6 +10,7 @@ import {
 import type { Route } from "./+types/root";
 import { useSettingsSubscription } from "~/stores";
 import "./app.css";
+import "./i18n";
 import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./components/theme-provider";
 

@@ -1,0 +1,21 @@
+{
+  "chat": {
+    "attachment_image": "Image",
+    "attachment_video": "Video",
+    "attachment_audio": "Audio",
+    "attachment_file": "Attachment",
+    "quick_message_default_title": "Quick Message",
+    "upload_failed": "Upload failed",
+    "send_failed": "Send failed",
+    "drop_to_upload": "Drop files here to upload",
+    "editing_tip": "Editing message, sending will create a new branch",
+    "cancel_edit": "Cancel Edit",
+    "delete_attachment_failed": "Failed to delete attachment",
+    "upload_image": "Upload Image",
+    "upload_document": "Upload Document",
+    "placeholder_ready": "Type a message...",
+    "placeholder_not_ready": "Please select a conversation first",
+    "send_hint_enter": "Press Enter to send, Shift + Enter for newline",
+    "send_hint_newline": "Press Enter for newline"
+  }
+}

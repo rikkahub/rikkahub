@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { File, Image, LoaderCircle, Mic, Plus, Send, Square, Video, X, Zap } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { ModelList } from "~/components/input/model-list";
@@ -72,18 +73,18 @@ function toMessagePart(file: UploadFilesResponseDto["files"][number]): UIMessage
   };
 }
 
-function partLabel(part: UIMessagePart): string {
+function partLabel(part: UIMessagePart, t: (key: string) => string): string {
   switch (part.type) {
     case "document":
       return part.fileName;
     case "image":
-      return "图片";
+      return t("chat.attachment_image");
     case "video":
-      return "视频";
+      return t("chat.attachment_video");
     case "audio":
-      return "音频";
+      return t("chat.attachment_audio");
     default:
-      return "附件";
+      return t("chat.attachment_file");
   }
 }
 
@@ -129,6 +130,7 @@ export function ChatInput({
   onCancelEdit,
   className,
 }: ChatInputProps) {
+  const { t } = useTranslation();
   const sendOnEnter = useSettingsStore(
     (state) => state.settings?.displaySetting.sendOnEnter ?? true,
   );
@@ -149,12 +151,12 @@ export function ChatInput({
         }
 
         return {
-          title: title || "快捷消息",
+          title: title || t("chat.quick_message_default_title"),
           content,
         };
       })
       .filter((item): item is QuickMessageOption => item !== null);
-  }, [currentAssistant?.quickMessages]);
+  }, [currentAssistant?.quickMessages, t]);
 
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -201,13 +203,13 @@ export function ChatInput({
         const parts = response.files.map(toMessagePart);
         onAddParts(parts);
       } catch (uploadError) {
-        const message = uploadError instanceof Error ? uploadError.message : "上传失败";
+        const message = uploadError instanceof Error ? uploadError.message : t("chat.upload_failed");
         setError(message);
       } finally {
         setUploading(false);
       }
     },
-    [onAddParts, ready],
+    [onAddParts, ready, t],
   );
 
   const handlePrimaryAction = React.useCallback(async () => {
@@ -228,12 +230,12 @@ export function ChatInput({
         await onSend();
       }
     } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : "发送失败";
+      const message = submitError instanceof Error ? submitError.message : t("chat.send_failed");
       setError(message);
     } finally {
       setSubmitting(false);
     }
-  }, [actionDisabled, canSend, canStop, onSend, onStop]);
+  }, [actionDisabled, canSend, canStop, onSend, onStop, t]);
 
   const handleTextChange = React.useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -335,8 +337,8 @@ export function ChatInput({
     [canUpload, uploadFiles],
   );
 
-  const sendHint = sendOnEnter ? "按 Enter 发送，Shift + Enter 换行" : "按 Enter 换行";
-  const placeholder = ready ? "输入消息..." : "请先选择会话";
+  const sendHint = sendOnEnter ? t("chat.send_hint_enter") : t("chat.send_hint_newline");
+  const placeholder = ready ? t("chat.placeholder_ready") : t("chat.placeholder_not_ready");
 
   return (
     <div
@@ -360,12 +362,12 @@ export function ChatInput({
         >
           {dragActive ? (
             <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-background/80 px-4 text-center text-sm font-medium text-primary">
-              拖拽文件到这里上传
+              {t("chat.drop_to_upload")}
             </div>
           ) : null}
           {isEditing ? (
             <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
-              <span className="text-primary">正在编辑消息，发送后会创建新分支</span>
+              <span className="text-primary">{t("chat.editing_tip")}</span>
               <Button
                 type="button"
                 variant="ghost"
@@ -374,7 +376,7 @@ export function ChatInput({
                 onClick={onCancelEdit}
                 disabled={submitting || uploading}
               >
-                取消编辑
+                {t("chat.cancel_edit")}
               </Button>
             </div>
           ) : null}
@@ -397,7 +399,7 @@ export function ChatInput({
                     ) : (
                       partIcon(part)
                     )}
-                    <span className="truncate">{partLabel(part)}</span>
+                    <span className="truncate">{partLabel(part, t)}</span>
                     <button
                       className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                       onClick={async () => {
@@ -409,7 +411,9 @@ export function ChatInput({
                             await api.delete<{ status: string }>(`files/${fileId}`);
                           } catch (deleteError) {
                             const message =
-                              deleteError instanceof Error ? deleteError.message : "删除附件失败";
+                              deleteError instanceof Error
+                                ? deleteError.message
+                                : t("chat.delete_attachment_failed");
                             setError(message);
                             return;
                           }
@@ -475,7 +479,7 @@ export function ChatInput({
                     }}
                   >
                     <Image className="size-4" />
-                    上传图片
+                    {t("chat.upload_image")}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
@@ -483,7 +487,7 @@ export function ChatInput({
                     }}
                   >
                     <File className="size-4" />
-                    上传文档
+                    {t("chat.upload_document")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
