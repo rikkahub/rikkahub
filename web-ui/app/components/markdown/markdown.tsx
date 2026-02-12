@@ -4,12 +4,10 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneLight, oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "~/lib/utils";
-import { Check, Copy } from "lucide-react";
 import { getCodePreviewLanguage } from "~/components/workbench/code-preview-language";
 import { useOptionalWorkbench } from "~/components/workbench/workbench-context";
+import { CodeBlock } from "./code-block";
 import "katex/dist/katex.min.css";
 import "./markdown.css";
 
@@ -72,79 +70,6 @@ type MarkdownProps = {
   allowCodePreview?: boolean;
 };
 
-function CodeBlock({
-  language,
-  children,
-  onPreview,
-}: {
-  language: string;
-  children: string;
-  onPreview?: () => void;
-}) {
-  const [copied, setCopied] = React.useState(false);
-  const isDark =
-    typeof window !== "undefined" && document.documentElement.classList.contains("dark");
-  const previewLanguage = getCodePreviewLanguage(language);
-  const canPreview = Boolean(onPreview && previewLanguage);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(children);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="code-block">
-      <div className="code-block-header">
-        <span className="code-block-language">{language || "text"}</span>
-        <div className="code-block-actions">
-          {canPreview && (
-            <button
-              onClick={onPreview}
-              className="code-block-copy"
-              type="button"
-              aria-label="Preview code"
-            >
-              <span>预览</span>
-            </button>
-          )}
-          <button
-            onClick={handleCopy}
-            className="code-block-copy"
-            aria-label="Copy code"
-            type="button"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3 w-3" />
-                <span>Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3 w-3" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-      <SyntaxHighlighter
-        style={isDark ? oneDark : oneLight}
-        language={language || "text"}
-        PreTag="div"
-        customStyle={{
-          margin: 0,
-          padding: "0.75rem",
-          borderRadius: "0 0 0.5rem 0.5rem",
-          fontSize: "0.875rem",
-        }}
-      >
-        {children}
-      </SyntaxHighlighter>
-    </div>
-  );
-}
-
 export default function Markdown({
   content,
   className,
@@ -189,6 +114,7 @@ export default function Markdown({
               return (
                 <CodeBlock
                   language={language}
+                  code={code}
                   onPreview={
                     allowCodePreview && workbench
                       ? () => {
@@ -196,9 +122,7 @@ export default function Markdown({
                         }
                       : undefined
                   }
-                >
-                  {code}
-                </CodeBlock>
+                />
               );
             }
 
