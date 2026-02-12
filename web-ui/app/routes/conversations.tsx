@@ -918,6 +918,7 @@ function ConversationsPageInner() {
   );
 
   const handleCreateConversation = React.useCallback(() => {
+    closePanel();
     setActiveId(null);
     resetDetail();
     setHomeDraftId(createHomeDraftId());
@@ -925,7 +926,7 @@ function ConversationsPageInner() {
     if (routeId) {
       navigate("/");
     }
-  }, [navigate, resetDetail, routeId, setActiveId]);
+  }, [closePanel, navigate, resetDetail, routeId, setActiveId]);
 
   const handleStop = React.useCallback(async () => {
     if (!activeId) return;
