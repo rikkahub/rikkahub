@@ -8,12 +8,13 @@ import api from "~/services/api";
 import type { ProviderModel } from "~/types";
 import { Button } from "~/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import { Input } from "~/components/ui/input";
 
 const PRESET_BUDGETS = {
@@ -119,6 +120,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   const [open, setOpen] = React.useState(false);
   const [updatingBudget, setUpdatingBudget] = React.useState<number | null>(null);
   const [customValue, setCustomValue] = React.useState("");
+  const [customExpanded, setCustomExpanded] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const currentModelId = currentAssistant?.chatModelId ?? settings?.chatModelId ?? null;
@@ -145,6 +147,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   React.useEffect(() => {
     if (open) {
       setCustomValue(String(currentBudget));
+      setCustomExpanded(false);
       setError(null);
     }
   }, [currentBudget, open]);
@@ -178,126 +181,142 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   }
 
   return (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={!canUse || loading}
-        className={cn(
-          "h-8 rounded-full px-2.5 text-sm font-normal text-muted-foreground hover:text-foreground",
-          className,
-        )}
-        onClick={() => {
-          setOpen(true);
-        }}
-      >
-        <span>{currentPreset.label}</span>
-        <span className="hidden sm:block">
-          {loading ? (
-            <LoaderCircle className="size-3.5 animate-spin" />
-          ) : (
-            <ChevronDown className="size-3.5" />
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!canUse) {
+          setOpen(false);
+          return;
+        }
+
+        setOpen(nextOpen);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={!canUse || loading}
+          className={cn(
+            "h-8 rounded-full px-2.5 text-sm font-normal text-muted-foreground hover:text-foreground",
+            className,
           )}
-        </span>
-      </Button>
+        >
+          <span>{currentPreset.label}</span>
+          <span className="hidden sm:block">
+            {loading ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <ChevronDown className="size-3.5" />
+            )}
+          </span>
+        </Button>
+      </PopoverTrigger>
 
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          if (!canUse) {
-            setOpen(false);
-            return;
-          }
+      <PopoverContent align="end" className="w-[min(92vw,24rem)] gap-0 p-0">
+        <PopoverHeader className="border-b px-6 py-4">
+          <PopoverTitle>推理</PopoverTitle>
+          <PopoverDescription>配置当前助手的推理强度和预算</PopoverDescription>
+        </PopoverHeader>
 
-          setOpen(nextOpen);
-        }}
-      >
-        <DialogContent className="max-h-[80svh] gap-0 p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-6 py-4">
-            <DialogTitle>推理</DialogTitle>
-            <DialogDescription>配置当前助手的推理强度和预算</DialogDescription>
-          </DialogHeader>
+        <div className="max-h-[70svh] space-y-3 overflow-y-auto px-4 py-4">
+          {error ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {error}
+            </div>
+          ) : null}
 
-          <div className="space-y-3 overflow-y-auto px-4 py-4">
-            {error ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {error}
-              </div>
-            ) : null}
-
+          <div className="grid grid-cols-3 gap-2">
             {REASONING_PRESETS.map((preset) => {
               const selected = preset.key === currentLevel;
               const switching = updatingBudget === preset.budget;
 
               return (
-                <button
+                <Button
                   key={preset.key}
                   type="button"
+                  size="sm"
+                  variant={selected ? "default" : "outline"}
                   className={cn(
-                    "hover:bg-muted flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition",
-                    selected && "border-primary bg-primary/5",
+                    "h-8 w-full justify-start rounded-full px-2 text-xs",
+                    selected && "shadow-none",
                   )}
                   disabled={disabled || loading}
                   onClick={() => {
                     void updateThinkingBudget(preset.budget);
                   }}
                 >
-                  <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                    {preset.key === "OFF" ? (
-                      <LightbulbOff className="size-4" />
-                    ) : preset.key === "AUTO" ? (
-                      <Sparkles className="size-4" />
-                    ) : (
-                      <Lightbulb className="size-4" />
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">{preset.label}</div>
-                    <div className="text-muted-foreground mt-0.5 text-xs">{preset.description}</div>
-                  </div>
-
-                  {switching ? <LoaderCircle className="mt-1 size-4 animate-spin" /> : null}
-                </button>
+                  {preset.key === "OFF" ? (
+                    <LightbulbOff className="size-3.5" />
+                  ) : preset.key === "AUTO" ? (
+                    <Sparkles className="size-3.5" />
+                  ) : (
+                    <Lightbulb className="size-3.5" />
+                  )}
+                  <span className="truncate">{preset.label}</span>
+                  <span className="ml-auto flex size-3.5 items-center justify-center">
+                    {switching ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+                  </span>
+                </Button>
               );
             })}
-
-            <div className="space-y-2 rounded-lg border px-3 py-3">
-              <div className="text-sm font-medium">自定义推理预算</div>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={customValue}
-                  onChange={(event) => {
-                    setCustomValue(event.target.value);
-                  }}
-                  placeholder="输入预算 token 数"
-                  inputMode="numeric"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={disabled || loading}
-                  onClick={() => {
-                    const parsedValue = Number.parseInt(customValue.trim(), 10);
-                    if (Number.isNaN(parsedValue)) {
-                      setError("请输入有效的整数");
-                      return;
-                    }
-
-                    void updateThinkingBudget(parsedValue);
-                  }}
-                >
-                  应用
-                </Button>
-              </div>
-              <div className="text-muted-foreground text-xs">
-                示例：0（关闭）、-1（自动）、1024、16000、32000
-              </div>
-            </div>
           </div>
-        </DialogContent>
-      </Dialog>
-    </>
+
+          <div className="text-muted-foreground h-4 truncate text-xs">{currentPreset.description}</div>
+
+          <div className="space-y-2 px-1 py-1">
+            <button
+              type="button"
+              className="hover:bg-muted flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-xs font-medium transition"
+              onClick={() => {
+                setCustomExpanded((prev) => !prev);
+              }}
+            >
+              <span>自定义推理预算</span>
+              <ChevronDown
+                className={cn("size-3.5 transition-transform", customExpanded && "rotate-180")}
+              />
+            </button>
+
+            {customExpanded ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Input
+                    className="h-8"
+                    value={customValue}
+                    onChange={(event) => {
+                      setCustomValue(event.target.value);
+                    }}
+                    placeholder="输入预算 token 数"
+                    inputMode="numeric"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={disabled || loading}
+                    onClick={() => {
+                      const parsedValue = Number.parseInt(customValue.trim(), 10);
+                      if (Number.isNaN(parsedValue)) {
+                        setError("请输入有效的整数");
+                        return;
+                      }
+
+                      void updateThinkingBudget(parsedValue);
+                    }}
+                  >
+                    应用
+                  </Button>
+                </div>
+                <div className="text-muted-foreground text-xs">
+                  示例：0（关闭）、-1（自动）、1024、16000、32000
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
