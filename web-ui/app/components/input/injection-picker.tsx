@@ -9,12 +9,13 @@ import type { LorebookProfile, ModeInjectionProfile } from "~/types";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
 
 export interface InjectionPickerButtonProps {
@@ -208,133 +209,87 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
   }
 
   return (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={!canUse || updating}
-        className={cn(
-          "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
-          selectedCount > 0 && "text-primary hover:bg-primary/10",
-          className,
-        )}
-        onClick={() => {
-          setOpen(true);
-        }}
-      >
-        {updating ? <LoaderCircle className="size-4 animate-spin" /> : <BookOpen className="size-4" />}
-        {selectedCount > 0 ? (
-          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-            {selectedCount}
-          </span>
-        ) : null}
-      </Button>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!canUse) {
+          setOpen(false);
+          return;
+        }
 
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          if (!canUse) {
-            setOpen(false);
-            return;
-          }
+        setOpen(nextOpen);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={!canUse || updating}
+          className={cn(
+            "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
+            selectedCount > 0 && "text-primary hover:bg-primary/10",
+            className,
+          )}
+        >
+          {updating ? <LoaderCircle className="size-4 animate-spin" /> : <BookOpen className="size-4" />}
+          {selectedCount > 0 ? (
+            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+              {selectedCount}
+            </span>
+          ) : null}
+        </Button>
+      </PopoverTrigger>
 
-          setOpen(nextOpen);
-        }}
-      >
-        <DialogContent className="max-h-[80svh] gap-0 p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-6 py-4">
-            <DialogTitle>提示词注入</DialogTitle>
-            <DialogDescription>为当前助手启用模式注入和 Lorebook</DialogDescription>
-          </DialogHeader>
+      <PopoverContent align="end" className="w-[min(92vw,26rem)] gap-0 p-0">
+        <PopoverHeader className="border-b px-6 py-4">
+          <PopoverTitle>提示词注入</PopoverTitle>
+          <PopoverDescription>为当前助手启用模式注入和 Lorebook</PopoverDescription>
+        </PopoverHeader>
 
-          <div className="space-y-4 px-4 py-4">
-            {error ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {error}
-              </div>
-            ) : null}
-
-            <div className="bg-muted inline-flex rounded-full p-1">
-              <button
-                type="button"
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs transition",
-                  activeTab === "mode" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
-                )}
-                onClick={() => {
-                  setActiveTab("mode");
-                }}
-                disabled={modeInjections.length === 0}
-              >
-                模式注入
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs transition",
-                  activeTab === "lorebook"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground",
-                )}
-                onClick={() => {
-                  setActiveTab("lorebook");
-                }}
-                disabled={lorebooks.length === 0}
-              >
-                Lorebook
-              </button>
+        <div className="space-y-4 px-4 py-4">
+          {error ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {error}
             </div>
+          ) : null}
 
-            <ScrollArea className="h-[45vh] pr-3">
-              {activeTab === "mode" ? (
-                modeInjections.length > 0 ? (
-                  <div className="space-y-2">
-                    {modeInjections.map((item) => {
-                      const checked = selectedModeInjectionIds.includes(item.id);
-                      const switching = updatingKey === `mode:${item.id}`;
+          <div className="bg-muted inline-flex rounded-full p-1">
+            <button
+              type="button"
+              className={cn(
+                "rounded-full px-3 py-1 text-xs transition",
+                activeTab === "mode" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+              )}
+              onClick={() => {
+                setActiveTab("mode");
+              }}
+              disabled={modeInjections.length === 0}
+            >
+              模式注入
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "rounded-full px-3 py-1 text-xs transition",
+                activeTab === "lorebook" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+              )}
+              onClick={() => {
+                setActiveTab("lorebook");
+              }}
+              disabled={lorebooks.length === 0}
+            >
+              Lorebook
+            </button>
+          </div>
 
-                      return (
-                        <label
-                          key={item.id}
-                          className={cn(
-                            "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition",
-                            checked && "border-primary bg-primary/5",
-                          )}
-                        >
-                          {switching ? (
-                            <LoaderCircle className="size-4 animate-spin" />
-                          ) : (
-                            <Checkbox
-                              checked={checked}
-                              disabled={disabled || updating}
-                              onCheckedChange={(nextChecked) => {
-                                void handleToggleModeInjection(item.id, Boolean(nextChecked));
-                              }}
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium">
-                              {getDisplayName(item.name, "未命名模式注入")}
-                            </div>
-                            {item.enabled === false ? (
-                              <div className="text-muted-foreground mt-0.5 text-xs">已禁用</div>
-                            ) : null}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                    暂无模式注入
-                  </div>
-                )
-              ) : lorebooks.length > 0 ? (
+          <ScrollArea className="h-[45vh] pr-3">
+            {activeTab === "mode" ? (
+              modeInjections.length > 0 ? (
                 <div className="space-y-2">
-                  {lorebooks.map((item) => {
-                    const checked = selectedLorebookIds.includes(item.id);
-                    const switching = updatingKey === `lorebook:${item.id}`;
+                  {modeInjections.map((item) => {
+                    const checked = selectedModeInjectionIds.includes(item.id);
+                    const switching = updatingKey === `mode:${item.id}`;
 
                     return (
                       <label
@@ -351,20 +306,14 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
                             checked={checked}
                             disabled={disabled || updating}
                             onCheckedChange={(nextChecked) => {
-                              void handleToggleLorebook(item.id, Boolean(nextChecked));
+                              void handleToggleModeInjection(item.id, Boolean(nextChecked));
                             }}
                           />
                         )}
-
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium">
-                            {getDisplayName(item.name, "未命名 Lorebook")}
+                            {getDisplayName(item.name, "未命名模式注入")}
                           </div>
-                          {typeof item.description === "string" && item.description.trim().length > 0 ? (
-                            <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
-                              {item.description}
-                            </div>
-                          ) : null}
                           {item.enabled === false ? (
                             <div className="text-muted-foreground mt-0.5 text-xs">已禁用</div>
                           ) : null}
@@ -375,13 +324,60 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
                 </div>
               ) : (
                 <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                  暂无 Lorebook
+                  暂无模式注入
                 </div>
-              )}
-            </ScrollArea>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+              )
+            ) : lorebooks.length > 0 ? (
+              <div className="space-y-2">
+                {lorebooks.map((item) => {
+                  const checked = selectedLorebookIds.includes(item.id);
+                  const switching = updatingKey === `lorebook:${item.id}`;
+
+                  return (
+                    <label
+                      key={item.id}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition",
+                        checked && "border-primary bg-primary/5",
+                      )}
+                    >
+                      {switching ? (
+                        <LoaderCircle className="size-4 animate-spin" />
+                      ) : (
+                        <Checkbox
+                          checked={checked}
+                          disabled={disabled || updating}
+                          onCheckedChange={(nextChecked) => {
+                            void handleToggleLorebook(item.id, Boolean(nextChecked));
+                          }}
+                        />
+                      )}
+
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">
+                          {getDisplayName(item.name, "未命名 Lorebook")}
+                        </div>
+                        {typeof item.description === "string" && item.description.trim().length > 0 ? (
+                          <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                            {item.description}
+                          </div>
+                        ) : null}
+                        {item.enabled === false ? (
+                          <div className="text-muted-foreground mt-0.5 text-xs">已禁用</div>
+                        ) : null}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                暂无 Lorebook
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -8,12 +8,13 @@ import api from "~/services/api";
 import type { McpServerConfig, McpToolOption } from "~/types";
 import { Button } from "~/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Switch } from "~/components/ui/switch";
 
@@ -141,107 +142,102 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
   );
 
   return (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={!canUse || updating}
-        className={cn(
-          "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
-          selectedEnabledCount > 0 && "text-primary hover:bg-primary/10",
-          className,
-        )}
-        onClick={() => {
-          setOpen(true);
-        }}
-      >
-        {updating ? <LoaderCircle className="size-4 animate-spin" /> : <Terminal className="size-4" />}
-        {selectedEnabledCount > 0 ? (
-          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-            {selectedEnabledCount}
-          </span>
-        ) : null}
-        <span className="hidden sm:block">
-          <ChevronDown className="size-3.5" />
-        </span>
-      </Button>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!canUse) {
+          setOpen(false);
+          return;
+        }
 
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          if (!canUse) {
-            setOpen(false);
-            return;
-          }
+        setOpen(nextOpen);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={!canUse || updating}
+          className={cn(
+            "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
+            selectedEnabledCount > 0 && "text-primary hover:bg-primary/10",
+            className,
+          )}
+        >
+          {updating ? <LoaderCircle className="size-3.5 animate-spin" /> : <Terminal className="size-3.5" />}
+          {selectedEnabledCount > 0 ? (
+            <span className="rounded-full bg-primary/10 px-1 py-0.5 text-[9px] text-primary">
+              {selectedEnabledCount}
+            </span>
+          ) : null}
+        </Button>
+      </PopoverTrigger>
 
-          setOpen(nextOpen);
-        }}
-      >
-        <DialogContent className="max-h-[80svh] gap-0 p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-6 py-4">
-            <DialogTitle>MCP</DialogTitle>
-            <DialogDescription>选择当前助手可用的 MCP 服务器</DialogDescription>
-          </DialogHeader>
+      <PopoverContent align="end" className="w-[min(92vw,22rem)] gap-0 p-0">
+        <PopoverHeader className="border-b px-3 py-2.5">
+          <PopoverTitle className="text-sm">MCP</PopoverTitle>
+          <PopoverDescription className="text-[11px]">选择当前助手可用的 MCP 服务器</PopoverDescription>
+        </PopoverHeader>
 
-          <div className="space-y-4 px-4 py-4">
-            {error ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {error}
-              </div>
-            ) : null}
+        <div className="space-y-2 px-2.5 py-2.5">
+          {error ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+              {error}
+            </div>
+          ) : null}
 
-            <ScrollArea className="h-[45vh] pr-3">
-              {enabledServers.length > 0 ? (
-                <div className="space-y-2">
-                  {enabledServers.map((server) => {
-                    const selected = selectedServerIdSet.has(server.id);
-                    const switching = updatingServerId === server.id;
-                    const tools = getEnabledToolsCount(server.commonOptions?.tools);
+          <ScrollArea className="h-[32vh] pr-1.5">
+            {enabledServers.length > 0 ? (
+              <div className="space-y-1">
+                {enabledServers.map((server) => {
+                  const selected = selectedServerIdSet.has(server.id);
+                  const switching = updatingServerId === server.id;
+                  const tools = getEnabledToolsCount(server.commonOptions?.tools);
 
-                    return (
-                      <div
-                        key={server.id}
-                        className={cn(
-                          "flex items-center gap-3 rounded-lg border px-3 py-3 transition",
-                          selected && "border-primary bg-primary/5",
+                  return (
+                    <div
+                      key={server.id}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md border px-2 py-1.5 transition",
+                        selected && "border-primary bg-primary/5",
+                      )}
+                    >
+                      <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                        {switching ? (
+                          <LoaderCircle className="size-3 animate-spin" />
+                        ) : (
+                          <Terminal className="size-3" />
                         )}
-                      >
-                        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                          {switching ? (
-                            <LoaderCircle className="size-4 animate-spin" />
-                          ) : (
-                            <Terminal className="size-4" />
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{getServerName(server)}</div>
-                          <div className="text-muted-foreground mt-0.5 text-xs">
-                            {tools.enabled}/{tools.total} tools enabled
-                          </div>
-                        </div>
-
-                        <Switch
-                          checked={selected}
-                          disabled={disabled || updating}
-                          onCheckedChange={(nextChecked) => {
-                            void handleToggleServer(server.id, nextChecked);
-                          }}
-                        />
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                  暂无可用 MCP 服务器
-                </div>
-              )}
-            </ScrollArea>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[11px] font-medium leading-tight">{getServerName(server)}</div>
+                        <div className="text-muted-foreground text-[10px] leading-tight">
+                          {tools.enabled}/{tools.total} tools enabled
+                        </div>
+                      </div>
+
+                      <Switch
+                        size="sm"
+                        checked={selected}
+                        disabled={disabled || updating}
+                        onCheckedChange={(nextChecked) => {
+                          void handleToggleServer(server.id, nextChecked);
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                暂无可用 MCP 服务器
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

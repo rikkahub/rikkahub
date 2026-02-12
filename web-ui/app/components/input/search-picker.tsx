@@ -9,12 +9,13 @@ import type { BuiltInTool, ProviderModel, SearchServiceOption } from "~/types";
 import { AIIcon } from "~/components/ui/ai-icon";
 import { Button } from "~/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Switch } from "~/components/ui/switch";
 
@@ -210,173 +211,157 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
   );
 
   return (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={!canUse || loading}
-        className={cn(
-          "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
-          checked && "text-primary hover:bg-primary/10",
-          className,
-        )}
-        onClick={() => {
-          setOpen(true);
-        }}
-      >
-        {updatingSearchEnabled || updatingBuiltInSearch ? (
-          <LoaderCircle className="size-4 animate-spin" />
-        ) : searchEnabled && currentService ? (
-          <AIIcon
-            name={getServiceLabel(currentService)}
-            size={16}
-            className="bg-transparent"
-            imageClassName="h-full w-full"
-          />
-        ) : builtInSearchEnabled ? (
-          <Search className="size-4" />
-        ) : (
-          <Earth className="size-4" />
-        )}
-        <span className="hidden sm:block">
-          <ChevronDown className="size-3.5" />
-        </span>
-      </Button>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!canUse) {
+          setOpen(false);
+          return;
+        }
 
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          if (!canUse) {
-            setOpen(false);
-            return;
-          }
+        setOpen(nextOpen);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={!canUse || loading}
+          className={cn(
+            "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
+            checked && "text-primary hover:bg-primary/10",
+            className,
+          )}
+        >
+          {updatingSearchEnabled || updatingBuiltInSearch ? (
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : searchEnabled && currentService ? (
+            <AIIcon
+              name={getServiceLabel(currentService)}
+              size={16}
+              className="bg-transparent"
+              imageClassName="h-full w-full"
+            />
+          ) : builtInSearchEnabled ? (
+            <Search className="size-4" />
+          ) : (
+            <Earth className="size-4" />
+          )}
+          <span className="hidden sm:block">
+            <ChevronDown className="size-3.5" />
+          </span>
+        </Button>
+      </PopoverTrigger>
 
-          setOpen(nextOpen);
-        }}
-      >
-        <DialogContent className="max-h-[80svh] gap-0 p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-6 py-4">
-            <DialogTitle>网络搜索</DialogTitle>
-            <DialogDescription>配置联网搜索与搜索服务</DialogDescription>
-          </DialogHeader>
+      <PopoverContent align="end" className="w-[min(92vw,28rem)] gap-0 p-0">
+        <PopoverHeader className="border-b px-6 py-4">
+          <PopoverTitle>网络搜索</PopoverTitle>
+          <PopoverDescription>配置联网搜索与搜索服务</PopoverDescription>
+        </PopoverHeader>
 
-          <div className="space-y-4 px-4 py-4">
-            {error ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {error}
+        <div className="space-y-4 px-4 py-4">
+          {error ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {error}
+            </div>
+          ) : null}
+
+          {isGeminiModel(currentModel) ? (
+            <div className="flex items-center gap-3 rounded-lg border px-3 py-3">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                <Search className="size-4" />
               </div>
-            ) : null}
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium">模型内置搜索</div>
+                <div className="text-muted-foreground text-xs">使用模型原生搜索能力</div>
+              </div>
+              <Switch
+                checked={builtInSearchEnabled}
+                disabled={
+                  disabled || updatingBuiltInSearch || updatingSearchEnabled || updatingServiceIndex !== null
+                }
+                onCheckedChange={(nextChecked) => {
+                  void handleToggleBuiltInSearch(nextChecked);
+                }}
+              />
+            </div>
+          ) : null}
 
-            {isGeminiModel(currentModel) ? (
+          {!builtInSearchEnabled ? (
+            <>
               <div className="flex items-center gap-3 rounded-lg border px-3 py-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                  <Search className="size-4" />
+                  <Earth className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">模型内置搜索</div>
-                  <div className="text-muted-foreground text-xs">使用模型原生搜索能力</div>
+                  <div className="text-sm font-medium">联网搜索</div>
+                  <div className="text-muted-foreground text-xs">{searchEnabled ? "已启用" : "已关闭"}</div>
                 </div>
                 <Switch
-                  checked={builtInSearchEnabled}
+                  checked={searchEnabled}
                   disabled={
-                    disabled ||
-                    updatingBuiltInSearch ||
-                    updatingSearchEnabled ||
-                    updatingServiceIndex !== null
+                    disabled || updatingSearchEnabled || updatingBuiltInSearch || updatingServiceIndex !== null
                   }
                   onCheckedChange={(nextChecked) => {
-                    void handleToggleBuiltInSearch(nextChecked);
+                    void handleToggleSearchEnabled(nextChecked);
                   }}
                 />
               </div>
-            ) : null}
 
-            {!builtInSearchEnabled ? (
-              <>
-                <div className="flex items-center gap-3 rounded-lg border px-3 py-3">
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                    <Earth className="size-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">联网搜索</div>
-                    <div className="text-muted-foreground text-xs">
-                      {searchEnabled ? "已启用" : "已关闭"}
-                    </div>
-                  </div>
-                  <Switch
-                    checked={searchEnabled}
-                    disabled={
-                      disabled ||
-                      updatingSearchEnabled ||
-                      updatingBuiltInSearch ||
-                      updatingServiceIndex !== null
-                    }
-                    onCheckedChange={(nextChecked) => {
-                      void handleToggleSearchEnabled(nextChecked);
-                    }}
-                  />
-                </div>
+              <ScrollArea className="h-[45vh] pr-3">
+                {settings?.searchServices?.length ? (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {settings.searchServices.map((service, index) => {
+                      const selected = index === settings.searchServiceSelected;
+                      const switching = updatingServiceIndex === index;
 
-                <ScrollArea className="h-[45vh] pr-3">
-                  {settings?.searchServices?.length ? (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {settings.searchServices.map((service, index) => {
-                        const selected = index === settings.searchServiceSelected;
-                        const switching = updatingServiceIndex === index;
-
-                        return (
-                          <button
-                            key={service.id}
-                            type="button"
-                            className={cn(
-                              "hover:bg-muted flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition",
-                              selected && "border-primary bg-primary/5",
-                            )}
-                            disabled={
-                              disabled ||
-                              updatingSearchEnabled ||
-                              updatingBuiltInSearch ||
-                              updatingServiceIndex !== null
-                            }
-                            onClick={() => {
-                              void handleSelectService(index);
-                            }}
-                          >
-                            <AIIcon
-                              name={getServiceLabel(service)}
-                              size={20}
-                              className="bg-transparent"
-                              imageClassName="h-full w-full"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium">
-                                {getServiceLabel(service)}
-                              </div>
-                              <div className="text-muted-foreground truncate text-xs">
-                                {getServiceType(service) ?? "unknown"}
-                              </div>
+                      return (
+                        <button
+                          key={service.id}
+                          type="button"
+                          className={cn(
+                            "hover:bg-muted flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition",
+                            selected && "border-primary bg-primary/5",
+                          )}
+                          disabled={
+                            disabled || updatingSearchEnabled || updatingBuiltInSearch || updatingServiceIndex !== null
+                          }
+                          onClick={() => {
+                            void handleSelectService(index);
+                          }}
+                        >
+                          <AIIcon
+                            name={getServiceLabel(service)}
+                            size={20}
+                            className="bg-transparent"
+                            imageClassName="h-full w-full"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium">{getServiceLabel(service)}</div>
+                            <div className="text-muted-foreground truncate text-xs">
+                              {getServiceType(service) ?? "unknown"}
                             </div>
-                            {switching ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                      暂无可用搜索服务
-                    </div>
-                  )}
-                </ScrollArea>
-              </>
-            ) : (
-              <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
-                当前已启用模型内置搜索，应用搜索服务设置暂不生效。
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+                          </div>
+                          {switching ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                    暂无可用搜索服务
+                  </div>
+                )}
+              </ScrollArea>
+            </>
+          ) : (
+            <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+              当前已启用模型内置搜索，应用搜索服务设置暂不生效。
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
