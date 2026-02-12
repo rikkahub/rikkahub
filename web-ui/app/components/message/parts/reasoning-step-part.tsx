@@ -3,6 +3,7 @@ import { Brain, Sparkles } from "lucide-react";
 
 import Markdown from "~/components/markdown/markdown";
 import type { ReasoningPart as UIReasoningPart } from "~/types";
+import Think from "~/assets/think.svg?react";
 
 import { ControlledChainOfThoughtStep } from "../chain-of-thought";
 
@@ -81,7 +82,7 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
         loading ? (
           <Sparkles className="h-4 w-4 animate-pulse text-primary" />
         ) : (
-          <Brain className="h-4 w-4 text-primary" />
+          <Think className="h-4 w-4 text-primary" />
         )
       }
       label={<span className="text-foreground text-xs font-medium">深度思考</span>}
