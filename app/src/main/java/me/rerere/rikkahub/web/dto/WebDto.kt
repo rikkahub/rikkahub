@@ -76,6 +76,13 @@ data class UpdateAssistantMcpServersRequest(
 )
 
 @Serializable
+data class UpdateAssistantInjectionsRequest(
+    val assistantId: String,
+    val modeInjectionIds: List<String>,
+    val lorebookIds: List<String>,
+)
+
+@Serializable
 data class UpdateSearchEnabledRequest(
     val enabled: Boolean,
 )

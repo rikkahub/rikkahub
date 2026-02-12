@@ -381,6 +381,27 @@ class SettingsStore(
             )
         }
     }
+
+    suspend fun updateAssistantInjections(
+        assistantId: Uuid,
+        modeInjectionIds: Set<Uuid>,
+        lorebookIds: Set<Uuid>
+    ) {
+        update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map { assistant ->
+                    if (assistant.id == assistantId) {
+                        assistant.copy(
+                            modeInjectionIds = modeInjectionIds,
+                            lorebookIds = lorebookIds
+                        )
+                    } else {
+                        assistant
+                    }
+                }
+            )
+        }
+    }
 }
 
 @Serializable

@@ -19,6 +19,7 @@ import me.rerere.rikkahub.web.dto.UpdateAssistantModelRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantThinkingBudgetRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantMcpServersRequest
+import me.rerere.rikkahub.web.dto.UpdateAssistantInjectionsRequest
 import me.rerere.rikkahub.web.dto.UpdateBuiltInToolRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchEnabledRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchServiceRequest
@@ -87,6 +88,36 @@ fun Route.settingsRoutes(
             }
 
             settingsStore.updateAssistantMcpServers(assistantId, requestedServerIds)
+            call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
+        }
+
+        post("/assistant/injections") {
+            val request = call.receive<UpdateAssistantInjectionsRequest>()
+            val assistantId = request.assistantId.toUuid("assistantId")
+
+            val settings = settingsStore.settingsFlow.value
+            if (settings.assistants.none { it.id == assistantId }) {
+                throw NotFoundException("Assistant not found")
+            }
+
+            val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
+            val requestedModeInjectionIds =
+                request.modeInjectionIds.map { it.toUuid("modeInjectionIds") }.toSet()
+            if (!validModeInjectionIds.containsAll(requestedModeInjectionIds)) {
+                throw BadRequestException("modeInjectionIds contains unknown injection id")
+            }
+
+            val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
+            val requestedLorebookIds = request.lorebookIds.map { it.toUuid("lorebookIds") }.toSet()
+            if (!validLorebookIds.containsAll(requestedLorebookIds)) {
+                throw BadRequestException("lorebookIds contains unknown lorebook id")
+            }
+
+            settingsStore.updateAssistantInjections(
+                assistantId = assistantId,
+                modeInjectionIds = requestedModeInjectionIds,
+                lorebookIds = requestedLorebookIds
+            )
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
         }
 

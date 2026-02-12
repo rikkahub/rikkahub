@@ -8,6 +8,7 @@ import { ModelList } from "~/components/input/model-list";
 import { ReasoningPickerButton } from "~/components/input/reasoning-picker";
 import { SearchPickerButton } from "~/components/input/search-picker";
 import { McpPickerButton } from "~/components/input/mcp-picker";
+import { InjectionPickerButton } from "~/components/input/injection-picker";
 import { useSettingsStore } from "~/stores";
 import { Button } from "~/components/ui/button";
 import {
@@ -499,6 +500,7 @@ export function ChatInput({
               <ModelList disabled={!canSwitchModel} className="max-w-64" />
               <ReasoningPickerButton disabled={!canSwitchModel} />
               <McpPickerButton disabled={!canSwitchModel} />
+              <InjectionPickerButton disabled={!canSwitchModel} />
               <SearchPickerButton disabled={!canSwitchModel} />
             </div>
             <Button
