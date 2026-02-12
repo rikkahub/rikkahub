@@ -506,7 +506,7 @@ export function ChatInput({
             onPaste={handlePaste}
             placeholder={placeholder}
             disabled={!ready || disabled}
-            className="min-h-[60px] max-h-[200px] resize-none border-0 bg-transparent p-2 text-sm shadow-none focus-visible:ring-0"
+            className="min-h-[60px] max-h-[200px] resize-none border-0 bg-transparent dark:bg-transparent p-2 text-sm shadow-none focus-visible:ring-0"
             rows={2}
           />
           <div className="flex items-center justify-between gap-2">
