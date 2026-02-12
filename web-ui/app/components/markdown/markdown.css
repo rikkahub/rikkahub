@@ -124,6 +124,10 @@
   @apply flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-muted;
 }
 
+.code-block-actions {
+  @apply flex items-center gap-1;
+}
+
 .code-block-copy:active {
   @apply scale-95;
 }

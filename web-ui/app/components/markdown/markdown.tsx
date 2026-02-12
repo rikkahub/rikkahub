@@ -8,6 +8,8 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight, oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "~/lib/utils";
 import { Check, Copy } from "lucide-react";
+import { getCodePreviewLanguage } from "~/components/workbench/code-preview-language";
+import { useOptionalWorkbench } from "~/components/workbench/workbench-context";
 import "katex/dist/katex.min.css";
 import "./markdown.css";
 
@@ -67,12 +69,23 @@ type MarkdownProps = {
   content: string;
   className?: string;
   onClickCitation?: (id: string) => void;
+  allowCodePreview?: boolean;
 };
 
-function CodeBlock({ language, children }: { language: string; children: string }) {
+function CodeBlock({
+  language,
+  children,
+  onPreview,
+}: {
+  language: string;
+  children: string;
+  onPreview?: () => void;
+}) {
   const [copied, setCopied] = React.useState(false);
   const isDark =
     typeof window !== "undefined" && document.documentElement.classList.contains("dark");
+  const previewLanguage = getCodePreviewLanguage(language);
+  const canPreview = Boolean(onPreview && previewLanguage);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(children);
@@ -84,19 +97,36 @@ function CodeBlock({ language, children }: { language: string; children: string 
     <div className="code-block">
       <div className="code-block-header">
         <span className="code-block-language">{language || "text"}</span>
-        <button onClick={handleCopy} className="code-block-copy" aria-label="Copy code">
-          {copied ? (
-            <>
-              <Check className="h-3 w-3" />
-              <span>Copied</span>
-            </>
-          ) : (
-            <>
-              <Copy className="h-3 w-3" />
-              <span>Copy</span>
-            </>
+        <div className="code-block-actions">
+          {canPreview && (
+            <button
+              onClick={onPreview}
+              className="code-block-copy"
+              type="button"
+              aria-label="Preview code"
+            >
+              <span>预览</span>
+            </button>
           )}
-        </button>
+          <button
+            onClick={handleCopy}
+            className="code-block-copy"
+            aria-label="Copy code"
+            type="button"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3 w-3" />
+                <span>Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3 w-3" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
       <SyntaxHighlighter
         style={isDark ? oneDark : oneLight}
@@ -115,8 +145,32 @@ function CodeBlock({ language, children }: { language: string; children: string 
   );
 }
 
-export default function Markdown({ content, className, onClickCitation }: MarkdownProps) {
+export default function Markdown({
+  content,
+  className,
+  onClickCitation,
+  allowCodePreview = true,
+}: MarkdownProps) {
+  const workbench = useOptionalWorkbench();
   const processedContent = React.useMemo(() => preProcess(content), [content]);
+  const handlePreviewCode = React.useCallback(
+    (language: string, code: string) => {
+      if (!allowCodePreview || !workbench) return;
+
+      const previewLanguage = getCodePreviewLanguage(language);
+      if (!previewLanguage) return;
+
+      workbench.openPanel({
+        type: "code-preview",
+        title: `${previewLanguage.toUpperCase()} 预览`,
+        payload: {
+          language: previewLanguage,
+          code,
+        },
+      });
+    },
+    [allowCodePreview, workbench],
+  );
 
   return (
     <div className={cn("markdown", className)}>
@@ -126,12 +180,26 @@ export default function Markdown({ content, className, onClickCitation }: Markdo
         components={{
           pre: ({ children }) => <>{children}</>,
           code: ({ className, children, ...props }) => {
-            const match = /language-(\w+)/.exec(className || "");
-            const isBlock = typeof children === "string" && children.includes("\n");
+            const match = /language-([A-Za-z0-9_-]+)/.exec(className || "");
+            const code = String(children).replace(/\n$/, "");
+            const isBlock = code.includes("\n");
 
             if (match || isBlock) {
-              const code = String(children).replace(/\n$/, "");
-              return <CodeBlock language={match?.[1] || ""}>{code}</CodeBlock>;
+              const language = match?.[1] || "";
+              return (
+                <CodeBlock
+                  language={language}
+                  onPreview={
+                    allowCodePreview && workbench
+                      ? () => {
+                          handlePreviewCode(language, code);
+                        }
+                      : undefined
+                  }
+                >
+                  {code}
+                </CodeBlock>
+              );
             }
 
             return (
