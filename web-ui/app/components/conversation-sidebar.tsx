@@ -853,7 +853,14 @@ export function ConversationSidebar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <div className="ml-auto text-xs font-light text-muted-foreground">RikkaHub</div>
+          <a 
+            href="https://rikka-ai.com" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="ml-auto text-xs font-light text-muted-foreground hover:text-foreground transition-colors"
+          >
+            RikkaHub
+          </a>
         </div>
       </SidebarFooter>
     </Sidebar>
