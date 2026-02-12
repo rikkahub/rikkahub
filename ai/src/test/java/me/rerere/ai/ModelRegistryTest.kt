@@ -1,6 +1,7 @@
 package me.rerere.ai
 
 import me.rerere.ai.provider.Modality
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.registry.ModelRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -67,6 +68,26 @@ class ModelRegistryTest {
         assertEquals(
             listOf(Modality.TEXT, Modality.IMAGE),
             ModelRegistry.MODEL_INPUT_MODALITIES.getData("o3-mini")
+        )
+    }
+
+    @Test
+    fun testGlm5AndMinimaxM25() {
+        assertEquals(
+            listOf(Modality.TEXT),
+            ModelRegistry.MODEL_INPUT_MODALITIES.getData("glm-5")
+        )
+        assertEquals(
+            listOf(Modality.TEXT),
+            ModelRegistry.MODEL_INPUT_MODALITIES.getData("minimax-m2.5")
+        )
+        assertEquals(
+            listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            ModelRegistry.MODEL_ABILITIES.getData("glm-5")
+        )
+        assertEquals(
+            listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            ModelRegistry.MODEL_ABILITIES.getData("minimax-m2.5")
         )
     }
 }
