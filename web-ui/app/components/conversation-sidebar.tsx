@@ -9,6 +9,7 @@ import {
   Moon,
   MoreHorizontal,
   MoveRight,
+  ArrowUp,
   Pencil,
   Pin,
   PinOff,
@@ -526,6 +527,7 @@ export function ConversationSidebar({
   const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([]);
   const [switchingAssistantId, setSwitchingAssistantId] = React.useState<string | null>(null);
   const [switchError, setSwitchError] = React.useState<string | null>(null);
+  const [showBackToTop, setShowBackToTop] = React.useState(false);
 
   const currentTheme = theme;
   const currentThemeOption =
@@ -587,6 +589,27 @@ export function ConversationSidebar({
     },
     [currentAssistantId, onAssistantChange],
   );
+
+  const handleBackToTop = React.useCallback(() => {
+    const scrollContainer = document.getElementById("conversationScrollTarget");
+    if (!scrollContainer) return;
+    scrollContainer.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  React.useEffect(() => {
+    const scrollContainer = document.getElementById("conversationScrollTarget");
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      setShowBackToTop(scrollContainer.scrollTop > 240);
+    };
+
+    handleScroll();
+    scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      scrollContainer.removeEventListener("scroll", handleScroll);
+    };
+  }, [conversations.length]);
 
   return (
     <Sidebar collapsible="offcanvas" variant="sidebar">
@@ -683,6 +706,21 @@ export function ConversationSidebar({
               })}
             </SidebarMenu>
           </InfiniteScrollArea>
+          {showBackToTop && (
+            <div className="pointer-events-none absolute right-0 bottom-4 left-0 flex justify-center">
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon-sm"
+                className="pointer-events-auto shadow-sm"
+                aria-label="回到顶部"
+                title="回到顶部"
+                onClick={handleBackToTop}
+              >
+                <ArrowUp className="size-4" />
+              </Button>
+            </div>
+          )}
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
