@@ -10,12 +10,13 @@ import { AIIcon } from "~/components/ui/ai-icon";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import { Input } from "~/components/ui/input";
 import { ScrollArea } from "~/components/ui/scroll-area";
 
@@ -162,76 +163,85 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
   );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={cn(
-          "rounded-full px-0 text-muted-foreground hover:text-foreground sm:h-8 sm:max-w-64 sm:justify-start sm:gap-2 sm:px-2",
-          className,
-        )}
-        disabled={disabled || !currentAssistant}
-        onClick={() => {
-          setOpen(true);
-        }}
-      >
-        <AIIcon
-          name={currentModel?.modelId ?? "auto"}
-          size={16}
-          className="bg-transparent"
-          imageClassName="h-full w-full"
-        />
-        <span className="hidden min-w-0 flex-1 truncate text-left sm:block">
-          {currentModelLabel}
-        </span>
-        <ChevronDown className="hidden size-3.5 shrink-0 sm:block" />
-      </Button>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (disabled || !currentAssistant) {
+          setOpen(false);
+          return;
+        }
 
-      <DialogContent className="gap-0 p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle>选择模型</DialogTitle>
-          <DialogDescription>切换当前助手使用的聊天模型</DialogDescription>
-        </DialogHeader>
+        setOpen(nextOpen);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "rounded-full px-0 text-muted-foreground hover:text-foreground sm:h-8 sm:max-w-64 sm:justify-start sm:gap-2 sm:px-2",
+            className,
+          )}
+          disabled={disabled || !currentAssistant}
+        >
+          <AIIcon
+            name={currentModel?.modelId ?? "auto"}
+            size={16}
+            className="bg-transparent"
+            imageClassName="h-full w-full"
+          />
+          <span className="hidden min-w-0 flex-1 truncate text-left sm:block">
+            {currentModelLabel}
+          </span>
+          <ChevronDown className="hidden size-3.5 shrink-0 sm:block" />
+        </Button>
+      </PopoverTrigger>
 
-        <div className="space-y-3 px-4 py-4">
+      <PopoverContent align="end" className="w-[min(96vw,30rem)] gap-0 p-0">
+        <PopoverHeader className="border-b px-4 py-3">
+          <PopoverTitle className="text-sm">选择模型</PopoverTitle>
+          <PopoverDescription className="text-xs">切换当前助手使用的聊天模型</PopoverDescription>
+        </PopoverHeader>
+
+        <div className="space-y-2 px-3 py-3">
           <div className="relative">
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
             <Input
               value={searchKeywords}
               onChange={(event) => {
                 setSearchKeywords(event.target.value);
               }}
               placeholder="搜索模型"
-              className="pl-8"
+              className="h-8 pl-7 text-xs"
             />
           </div>
 
           {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
               {error}
             </div>
           ) : null}
 
-          <ScrollArea className="h-[60vh] pr-3">
+          <ScrollArea className="h-[52vh] pr-2">
             {sections.length === 0 ? (
               <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
                 没有可用模型
               </div>
             ) : (
-              <div className="space-y-4 pb-2">
+              <div className="space-y-3 pb-1">
                 {sections.map((section) => (
-                  <div key={section.providerId} className="space-y-2">
-                    <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
+                  <div key={section.providerId} className="space-y-1.5">
+                    <div className="text-muted-foreground flex items-center gap-1.5 text-[11px] font-medium">
                       <AIIcon
                         name={section.providerName}
-                        size={14}
+                        size={12}
                         className="bg-transparent"
                         imageClassName="h-full w-full"
                       />
                       <span>{section.providerName}</span>
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       {section.models.map((model) => {
                         const isSelected = model.id === currentModelId;
                         const isUpdating = model.id === updatingModelId;
@@ -242,7 +252,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                             key={model.id}
                             type="button"
                             className={cn(
-                              "hover:bg-muted flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition",
+                              "hover:bg-muted flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition",
                               isSelected && "border-primary bg-primary/5",
                             )}
                             disabled={disabled || updatingModelId !== null}
@@ -250,21 +260,25 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                               void handleSelectModel(model);
                             }}
                           >
-                            <AIIcon name={model.modelId} size={28} />
+                            <AIIcon name={model.modelId} size={24} />
 
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium">
+                              <div className="truncate text-xs font-medium leading-tight">
                                 {getModelDisplayName(model)}
                               </div>
-                              <div className="text-muted-foreground truncate text-xs">
+                              <div className="text-muted-foreground truncate text-[11px] leading-tight">
                                 {model.modelId}
                               </div>
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                <Badge variant="outline" className="text-[10px]">
+                              <div className="mt-0.5 flex flex-wrap gap-1">
+                                <Badge variant="outline" className="px-1 py-0 text-[9px]">
                                   {formatModality(model)}
                                 </Badge>
                                 {abilities.map((ability) => (
-                                  <Badge key={ability} variant="secondary" className="text-[10px]">
+                                  <Badge
+                                    key={ability}
+                                    variant="secondary"
+                                    className="px-1 py-0 text-[9px]"
+                                  >
                                     {getAbilityLabel(ability)}
                                   </Badge>
                                 ))}
@@ -272,9 +286,9 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                             </div>
 
                             {isUpdating ? (
-                              <LoaderCircle className="text-muted-foreground size-4 animate-spin" />
+                              <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />
                             ) : isSelected ? (
-                              <Check className="text-primary size-4" />
+                              <Check className="text-primary size-3.5" />
                             ) : null}
                           </button>
                         );
@@ -286,7 +300,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
             )}
           </ScrollArea>
         </div>
-      </DialogContent>
-    </Dialog>
+      </PopoverContent>
+    </Popover>
   );
 }
