@@ -525,6 +525,7 @@ function ConversationTimeline({
   detailError,
   selectedNodeMessages,
   isGenerating,
+  contentClassName,
   onEdit,
   onDelete,
   onFork,
@@ -538,6 +539,7 @@ function ConversationTimeline({
   detailError: string | null;
   selectedNodeMessages: SelectedNodeMessage[];
   isGenerating: boolean;
+  contentClassName?: string;
   onEdit: (message: MessageDto) => void | Promise<void>;
   onDelete: (messageId: string) => Promise<void>;
   onFork: (messageId: string) => Promise<void>;
@@ -550,7 +552,9 @@ function ConversationTimeline({
 
   return (
     <Conversation className="flex-1 min-h-0">
-      <ConversationContent className="mx-auto w-full max-w-3xl gap-4 px-4 py-6">
+      <ConversationContent
+        className={cn("mx-auto w-full max-w-3xl gap-4 px-4 py-6", contentClassName)}
+      >
         {!activeId && !isHomeRoute && (
           <ConversationEmptyState
             icon={<MessageSquare className="size-10" />}
@@ -619,17 +623,19 @@ function ConversationTimeline({
 function ConversationSuggestions({
   suggestions,
   onClickSuggestion,
+  className,
 }: {
   suggestions: string[];
   onClickSuggestion: (suggestion: string) => void;
+  className?: string;
 }) {
   if (suggestions.length === 0) {
     return null;
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4">
-      <div className="flex gap-2 overflow-x-auto">
+    <div className={cn("mx-auto w-full max-w-3xl px-4", className)}>
+      <div className="flex gap-2 overflow-x-auto rounded-lg bg-background/85 px-1 py-1 backdrop-blur supports-backdrop-filter:bg-background/70">
         {suggestions.map((suggestion, index) => (
           <button
             key={`${suggestion}-${index}`}
@@ -939,7 +945,7 @@ function ConversationsPageInner() {
       className={cn("flex flex-1 flex-col min-h-0 overflow-hidden", isNewChat && "justify-center")}
     >
       {!isNewChat && (
-        <>
+        <div className="relative flex min-h-0 flex-1">
           <ConversationTimeline
             activeId={activeId}
             isHomeRoute={isHomeRoute}
@@ -947,6 +953,7 @@ function ConversationsPageInner() {
             detailError={detailError}
             selectedNodeMessages={selectedNodeMessages}
             isGenerating={detail?.isGenerating ?? false}
+            contentClassName={showSuggestions ? "pb-24" : undefined}
             onEdit={handleStartEdit}
             onDelete={handleDeleteMessage}
             onFork={handleForkMessage}
@@ -959,9 +966,10 @@ function ConversationsPageInner() {
             <ConversationSuggestions
               suggestions={chatSuggestions}
               onClickSuggestion={handleClickSuggestion}
+              className="pointer-events-auto absolute right-0 bottom-3 left-0 z-20"
             />
           ) : null}
-        </>
+        </div>
       )}
 
       <motion.div layout="position" transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}>
