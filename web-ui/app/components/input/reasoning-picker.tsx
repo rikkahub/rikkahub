@@ -263,7 +263,9 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
             })}
           </div>
 
-          <div className="text-muted-foreground h-4 truncate text-xs">{currentPreset.description}</div>
+          <div className="text-muted-foreground h-4 truncate text-xs">
+            {currentPreset.description}
+          </div>
 
           <div className="space-y-2 px-1 py-1">
             <button

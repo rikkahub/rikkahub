@@ -279,7 +279,10 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
               <Switch
                 checked={builtInSearchEnabled}
                 disabled={
-                  disabled || updatingBuiltInSearch || updatingSearchEnabled || updatingServiceIndex !== null
+                  disabled ||
+                  updatingBuiltInSearch ||
+                  updatingSearchEnabled ||
+                  updatingServiceIndex !== null
                 }
                 onCheckedChange={(nextChecked) => {
                   void handleToggleBuiltInSearch(nextChecked);
@@ -296,12 +299,17 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">联网搜索</div>
-                  <div className="text-muted-foreground text-xs">{searchEnabled ? "已启用" : "已关闭"}</div>
+                  <div className="text-muted-foreground text-xs">
+                    {searchEnabled ? "已启用" : "已关闭"}
+                  </div>
                 </div>
                 <Switch
                   checked={searchEnabled}
                   disabled={
-                    disabled || updatingSearchEnabled || updatingBuiltInSearch || updatingServiceIndex !== null
+                    disabled ||
+                    updatingSearchEnabled ||
+                    updatingBuiltInSearch ||
+                    updatingServiceIndex !== null
                   }
                   onCheckedChange={(nextChecked) => {
                     void handleToggleSearchEnabled(nextChecked);
@@ -325,7 +333,10 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                             selected && "border-primary bg-primary/5",
                           )}
                           disabled={
-                            disabled || updatingSearchEnabled || updatingBuiltInSearch || updatingServiceIndex !== null
+                            disabled ||
+                            updatingSearchEnabled ||
+                            updatingBuiltInSearch ||
+                            updatingServiceIndex !== null
                           }
                           onClick={() => {
                             void handleSelectService(index);
@@ -338,7 +349,9 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                             imageClassName="h-full w-full"
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium">{getServiceLabel(service)}</div>
+                            <div className="truncate text-sm font-medium">
+                              {getServiceLabel(service)}
+                            </div>
                             <div className="text-muted-foreground truncate text-xs">
                               {getServiceType(service) ?? "unknown"}
                             </div>

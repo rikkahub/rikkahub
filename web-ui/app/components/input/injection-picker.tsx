@@ -36,9 +36,8 @@ function getModeInjections(source: unknown): ModeInjectionProfile[] {
     return [];
   }
 
-  return source.filter(
-    (item): item is ModeInjectionProfile =>
-      Boolean(item && typeof item === "object" && typeof item.id === "string"),
+  return source.filter((item): item is ModeInjectionProfile =>
+    Boolean(item && typeof item === "object" && typeof item.id === "string"),
   );
 }
 
@@ -47,9 +46,8 @@ function getLorebooks(source: unknown): LorebookProfile[] {
     return [];
   }
 
-  return source.filter(
-    (item): item is LorebookProfile =>
-      Boolean(item && typeof item === "object" && typeof item.id === "string"),
+  return source.filter((item): item is LorebookProfile =>
+    Boolean(item && typeof item === "object" && typeof item.id === "string"),
   );
 }
 
@@ -184,7 +182,9 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
 
       setUpdatingKey(`lorebook:${id}`);
       const nextModeIds = selectedModeInjectionIds.filter((item) => modeInjectionIdSet.has(item));
-      const nextLorebookIds = new Set(selectedLorebookIds.filter((item) => lorebookIdSet.has(item)));
+      const nextLorebookIds = new Set(
+        selectedLorebookIds.filter((item) => lorebookIdSet.has(item)),
+      );
 
       if (checked) {
         nextLorebookIds.add(id);
@@ -232,7 +232,11 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
             className,
           )}
         >
-          {updating ? <LoaderCircle className="size-4 animate-spin" /> : <BookOpen className="size-4" />}
+          {updating ? (
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : (
+            <BookOpen className="size-4" />
+          )}
           {selectedCount > 0 ? (
             <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
               {selectedCount}
@@ -259,7 +263,9 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
               type="button"
               className={cn(
                 "rounded-full px-3 py-1 text-xs transition",
-                activeTab === "mode" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+                activeTab === "mode"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground",
               )}
               onClick={() => {
                 setActiveTab("mode");
@@ -272,7 +278,9 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
               type="button"
               className={cn(
                 "rounded-full px-3 py-1 text-xs transition",
-                activeTab === "lorebook" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+                activeTab === "lorebook"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground",
               )}
               onClick={() => {
                 setActiveTab("lorebook");
@@ -357,7 +365,8 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
                         <div className="truncate text-sm font-medium">
                           {getDisplayName(item.name, "未命名 Lorebook")}
                         </div>
-                        {typeof item.description === "string" && item.description.trim().length > 0 ? (
+                        {typeof item.description === "string" &&
+                        item.description.trim().length > 0 ? (
                           <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
                             {item.description}
                           </div>

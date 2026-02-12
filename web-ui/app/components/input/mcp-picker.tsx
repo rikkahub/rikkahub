@@ -31,7 +31,10 @@ function getAssistantMcpServerIds(source: unknown): string[] {
   return source.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
-function getEnabledToolsCount(tools: McpToolOption[] | undefined): { enabled: number; total: number } {
+function getEnabledToolsCount(tools: McpToolOption[] | undefined): {
+  enabled: number;
+  total: number;
+} {
   if (!tools || tools.length === 0) {
     return { enabled: 0, total: 0 };
   }
@@ -61,7 +64,10 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
   const canUse = Boolean(settings && currentAssistant && !disabled);
 
   const allServers = settings?.mcpServers ?? [];
-  const knownServerIdSet = React.useMemo(() => new Set(allServers.map((server) => server.id)), [allServers]);
+  const knownServerIdSet = React.useMemo(
+    () => new Set(allServers.map((server) => server.id)),
+    [allServers],
+  );
   const enabledServers = React.useMemo(
     () => allServers.filter((server) => server.commonOptions?.enable),
     [allServers],
@@ -165,7 +171,11 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
             className,
           )}
         >
-          {updating ? <LoaderCircle className="size-3.5 animate-spin" /> : <Terminal className="size-3.5" />}
+          {updating ? (
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : (
+            <Terminal className="size-3.5" />
+          )}
           {selectedEnabledCount > 0 ? (
             <span className="rounded-full bg-primary/10 px-1 py-0.5 text-[9px] text-primary">
               {selectedEnabledCount}
@@ -177,7 +187,9 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
       <PopoverContent align="end" className="w-[min(92vw,22rem)] gap-0 p-0">
         <PopoverHeader className="border-b px-3 py-2.5">
           <PopoverTitle className="text-sm">MCP</PopoverTitle>
-          <PopoverDescription className="text-[11px]">选择当前助手可用的 MCP 服务器</PopoverDescription>
+          <PopoverDescription className="text-[11px]">
+            选择当前助手可用的 MCP 服务器
+          </PopoverDescription>
         </PopoverHeader>
 
         <div className="space-y-2 px-2.5 py-2.5">
@@ -212,7 +224,9 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[11px] font-medium leading-tight">{getServerName(server)}</div>
+                        <div className="truncate text-[11px] font-medium leading-tight">
+                          {getServerName(server)}
+                        </div>
                         <div className="text-muted-foreground text-[10px] leading-tight">
                           {tools.enabled}/{tools.total} tools enabled
                         </div>
