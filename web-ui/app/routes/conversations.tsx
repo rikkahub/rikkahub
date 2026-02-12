@@ -2,6 +2,10 @@ import * as React from "react";
 
 import { useNavigate, useParams } from "react-router";
 
+import {
+  ConversationQuickJump,
+  getConversationMessageAnchorId,
+} from "~/components/conversation-quick-jump";
 import { ConversationSidebar } from "~/components/conversation-sidebar";
 import {
   Conversation,
@@ -83,6 +87,51 @@ function getModelDisplayName(
   }
 
   return "未命名模型";
+}
+
+function truncatePreviewText(value: string, maxLength = 48): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength)}...`;
+}
+
+function getQuickJumpPreview(message: MessageDto): string {
+  const textPreview = message.parts
+    .filter((part): part is Extract<UIMessagePart, { type: "text" }> => part.type === "text")
+    .map((part) => part.text.trim())
+    .find((text) => text.length > 0);
+
+  if (textPreview) {
+    return truncatePreviewText(textPreview.replace(/\s+/g, " "));
+  }
+
+  const fallbackPart = message.parts.find(Boolean);
+  if (!fallbackPart) return "空消息";
+
+  switch (fallbackPart.type) {
+    case "image":
+      return "[图片]";
+    case "video":
+      return "[视频]";
+    case "audio":
+      return "[音频]";
+    case "document":
+      return fallbackPart.fileName.trim().length > 0
+        ? `[文档] ${truncatePreviewText(fallbackPart.fileName.trim(), 32)}`
+        : "[文档]";
+    case "reasoning":
+      return fallbackPart.reasoning.trim().length > 0
+        ? truncatePreviewText(fallbackPart.reasoning.trim().replace(/\s+/g, " "))
+        : "[思考]";
+    case "tool":
+      return fallbackPart.toolName.trim().length > 0
+        ? `[工具] ${truncatePreviewText(fallbackPart.toolName.trim(), 32)}`
+        : "[工具调用]";
+    case "text":
+      return "空消息";
+  }
 }
 
 function isAttachmentPart(
@@ -487,6 +536,9 @@ function ConversationTimeline({
   onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
   onToolApproval: (toolCallId: string, approved: boolean, reason: string) => Promise<void>;
 }) {
+  const canQuickJump =
+    Boolean(activeId) && !detailLoading && !detailError && selectedNodeMessages.length > 1;
+
   return (
     <Conversation className="flex-1 min-h-0">
       <ConversationContent className="mx-auto w-full max-w-3xl gap-4 px-4 py-6">
@@ -514,19 +566,24 @@ function ConversationTimeline({
           !detailError &&
           activeId &&
           selectedNodeMessages.map(({ node, message }, index) => (
-            <ChatMessage
+            <div
               key={message.id}
-              node={node}
-              message={message}
-              loading={isGenerating && index === selectedNodeMessages.length - 1}
-              isLastMessage={index === selectedNodeMessages.length - 1}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onFork={onFork}
-              onRegenerate={onRegenerate}
-              onSelectBranch={onSelectBranch}
-              onToolApproval={onToolApproval}
-            />
+              id={getConversationMessageAnchorId(message.id)}
+              className="scroll-mt-24"
+            >
+              <ChatMessage
+                node={node}
+                message={message}
+                loading={isGenerating && index === selectedNodeMessages.length - 1}
+                isLastMessage={index === selectedNodeMessages.length - 1}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onFork={onFork}
+                onRegenerate={onRegenerate}
+                onSelectBranch={onSelectBranch}
+                onToolApproval={onToolApproval}
+              />
+            </div>
           ))}
         {!detailLoading && !detailError && activeId && isGenerating && (
           <div className="flex items-start py-2">
@@ -534,6 +591,16 @@ function ConversationTimeline({
           </div>
         )}
       </ConversationContent>
+
+      {canQuickJump ? (
+        <ConversationQuickJump
+          items={selectedNodeMessages.map(({ message }) => ({
+            id: message.id,
+            role: message.role,
+            preview: getQuickJumpPreview(message),
+          }))}
+        />
+      ) : null}
 
       <ConversationScrollButton />
     </Conversation>
