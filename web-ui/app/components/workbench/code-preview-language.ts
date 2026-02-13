@@ -5,6 +5,8 @@ const CODE_PREVIEW_LANGUAGE_ALIASES: Record<string, string> = {
   svg: "svg",
   md: "markdown",
   markdown: "markdown",
+  mermaid: "mermaid",
+  mmd: "mermaid",
 };
 
 const SUPPORTED_CODE_PREVIEW_LANGUAGES = new Set(Object.keys(CODE_PREVIEW_LANGUAGE_ALIASES));

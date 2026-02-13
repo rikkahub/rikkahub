@@ -34,7 +34,8 @@ function CodePreviewPanel({ panel }: { panel: WorkbenchPanel }) {
   const canRenderPreview =
     normalizedLanguage === "html" ||
     normalizedLanguage === "svg" ||
-    normalizedLanguage === "markdown";
+    normalizedLanguage === "markdown" ||
+    normalizedLanguage === "mermaid";
 
   React.useEffect(() => {
     setMode(canRenderPreview ? "preview" : "source");
@@ -47,6 +48,78 @@ function CodePreviewPanel({ panel }: { panel: WorkbenchPanel }) {
 
     if (normalizedLanguage === "svg") {
       return `<!doctype html><html><body style="margin:0;display:flex;align-items:center;justify-content:center;padding:16px;">${code}</body></html>`;
+    }
+
+    if (normalizedLanguage === "mermaid") {
+      const encodedCode = encodeURIComponent(code);
+      return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+        color: #1f2937;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      #container {
+        min-height: 100vh;
+        box-sizing: border-box;
+        padding: 16px;
+        display: flex;
+        justify-content: center;
+      }
+      #diagram {
+        width: 100%;
+      }
+      #error {
+        display: none;
+        width: 100%;
+        white-space: pre-wrap;
+        color: #b91c1c;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="diagram"></div>
+      <pre id="error"></pre>
+    </div>
+    <script type="module">
+      import mermaid from "https://esm.sh/mermaid@11";
+
+      const source = decodeURIComponent("${encodedCode}");
+      const diagram = document.getElementById("diagram");
+      const errorEl = document.getElementById("error");
+
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "loose",
+      });
+
+      try {
+        const id = "mermaid-" + Math.random().toString(36).slice(2);
+        const result = await mermaid.render(id, source.trim());
+        if (diagram) {
+          diagram.innerHTML = result.svg;
+        }
+      } catch (error) {
+        if (errorEl) {
+          errorEl.style.display = "block";
+          errorEl.textContent = error instanceof Error ? error.message : String(error);
+        }
+      }
+    </script>
+  </body>
+</html>`;
     }
 
     return "";
