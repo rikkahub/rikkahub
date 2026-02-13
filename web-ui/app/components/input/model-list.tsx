@@ -223,7 +223,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
             </div>
           ) : null}
 
-          <ScrollArea className="h-[52vh] pr-2">
+          <ScrollArea className="h-[24rem] pr-2">
             {sections.length === 0 ? (
               <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
                 没有可用模型

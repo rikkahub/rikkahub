@@ -317,7 +317,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                 />
               </div>
 
-              <ScrollArea className="h-[45vh] pr-3">
+              <ScrollArea className="h-[16rem] pr-3">
                 {settings?.searchServices?.length ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {settings.searchServices.map((service, index) => {

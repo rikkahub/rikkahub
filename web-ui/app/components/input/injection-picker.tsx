@@ -291,7 +291,7 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
             </button>
           </div>
 
-          <ScrollArea className="h-[45vh] pr-3">
+          <ScrollArea className="h-[16rem] pr-3">
             {activeTab === "mode" ? (
               modeInjections.length > 0 ? (
                 <div className="space-y-2">
