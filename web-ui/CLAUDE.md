@@ -102,9 +102,17 @@ app/
 │   ├── files.ts              # 文件 URL 转换
 │   └── error.ts              # 错误处理
 │
-├── locales/                  # 国际化语言文件
-│   ├── en-US/common.json     # 英文翻译
-│   └── zh-CN/common.json     # 中文翻译
+├── locales/                  # 国际化语言文件（命名空间组织）
+│   ├── zh-CN/                # 简体中文（默认语言）
+│   │   ├── common.json       # 通用 UI 翻译（侧边栏、主题等）
+│   │   ├── input.json        # 输入相关翻译（聊天、模型选择）
+│   │   ├── markdown.json     # Markdown 渲染翻译
+│   │   └── message.json      # 消息显示翻译（消息部分、工具）
+│   └── en-US/                # 英文
+│       ├── common.json
+│       ├── input.json
+│       ├── markdown.json
+│       └── message.json
 │
 ├── assets/                   # 静态资源
 ├── i18n.ts                   # i18next 配置
