@@ -2,7 +2,9 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
 import enUSCommon from "./locales/en-US/common.json";
+import enUSInput from "./locales/en-US/input.json";
 import zhCNCommon from "./locales/zh-CN/common.json";
+import zhCNInput from "./locales/zh-CN/input.json";
 
 const SUPPORTED_LANGUAGES = ["zh-CN", "en-US"] as const;
 
@@ -24,16 +26,18 @@ void i18n.use(initReactI18next).init({
   resources: {
     "zh-CN": {
       common: zhCNCommon,
+      input: zhCNInput,
     },
     "en-US": {
       common: enUSCommon,
+      input: enUSInput,
     },
   },
   lng: getInitialLanguage(),
   fallbackLng: "zh-CN",
   supportedLngs: [...SUPPORTED_LANGUAGES],
   defaultNS: "common",
-  ns: ["common"],
+  ns: ["common", "input"],
   interpolation: {
     escapeValue: false,
   },

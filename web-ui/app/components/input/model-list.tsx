@@ -1,6 +1,8 @@
 import * as React from "react";
 
+import type { TFunction } from "i18next";
 import { Check, ChevronDown, Heart, LoaderCircle, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { getModelDisplayName } from "~/lib/display";
@@ -45,12 +47,12 @@ function formatModality(model: ProviderModel): string {
   return `${input} -> ${output}`;
 }
 
-function getAbilityLabel(ability: ModelAbility): string {
+function getAbilityLabel(ability: ModelAbility, t: TFunction): string {
   if (ability === "TOOL") {
-    return "工具";
+    return t("model_list.ability_tool");
   }
 
-  return "推理";
+  return t("model_list.ability_reasoning");
 }
 
 interface ModelOptionRowProps {
@@ -61,6 +63,7 @@ interface ModelOptionRowProps {
   disabled: boolean;
   onSelect: (model: ProviderModel) => void | Promise<void>;
   onToggleFavorite: (model: ProviderModel) => void | Promise<void>;
+  t: TFunction;
 }
 
 function ModelOptionRow({
@@ -71,6 +74,7 @@ function ModelOptionRow({
   disabled,
   onSelect,
   onToggleFavorite,
+  t,
 }: ModelOptionRowProps) {
   const abilities = model.abilities ?? [];
 
@@ -117,7 +121,7 @@ function ModelOptionRow({
           </Badge>
           {abilities.map((ability) => (
             <Badge key={ability} variant="secondary" className="px-1 py-0 text-[9px]">
-              {getAbilityLabel(ability)}
+              {getAbilityLabel(ability, t)}
             </Badge>
           ))}
         </div>
@@ -144,6 +148,7 @@ function ModelOptionRow({
 }
 
 export function ModelList({ disabled = false, className, onChanged }: ModelListProps) {
+  const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
 
   const [open, setOpen] = React.useState(false);
@@ -224,7 +229,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
 
   const currentModelLabel = currentModel
     ? getModelDisplayName(currentModel.displayName, currentModel.modelId)
-    : "选择模型";
+    : t("model_list.select_model");
 
   React.useEffect(() => {
     if (!open) {
@@ -286,13 +291,16 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
         onChanged?.(model);
         setOpen(false);
       } catch (changeError) {
-        const message = changeError instanceof Error ? changeError.message : "切换模型失败";
+        const message =
+          changeError instanceof Error
+            ? changeError.message
+            : t("model_list.switch_model_failed");
         setError(message);
       } finally {
         setUpdatingModelId(null);
       }
     },
-    [currentAssistant, currentModelId, disabled, onChanged],
+    [currentAssistant, currentModelId, disabled, onChanged, t],
   );
 
   const handleToggleFavorite = React.useCallback(
@@ -314,13 +322,16 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
           modelIds: newFavoriteModels,
         });
       } catch (changeError) {
-        const message = changeError instanceof Error ? changeError.message : "更新收藏失败";
+        const message =
+          changeError instanceof Error
+            ? changeError.message
+            : t("model_list.update_favorites_failed");
         setError(message);
       } finally {
         setUpdatingModelId(null);
       }
     },
-    [disabled, favoriteModelIds, settings],
+    [disabled, favoriteModelIds, settings, t],
   );
 
   return (
@@ -361,8 +372,10 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
 
       <PopoverContent align="end" className="w-[min(96vw,30rem)] gap-0 p-0">
         <PopoverHeader className="border-b px-4 py-3">
-          <PopoverTitle className="text-sm">选择模型</PopoverTitle>
-          <PopoverDescription className="text-xs">切换当前助手使用的聊天模型</PopoverDescription>
+          <PopoverTitle className="text-sm">{t("model_list.title")}</PopoverTitle>
+          <PopoverDescription className="text-xs">
+            {t("model_list.description")}
+          </PopoverDescription>
         </PopoverHeader>
 
         <div className="space-y-2 px-3 py-3">
@@ -373,7 +386,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
               onChange={(event) => {
                 setSearchKeywords(event.target.value);
               }}
-              placeholder="搜索模型"
+              placeholder={t("model_list.search_placeholder")}
               className="h-8 pl-7 text-xs"
             />
           </div>
@@ -387,7 +400,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
           <div className="h-[24rem]">
             {sections.length === 0 && favoriteModels.length === 0 ? (
               <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                没有可用模型
+                {t("model_list.empty")}
               </div>
             ) : (
               <div className="flex h-full min-h-0 flex-col gap-2">
@@ -405,7 +418,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                         }}
                       >
                         <Heart className={cn("size-3", isFavoriteSectionSelected && "fill-current")} />
-                        <span>收藏</span>
+                        <span>{t("model_list.favorites")}</span>
                       </button>
                     )}
 
@@ -448,6 +461,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                         disabled={disabled || updatingModelId !== null}
                         onSelect={handleSelectModel}
                         onToggleFavorite={handleToggleFavorite}
+                        t={t}
                       />
                     ))}
                   </div>

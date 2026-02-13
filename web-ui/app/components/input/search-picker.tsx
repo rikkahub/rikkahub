@@ -1,6 +1,8 @@
 import * as React from "react";
 
+import type { TFunction } from "i18next";
 import { ChevronDown, Earth, LoaderCircle, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { useCurrentModel } from "~/hooks/use-current-model";
@@ -26,21 +28,21 @@ import { PickerErrorAlert } from "./picker-error-alert";
 
 const SEARCH_TOOL_NAME = "search";
 
-const SEARCH_SERVICE_LABELS: Record<string, string> = {
-  bing_local: "Bing",
-  rikkahub: "RikkaHub",
-  zhipu: "智谱",
-  tavily: "Tavily",
-  exa: "Exa",
-  searxng: "SearXNG",
-  linkup: "LinkUp",
-  brave: "Brave",
-  metaso: "秘塔",
-  ollama: "Ollama",
-  perplexity: "Perplexity",
-  firecrawl: "Firecrawl",
-  jina: "Jina",
-  bocha: "博查",
+const SEARCH_SERVICE_LABEL_KEYS: Record<string, string> = {
+  bing_local: "input.search.service_labels.bing_local",
+  rikkahub: "input.search.service_labels.rikkahub",
+  zhipu: "input.search.service_labels.zhipu",
+  tavily: "input.search.service_labels.tavily",
+  exa: "input.search.service_labels.exa",
+  searxng: "input.search.service_labels.searxng",
+  linkup: "input.search.service_labels.linkup",
+  brave: "input.search.service_labels.brave",
+  metaso: "input.search.service_labels.metaso",
+  ollama: "input.search.service_labels.ollama",
+  perplexity: "input.search.service_labels.perplexity",
+  firecrawl: "input.search.service_labels.firecrawl",
+  jina: "input.search.service_labels.jina",
+  bocha: "input.search.service_labels.bocha",
 };
 
 export interface SearchPickerButtonProps {
@@ -90,16 +92,21 @@ function getServiceType(service: SearchServiceOption): string | null {
   return value.length > 0 ? value : null;
 }
 
-function getServiceLabel(service: SearchServiceOption): string {
+function getServiceLabel(
+  service: SearchServiceOption,
+  t: TFunction,
+): string {
   const type = getServiceType(service);
   if (!type) {
-    return "Search";
+    return t("search.default_service_label");
   }
 
-  return SEARCH_SERVICE_LABELS[type] ?? type;
+  const key = SEARCH_SERVICE_LABEL_KEYS[type];
+  return key ? t(key) : type;
 }
 
 export function SearchPickerButton({ disabled = false, className }: SearchPickerButtonProps) {
+  const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
   const { currentModel } = useCurrentModel();
 
@@ -134,12 +141,12 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
       try {
         await api.post<{ status: string }>("settings/search/enabled", { enabled });
       } catch (toggleError) {
-        setError(extractErrorMessage(toggleError, "更新网络搜索失败"));
+        setError(extractErrorMessage(toggleError, t("search.update_search_failed")));
       } finally {
         setUpdatingSearchEnabled(false);
       }
     },
-    [canUse],
+    [canUse, t],
   );
 
   const handleSelectService = React.useCallback(
@@ -158,12 +165,12 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
       try {
         await api.post<{ status: string }>("settings/search/service", { index });
       } catch (serviceError) {
-        setError(extractErrorMessage(serviceError, "切换搜索服务失败"));
+        setError(extractErrorMessage(serviceError, t("search.switch_service_failed")));
       } finally {
         setUpdatingServiceIndex(null);
       }
     },
-    [canUse, settings],
+    [canUse, settings, t],
   );
 
   const handleToggleBuiltInSearch = React.useCallback(
@@ -182,12 +189,12 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
           enabled,
         });
       } catch (toolError) {
-        setError(extractErrorMessage(toolError, "更新内置搜索失败"));
+        setError(extractErrorMessage(toolError, t("search.update_builtin_failed")));
       } finally {
         setUpdatingBuiltInSearch(false);
       }
     },
-    [canUse, currentModel],
+    [canUse, currentModel, t],
   );
 
   return (
@@ -208,7 +215,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
             <LoaderCircle className="size-4 animate-spin" />
           ) : searchEnabled && currentService ? (
             <AIIcon
-              name={getServiceLabel(currentService)}
+              name={getServiceLabel(currentService, t)}
               size={16}
               className="bg-transparent"
               imageClassName="h-full w-full"
@@ -226,8 +233,8 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
 
       <PopoverContent align="end" className="w-[min(92vw,28rem)] gap-0 p-0">
         <PopoverHeader className="border-b px-6 py-4">
-          <PopoverTitle>网络搜索</PopoverTitle>
-          <PopoverDescription>配置联网搜索与搜索服务</PopoverDescription>
+          <PopoverTitle>{t("search.title")}</PopoverTitle>
+          <PopoverDescription>{t("search.description")}</PopoverDescription>
         </PopoverHeader>
 
         <div className="space-y-4 px-4 py-4">
@@ -239,8 +246,8 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                 <Search className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">模型内置搜索</div>
-                <div className="text-muted-foreground text-xs">使用模型原生搜索能力</div>
+                <div className="text-sm font-medium">{t("search.builtin_title")}</div>
+                <div className="text-muted-foreground text-xs">{t("search.builtin_desc")}</div>
               </div>
               <Switch
                 checked={builtInSearchEnabled}
@@ -264,9 +271,9 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                   <Earth className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">联网搜索</div>
+                  <div className="text-sm font-medium">{t("search.web_title")}</div>
                   <div className="text-muted-foreground text-xs">
-                    {searchEnabled ? "已启用" : "已关闭"}
+                    {searchEnabled ? t("search.status_enabled") : t("search.status_disabled")}
                   </div>
                 </div>
                 <Switch
@@ -309,17 +316,17 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                           }}
                         >
                           <AIIcon
-                            name={getServiceLabel(service)}
+                            name={getServiceLabel(service, t)}
                             size={20}
                             className="bg-transparent"
                             imageClassName="h-full w-full"
                           />
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-medium">
-                              {getServiceLabel(service)}
+                              {getServiceLabel(service, t)}
                             </div>
                             <div className="text-muted-foreground truncate text-xs">
-                              {getServiceType(service) ?? "unknown"}
+                              {getServiceType(service) ?? t("search.unknown")}
                             </div>
                           </div>
                           {switching ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
@@ -329,14 +336,14 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                   </div>
                 ) : (
                   <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                    暂无可用搜索服务
+                    {t("search.empty")}
                   </div>
                 )}
               </ScrollArea>
             </>
           ) : (
             <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
-              当前已启用模型内置搜索，应用搜索服务设置暂不生效。
+              {t("search.builtin_notice")}
             </div>
           )}
         </div>

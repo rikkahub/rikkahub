@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { LoaderCircle, Terminal } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { usePickerPopover } from "~/hooks/use-picker-popover";
@@ -43,6 +44,7 @@ function getEnabledToolsCount(tools: McpToolOption[] | undefined): {
 }
 
 export function McpPickerButton({ disabled = false, className }: McpPickerButtonProps) {
+  const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
 
   const [updating, setUpdating] = React.useState(false);
@@ -97,13 +99,13 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
           mcpServerIds: nextServerIds,
         });
       } catch (updateError) {
-        setError(extractErrorMessage(updateError, "更新 MCP 设置失败"));
+        setError(extractErrorMessage(updateError, t("mcp.update_failed")));
       } finally {
         setUpdating(false);
         setUpdatingServerId(null);
       }
     },
-    [canUse, currentAssistant],
+    [canUse, currentAssistant, t],
   );
 
   const handleToggleServer = React.useCallback(
@@ -157,9 +159,9 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
 
       <PopoverContent align="end" className="w-[min(92vw,22rem)] gap-0 p-0">
         <PopoverHeader className="border-b px-3 py-2.5">
-          <PopoverTitle className="text-sm">MCP</PopoverTitle>
+          <PopoverTitle className="text-sm">{t("mcp.title")}</PopoverTitle>
           <PopoverDescription className="text-[11px]">
-            选择当前助手可用的 MCP 服务器
+            {t("mcp.description")}
           </PopoverDescription>
         </PopoverHeader>
 
@@ -192,10 +194,13 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
 
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[11px] font-medium leading-tight">
-                          {getDisplayName(server.commonOptions?.name, "Unnamed MCP Server")}
+                          {getDisplayName(server.commonOptions?.name, t("mcp.unnamed_server"))}
                         </div>
                         <div className="text-muted-foreground text-[10px] leading-tight">
-                          {tools.enabled}/{tools.total} tools enabled
+                          {t("mcp.tools_enabled", {
+                            enabled: tools.enabled,
+                            total: tools.total,
+                          })}
                         </div>
                       </div>
 
@@ -213,7 +218,7 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
               </div>
             ) : (
               <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                暂无可用 MCP 服务器
+                {t("mcp.empty")}
               </div>
             )}
           </ScrollArea>
