@@ -42,6 +42,7 @@ import {
 } from "~/types";
 import { MessageSquare } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 import { v4 as uuidv4 } from "uuid";
 
 type ConversationStreamEvent = ConversationSnapshotEventDto | ConversationNodeUpdateEventDto;
@@ -940,6 +941,21 @@ function ConversationsPageInner() {
   }, [activeId]);
 
   const hasWorkbenchPanel = Boolean(panel);
+  const workbenchPanelRef = React.useRef<PanelImperativeHandle | null>(null);
+
+  React.useEffect(() => {
+    if (isMobile) return;
+
+    const workbenchPanel = workbenchPanelRef.current;
+    if (!workbenchPanel) return;
+
+    if (hasWorkbenchPanel) {
+      workbenchPanel.expand();
+    } else {
+      workbenchPanel.collapse();
+    }
+  }, [hasWorkbenchPanel, isMobile]);
+
   const chatContent = (
     <div
       className={cn("flex flex-1 flex-col min-h-0 overflow-hidden", isNewChat && "justify-center")}
@@ -1047,14 +1063,30 @@ function ConversationsPageInner() {
           </div>
         </div>
 
-        {!isMobile && hasWorkbenchPanel && panel ? (
+        {!isMobile ? (
           <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-            <ResizablePanel defaultSize={64} minSize={40}>
+            <ResizablePanel
+              defaultSize={hasWorkbenchPanel ? 64 : 100}
+              minSize={40}
+              className="flex min-h-0 flex-col"
+            >
               {chatContent}
             </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={36} minSize={24}>
-              <WorkbenchHost panel={panel} onClose={closePanel} className="border-l-0" />
+            <ResizableHandle
+              withHandle
+              className={cn(!hasWorkbenchPanel && "pointer-events-none opacity-0")}
+            />
+            <ResizablePanel
+              defaultSize={hasWorkbenchPanel ? 36 : 0}
+              minSize={24}
+              collapsible
+              collapsedSize={0}
+              panelRef={workbenchPanelRef}
+              className="flex min-h-0 flex-col"
+            >
+              {panel ? (
+                <WorkbenchHost panel={panel} onClose={closePanel} className="border-l-0" />
+              ) : null}
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
