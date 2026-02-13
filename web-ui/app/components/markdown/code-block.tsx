@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { ComponentProps, CSSProperties, HTMLAttributes } from "react";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Download } from "lucide-react";
 import {
   bundledLanguages,
   createHighlighter,
@@ -52,6 +52,7 @@ type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
 
 interface CodeBlockContextType {
   code: string;
+  language: string;
 }
 
 const ITALIC_STYLES = new Set([1, 3, 5, 7]);
@@ -60,7 +61,43 @@ const UNDERLINE_STYLES = new Set([4, 5, 6, 7]);
 
 const CodeBlockContext = React.createContext<CodeBlockContextType>({
   code: "",
+  language: "text",
 });
+
+const DEFAULT_DOWNLOAD_FILE_NAME = "code.txt";
+const CODE_LANGUAGE_EXTENSION_MAP: Record<string, string> = {
+  bash: "sh",
+  csharp: "cs",
+  javascript: "js",
+  js: "js",
+  jsx: "jsx",
+  kotlin: "kt",
+  markdown: "md",
+  plaintext: "txt",
+  python: "py",
+  shell: "sh",
+  typescript: "ts",
+  tsx: "tsx",
+};
+
+function toDownloadFileName(language: string): string {
+  const normalized = language.trim().toLowerCase();
+  if (!normalized) {
+    return DEFAULT_DOWNLOAD_FILE_NAME;
+  }
+
+  const mappedExtension = CODE_LANGUAGE_EXTENSION_MAP[normalized];
+  if (mappedExtension) {
+    return `code.${mappedExtension}`;
+  }
+
+  const safeExtension = normalized.replace(/[^a-z0-9]+/g, "");
+  if (!safeExtension) {
+    return DEFAULT_DOWNLOAD_FILE_NAME;
+  }
+
+  return `code.${safeExtension}`;
+}
 
 const highlighterCache = new Map<
   BundledLanguage,
@@ -504,6 +541,62 @@ export function CodeBlockPreviewButton({
   );
 }
 
+export type CodeBlockDownloadButtonProps = ComponentProps<typeof Button> & {
+  onDownload?: () => void;
+  onError?: (error: Error) => void;
+};
+
+export function CodeBlockDownloadButton({
+  children,
+  className,
+  onDownload,
+  onError,
+  ...props
+}: CodeBlockDownloadButtonProps) {
+  const { code, language } = React.useContext(CodeBlockContext);
+
+  const handleDownload = React.useCallback(() => {
+    if (typeof window === "undefined") {
+      onError?.(new Error("Window is not available"));
+      return;
+    }
+
+    try {
+      const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = toDownloadFileName(language);
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      onDownload?.();
+    } catch (error) {
+      onError?.(error as Error);
+    }
+  }, [code, language, onDownload, onError]);
+
+  return (
+    <Button
+      aria-label="Download code"
+      className={cn("code-block-copy h-6 px-1.5", className)}
+      onClick={handleDownload}
+      size="xs"
+      type="button"
+      variant="ghost"
+      {...props}
+    >
+      {children ?? (
+        <>
+          <Download className="size-3" />
+          <span>下载</span>
+        </>
+      )}
+    </Button>
+  );
+}
+
 export type CodeBlockLanguageSelectorProps = ComponentProps<typeof Select>;
 
 export function CodeBlockLanguageSelector(props: CodeBlockLanguageSelectorProps) {
@@ -558,7 +651,10 @@ export function CodeBlock({
   const previewLanguage = React.useMemo(() => getCodePreviewLanguage(language), [language]);
   const canPreview = Boolean(onPreview && previewLanguage);
   const shikiLanguage = React.useMemo(() => resolveShikiLanguage(language), [language]);
-  const contextValue = React.useMemo(() => ({ code }), [code]);
+  const contextValue = React.useMemo(
+    () => ({ code, language: displayLanguage }),
+    [code, displayLanguage],
+  );
 
   return (
     <CodeBlockContext.Provider value={contextValue}>
@@ -569,6 +665,7 @@ export function CodeBlock({
           </CodeBlockTitle>
           <CodeBlockActions>
             {canPreview && onPreview && <CodeBlockPreviewButton onPreview={onPreview} />}
+            <CodeBlockDownloadButton />
             <CodeBlockCopyButton />
           </CodeBlockActions>
         </CodeBlockHeader>
