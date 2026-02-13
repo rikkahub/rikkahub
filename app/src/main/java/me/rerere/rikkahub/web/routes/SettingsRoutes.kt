@@ -21,6 +21,7 @@ import me.rerere.rikkahub.web.dto.UpdateAssistantThinkingBudgetRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantMcpServersRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantInjectionsRequest
 import me.rerere.rikkahub.web.dto.UpdateBuiltInToolRequest
+import me.rerere.rikkahub.web.dto.UpdateFavoriteModelsRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchEnabledRequest
 import me.rerere.rikkahub.web.dto.UpdateSearchServiceRequest
 import java.util.Locale
@@ -172,6 +173,16 @@ fun Route.settingsRoutes(
                 )
             }
 
+            call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
+        }
+
+        post("/favorite-models") {
+            val request = call.receive<UpdateFavoriteModelsRequest>()
+            val favoriteModelIds = request.modelIds.map { it.toUuid("modelId") }
+
+            settingsStore.update { settings ->
+                settings.copy(favoriteModels = favoriteModelIds)
+            }
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
         }
 

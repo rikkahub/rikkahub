@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Check, ChevronDown, LoaderCircle, Search } from "lucide-react";
+import { Check, ChevronDown, Heart, LoaderCircle, Search } from "lucide-react";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { cn } from "~/lib/utils";
@@ -73,6 +73,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
   const [error, setError] = React.useState<string | null>(null);
 
   const currentModelId = currentAssistant?.chatModelId ?? settings?.chatModelId ?? null;
+  const favoriteModelIds = settings?.favoriteModels ?? [];
 
   const sections = React.useMemo<ModelSection[]>(() => {
     if (!settings) {
@@ -108,6 +109,13 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
   }, [searchKeywords, settings]);
 
   const allModels = React.useMemo(() => sections.flatMap((section) => section.models), [sections]);
+
+  // 收藏的模型列表
+  const favoriteModels = React.useMemo(() => {
+    return favoriteModelIds
+      .map((id) => allModels.find((model) => model.id === id))
+      .filter((model): model is ProviderModel => model !== undefined);
+  }, [favoriteModelIds, allModels]);
 
   const currentModel = React.useMemo(
     () => allModels.find((model) => model.id === currentModelId) ?? null,
@@ -160,6 +168,34 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
       }
     },
     [currentAssistant, currentModelId, disabled, onChanged],
+  );
+
+  const handleToggleFavorite = React.useCallback(
+    async (model: ProviderModel) => {
+      if (disabled || !settings) {
+        return;
+      }
+
+      const isFavorite = favoriteModelIds.includes(model.id);
+      const newFavoriteModels = isFavorite
+        ? favoriteModelIds.filter((id) => id !== model.id)
+        : [...favoriteModelIds, model.id];
+
+      setUpdatingModelId(model.id);
+      setError(null);
+
+      try {
+        await api.post<{ status: string }>("settings/favorite-models", {
+          modelIds: newFavoriteModels,
+        });
+      } catch (changeError) {
+        const message = changeError instanceof Error ? changeError.message : "更新收藏失败";
+        setError(message);
+      } finally {
+        setUpdatingModelId(null);
+      }
+    },
+    [disabled, favoriteModelIds, settings],
   );
 
   return (
@@ -224,25 +260,21 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
           ) : null}
 
           <ScrollArea className="h-[24rem] pr-2">
-            {sections.length === 0 ? (
+            {sections.length === 0 && favoriteModels.length === 0 ? (
               <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
                 没有可用模型
               </div>
             ) : (
               <div className="space-y-3 pb-1">
-                {sections.map((section) => (
-                  <div key={section.providerId} className="space-y-1.5">
-                    <div className="text-muted-foreground flex items-center gap-1.5 text-[11px] font-medium">
-                      <AIIcon
-                        name={section.providerName}
-                        size={12}
-                        className="bg-transparent"
-                        imageClassName="h-full w-full"
-                      />
-                      <span>{section.providerName}</span>
+                {/* 收藏的模型 */}
+                {favoriteModels.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="text-primary flex items-center gap-1.5 text-[11px] font-medium">
+                      <Heart className="size-3" />
+                      <span>收藏</span>
                     </div>
                     <div className="space-y-1">
-                      {section.models.map((model) => {
+                      {favoriteModels.map((model) => {
                         const isSelected = model.id === currentModelId;
                         const isUpdating = model.id === updatingModelId;
                         const abilities = model.abilities ?? [];
@@ -289,7 +321,108 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                               <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />
                             ) : isSelected ? (
                               <Check className="text-primary size-3.5" />
-                            ) : null}
+                            ) : (
+                              <button
+                                type="button"
+                                className="text-primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleToggleFavorite(model);
+                                }}
+                              >
+                                <Heart className="size-3.5 fill-current" />
+                              </button>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {sections.map((section) => (
+                  <div key={section.providerId} className="space-y-1.5">
+                    <div className="text-muted-foreground flex items-center gap-1.5 text-[11px] font-medium">
+                      <AIIcon
+                        name={section.providerName}
+                        size={12}
+                        className="bg-transparent"
+                        imageClassName="h-full w-full"
+                      />
+                      <span>{section.providerName}</span>
+                    </div>
+                    <div className="space-y-1">
+                      {section.models.map((model) => {
+                        const isSelected = model.id === currentModelId;
+                        const isUpdating = model.id === updatingModelId;
+                        const abilities = model.abilities ?? [];
+                        const isFavorite = favoriteModelIds.includes(model.id);
+
+                        return (
+                          <button
+                            key={model.id}
+                            type="button"
+                            className={cn(
+                              "hover:bg-muted flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition",
+                              isSelected && "border-primary bg-primary/5",
+                            )}
+                            disabled={disabled || updatingModelId !== null}
+                            onClick={() => {
+                              void handleSelectModel(model);
+                            }}
+                          >
+                            <AIIcon name={model.modelId} size={24} />
+
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-xs font-medium leading-tight">
+                                {getModelDisplayName(model)}
+                              </div>
+                              <div className="text-muted-foreground truncate text-[11px] leading-tight">
+                                {model.modelId}
+                              </div>
+                              <div className="mt-0.5 flex flex-wrap gap-1">
+                                <Badge variant="outline" className="px-1 py-0 text-[9px]">
+                                  {formatModality(model)}
+                                </Badge>
+                                {abilities.map((ability) => (
+                                  <Badge
+                                    key={ability}
+                                    variant="secondary"
+                                    className="px-1 py-0 text-[9px]"
+                                  >
+                                    {getAbilityLabel(ability)}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+
+                            {isUpdating ? (
+                              <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />
+                            ) : isSelected ? (
+                              <Check className="text-primary size-3.5" />
+                            ) : isFavorite ? (
+                              <button
+                                type="button"
+                                className="text-primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleToggleFavorite(model);
+                                }}
+                              >
+                                <Heart className="size-3.5 fill-current" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="text-muted-foreground hover:text-primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleToggleFavorite(model);
+                                }}
+                              >
+                                <Heart className="size-3.5" />
+                              </button>
+                            )}
                           </button>
                         );
                       })}

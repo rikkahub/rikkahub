@@ -99,6 +99,11 @@ data class UpdateBuiltInToolRequest(
     val enabled: Boolean,
 )
 
+@Serializable
+data class UpdateFavoriteModelsRequest(
+    val modelIds: List<String>,
+)
+
 // ========== Response DTOs ==========
 
 @Serializable

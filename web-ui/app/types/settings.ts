@@ -131,6 +131,7 @@ export interface Settings {
   developerMode: boolean;
   displaySetting: DisplaySetting;
   enableWebSearch: boolean;
+  favoriteModels: string[];
   chatModelId: string;
   assistantId: string;
   providers: ProviderProfile[];
