@@ -28,21 +28,21 @@ import { PickerErrorAlert } from "./picker-error-alert";
 
 const SEARCH_TOOL_NAME = "search";
 
-const SEARCH_SERVICE_LABEL_KEYS: Record<string, string> = {
-  bing_local: "input.search.service_labels.bing_local",
-  rikkahub: "input.search.service_labels.rikkahub",
-  zhipu: "input.search.service_labels.zhipu",
-  tavily: "input.search.service_labels.tavily",
-  exa: "input.search.service_labels.exa",
-  searxng: "input.search.service_labels.searxng",
-  linkup: "input.search.service_labels.linkup",
-  brave: "input.search.service_labels.brave",
-  metaso: "input.search.service_labels.metaso",
-  ollama: "input.search.service_labels.ollama",
-  perplexity: "input.search.service_labels.perplexity",
-  firecrawl: "input.search.service_labels.firecrawl",
-  jina: "input.search.service_labels.jina",
-  bocha: "input.search.service_labels.bocha",
+const SEARCH_SERVICE_LABELS: Record<string, string> = {
+  bing_local: "Bing",
+  rikkahub: "RikkaHub",
+  zhipu: "智谱",
+  tavily: "Tavily",
+  exa: "Exa",
+  searxng: "SearXNG",
+  linkup: "LinkUp",
+  brave: "Brave",
+  metaso: "秘塔",
+  ollama: "Ollama",
+  perplexity: "Perplexity",
+  firecrawl: "Firecrawl",
+  jina: "Jina",
+  bocha: "博查",
 };
 
 export interface SearchPickerButtonProps {
@@ -101,8 +101,7 @@ function getServiceLabel(
     return t("search.default_service_label");
   }
 
-  const key = SEARCH_SERVICE_LABEL_KEYS[type];
-  return key ? t(key) : type;
+  return SEARCH_SERVICE_LABELS[type] ?? type;
 }
 
 export function SearchPickerButton({ disabled = false, className }: SearchPickerButtonProps) {

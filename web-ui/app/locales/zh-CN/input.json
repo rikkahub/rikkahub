@@ -65,22 +65,6 @@
   },
   "search": {
     "default_service_label": "搜索",
-    "service_labels": {
-      "bing_local": "Bing",
-      "rikkahub": "RikkaHub",
-      "zhipu": "智谱",
-      "tavily": "Tavily",
-      "exa": "Exa",
-      "searxng": "SearXNG",
-      "linkup": "LinkUp",
-      "brave": "Brave",
-      "metaso": "秘塔",
-      "ollama": "Ollama",
-      "perplexity": "Perplexity",
-      "firecrawl": "Firecrawl",
-      "jina": "Jina",
-      "bocha": "博查"
-    },
     "update_search_failed": "更新网络搜索失败",
     "switch_service_failed": "切换搜索服务失败",
     "update_builtin_failed": "更新内置搜索失败",

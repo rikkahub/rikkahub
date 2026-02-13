@@ -65,22 +65,6 @@
   },
   "search": {
     "default_service_label": "Search",
-    "service_labels": {
-      "bing_local": "Bing",
-      "rikkahub": "RikkaHub",
-      "zhipu": "Zhipu",
-      "tavily": "Tavily",
-      "exa": "Exa",
-      "searxng": "SearXNG",
-      "linkup": "LinkUp",
-      "brave": "Brave",
-      "metaso": "Metaso",
-      "ollama": "Ollama",
-      "perplexity": "Perplexity",
-      "firecrawl": "Firecrawl",
-      "jina": "Jina",
-      "bocha": "Bocha"
-    },
     "update_search_failed": "Failed to update web search",
     "switch_service_failed": "Failed to switch search service",
     "update_builtin_failed": "Failed to update built-in search",
