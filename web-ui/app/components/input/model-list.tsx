@@ -3,6 +3,7 @@ import * as React from "react";
 import { Check, ChevronDown, Heart, LoaderCircle, Search } from "lucide-react";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
+import { getModelDisplayName } from "~/lib/display";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
 import type { ModelAbility, ProviderModel } from "~/types";
@@ -34,20 +35,6 @@ interface ModelSection {
 
 function normalizeKeyword(value: string) {
   return value.trim().toLowerCase();
-}
-
-function getModelDisplayName(model: ProviderModel): string {
-  const name = model.displayName.trim();
-  if (name.length > 0) {
-    return name;
-  }
-
-  const modelId = model.modelId.trim();
-  if (modelId.length > 0) {
-    return modelId;
-  }
-
-  return "未命名模型";
 }
 
 function formatModality(model: ProviderModel): string {
@@ -94,7 +81,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
             return true;
           }
 
-          const displayName = getModelDisplayName(model).toLowerCase();
+          const displayName = getModelDisplayName(model.displayName, model.modelId).toLowerCase();
           const modelId = model.modelId.toLowerCase();
           return displayName.includes(keyword) || modelId.includes(keyword);
         });
@@ -122,7 +109,9 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
     [allModels, currentModelId],
   );
 
-  const currentModelLabel = currentModel ? getModelDisplayName(currentModel) : "选择模型";
+  const currentModelLabel = currentModel
+    ? getModelDisplayName(currentModel.displayName, currentModel.modelId)
+    : "选择模型";
 
   React.useEffect(() => {
     if (!open) {
@@ -295,8 +284,8 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                             <AIIcon name={model.modelId} size={24} />
 
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-xs font-medium leading-tight">
-                                {getModelDisplayName(model)}
+                                <div className="truncate text-xs font-medium leading-tight">
+                                {getModelDisplayName(model.displayName, model.modelId)}
                               </div>
                               <div className="text-muted-foreground truncate text-[11px] leading-tight">
                                 {model.modelId}
@@ -375,7 +364,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
 
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-xs font-medium leading-tight">
-                                {getModelDisplayName(model)}
+                                {getModelDisplayName(model.displayName, model.modelId)}
                               </div>
                               <div className="text-muted-foreground truncate text-[11px] leading-tight">
                                 {model.modelId}

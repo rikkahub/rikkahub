@@ -23,6 +23,7 @@ import { useIsMobile } from "~/hooks/use-mobile";
 import { toConversationSummaryUpdate, useConversationList } from "~/hooks/use-conversation-list";
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { useCurrentModel } from "~/hooks/use-current-model";
+import { getAssistantDisplayName, getModelDisplayName } from "~/lib/display";
 import { cn } from "~/lib/utils";
 import api, { sse } from "~/services/api";
 import { useChatInputStore } from "~/stores";
@@ -71,32 +72,6 @@ interface EditingSession {
 
 function createHomeDraftId() {
   return `home-${uuidv4()}`;
-}
-
-function getAssistantDisplayName(name: string | null | undefined) {
-  const normalized = name?.trim() ?? "";
-  if (normalized.length > 0) {
-    return normalized;
-  }
-
-  return "默认助手";
-}
-
-function getModelDisplayName(
-  displayName: string | null | undefined,
-  modelId: string | null | undefined,
-) {
-  const normalizedDisplayName = displayName?.trim() ?? "";
-  if (normalizedDisplayName.length > 0) {
-    return normalizedDisplayName;
-  }
-
-  const normalizedModelId = modelId?.trim() ?? "";
-  if (normalizedModelId.length > 0) {
-    return normalizedModelId;
-  }
-
-  return "未命名模型";
 }
 
 function truncatePreviewText(value: string, maxLength = 48): string {

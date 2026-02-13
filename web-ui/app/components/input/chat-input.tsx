@@ -341,15 +341,7 @@ export function ChatInput({
     [handlePrimaryAction, isGenerating, sendOnEnter],
   );
 
-  const handleImageInputChange = React.useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      await uploadFiles(event.target.files);
-      event.currentTarget.value = "";
-    },
-    [uploadFiles],
-  );
-
-  const handleFileInputChange = React.useCallback(
+  const handleUploadInputChange = React.useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       await uploadFiles(event.target.files);
       event.currentTarget.value = "";
@@ -556,7 +548,7 @@ export function ChatInput({
                   className="hidden"
                   accept={DOCUMENT_UPLOAD_ACCEPT_EXTENSIONS.join(",")}
                   multiple
-                  onChange={handleFileInputChange}
+                  onChange={handleUploadInputChange}
                   type="file"
                 />
                 <input
@@ -564,7 +556,7 @@ export function ChatInput({
                   accept={IMAGE_UPLOAD_ACCEPT}
                   className="hidden"
                   multiple
-                  onChange={handleImageInputChange}
+                  onChange={handleUploadInputChange}
                   type="file"
                 />
                 <DropdownMenuTrigger asChild>

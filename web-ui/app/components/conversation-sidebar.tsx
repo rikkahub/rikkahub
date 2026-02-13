@@ -63,6 +63,7 @@ import {
 } from "~/components/theme-provider";
 import { ConversationSearchButton } from "~/components/conversation-search-button";
 import { CustomThemeDialog } from "~/components/custom-theme-dialog";
+import { getAssistantDisplayName } from "~/lib/display";
 import type { AssistantAvatar, AssistantProfile, AssistantTag, ConversationListDto } from "~/types";
 
 const THEME_OPTIONS: Array<{
@@ -190,15 +191,6 @@ export interface ConversationSidebarProps {
   onUpdateTitle?: (id: string, title: string) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   onCreateConversation?: () => void;
-}
-
-function getAssistantDisplayName(assistant: AssistantProfile) {
-  const name = assistant.name.trim();
-  if (name.length > 0) {
-    return name;
-  }
-
-  return "默认助手";
 }
 
 interface ConversationListRowProps {
@@ -404,13 +396,13 @@ function ConversationListRow({
                                 await onMoveToAssistant(conversation.id, assistant.id);
                               },
                               {
-                                success: `已移动到 ${getAssistantDisplayName(assistant)}`,
+                                success: `已移动到 ${getAssistantDisplayName(assistant.name)}`,
                                 error: "移动会话失败",
                               },
                             );
                           }}
                         >
-                          {getAssistantDisplayName(assistant)}
+                          {getAssistantDisplayName(assistant.name)}
                         </DropdownMenuItem>
                       ))
                     )}
@@ -740,10 +732,10 @@ export function ConversationSidebar({
                   <UIAvatar
                     key={currentAssistant.id}
                     size="sm"
-                    name={getAssistantDisplayName(currentAssistant)}
+                    name={getAssistantDisplayName(currentAssistant.name)}
                     avatar={currentAssistant.avatar}
                   />
-                  <span className="truncate">{getAssistantDisplayName(currentAssistant)}</span>
+                  <span className="truncate">{getAssistantDisplayName(currentAssistant.name)}</span>
                 </>
               ) : (
                 <span className="truncate">选择助手</span>
@@ -785,7 +777,7 @@ export function ConversationSidebar({
                   {filteredAssistants.map((assistant) => {
                     const selected = assistant.id === currentAssistantId;
                     const switching = switchingAssistantId === assistant.id;
-                    const displayName = getAssistantDisplayName(assistant);
+                    const displayName = getAssistantDisplayName(assistant.name);
                     return (
                       <button
                         key={assistant.id}
