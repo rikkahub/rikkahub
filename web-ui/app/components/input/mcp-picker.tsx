@@ -1,8 +1,12 @@
 import * as React from "react";
 
-import { ChevronDown, LoaderCircle, Terminal } from "lucide-react";
+import { LoaderCircle, Terminal } from "lucide-react";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
+import { usePickerPopover } from "~/hooks/use-picker-popover";
+import { getDisplayName } from "~/lib/display";
+import { extractErrorMessage } from "~/lib/error";
+import { safeStringArray } from "~/lib/type-guards";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
 import type { McpServerConfig, McpToolOption } from "~/types";
@@ -18,17 +22,11 @@ import {
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Switch } from "~/components/ui/switch";
 
+import { PickerErrorAlert } from "./picker-error-alert";
+
 export interface McpPickerButtonProps {
   disabled?: boolean;
   className?: string;
-}
-
-function getAssistantMcpServerIds(source: unknown): string[] {
-  if (!Array.isArray(source)) {
-    return [];
-  }
-
-  return source.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
 function getEnabledToolsCount(tools: McpToolOption[] | undefined): {
@@ -44,24 +42,14 @@ function getEnabledToolsCount(tools: McpToolOption[] | undefined): {
   return { enabled, total };
 }
 
-function getServerName(server: McpServerConfig): string {
-  const name = server.commonOptions?.name?.trim();
-  if (name) {
-    return name;
-  }
-
-  return "Unnamed MCP Server";
-}
-
 export function McpPickerButton({ disabled = false, className }: McpPickerButtonProps) {
   const { settings, currentAssistant } = useCurrentAssistant();
 
-  const [open, setOpen] = React.useState(false);
   const [updating, setUpdating] = React.useState(false);
   const [updatingServerId, setUpdatingServerId] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
 
   const canUse = Boolean(settings && currentAssistant && !disabled);
+  const { error, setError, popoverProps } = usePickerPopover(canUse);
 
   const allServers = settings?.mcpServers ?? [];
   const knownServerIdSet = React.useMemo(
@@ -78,7 +66,7 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
   );
 
   const selectedServerIds = React.useMemo(
-    () => getAssistantMcpServerIds(currentAssistant?.mcpServers),
+    () => safeStringArray(currentAssistant?.mcpServers),
     [currentAssistant?.mcpServers],
   );
 
@@ -90,15 +78,9 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
 
   React.useEffect(() => {
     if (!canUse) {
-      setOpen(false);
+      popoverProps.onOpenChange(false);
     }
   }, [canUse]);
-
-  React.useEffect(() => {
-    if (!open) {
-      setError(null);
-    }
-  }, [open]);
 
   const updateSelectedServers = React.useCallback(
     async (nextServerIds: string[]) => {
@@ -115,8 +97,7 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
           mcpServerIds: nextServerIds,
         });
       } catch (updateError) {
-        const message = updateError instanceof Error ? updateError.message : "更新 MCP 设置失败";
-        setError(message);
+        setError(extractErrorMessage(updateError, "更新 MCP 设置失败"));
       } finally {
         setUpdating(false);
         setUpdatingServerId(null);
@@ -148,17 +129,7 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
   );
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!canUse) {
-          setOpen(false);
-          return;
-        }
-
-        setOpen(nextOpen);
-      }}
-    >
+    <Popover {...popoverProps}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -193,11 +164,7 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
         </PopoverHeader>
 
         <div className="space-y-2 px-2.5 py-2.5">
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
-              {error}
-            </div>
-          ) : null}
+          <PickerErrorAlert error={error} />
 
           <ScrollArea className="h-[32vh] pr-1.5">
             {enabledServers.length > 0 ? (
@@ -225,7 +192,7 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
 
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[11px] font-medium leading-tight">
-                          {getServerName(server)}
+                          {getDisplayName(server.commonOptions?.name, "Unnamed MCP Server")}
                         </div>
                         <div className="text-muted-foreground text-[10px] leading-tight">
                           {tools.enabled}/{tools.total} tools enabled

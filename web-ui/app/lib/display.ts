@@ -1,10 +1,10 @@
-export function getAssistantDisplayName(name: string | null | undefined): string {
-  const normalized = name?.trim() ?? "";
-  if (normalized.length > 0) {
-    return normalized;
-  }
+export function getDisplayName(value: string | null | undefined, fallback: string): string {
+  const normalized = value?.trim() ?? "";
+  return normalized.length > 0 ? normalized : fallback;
+}
 
-  return "默认助手";
+export function getAssistantDisplayName(name: string | null | undefined): string {
+  return getDisplayName(name, "默认助手");
 }
 
 export function getModelDisplayName(
@@ -16,10 +16,5 @@ export function getModelDisplayName(
     return normalizedDisplayName;
   }
 
-  const normalizedModelId = modelId?.trim() ?? "";
-  if (normalizedModelId.length > 0) {
-    return normalizedModelId;
-  }
-
-  return "未命名模型";
+  return getDisplayName(modelId, "未命名模型");
 }

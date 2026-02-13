@@ -3,6 +3,9 @@ import * as React from "react";
 import { ChevronDown, Lightbulb, LightbulbOff, LoaderCircle, Sparkles } from "lucide-react";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
+import { useCurrentModel } from "~/hooks/use-current-model";
+import { usePickerPopover } from "~/hooks/use-picker-popover";
+import { extractErrorMessage } from "~/lib/error";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
 import type { ProviderModel } from "~/types";
@@ -16,6 +19,8 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { Input } from "~/components/ui/input";
+
+import { PickerErrorAlert } from "./picker-error-alert";
 
 const PRESET_BUDGETS = {
   OFF: 0,
@@ -96,41 +101,17 @@ function getReasoningLevel(budget: number | null | undefined): ReasoningLevel {
   return closest.key;
 }
 
-function getCurrentModel(
-  settings: { providers: { models: ProviderModel[] }[] } | null,
-  modelId: string | null,
-): ProviderModel | null {
-  if (!settings || !modelId) {
-    return null;
-  }
-
-  for (const provider of settings.providers) {
-    const model = provider.models.find((item) => item.id === modelId);
-    if (model) {
-      return model;
-    }
-  }
-
-  return null;
-}
-
 export function ReasoningPickerButton({ disabled = false, className }: ReasoningPickerButtonProps) {
   const { settings, currentAssistant } = useCurrentAssistant();
+  const { currentModel } = useCurrentModel();
 
-  const [open, setOpen] = React.useState(false);
   const [updatingBudget, setUpdatingBudget] = React.useState<number | null>(null);
   const [customValue, setCustomValue] = React.useState("");
   const [customExpanded, setCustomExpanded] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const currentModelId = currentAssistant?.chatModelId ?? settings?.chatModelId ?? null;
-  const currentModel = React.useMemo(
-    () => getCurrentModel(settings, currentModelId),
-    [currentModelId, settings],
-  );
 
   const canUse = Boolean(settings && currentAssistant && !disabled);
   const canReasoning = isReasoningModel(currentModel);
+  const { open, error, setError, popoverProps } = usePickerPopover(canUse);
 
   const currentBudget = currentAssistant?.thinkingBudget ?? PRESET_BUDGETS.AUTO;
   const currentLevel = getReasoningLevel(currentBudget);
@@ -140,7 +121,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
 
   React.useEffect(() => {
     if (!canUse || !canReasoning) {
-      setOpen(false);
+      popoverProps.onOpenChange(false);
     }
   }, [canReasoning, canUse]);
 
@@ -148,7 +129,6 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
     if (open) {
       setCustomValue(String(currentBudget));
       setCustomExpanded(false);
-      setError(null);
     }
   }, [currentBudget, open]);
 
@@ -167,8 +147,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
           thinkingBudget,
         });
       } catch (updateError) {
-        const message = updateError instanceof Error ? updateError.message : "更新推理预算失败";
-        setError(message);
+        setError(extractErrorMessage(updateError, "更新推理预算失败"));
       } finally {
         setUpdatingBudget(null);
       }
@@ -181,17 +160,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   }
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!canUse) {
-          setOpen(false);
-          return;
-        }
-
-        setOpen(nextOpen);
-      }}
-    >
+    <Popover {...popoverProps}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -221,11 +190,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
         </PopoverHeader>
 
         <div className="max-h-[70svh] space-y-3 overflow-y-auto px-4 py-4">
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {error}
-            </div>
-          ) : null}
+          <PickerErrorAlert error={error} />
 
           <div className="grid grid-cols-3 gap-2">
             {REASONING_PRESETS.map((preset) => {

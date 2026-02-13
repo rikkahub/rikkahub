@@ -883,9 +883,9 @@ export function ConversationSidebar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <a 
-            href="https://rikka-ai.com" 
-            target="_blank" 
+          <a
+            href="https://rikka-ai.com"
+            target="_blank"
             rel="noopener noreferrer"
             className="ml-auto text-xs font-light text-muted-foreground hover:text-foreground transition-colors"
           >

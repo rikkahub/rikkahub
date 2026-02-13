@@ -3,6 +3,9 @@ import * as React from "react";
 import { ChevronDown, Earth, LoaderCircle, Search } from "lucide-react";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
+import { useCurrentModel } from "~/hooks/use-current-model";
+import { usePickerPopover } from "~/hooks/use-picker-popover";
+import { extractErrorMessage } from "~/lib/error";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
 import type { BuiltInTool, ProviderModel, SearchServiceOption } from "~/types";
@@ -18,6 +21,8 @@ import {
 } from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Switch } from "~/components/ui/switch";
+
+import { PickerErrorAlert } from "./picker-error-alert";
 
 const SEARCH_TOOL_NAME = "search";
 
@@ -96,48 +101,26 @@ function getServiceLabel(service: SearchServiceOption): string {
 
 export function SearchPickerButton({ disabled = false, className }: SearchPickerButtonProps) {
   const { settings, currentAssistant } = useCurrentAssistant();
+  const { currentModel } = useCurrentModel();
 
-  const [open, setOpen] = React.useState(false);
   const [updatingSearchEnabled, setUpdatingSearchEnabled] = React.useState(false);
   const [updatingBuiltInSearch, setUpdatingBuiltInSearch] = React.useState(false);
   const [updatingServiceIndex, setUpdatingServiceIndex] = React.useState<number | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
 
-  const currentModelId = currentAssistant?.chatModelId ?? settings?.chatModelId ?? null;
-
-  const currentModel = React.useMemo(() => {
-    if (!settings || !currentModelId) {
-      return null;
-    }
-
-    for (const provider of settings.providers) {
-      const model = provider.models.find((item) => item.id === currentModelId);
-      if (model) {
-        return model;
-      }
-    }
-
-    return null;
-  }, [currentModelId, settings]);
+  const canUse = Boolean(settings && currentAssistant && !disabled);
+  const { error, setError, popoverProps } = usePickerPopover(canUse);
 
   const builtInSearchEnabled = hasBuiltInSearch(currentModel?.tools);
   const searchEnabled = settings?.enableWebSearch ?? false;
   const currentService = settings?.searchServices?.[settings.searchServiceSelected] ?? null;
-  const canUse = Boolean(settings && currentAssistant && !disabled);
   const checked = searchEnabled || builtInSearchEnabled;
   const loading = updatingSearchEnabled || updatingBuiltInSearch || updatingServiceIndex !== null;
 
   React.useEffect(() => {
     if (!canUse) {
-      setOpen(false);
+      popoverProps.onOpenChange(false);
     }
   }, [canUse]);
-
-  React.useEffect(() => {
-    if (!open) {
-      setError(null);
-    }
-  }, [open]);
 
   const handleToggleSearchEnabled = React.useCallback(
     async (enabled: boolean) => {
@@ -151,8 +134,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
       try {
         await api.post<{ status: string }>("settings/search/enabled", { enabled });
       } catch (toggleError) {
-        const message = toggleError instanceof Error ? toggleError.message : "更新网络搜索失败";
-        setError(message);
+        setError(extractErrorMessage(toggleError, "更新网络搜索失败"));
       } finally {
         setUpdatingSearchEnabled(false);
       }
@@ -176,8 +158,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
       try {
         await api.post<{ status: string }>("settings/search/service", { index });
       } catch (serviceError) {
-        const message = serviceError instanceof Error ? serviceError.message : "切换搜索服务失败";
-        setError(message);
+        setError(extractErrorMessage(serviceError, "切换搜索服务失败"));
       } finally {
         setUpdatingServiceIndex(null);
       }
@@ -201,8 +182,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
           enabled,
         });
       } catch (toolError) {
-        const message = toolError instanceof Error ? toolError.message : "更新内置搜索失败";
-        setError(message);
+        setError(extractErrorMessage(toolError, "更新内置搜索失败"));
       } finally {
         setUpdatingBuiltInSearch(false);
       }
@@ -211,17 +191,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
   );
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!canUse) {
-          setOpen(false);
-          return;
-        }
-
-        setOpen(nextOpen);
-      }}
-    >
+    <Popover {...popoverProps}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -261,11 +231,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
         </PopoverHeader>
 
         <div className="space-y-4 px-4 py-4">
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {error}
-            </div>
-          ) : null}
+          <PickerErrorAlert error={error} />
 
           {isGeminiModel(currentModel) ? (
             <div className="flex items-center gap-3 rounded-lg border px-3 py-3">

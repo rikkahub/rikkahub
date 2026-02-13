@@ -90,7 +90,9 @@ function ModelOptionRow({
         <div className="truncate text-xs font-medium leading-tight">
           {getModelDisplayName(model.displayName, model.modelId)}
         </div>
-        <div className="text-muted-foreground truncate text-[11px] leading-tight">{model.modelId}</div>
+        <div className="text-muted-foreground truncate text-[11px] leading-tight">
+          {model.modelId}
+        </div>
         <div className="mt-0.5 flex flex-wrap gap-1">
           <Badge variant="outline" className="px-1 py-0 text-[9px]">
             {formatModality(model)}
