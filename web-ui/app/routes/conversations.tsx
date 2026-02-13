@@ -635,12 +635,12 @@ function ConversationSuggestions({
 
   return (
     <div className={cn("mx-auto w-full max-w-3xl px-4", className)}>
-      <div className="flex gap-2 overflow-x-auto rounded-lg bg-background/85 px-1 py-1 backdrop-blur supports-backdrop-filter:bg-background/70">
+      <div className="flex gap-2 overflow-x-auto rounded-lg px-1 py-1">
         {suggestions.map((suggestion, index) => (
           <button
             key={`${suggestion}-${index}`}
             type="button"
-            className="shrink-0 rounded-lg border bg-transparent px-3 py-1 text-xs text-foreground transition-colors hover:bg-muted/40"
+            className="shrink-0 rounded-lg border bg-muted/70 px-3 py-1 text-xs text-foreground transition-colors hover:bg-muted"
             onClick={() => {
               onClickSuggestion(suggestion);
             }}
@@ -966,7 +966,7 @@ function ConversationsPageInner() {
             <ConversationSuggestions
               suggestions={chatSuggestions}
               onClickSuggestion={handleClickSuggestion}
-              className="pointer-events-auto absolute right-0 bottom-3 left-0 z-20"
+              className="pointer-events-auto absolute right-0 bottom-1 left-0 z-20"
             />
           ) : null}
         </div>
@@ -1003,7 +1003,7 @@ function ConversationsPageInner() {
           }}
           onSend={handleSend}
           onStop={activeId ? handleStop : undefined}
-          className={showSuggestions ? "pt-1" : undefined}
+          className={showSuggestions ? "pt-0" : undefined}
         />
       </motion.div>
     </div>
