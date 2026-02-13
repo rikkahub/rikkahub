@@ -33,6 +33,8 @@ interface ModelSection {
   models: ProviderModel[];
 }
 
+const FAVORITE_SECTION_ID = "__favorites__";
+
 function normalizeKeyword(value: string) {
   return value.trim().toLowerCase();
 }
@@ -73,15 +75,31 @@ function ModelOptionRow({
   const abilities = model.abilities ?? [];
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
       className={cn(
         "hover:bg-muted flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition",
+        disabled && "pointer-events-none opacity-60",
         selected && "border-primary bg-primary/5",
       )}
-      disabled={disabled}
       onClick={() => {
+        if (disabled) {
+          return;
+        }
+
         void onSelect(model);
+      }}
+      onKeyDown={(event) => {
+        if (disabled) {
+          return;
+        }
+
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          void onSelect(model);
+        }
       }}
     >
       <AIIcon name={model.modelId} size={24} />
@@ -121,7 +139,7 @@ function ModelOptionRow({
           <Heart className={cn("size-3.5", favorite && "fill-current")} />
         </button>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -130,12 +148,24 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
 
   const [open, setOpen] = React.useState(false);
   const [searchKeywords, setSearchKeywords] = React.useState("");
+  const [selectedProviderId, setSelectedProviderId] = React.useState<string | null>(null);
   const [updatingModelId, setUpdatingModelId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const currentModelId = currentAssistant?.chatModelId ?? settings?.chatModelId ?? null;
   const favoriteModelIds = settings?.favoriteModels ?? [];
   const favoriteModelIdSet = React.useMemo(() => new Set(favoriteModelIds), [favoriteModelIds]);
+
+  const allModels = React.useMemo(() => {
+    if (!settings) {
+      return [];
+    }
+
+    return settings.providers
+      .filter((provider) => provider.enabled)
+      .flatMap((provider) => provider.models)
+      .filter((model) => model.type === "CHAT");
+  }, [settings]);
 
   const sections = React.useMemo<ModelSection[]>(() => {
     if (!settings) {
@@ -170,14 +200,22 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
       .filter((section) => section.models.length > 0);
   }, [searchKeywords, settings]);
 
-  const allModels = React.useMemo(() => sections.flatMap((section) => section.models), [sections]);
+  const selectedSection = React.useMemo(() => {
+    if (sections.length === 0) {
+      return null;
+    }
 
-  // 收藏的模型列表
+    return sections.find((section) => section.providerId === selectedProviderId) ?? sections[0];
+  }, [sections, selectedProviderId]);
+  const filteredModels = React.useMemo(() => sections.flatMap((section) => section.models), [sections]);
+
   const favoriteModels = React.useMemo(() => {
     return favoriteModelIds
-      .map((id) => allModels.find((model) => model.id === id))
+      .map((id) => filteredModels.find((model) => model.id === id))
       .filter((model): model is ProviderModel => model !== undefined);
-  }, [favoriteModelIds, allModels]);
+  }, [favoriteModelIds, filteredModels]);
+  const isFavoriteSectionSelected = selectedProviderId === FAVORITE_SECTION_ID;
+  const displayedModels = isFavoriteSectionSelected ? favoriteModels : (selectedSection?.models ?? []);
 
   const currentModel = React.useMemo(
     () => allModels.find((model) => model.id === currentModelId) ?? null,
@@ -194,6 +232,29 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
       setError(null);
     }
   }, [open]);
+
+  React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    if (sections.length === 0 && favoriteModels.length === 0) {
+      setSelectedProviderId(null);
+      return;
+    }
+
+    if (selectedProviderId === FAVORITE_SECTION_ID && favoriteModels.length > 0) {
+      return;
+    }
+
+    if (selectedProviderId && sections.some((section) => section.providerId === selectedProviderId)) {
+      return;
+    }
+
+    const currentModelSection =
+      currentModelId == null ? null : sections.find((section) => section.models.some((model) => model.id === currentModelId));
+    setSelectedProviderId(currentModelSection?.providerId ?? (favoriteModels.length > 0 ? FAVORITE_SECTION_ID : sections[0]?.providerId ?? null));
+  }, [currentModelId, favoriteModels.length, open, sections, selectedProviderId]);
 
   React.useEffect(() => {
     if (!disabled) {
@@ -323,67 +384,77 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
             </div>
           ) : null}
 
-          <ScrollArea className="h-[24rem] pr-2">
+          <div className="h-[24rem]">
             {sections.length === 0 && favoriteModels.length === 0 ? (
               <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
                 没有可用模型
               </div>
             ) : (
-              <div className="space-y-3 pb-1">
-                {/* 收藏的模型 */}
-                {favoriteModels.length > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="text-primary flex items-center gap-1.5 text-[11px] font-medium">
-                      <Heart className="size-3" />
-                      <span>收藏</span>
-                    </div>
-                    <div className="space-y-1">
-                      {favoriteModels.map((model) => (
-                        <ModelOptionRow
-                          key={model.id}
-                          model={model}
-                          selected={model.id === currentModelId}
-                          updating={model.id === updatingModelId}
-                          favorite
-                          disabled={disabled || updatingModelId !== null}
-                          onSelect={handleSelectModel}
-                          onToggleFavorite={handleToggleFavorite}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="flex h-full min-h-0 flex-col gap-2">
+                <ScrollArea className="max-h-20 w-full">
+                  <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                    {favoriteModels.length > 0 && (
+                      <button
+                        type="button"
+                        className={cn(
+                          "bg-muted/60 hover:bg-muted inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition",
+                          isFavoriteSectionSelected && "border-primary bg-primary/10 text-primary",
+                        )}
+                        onClick={() => {
+                          setSelectedProviderId(FAVORITE_SECTION_ID);
+                        }}
+                      >
+                        <Heart className={cn("size-3", isFavoriteSectionSelected && "fill-current")} />
+                        <span>收藏</span>
+                      </button>
+                    )}
 
-                {sections.map((section) => (
-                  <div key={section.providerId} className="space-y-1.5">
-                    <div className="text-muted-foreground flex items-center gap-1.5 text-[11px] font-medium">
-                      <AIIcon
-                        name={section.providerName}
-                        size={12}
-                        className="bg-transparent"
-                        imageClassName="h-full w-full"
-                      />
-                      <span>{section.providerName}</span>
-                    </div>
-                    <div className="space-y-1">
-                      {section.models.map((model) => (
-                        <ModelOptionRow
-                          key={model.id}
-                          model={model}
-                          selected={model.id === currentModelId}
-                          updating={model.id === updatingModelId}
-                          favorite={favoriteModelIdSet.has(model.id)}
-                          disabled={disabled || updatingModelId !== null}
-                          onSelect={handleSelectModel}
-                          onToggleFavorite={handleToggleFavorite}
-                        />
-                      ))}
-                    </div>
+                    {sections.map((section) => {
+                      const selected = section.providerId === selectedProviderId;
+                      return (
+                        <button
+                          key={section.providerId}
+                          type="button"
+                          className={cn(
+                            "bg-muted/60 hover:bg-muted inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition",
+                            selected && "border-primary bg-primary/10 text-primary",
+                          )}
+                          onClick={() => {
+                            setSelectedProviderId(section.providerId);
+                          }}
+                        >
+                          <AIIcon
+                            name={section.providerName}
+                            size={12}
+                            className="bg-transparent"
+                            imageClassName="h-full w-full"
+                          />
+                          <span className="truncate">{section.providerName}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
+                </ScrollArea>
+
+                <ScrollArea className="min-h-0 flex-1 rounded-md border">
+                  <div className="space-y-1 p-1.5">
+                    {displayedModels.map((model) => (
+                      <ModelOptionRow
+                        key={model.id}
+                        model={model}
+                        selected={model.id === currentModelId}
+                        updating={model.id === updatingModelId}
+                        favorite={favoriteModelIdSet.has(model.id)}
+                        disabled={disabled || updatingModelId !== null}
+                        onSelect={handleSelectModel}
+                        onToggleFavorite={handleToggleFavorite}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
               </div>
             )}
-          </ScrollArea>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
