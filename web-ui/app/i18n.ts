@@ -3,8 +3,10 @@ import { initReactI18next } from "react-i18next";
 
 import enUSCommon from "./locales/en-US/common.json";
 import enUSInput from "./locales/en-US/input.json";
+import enUSMarkdown from "./locales/en-US/markdown.json";
 import zhCNCommon from "./locales/zh-CN/common.json";
 import zhCNInput from "./locales/zh-CN/input.json";
+import zhCNMarkdown from "./locales/zh-CN/markdown.json";
 
 const SUPPORTED_LANGUAGES = ["zh-CN", "en-US"] as const;
 
@@ -27,17 +29,19 @@ void i18n.use(initReactI18next).init({
     "zh-CN": {
       common: zhCNCommon,
       input: zhCNInput,
+      markdown: zhCNMarkdown,
     },
     "en-US": {
       common: enUSCommon,
       input: enUSInput,
+      markdown: enUSMarkdown,
     },
   },
   lng: getInitialLanguage(),
   fallbackLng: "zh-CN",
   supportedLngs: [...SUPPORTED_LANGUAGES],
   defaultNS: "common",
-  ns: ["common", "input"],
+  ns: ["common", "input", "markdown"],
   interpolation: {
     escapeValue: false,
   },

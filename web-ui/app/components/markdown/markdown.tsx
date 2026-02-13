@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -76,6 +77,7 @@ export default function Markdown({
   onClickCitation,
   allowCodePreview = true,
 }: MarkdownProps) {
+  const { t } = useTranslation("markdown");
   const workbench = useOptionalWorkbench();
   const processedContent = React.useMemo(() => preProcess(content), [content]);
   const handlePreviewCode = React.useCallback(
@@ -87,14 +89,16 @@ export default function Markdown({
 
       workbench.openPanel({
         type: "code-preview",
-        title: `${previewLanguage.toUpperCase()} 预览`,
+        title: t("markdown.code_preview_title", {
+          language: previewLanguage.toUpperCase(),
+        }),
         payload: {
           language: previewLanguage,
           code,
         },
       });
     },
-    [allowCodePreview, workbench],
+    [allowCodePreview, t, workbench],
   );
 
   return (

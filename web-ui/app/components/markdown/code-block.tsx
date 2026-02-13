@@ -2,6 +2,7 @@ import * as React from "react";
 import type { ComponentProps, CSSProperties, HTMLAttributes } from "react";
 
 import { Check, Copy, Download } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   bundledLanguages,
   createHighlighter,
@@ -457,13 +458,14 @@ export function CodeBlockCopyButton({
   timeout = 2000,
   ...props
 }: CodeBlockCopyButtonProps) {
+  const { t } = useTranslation("markdown");
   const [isCopied, setIsCopied] = React.useState(false);
   const timeoutRef = React.useRef<number>(0);
   const { code } = React.useContext(CodeBlockContext);
 
   const copyToClipboard = React.useCallback(async () => {
     if (typeof window === "undefined" || !navigator?.clipboard?.writeText) {
-      onError?.(new Error("Clipboard API not available"));
+      onError?.(new Error(t("code_block.clipboard_not_available")));
       return;
     }
 
@@ -481,7 +483,7 @@ export function CodeBlockCopyButton({
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [code, isCopied, onCopy, onError, timeout]);
+  }, [code, isCopied, onCopy, onError, t, timeout]);
 
   React.useEffect(
     () => () => {
@@ -492,7 +494,7 @@ export function CodeBlockCopyButton({
 
   return (
     <Button
-      aria-label="Copy code"
+      aria-label={t("code_block.copy_code")}
       className={cn("code-block-copy h-6 px-1.5", className)}
       onClick={copyToClipboard}
       size="xs"
@@ -504,12 +506,12 @@ export function CodeBlockCopyButton({
         (isCopied ? (
           <>
             <Check className="size-3" />
-            <span>Copied</span>
+            <span>{t("code_block.copied")}</span>
           </>
         ) : (
           <>
             <Copy className="size-3" />
-            <span>Copy</span>
+            <span>{t("code_block.copy")}</span>
           </>
         ))}
     </Button>
@@ -526,9 +528,10 @@ export function CodeBlockPreviewButton({
   onPreview,
   ...props
 }: CodeBlockPreviewButtonProps) {
+  const { t } = useTranslation("markdown");
   return (
     <Button
-      aria-label="Preview code"
+      aria-label={t("code_block.preview_code")}
       className={cn("code-block-copy h-6 px-1.5", className)}
       onClick={onPreview}
       size="xs"
@@ -536,7 +539,7 @@ export function CodeBlockPreviewButton({
       variant="ghost"
       {...props}
     >
-      {children ?? <span>预览</span>}
+      {children ?? <span>{t("code_block.preview")}</span>}
     </Button>
   );
 }
@@ -553,11 +556,12 @@ export function CodeBlockDownloadButton({
   onError,
   ...props
 }: CodeBlockDownloadButtonProps) {
+  const { t } = useTranslation("markdown");
   const { code, language } = React.useContext(CodeBlockContext);
 
   const handleDownload = React.useCallback(() => {
     if (typeof window === "undefined") {
-      onError?.(new Error("Window is not available"));
+      onError?.(new Error(t("code_block.window_not_available")));
       return;
     }
 
@@ -575,11 +579,11 @@ export function CodeBlockDownloadButton({
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [code, language, onDownload, onError]);
+  }, [code, language, onDownload, onError, t]);
 
   return (
     <Button
-      aria-label="Download code"
+      aria-label={t("code_block.download_code")}
       className={cn("code-block-copy h-6 px-1.5", className)}
       onClick={handleDownload}
       size="xs"
@@ -590,7 +594,7 @@ export function CodeBlockDownloadButton({
       {children ?? (
         <>
           <Download className="size-3" />
-          <span>下载</span>
+          <span>{t("code_block.download")}</span>
         </>
       )}
     </Button>

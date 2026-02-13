@@ -1,0 +1,16 @@
+{
+  "code_block": {
+    "clipboard_not_available": "Clipboard is not available",
+    "copy_code": "Copy code",
+    "copied": "Copied",
+    "copy": "Copy",
+    "preview_code": "Preview code",
+    "preview": "Preview",
+    "window_not_available": "Window is not available",
+    "download_code": "Download code",
+    "download": "Download"
+  },
+  "markdown": {
+    "code_preview_title": "{{language}} preview"
+  }
+}
