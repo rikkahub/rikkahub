@@ -51,6 +51,78 @@ function getAbilityLabel(ability: ModelAbility): string {
   return "推理";
 }
 
+interface ModelOptionRowProps {
+  model: ProviderModel;
+  selected: boolean;
+  updating: boolean;
+  favorite: boolean;
+  disabled: boolean;
+  onSelect: (model: ProviderModel) => void | Promise<void>;
+  onToggleFavorite: (model: ProviderModel) => void | Promise<void>;
+}
+
+function ModelOptionRow({
+  model,
+  selected,
+  updating,
+  favorite,
+  disabled,
+  onSelect,
+  onToggleFavorite,
+}: ModelOptionRowProps) {
+  const abilities = model.abilities ?? [];
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "hover:bg-muted flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition",
+        selected && "border-primary bg-primary/5",
+      )}
+      disabled={disabled}
+      onClick={() => {
+        void onSelect(model);
+      }}
+    >
+      <AIIcon name={model.modelId} size={24} />
+
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-xs font-medium leading-tight">
+          {getModelDisplayName(model.displayName, model.modelId)}
+        </div>
+        <div className="text-muted-foreground truncate text-[11px] leading-tight">{model.modelId}</div>
+        <div className="mt-0.5 flex flex-wrap gap-1">
+          <Badge variant="outline" className="px-1 py-0 text-[9px]">
+            {formatModality(model)}
+          </Badge>
+          {abilities.map((ability) => (
+            <Badge key={ability} variant="secondary" className="px-1 py-0 text-[9px]">
+              {getAbilityLabel(ability)}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      {updating ? (
+        <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />
+      ) : selected ? (
+        <Check className="text-primary size-3.5" />
+      ) : (
+        <button
+          type="button"
+          className={favorite ? "text-primary" : "text-muted-foreground hover:text-primary"}
+          onClick={(event) => {
+            event.stopPropagation();
+            void onToggleFavorite(model);
+          }}
+        >
+          <Heart className={cn("size-3.5", favorite && "fill-current")} />
+        </button>
+      )}
+    </button>
+  );
+}
+
 export function ModelList({ disabled = false, className, onChanged }: ModelListProps) {
   const { settings, currentAssistant } = useCurrentAssistant();
 
@@ -61,6 +133,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
 
   const currentModelId = currentAssistant?.chatModelId ?? settings?.chatModelId ?? null;
   const favoriteModelIds = settings?.favoriteModels ?? [];
+  const favoriteModelIdSet = React.useMemo(() => new Set(favoriteModelIds), [favoriteModelIds]);
 
   const sections = React.useMemo<ModelSection[]>(() => {
     if (!settings) {
@@ -263,68 +336,18 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                       <span>收藏</span>
                     </div>
                     <div className="space-y-1">
-                      {favoriteModels.map((model) => {
-                        const isSelected = model.id === currentModelId;
-                        const isUpdating = model.id === updatingModelId;
-                        const abilities = model.abilities ?? [];
-
-                        return (
-                          <button
-                            key={model.id}
-                            type="button"
-                            className={cn(
-                              "hover:bg-muted flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition",
-                              isSelected && "border-primary bg-primary/5",
-                            )}
-                            disabled={disabled || updatingModelId !== null}
-                            onClick={() => {
-                              void handleSelectModel(model);
-                            }}
-                          >
-                            <AIIcon name={model.modelId} size={24} />
-
-                            <div className="min-w-0 flex-1">
-                                <div className="truncate text-xs font-medium leading-tight">
-                                {getModelDisplayName(model.displayName, model.modelId)}
-                              </div>
-                              <div className="text-muted-foreground truncate text-[11px] leading-tight">
-                                {model.modelId}
-                              </div>
-                              <div className="mt-0.5 flex flex-wrap gap-1">
-                                <Badge variant="outline" className="px-1 py-0 text-[9px]">
-                                  {formatModality(model)}
-                                </Badge>
-                                {abilities.map((ability) => (
-                                  <Badge
-                                    key={ability}
-                                    variant="secondary"
-                                    className="px-1 py-0 text-[9px]"
-                                  >
-                                    {getAbilityLabel(ability)}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-
-                            {isUpdating ? (
-                              <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />
-                            ) : isSelected ? (
-                              <Check className="text-primary size-3.5" />
-                            ) : (
-                              <button
-                                type="button"
-                                className="text-primary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleToggleFavorite(model);
-                                }}
-                              >
-                                <Heart className="size-3.5 fill-current" />
-                              </button>
-                            )}
-                          </button>
-                        );
-                      })}
+                      {favoriteModels.map((model) => (
+                        <ModelOptionRow
+                          key={model.id}
+                          model={model}
+                          selected={model.id === currentModelId}
+                          updating={model.id === updatingModelId}
+                          favorite
+                          disabled={disabled || updatingModelId !== null}
+                          onSelect={handleSelectModel}
+                          onToggleFavorite={handleToggleFavorite}
+                        />
+                      ))}
                     </div>
                   </div>
                 )}
@@ -341,80 +364,18 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                       <span>{section.providerName}</span>
                     </div>
                     <div className="space-y-1">
-                      {section.models.map((model) => {
-                        const isSelected = model.id === currentModelId;
-                        const isUpdating = model.id === updatingModelId;
-                        const abilities = model.abilities ?? [];
-                        const isFavorite = favoriteModelIds.includes(model.id);
-
-                        return (
-                          <button
-                            key={model.id}
-                            type="button"
-                            className={cn(
-                              "hover:bg-muted flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition",
-                              isSelected && "border-primary bg-primary/5",
-                            )}
-                            disabled={disabled || updatingModelId !== null}
-                            onClick={() => {
-                              void handleSelectModel(model);
-                            }}
-                          >
-                            <AIIcon name={model.modelId} size={24} />
-
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-xs font-medium leading-tight">
-                                {getModelDisplayName(model.displayName, model.modelId)}
-                              </div>
-                              <div className="text-muted-foreground truncate text-[11px] leading-tight">
-                                {model.modelId}
-                              </div>
-                              <div className="mt-0.5 flex flex-wrap gap-1">
-                                <Badge variant="outline" className="px-1 py-0 text-[9px]">
-                                  {formatModality(model)}
-                                </Badge>
-                                {abilities.map((ability) => (
-                                  <Badge
-                                    key={ability}
-                                    variant="secondary"
-                                    className="px-1 py-0 text-[9px]"
-                                  >
-                                    {getAbilityLabel(ability)}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-
-                            {isUpdating ? (
-                              <LoaderCircle className="text-muted-foreground size-3.5 animate-spin" />
-                            ) : isSelected ? (
-                              <Check className="text-primary size-3.5" />
-                            ) : isFavorite ? (
-                              <button
-                                type="button"
-                                className="text-primary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleToggleFavorite(model);
-                                }}
-                              >
-                                <Heart className="size-3.5 fill-current" />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="text-muted-foreground hover:text-primary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleToggleFavorite(model);
-                                }}
-                              >
-                                <Heart className="size-3.5" />
-                              </button>
-                            )}
-                          </button>
-                        );
-                      })}
+                      {section.models.map((model) => (
+                        <ModelOptionRow
+                          key={model.id}
+                          model={model}
+                          selected={model.id === currentModelId}
+                          updating={model.id === updatingModelId}
+                          favorite={favoriteModelIdSet.has(model.id)}
+                          disabled={disabled || updatingModelId !== null}
+                          onSelect={handleSelectModel}
+                          onToggleFavorite={handleToggleFavorite}
+                        />
+                      ))}
                     </div>
                   </div>
                 ))}
