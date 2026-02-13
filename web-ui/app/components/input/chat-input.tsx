@@ -175,7 +175,7 @@ export function ChatInput({
   onSuggestionClick,
   className,
 }: ChatInputProps) {
-  const { t } = useTranslation();
+  const { t } = useTranslation("input");
   const sendOnEnter = useSettingsStore(
     (state) => state.settings?.displaySetting.sendOnEnter ?? true,
   );
