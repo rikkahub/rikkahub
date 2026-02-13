@@ -621,39 +621,6 @@ function ConversationTimeline({
   );
 }
 
-function ConversationSuggestions({
-  suggestions,
-  onClickSuggestion,
-  className,
-}: {
-  suggestions: string[];
-  onClickSuggestion: (suggestion: string) => void;
-  className?: string;
-}) {
-  if (suggestions.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className={cn("mx-auto w-full max-w-3xl px-4", className)}>
-      <div className="flex gap-2 overflow-x-auto rounded-lg px-1 py-1">
-        {suggestions.map((suggestion, index) => (
-          <button
-            key={`${suggestion}-${index}`}
-            type="button"
-            className="shrink-0 rounded-lg border bg-muted/70 px-3 py-1 text-xs text-foreground transition-colors hover:bg-muted"
-            onClick={() => {
-              onClickSuggestion(suggestion);
-            }}
-          >
-            {suggestion}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function meta() {
   return [{ title: "RikkaHub Web" }, { name: "description", content: "RikkaHub web client" }];
 }
@@ -969,7 +936,6 @@ function ConversationsPageInner() {
             detailError={detailError}
             selectedNodeMessages={selectedNodeMessages}
             isGenerating={detail?.isGenerating ?? false}
-            contentClassName={showSuggestions ? "pb-24" : undefined}
             onEdit={handleStartEdit}
             onDelete={handleDeleteMessage}
             onFork={handleForkMessage}
@@ -977,14 +943,6 @@ function ConversationsPageInner() {
             onSelectBranch={handleSelectBranch}
             onToolApproval={handleToolApproval}
           />
-
-          {showSuggestions ? (
-            <ConversationSuggestions
-              suggestions={chatSuggestions}
-              onClickSuggestion={handleClickSuggestion}
-              className="pointer-events-auto absolute right-0 bottom-1 left-0 z-20"
-            />
-          ) : null}
         </div>
       )}
 
@@ -1011,6 +969,8 @@ function ConversationsPageInner() {
           disabled={detailLoading || Boolean(detailError)}
           onValueChange={handleInputTextChange}
           onAddParts={handleAddInputParts}
+          suggestions={showSuggestions ? chatSuggestions : []}
+          onSuggestionClick={handleClickSuggestion}
           isEditing={Boolean(editingSession)}
           onCancelEdit={editingSession ? handleCancelEdit : undefined}
           shouldDeleteFileOnRemove={shouldDeleteAttachmentFileOnRemove}
@@ -1019,7 +979,6 @@ function ConversationsPageInner() {
           }}
           onSend={handleSend}
           onStop={activeId ? handleStop : undefined}
-          className={showSuggestions ? "pt-0" : undefined}
         />
       </motion.div>
     </div>
