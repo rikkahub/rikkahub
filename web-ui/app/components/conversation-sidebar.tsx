@@ -9,6 +9,7 @@ import {
   Moon,
   MoreHorizontal,
   MoveRight,
+  Palette,
   ArrowUp,
   Pencil,
   Pin,
@@ -525,6 +526,8 @@ export function ConversationSidebar({
   const currentThemeOption =
     THEME_OPTIONS.find((option) => option.value === currentTheme) ?? THEME_OPTIONS[2];
   const CurrentThemeIcon = currentThemeOption.icon;
+  const currentColorThemeOption =
+    COLOR_THEME_OPTIONS.find((option) => option.value === colorTheme) ?? COLOR_THEME_OPTIONS[0];
 
   const handleCustomThemeSave = React.useCallback(
     (themeCss: CustomThemeCss) => {
@@ -853,7 +856,22 @@ export function ConversationSidebar({
                   </DropdownMenuItem>
                 );
               })}
-              <DropdownMenuSeparator />
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                type="button"
+                aria-label={`主题色：${currentColorThemeOption.label}`}
+                title={`主题色：${currentColorThemeOption.label}`}
+              >
+                <Palette className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-44" side="top" align="end">
               <DropdownMenuLabel>主题色</DropdownMenuLabel>
               {COLOR_THEME_OPTIONS.map((option) => {
                 const selected = option.value === colorTheme;
