@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import type { ReasoningPart, ToolPart, UIMessagePart } from "~/types";
 
@@ -68,7 +69,10 @@ interface MessagePartsProps {
   onToolApproval?: (toolCallId: string, approved: boolean, reason: string) => void | Promise<void>;
 }
 
-function renderContentPart(part: UIMessagePart) {
+function renderContentPart(
+  part: UIMessagePart,
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
   switch (part.type) {
     case "text":
       return <TextPart text={part.text} />;
@@ -86,14 +90,13 @@ function renderContentPart(part: UIMessagePart) {
       );
     case "tool":
       return (
-        <div className="text-xs text-muted-foreground">
-          [Tool step should render in chain-of-thought]
-        </div>
+        <div className="text-xs text-muted-foreground">{t("message_parts.tool_step_hint")}</div>
       );
   }
 }
 
 export function MessageParts({ parts, loading = false, onToolApproval }: MessagePartsProps) {
+  const { t } = useTranslation("message");
   const groupedParts = React.useMemo(() => groupMessageParts(parts), [parts]);
 
   return (
@@ -106,8 +109,10 @@ export function MessageParts({ parts, loading = false, onToolApproval }: Message
             <ChainOfThought
               key={`thinking-${blockIndex}`}
               className="my-1"
-              collapseLabel="收起思考过程"
-              showMoreLabel={(hiddenCount) => `展开 ${hiddenCount} 条思考步骤`}
+              collapseLabel={t("message_parts.collapse_thinking")}
+              showMoreLabel={(hiddenCount) =>
+                t("message_parts.expand_thinking_steps", { count: hiddenCount })
+              }
               steps={block.steps}
               renderStep={(step, stepIndex, { isFirst, isLast }) => {
                 if (step.type === "reasoning") {
@@ -140,7 +145,7 @@ export function MessageParts({ parts, loading = false, onToolApproval }: Message
 
         return (
           <React.Fragment key={`content-${block.index}`}>
-            {renderContentPart(block.part)}
+            {renderContentPart(block.part, t)}
           </React.Fragment>
         );
       })}

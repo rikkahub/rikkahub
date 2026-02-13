@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { X } from "lucide-react";
 
@@ -25,6 +26,7 @@ function readStringField(payload: Record<string, unknown>, key: string): string 
 }
 
 function CodePreviewPanel({ panel }: { panel: WorkbenchPanel }) {
+  const { t } = useTranslation();
   const [mode, setMode] = React.useState<"preview" | "source">("preview");
 
   const language = readStringField(panel.payload, "language");
@@ -137,7 +139,7 @@ function CodePreviewPanel({ panel }: { panel: WorkbenchPanel }) {
             setMode("preview");
           }}
         >
-          预览
+          {t("workbench.preview")}
         </Button>
         <Button
           type="button"
@@ -147,7 +149,7 @@ function CodePreviewPanel({ panel }: { panel: WorkbenchPanel }) {
             setMode("source");
           }}
         >
-          源码
+          {t("workbench.source_code")}
         </Button>
       </div>
 
@@ -166,7 +168,9 @@ function CodePreviewPanel({ panel }: { panel: WorkbenchPanel }) {
             />
           )
         ) : (
-          <pre className="h-full overflow-auto bg-muted/30 p-4 text-xs">{code || "(空内容)"}</pre>
+          <pre className="h-full overflow-auto bg-muted/30 p-4 text-xs">
+            {code || t("workbench.empty_content")}
+          </pre>
         )}
       </div>
     </div>
@@ -190,6 +194,7 @@ const PANEL_RENDERERS: Record<string, WorkbenchPanelRenderer> = {
 };
 
 export function WorkbenchHost({ panel, onClose, className }: WorkbenchHostProps) {
+  const { t } = useTranslation();
   const renderer = PANEL_RENDERERS[panel.type];
 
   return (
@@ -197,10 +202,12 @@ export function WorkbenchHost({ panel, onClose, className }: WorkbenchHostProps)
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="min-w-0">
           <div className="truncate font-medium text-sm">{panel.title}</div>
-          <div className="truncate text-muted-foreground text-xs">类型：{panel.type}</div>
+          <div className="truncate text-muted-foreground text-xs">
+            {t("workbench.type_label", { type: panel.type })}
+          </div>
         </div>
         <Button
-          aria-label="关闭面板"
+          aria-label={t("workbench.close_panel")}
           type="button"
           size="icon-sm"
           variant="ghost"

@@ -1,4 +1,6 @@
 import * as React from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 
 import {
   ArrowDown,
@@ -59,28 +61,28 @@ function hasRenderablePart(part: UIMessagePart): boolean {
   }
 }
 
-function formatPartForCopy(part: UIMessagePart): string | null {
+function formatPartForCopy(part: UIMessagePart, t: TFunction): string | null {
   switch (part.type) {
     case "text":
       return part.text;
     case "image":
-      return `[图片] ${part.url}`;
+      return `[${t("chat_message.copy_image")}] ${part.url}`;
     case "video":
-      return `[视频] ${part.url}`;
+      return `[${t("chat_message.copy_video")}] ${part.url}`;
     case "audio":
-      return `[音频] ${part.url}`;
+      return `[${t("chat_message.copy_audio")}] ${part.url}`;
     case "document":
-      return `[文档] ${part.fileName}`;
+      return `[${t("chat_message.copy_document")}] ${part.fileName}`;
     case "reasoning":
       return part.reasoning;
     case "tool":
-      return `[工具] ${part.toolName}`;
+      return `[${t("chat_message.copy_tool")}] ${part.toolName}`;
   }
 }
 
-function buildCopyText(parts: UIMessagePart[]): string {
+function buildCopyText(parts: UIMessagePart[], t: TFunction): string {
   return parts
-    .map(formatPartForCopy)
+    .map((part) => formatPartForCopy(part, t))
     .filter((value): value is string => Boolean(value && value.trim().length > 0))
     .join("\n\n")
     .trim();
@@ -111,7 +113,12 @@ function getDurationMs(createdAt: string, finishedAt?: string | null): number | 
   return end - start;
 }
 
-function getNerdStats(usage: TokenUsage, createdAt: string, finishedAt?: string | null) {
+function getNerdStats(
+  usage: TokenUsage,
+  createdAt: string,
+  finishedAt: string | null | undefined,
+  t: TFunction,
+) {
   const stats: Array<{ key: string; icon: React.ReactNode; label: string }> = [];
 
   stats.push({
@@ -119,14 +126,21 @@ function getNerdStats(usage: TokenUsage, createdAt: string, finishedAt?: string 
     icon: <ArrowUp className="size-3" />,
     label:
       usage.cachedTokens > 0
-        ? `${formatNumber(usage.promptTokens)} tokens (${formatNumber(usage.cachedTokens)} cached)`
-        : `${formatNumber(usage.promptTokens)} tokens`,
+        ? t("chat_message.prompt_tokens_with_cache", {
+            promptTokens: formatNumber(usage.promptTokens),
+            cachedTokens: formatNumber(usage.cachedTokens),
+          })
+        : t("chat_message.prompt_tokens", {
+            promptTokens: formatNumber(usage.promptTokens),
+          }),
   });
 
   stats.push({
     key: "completion",
     icon: <ArrowDown className="size-3" />,
-    label: `${formatNumber(usage.completionTokens)} tokens`,
+    label: t("chat_message.completion_tokens", {
+      completionTokens: formatNumber(usage.completionTokens),
+    }),
   });
 
   const durationMs = getDurationMs(createdAt, finishedAt);
@@ -137,13 +151,17 @@ function getNerdStats(usage: TokenUsage, createdAt: string, finishedAt?: string 
     stats.push({
       key: "speed",
       icon: <Zap className="size-3" />,
-      label: `${tps.toFixed(1)} tok/s`,
+      label: t("chat_message.tokens_per_second", {
+        value: tps.toFixed(1),
+      }),
     });
 
     stats.push({
       key: "duration",
       icon: <Clock3 className="size-3" />,
-      label: `${durationSeconds.toFixed(1)}s`,
+      label: t("chat_message.duration_seconds", {
+        value: durationSeconds.toFixed(1),
+      }),
     });
   }
 
@@ -171,22 +189,23 @@ function ChatMessageActionsRow({
   onDelete?: (messageId: string) => void | Promise<void>;
   onFork?: (messageId: string) => void | Promise<void>;
 }) {
+  const { t } = useTranslation("message");
   const [regenerating, setRegenerating] = React.useState(false);
   const [switchingBranch, setSwitchingBranch] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [forking, setForking] = React.useState(false);
 
   const handleCopy = React.useCallback(async () => {
-    const text = buildCopyText(message.parts);
+    const text = buildCopyText(message.parts, t);
     if (!text || typeof navigator === "undefined" || !navigator.clipboard) return;
     await navigator.clipboard.writeText(text);
-  }, [message.parts]);
+  }, [message.parts, t]);
 
   const handleRegenerate = React.useCallback(async () => {
     if (!onRegenerate) return;
 
     if (message.role === "USER") {
-      const confirmed = window.confirm("将从这条用户消息重新生成，确认继续吗？");
+      const confirmed = window.confirm(t("chat_message.regenerate_from_user_confirm"));
       if (!confirmed) return;
     }
 
@@ -196,7 +215,7 @@ function ChatMessageActionsRow({
     } finally {
       setRegenerating(false);
     }
-  }, [message.id, message.role, onRegenerate]);
+  }, [message.id, message.role, onRegenerate, t]);
 
   const handleSwitchBranch = React.useCallback(
     async (selectIndex: number) => {
@@ -217,7 +236,7 @@ function ChatMessageActionsRow({
   const handleDelete = React.useCallback(async () => {
     if (!onDelete) return;
 
-    const confirmed = window.confirm("确认删除这条消息吗？");
+    const confirmed = window.confirm(t("chat_message.delete_confirm"));
     if (!confirmed) return;
 
     setDeleting(true);
@@ -226,7 +245,7 @@ function ChatMessageActionsRow({
     } finally {
       setDeleting(false);
     }
-  }, [message.id, onDelete]);
+  }, [message.id, onDelete, t]);
 
   const handleFork = React.useCallback(async () => {
     if (!onFork) return;
@@ -254,13 +273,13 @@ function ChatMessageActionsRow({
       )}
     >
       <Button
-        aria-label="复制消息"
+        aria-label={t("chat_message.copy_message")}
         disabled={actionDisabled}
         onClick={() => {
           void handleCopy();
         }}
         size="icon-xs"
-        title="复制"
+        title={t("chat_message.copy")}
         type="button"
         variant="ghost"
       >
@@ -269,13 +288,13 @@ function ChatMessageActionsRow({
 
       {canEdit && (
         <Button
-          aria-label="编辑消息"
+          aria-label={t("chat_message.edit_message")}
           disabled={actionDisabled}
           onClick={() => {
             void onEdit?.(message);
           }}
           size="icon-xs"
-          title="编辑"
+          title={t("chat_message.edit")}
           type="button"
           variant="ghost"
         >
@@ -285,13 +304,13 @@ function ChatMessageActionsRow({
 
       {onRegenerate && (
         <Button
-          aria-label="重新生成"
+          aria-label={t("chat_message.regenerate")}
           disabled={actionDisabled}
           onClick={() => {
             void handleRegenerate();
           }}
           size="icon-xs"
-          title="重新生成"
+          title={t("chat_message.regenerate")}
           type="button"
           variant="ghost"
         >
@@ -302,13 +321,13 @@ function ChatMessageActionsRow({
       {canSwitchBranch && (
         <>
           <Button
-            aria-label="上一分支"
+            aria-label={t("chat_message.previous_branch")}
             disabled={actionDisabled || node.selectIndex <= 0}
             onClick={() => {
               void handleSwitchBranch(node.selectIndex - 1);
             }}
             size="icon-xs"
-            title="上一分支"
+            title={t("chat_message.previous_branch")}
             type="button"
             variant="ghost"
           >
@@ -318,13 +337,13 @@ function ChatMessageActionsRow({
             {node.selectIndex + 1}/{node.messages.length}
           </span>
           <Button
-            aria-label="下一分支"
+            aria-label={t("chat_message.next_branch")}
             disabled={actionDisabled || node.selectIndex >= node.messages.length - 1}
             onClick={() => {
               void handleSwitchBranch(node.selectIndex + 1);
             }}
             size="icon-xs"
-            title="下一分支"
+            title={t("chat_message.next_branch")}
             type="button"
             variant="ghost"
           >
@@ -337,10 +356,10 @@ function ChatMessageActionsRow({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              aria-label="更多操作"
+              aria-label={t("chat_message.more_actions")}
               disabled={actionDisabled}
               size="icon-xs"
-              title="更多操作"
+              title={t("chat_message.more_actions")}
               type="button"
               variant="ghost"
             >
@@ -356,7 +375,7 @@ function ChatMessageActionsRow({
                 }}
               >
                 <GitFork className="size-3.5" />
-                创建分叉
+                {t("chat_message.create_fork")}
               </DropdownMenuItem>
             )}
             <DropdownMenuItem
@@ -367,7 +386,7 @@ function ChatMessageActionsRow({
               }}
             >
               <Trash2 className="size-3.5" />
-              删除
+              {t("chat_message.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -383,13 +402,14 @@ function ChatMessageNerdLineRow({
   message: MessageDto;
   alignRight: boolean;
 }) {
+  const { t } = useTranslation("message");
   const displaySetting = useSettingsStore((state) => state.settings?.displaySetting);
 
   if (!displaySetting?.showTokenUsage || !message.usage) {
     return null;
   }
 
-  const stats = getNerdStats(message.usage, message.createdAt, message.finishedAt);
+  const stats = getNerdStats(message.usage, message.createdAt, message.finishedAt, t);
   if (stats.length === 0) return null;
 
   return (

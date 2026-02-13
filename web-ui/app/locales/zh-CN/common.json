@@ -68,5 +68,20 @@
     "type_to_start": "输入关键词开始搜索",
     "no_results": "没有找到匹配会话",
     "unnamed_conversation": "未命名会话"
+  },
+  "quick_jump": {
+    "role_user": "用户",
+    "role_assistant": "助手",
+    "role_message": "消息",
+    "jump_to_message": "跳转到第 {{index}} 条{{role}}消息",
+    "message_title": "第 {{index}} 条{{role}}消息",
+    "no_preview": "无可预览内容"
+  },
+  "workbench": {
+    "preview": "预览",
+    "source_code": "源码",
+    "empty_content": "(空内容)",
+    "type_label": "类型：{{type}}",
+    "close_panel": "关闭面板"
   }
 }

@@ -68,5 +68,20 @@
     "type_to_start": "Type keywords to start searching",
     "no_results": "No matching conversations found",
     "unnamed_conversation": "Untitled conversation"
+  },
+  "quick_jump": {
+    "role_user": "user",
+    "role_assistant": "assistant",
+    "role_message": "message",
+    "jump_to_message": "Jump to message {{index}} ({{role}})",
+    "message_title": "Message {{index}} ({{role}})",
+    "no_preview": "No preview available"
+  },
+  "workbench": {
+    "preview": "Preview",
+    "source_code": "Source",
+    "empty_content": "(empty)",
+    "type_label": "Type: {{type}}",
+    "close_panel": "Close panel"
   }
 }

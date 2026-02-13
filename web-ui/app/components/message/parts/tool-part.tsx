@@ -1,4 +1,6 @@
 import * as React from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import {
   BookHeart,
   BookX,
@@ -102,29 +104,29 @@ function getToolIcon(toolName: string, action?: string) {
   return Wrench;
 }
 
-function getToolTitle(toolName: string, args: unknown): string {
+function getToolTitle(toolName: string, args: unknown, t: TFunction): string {
   const action = getStringField(args, "action");
 
   if (toolName === TOOL_NAMES.MEMORY) {
-    if (action === MEMORY_ACTIONS.CREATE) return "创建记忆";
-    if (action === MEMORY_ACTIONS.EDIT) return "编辑记忆";
-    if (action === MEMORY_ACTIONS.DELETE) return "删除记忆";
+    if (action === MEMORY_ACTIONS.CREATE) return t("tool_part.memory_create");
+    if (action === MEMORY_ACTIONS.EDIT) return t("tool_part.memory_edit");
+    if (action === MEMORY_ACTIONS.DELETE) return t("tool_part.memory_delete");
   }
 
   if (toolName === TOOL_NAMES.SEARCH_WEB) {
     const query = getStringField(args, "query") ?? "";
-    return query ? `联网搜索：${query}` : "联网搜索";
+    return query ? t("tool_part.search_web_with_query", { query }) : t("tool_part.search_web");
   }
 
-  if (toolName === TOOL_NAMES.SCRAPE_WEB) return "网页抓取";
-  if (toolName === TOOL_NAMES.GET_TIME_INFO) return "获取时间信息";
+  if (toolName === TOOL_NAMES.SCRAPE_WEB) return t("tool_part.scrape_web");
+  if (toolName === TOOL_NAMES.GET_TIME_INFO) return t("tool_part.get_time_info");
 
   if (toolName === TOOL_NAMES.CLIPBOARD) {
-    if (action === CLIPBOARD_ACTIONS.READ) return "读取剪贴板";
-    if (action === CLIPBOARD_ACTIONS.WRITE) return "写入剪贴板";
+    if (action === CLIPBOARD_ACTIONS.READ) return t("tool_part.clipboard_read");
+    if (action === CLIPBOARD_ACTIONS.WRITE) return t("tool_part.clipboard_write");
   }
 
-  return `工具调用：${toolName}`;
+  return t("tool_part.tool_call_with_name", { toolName });
 }
 
 function JsonBlock({ value }: { value: unknown }) {
@@ -136,13 +138,16 @@ function JsonBlock({ value }: { value: unknown }) {
 }
 
 function SearchWebPreview({ args, content }: { args: unknown; content: unknown }) {
+  const { t } = useTranslation("message");
   const query = getStringField(args, "query") ?? "";
   const answer = getStringField(content, "answer");
   const items = getArrayField(content, "items");
 
   return (
     <div className="space-y-3">
-      <div className="text-sm">搜索词：{query || "(空)"}</div>
+      <div className="text-sm">
+        {t("tool_part.search_query_label", { query: query || t("tool_part.empty") })}
+      </div>
       {answer && (
         <div className="rounded-lg border bg-primary/5 p-3">
           <Markdown content={answer} className="text-sm" />
@@ -225,6 +230,7 @@ export function ToolPart({
   isFirst,
   isLast,
 }: ToolPartProps) {
+  const { t } = useTranslation("message");
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = React.useState(true);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -243,7 +249,7 @@ export function ToolPart({
   const outputContent = React.useMemo(() => safeJsonParse(outputText), [outputText]);
 
   const memoryAction = getStringField(args, "action");
-  const title = getToolTitle(tool.toolName, args);
+  const title = getToolTitle(tool.toolName, args, t);
   const isPending = tool.approvalState.type === "pending";
   const isDenied = tool.approvalState.type === "denied";
   const deniedReason =
@@ -272,7 +278,7 @@ export function ToolPart({
   const handleDeny = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!onToolApproval) return;
-    const reason = window.prompt("请输入拒绝原因（可选）", "");
+    const reason = window.prompt(t("tool_part.deny_reason_prompt"), "");
     if (reason === null) return;
     await onToolApproval(tool.toolCallId, false, reason);
   };
@@ -324,7 +330,9 @@ export function ToolPart({
             {tool.toolName === TOOL_NAMES.SEARCH_WEB &&
               getArrayField(outputContent, "items").length > 0 && (
                 <div className="text-muted-foreground text-xs">
-                  检索到 {getArrayField(outputContent, "items").length} 条结果
+                  {t("tool_part.search_results_count", {
+                    count: getArrayField(outputContent, "items").length,
+                  })}
                 </div>
               )}
 
@@ -336,7 +344,9 @@ export function ToolPart({
 
             {isDenied && (
               <div className="text-destructive text-xs">
-                已拒绝{deniedReason ? `: ${deniedReason}` : ""}
+                {deniedReason
+                  ? t("tool_part.denied_with_reason", { reason: deniedReason })
+                  : t("tool_part.denied")}
               </div>
             )}
           </div>
@@ -351,7 +361,9 @@ export function ToolPart({
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>{title}</DrawerTitle>
-            <DrawerDescription>工具名：{tool.toolName}</DrawerDescription>
+            <DrawerDescription>
+              {t("tool_part.tool_name_label", { toolName: tool.toolName })}
+            </DrawerDescription>
           </DrawerHeader>
 
           <div className="max-h-[72vh] space-y-4 overflow-y-auto px-4 pb-6">
@@ -362,16 +374,22 @@ export function ToolPart({
             ) : (
               <div className="space-y-3">
                 <div>
-                  <div className="mb-1 text-muted-foreground text-xs">参数</div>
+                  <div className="mb-1 text-muted-foreground text-xs">
+                    {t("tool_part.parameters")}
+                  </div>
                   <JsonBlock value={args} />
                 </div>
                 {isExecuted && (
                   <div>
-                    <div className="mb-1 text-muted-foreground text-xs">结果</div>
+                    <div className="mb-1 text-muted-foreground text-xs">
+                      {t("tool_part.result")}
+                    </div>
                     <JsonBlock value={outputContent} />
                   </div>
                 )}
-                {!isExecuted && <div className="text-muted-foreground text-sm">工具尚未执行</div>}
+                {!isExecuted && (
+                  <div className="text-muted-foreground text-sm">{t("tool_part.not_executed")}</div>
+                )}
               </div>
             )}
           </div>

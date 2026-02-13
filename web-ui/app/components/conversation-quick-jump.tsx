@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
@@ -44,14 +45,18 @@ function getRoleDotClass(role: string): string {
   return "bg-foreground/80";
 }
 
-function getRoleLabel(role: string): string {
+function getRoleLabel(
+  role: string,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
   const normalizedRole = role.toUpperCase();
-  if (normalizedRole === "USER") return "用户";
-  if (normalizedRole === "ASSISTANT") return "助手";
-  return "消息";
+  if (normalizedRole === "USER") return t("quick_jump.role_user");
+  if (normalizedRole === "ASSISTANT") return t("quick_jump.role_assistant");
+  return t("quick_jump.role_message");
 }
 
 export function ConversationQuickJump({ items }: ConversationQuickJumpProps) {
+  const { t } = useTranslation();
   const { scrollRef } = useStickToBottomContext();
   const [activeMessageId, setActiveMessageId] = React.useState<string | null>(null);
   const canQuickJump = items.length > 1;
@@ -138,6 +143,7 @@ export function ConversationQuickJump({ items }: ConversationQuickJumpProps) {
         <div className="flex flex-col items-start gap-1">
           {items.map((item, index) => {
             const isActive = activeMessageId === item.id;
+            const roleLabel = getRoleLabel(item.role, t);
 
             return (
               <Tooltip key={`quick-jump-${item.id}`}>
@@ -145,8 +151,11 @@ export function ConversationQuickJump({ items }: ConversationQuickJumpProps) {
                   <button
                     type="button"
                     className="flex w-8 items-center justify-start gap-1 transition-colors"
-                    aria-label={`跳转到第 ${index + 1} 条${getRoleLabel(item.role)}消息`}
-                    title={`第 ${index + 1} 条${getRoleLabel(item.role)}消息`}
+                    aria-label={t("quick_jump.jump_to_message", {
+                      index: index + 1,
+                      role: roleLabel,
+                    })}
+                    title={t("quick_jump.message_title", { index: index + 1, role: roleLabel })}
                     onClick={() => {
                       handleQuickJump(item.id);
                     }}
@@ -170,9 +179,9 @@ export function ConversationQuickJump({ items }: ConversationQuickJumpProps) {
                 <TooltipContent side="left" sideOffset={8} className="max-w-64 text-left">
                   <div className="space-y-0.5">
                     <div className="text-[11px] text-background/75">
-                      {index + 1}/{items.length} · {getRoleLabel(item.role)}
+                      {index + 1}/{items.length} · {roleLabel}
                     </div>
-                    <div>{item.preview?.trim() || "无可预览内容"}</div>
+                    <div>{item.preview?.trim() || t("quick_jump.no_preview")}</div>
                   </div>
                 </TooltipContent>
               </Tooltip>
