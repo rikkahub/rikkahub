@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Pin, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -22,6 +23,7 @@ export interface ConversationSearchButtonProps {
 }
 
 export function ConversationSearchButton({ onSelect }: ConversationSearchButtonProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [searching, setSearching] = React.useState(false);
@@ -68,7 +70,7 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
           if (searchError instanceof Error) {
             setError(searchError.message);
           } else {
-            setError("搜索会话失败");
+            setError(t("conversation_search.search_failed"));
           }
         })
         .finally(() => {
@@ -80,19 +82,19 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
     return () => {
       window.clearTimeout(timer);
     };
-  }, [open, query]);
+  }, [open, query, t]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="w-full justify-start" type="button">
           <Search className="size-4" />
-          搜索对话
+          {t("conversation_search.search_conversations")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[80svh] max-w-xl overflow-hidden p-0">
         <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle>搜索会话</DialogTitle>
+          <DialogTitle>{t("conversation_search.search_conversations")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3 px-6 py-4">
@@ -101,14 +103,16 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
             onChange={(event) => {
               setQuery(event.target.value);
             }}
-            placeholder="输入会话标题关键词"
+            placeholder={t("conversation_search.input_placeholder")}
             autoFocus
           />
 
           <ScrollArea className="h-[360px] rounded-md border">
             <div className="space-y-1 p-2">
               {searching ? (
-                <div className="px-2 py-6 text-center text-sm text-muted-foreground">搜索中...</div>
+                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  {t("conversation_search.searching")}
+                </div>
               ) : null}
 
               {!searching && error ? (
@@ -117,13 +121,13 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
 
               {!searching && !error && query.trim().length === 0 ? (
                 <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  输入关键词开始搜索
+                  {t("conversation_search.type_to_start")}
                 </div>
               ) : null}
 
               {!searching && !error && query.trim().length > 0 && results.length === 0 ? (
                 <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  没有找到匹配会话
+                  {t("conversation_search.no_results")}
                 </div>
               ) : null}
 
@@ -139,7 +143,9 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
                       setOpen(false);
                     }}
                   >
-                    <span className="min-w-0 flex-1 truncate">{item.title || "未命名会话"}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {item.title || t("conversation_search.unnamed_conversation")}
+                    </span>
                     {item.isPinned ? <Pin className="size-3 text-primary" /> : null}
                   </button>
                 ))}

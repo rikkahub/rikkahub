@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import dayjs from "dayjs";
+import type { TFunction } from "i18next";
 import { toast } from "sonner";
 import {
   Check,
@@ -69,53 +70,53 @@ import type { AssistantAvatar, AssistantProfile, AssistantTag, ConversationListD
 
 const THEME_OPTIONS: Array<{
   value: Theme;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
   {
     value: "light",
-    label: "浅色",
+    labelKey: "theme_light",
     icon: Sun,
   },
   {
     value: "dark",
-    label: "深色",
+    labelKey: "theme_dark",
     icon: Moon,
   },
   {
     value: "system",
-    label: "跟随系统",
+    labelKey: "theme_system",
     icon: Laptop,
   },
 ];
 
 const COLOR_THEME_OPTIONS: Array<{
   value: ColorTheme;
-  label: string;
+  labelKey: string;
 }> = [
   {
     value: "default",
-    label: "默认",
+    labelKey: "color_default",
   },
   {
     value: "claude",
-    label: "Claude",
+    labelKey: "color_claude",
   },
   {
     value: "t3-chat",
-    label: "T3 Chat",
+    labelKey: "color_t3_chat",
   },
   {
     value: "mono",
-    label: "Mono",
+    labelKey: "color_mono",
   },
   {
     value: "bubblegum",
-    label: "Bubblegum",
+    labelKey: "color_bubblegum",
   },
   {
     value: "custom",
-    label: "自定义",
+    labelKey: "color_custom",
   },
 ];
 
@@ -129,12 +130,12 @@ type ConversationListItem =
   | { type: "date-header"; date: string; label: string }
   | { type: "item"; conversation: ConversationListDto };
 
-function getDateLabel(date: dayjs.Dayjs): string {
+function getDateLabel(date: dayjs.Dayjs, t: TFunction): string {
   const today = dayjs().startOf("day");
   const yesterday = today.subtract(1, "day");
 
-  if (date.isSame(today, "day")) return "今天";
-  if (date.isSame(yesterday, "day")) return "昨天";
+  if (date.isSame(today, "day")) return t("conversation_sidebar.today");
+  if (date.isSame(yesterday, "day")) return t("conversation_sidebar.yesterday");
 
   const native = date.toDate();
   const sameYear = date.year() === today.year();
@@ -146,7 +147,10 @@ function getDateLabel(date: dayjs.Dayjs): string {
   return formatter.format(native);
 }
 
-function groupConversations(conversations: ConversationListDto[]): ConversationListItem[] {
+function groupConversations(
+  conversations: ConversationListDto[],
+  t: TFunction,
+): ConversationListItem[] {
   const items: ConversationListItem[] = [];
   const pinned = conversations.filter((c) => c.isPinned);
   const unpinned = conversations.filter((c) => !c.isPinned);
@@ -163,7 +167,7 @@ function groupConversations(conversations: ConversationListDto[]): ConversationL
     const date = dayjs(c.updateAt).startOf("day");
     const dateKey = date.format("YYYY-MM-DD");
     if (dateKey !== lastDate) {
-      items.push({ type: "date-header", date: dateKey, label: getDateLabel(date) });
+      items.push({ type: "date-header", date: dateKey, label: getDateLabel(date, t) });
       lastDate = dateKey;
     }
     items.push({ type: "item", conversation: c });
@@ -217,6 +221,7 @@ function ConversationListRow({
   onUpdateTitle,
   onDelete,
 }: ConversationListRowProps) {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [pendingAction, setPendingAction] = React.useState<string | null>(null);
 
@@ -244,12 +249,12 @@ function ConversationListRow({
         }
       } catch (error) {
         console.error("Conversation action failed", error);
-        toast.error(messages?.error ?? "操作失败，请稍后重试");
+        toast.error(messages?.error ?? t("conversation_sidebar.action_failed_retry"));
       } finally {
         setPendingAction(null);
       }
     },
-    [],
+    [t],
   );
   return (
     <SidebarMenuItem>
@@ -264,13 +269,15 @@ function ConversationListRow({
           }}
         >
           <span className="flex w-full items-center gap-2">
-            <span className="flex-1 truncate">{conversation.title || "未命名会话"}</span>
+            <span className="flex-1 truncate">
+              {conversation.title || t("conversation_sidebar.unnamed_conversation")}
+            </span>
             {conversation.isPinned && <Pin className="size-3 text-primary" aria-hidden />}
             {conversation.isGenerating && (
               <span
                 className="inline-block size-2 rounded-full bg-emerald-500"
-                aria-label="生成中"
-                title="生成中"
+                aria-label={t("conversation_sidebar.generating")}
+                title={t("conversation_sidebar.generating")}
               />
             )}
           </span>
@@ -281,8 +288,8 @@ function ConversationListRow({
             <DropdownMenuTrigger asChild>
               <SidebarMenuAction
                 showOnHover
-                aria-label="会话操作"
-                title="会话操作"
+                aria-label={t("conversation_sidebar.conversation_actions")}
+                title={t("conversation_sidebar.conversation_actions")}
                 disabled={pendingAction !== null}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -303,8 +310,12 @@ function ConversationListRow({
                         await onPin(conversation.id);
                       },
                       {
-                        success: conversation.isPinned ? "已取消置顶" : "已置顶",
-                        error: conversation.isPinned ? "取消置顶失败" : "置顶失败",
+                        success: conversation.isPinned
+                          ? t("conversation_sidebar.unpin_success")
+                          : t("conversation_sidebar.pin_success"),
+                        error: conversation.isPinned
+                          ? t("conversation_sidebar.unpin_failed")
+                          : t("conversation_sidebar.pin_failed"),
                       },
                     );
                   }}
@@ -314,7 +325,11 @@ function ConversationListRow({
                   ) : (
                     <Pin className="size-4" />
                   )}
-                  <span>{conversation.isPinned ? "取消置顶" : "置顶"}</span>
+                  <span>
+                    {conversation.isPinned
+                      ? t("conversation_sidebar.unpin")
+                      : t("conversation_sidebar.pin")}
+                  </span>
                 </DropdownMenuItem>
               )}
 
@@ -329,14 +344,14 @@ function ConversationListRow({
                         await onRegenerateTitle(conversation.id);
                       },
                       {
-                        success: "已请求重新生成标题",
-                        error: "重新生成标题失败",
+                        success: t("conversation_sidebar.regenerate_title_success"),
+                        error: t("conversation_sidebar.regenerate_title_failed"),
                       },
                     );
                   }}
                 >
                   <RefreshCw className="size-4" />
-                  <span>重新生成标题</span>
+                  <span>{t("conversation_sidebar.regenerate_title")}</span>
                 </DropdownMenuItem>
               )}
 
@@ -345,12 +360,14 @@ function ConversationListRow({
                   disabled={pendingAction !== null}
                   onSelect={(event) => {
                     event.preventDefault();
-                    const nextTitle = window.prompt("请输入新标题", conversation.title)?.trim();
+                    const nextTitle = window
+                      .prompt(t("conversation_sidebar.edit_title_prompt"), conversation.title)
+                      ?.trim();
                     if (nextTitle == null) {
                       return;
                     }
                     if (nextTitle.length === 0) {
-                      toast.error("标题不能为空");
+                      toast.error(t("conversation_sidebar.title_empty"));
                       return;
                     }
                     if (nextTitle === conversation.title) {
@@ -362,14 +379,14 @@ function ConversationListRow({
                         await onUpdateTitle(conversation.id, nextTitle);
                       },
                       {
-                        success: "标题已更新",
-                        error: "更新标题失败",
+                        success: t("conversation_sidebar.title_updated"),
+                        error: t("conversation_sidebar.title_update_failed"),
                       },
                     );
                   }}
                 >
                   <Pencil className="size-4" />
-                  <span>手动编辑标题</span>
+                  <span>{t("conversation_sidebar.edit_title")}</span>
                 </DropdownMenuItem>
               )}
 
@@ -379,11 +396,13 @@ function ConversationListRow({
                     disabled={pendingAction !== null || moveTargets.length === 0}
                   >
                     <MoveRight className="size-4" />
-                    <span>移动到助手</span>
+                    <span>{t("conversation_sidebar.move_to_assistant")}</span>
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     {moveTargets.length === 0 ? (
-                      <DropdownMenuItem disabled>没有可用助手</DropdownMenuItem>
+                      <DropdownMenuItem disabled>
+                        {t("conversation_sidebar.no_available_assistants")}
+                      </DropdownMenuItem>
                     ) : (
                       moveTargets.map((assistant) => (
                         <DropdownMenuItem
@@ -397,8 +416,10 @@ function ConversationListRow({
                                 await onMoveToAssistant(conversation.id, assistant.id);
                               },
                               {
-                                success: `已移动到 ${getAssistantDisplayName(assistant.name)}`,
-                                error: "移动会话失败",
+                                success: t("conversation_sidebar.moved_to_assistant", {
+                                  assistant: getAssistantDisplayName(assistant.name),
+                                }),
+                                error: t("conversation_sidebar.move_conversation_failed"),
                               },
                             );
                           }}
@@ -419,7 +440,7 @@ function ConversationListRow({
                     disabled={pendingAction !== null}
                     onSelect={(event) => {
                       event.preventDefault();
-                      if (!window.confirm("确定删除这个会话吗？")) {
+                      if (!window.confirm(t("conversation_sidebar.delete_confirm"))) {
                         return;
                       }
                       void runAction(
@@ -428,14 +449,14 @@ function ConversationListRow({
                           await onDelete(conversation.id);
                         },
                         {
-                          success: "会话已删除",
-                          error: "删除会话失败",
+                          success: t("conversation_sidebar.delete_success"),
+                          error: t("conversation_sidebar.delete_failed"),
                         },
                       );
                     }}
                   >
                     <Trash2 className="size-4" />
-                    <span>删除会话</span>
+                    <span>{t("conversation_sidebar.delete_conversation")}</span>
                   </DropdownMenuItem>
                 </>
               )}
@@ -464,14 +485,14 @@ function LanguageSwitcher() {
           variant="outline"
           size="icon-sm"
           type="button"
-          aria-label={`语言：${currentOption.label}`}
-          title={`语言：${currentOption.label}`}
+          aria-label={`Language: ${currentOption.label}`}
+          title={`Language: ${currentOption.label}`}
         >
           <Languages className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-40" side="top" align="end">
-        <DropdownMenuLabel>语言</DropdownMenuLabel>
+        <DropdownMenuLabel>Language</DropdownMenuLabel>
         {LANGUAGE_OPTIONS.map((option) => {
           const selected = option.value === currentLanguage;
           return (
@@ -512,6 +533,7 @@ export function ConversationSidebar({
   onDelete,
   onCreateConversation,
 }: ConversationSidebarProps) {
+  const { t, i18n } = useTranslation();
   const { theme, setTheme, colorTheme, setColorTheme, customThemeCss, setCustomThemeCss } =
     useTheme();
 
@@ -533,9 +555,9 @@ export function ConversationSidebar({
     (themeCss: CustomThemeCss) => {
       setCustomThemeCss(themeCss);
       setColorTheme("custom");
-      toast.success("自定义主题已保存");
+      toast.success(t("conversation_sidebar.custom_theme_saved"));
     },
-    [setColorTheme, setCustomThemeCss],
+    [setColorTheme, setCustomThemeCss, t],
   );
 
   const currentAssistant = React.useMemo(
@@ -544,7 +566,10 @@ export function ConversationSidebar({
     [assistants, currentAssistantId],
   );
 
-  const groupedItems = React.useMemo(() => groupConversations(conversations), [conversations]);
+  const groupedItems = React.useMemo(
+    () => groupConversations(conversations, t),
+    [conversations, i18n.resolvedLanguage, t],
+  );
 
   const filteredAssistants = React.useMemo(() => {
     if (selectedTagIds.length === 0) {
@@ -576,7 +601,7 @@ export function ConversationSidebar({
         if (switchAssistantError instanceof Error) {
           setSwitchError(switchAssistantError.message);
         } else {
-          setSwitchError("切换助手失败");
+          setSwitchError(t("conversation_sidebar.switch_assistant_failed"));
         }
       } finally {
         setSwitchingAssistantId(null);
@@ -618,7 +643,9 @@ export function ConversationSidebar({
           />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium leading-none">{userName}</div>
-            <div className="mt-1 truncate text-xs text-muted-foreground">欢迎回来</div>
+            <div className="mt-1 truncate text-xs text-muted-foreground">
+              {t("conversation_sidebar.welcome_back")}
+            </div>
           </div>
         </div>
       </SidebarHeader>
@@ -632,7 +659,7 @@ export function ConversationSidebar({
               onClick={onCreateConversation}
             >
               <Plus className="size-4" />
-              新建对话
+              {t("conversation_sidebar.new_conversation")}
             </Button>
 
             <ConversationSearchButton onSelect={onSelect} />
@@ -640,7 +667,7 @@ export function ConversationSidebar({
         </SidebarGroup>
 
         <SidebarGroup className="flex min-h-0 flex-1 flex-col">
-          <SidebarGroupLabel>Conversations</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("conversation_sidebar.conversations")}</SidebarGroupLabel>
           <InfiniteScrollArea
             dataLength={conversations.length}
             next={loadMore}
@@ -650,7 +677,9 @@ export function ConversationSidebar({
             <SidebarMenu>
               {loading && (
                 <SidebarMenuItem>
-                  <div className="px-2 py-2 text-xs text-muted-foreground">加载中...</div>
+                  <div className="px-2 py-2 text-xs text-muted-foreground">
+                    {t("conversation_sidebar.loading")}
+                  </div>
                 </SidebarMenuItem>
               )}
               {error && (
@@ -660,7 +689,9 @@ export function ConversationSidebar({
               )}
               {!loading && !error && conversations.length === 0 && (
                 <SidebarMenuItem>
-                  <div className="px-2 py-2 text-xs text-muted-foreground">暂无会话</div>
+                  <div className="px-2 py-2 text-xs text-muted-foreground">
+                    {t("conversation_sidebar.no_conversations")}
+                  </div>
                 </SidebarMenuItem>
               )}
               {groupedItems.map((listItem) => {
@@ -669,7 +700,7 @@ export function ConversationSidebar({
                     <SidebarMenuItem key="pinned_header">
                       <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-semibold text-primary">
                         <Pin className="size-3" />
-                        置顶
+                        {t("conversation_sidebar.pinned")}
                       </div>
                     </SidebarMenuItem>
                   );
@@ -708,8 +739,8 @@ export function ConversationSidebar({
                 variant="secondary"
                 size="icon-sm"
                 className="pointer-events-auto shadow-sm"
-                aria-label="回到顶部"
-                title="回到顶部"
+                aria-label={t("conversation_sidebar.back_to_top")}
+                title={t("conversation_sidebar.back_to_top")}
                 onClick={handleBackToTop}
               >
                 <ArrowUp className="size-4" />
@@ -741,13 +772,13 @@ export function ConversationSidebar({
                   <span className="truncate">{getAssistantDisplayName(currentAssistant.name)}</span>
                 </>
               ) : (
-                <span className="truncate">选择助手</span>
+                <span className="truncate">{t("conversation_sidebar.select_assistant")}</span>
               )}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[80svh] max-w-xl overflow-hidden p-0">
             <DialogHeader className="border-b px-6 py-4">
-              <DialogTitle>选择助手</DialogTitle>
+              <DialogTitle>{t("conversation_sidebar.select_assistant")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 px-6 py-4">
               {assistantTags.length > 0 && (
@@ -794,12 +825,12 @@ export function ConversationSidebar({
                         {selected && !switching && (
                           <Badge variant="secondary" className="gap-1">
                             <Check className="size-3" />
-                            当前
+                            {t("conversation_sidebar.current")}
                           </Badge>
                         )}
                         {switching && (
                           <Badge variant="secondary" className="text-xs">
-                            切换中...
+                            {t("conversation_sidebar.switching")}
                           </Badge>
                         )}
                       </button>
@@ -807,7 +838,7 @@ export function ConversationSidebar({
                   })}
                   {filteredAssistants.length === 0 && (
                     <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                      没有符合标签的助手
+                      {t("conversation_sidebar.no_assistants_by_tag")}
                     </div>
                   )}
                 </div>
@@ -832,14 +863,18 @@ export function ConversationSidebar({
                 variant="outline"
                 size="icon-sm"
                 type="button"
-                aria-label={`颜色模式：${currentThemeOption.label}`}
-                title={`颜色模式：${currentThemeOption.label}`}
+                aria-label={t("conversation_sidebar.theme_mode_label", {
+                  label: t(`conversation_sidebar.${currentThemeOption.labelKey}`),
+                })}
+                title={t("conversation_sidebar.theme_mode_label", {
+                  label: t(`conversation_sidebar.${currentThemeOption.labelKey}`),
+                })}
               >
                 <CurrentThemeIcon className="size-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-44" side="top" align="end">
-              <DropdownMenuLabel>颜色模式</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("conversation_sidebar.theme_mode")}</DropdownMenuLabel>
               {THEME_OPTIONS.map((option) => {
                 const selected = option.value === currentTheme;
                 const ThemeOptionIcon = option.icon;
@@ -851,7 +886,7 @@ export function ConversationSidebar({
                     }}
                   >
                     <ThemeOptionIcon className="size-4" />
-                    <span className="flex-1">{option.label}</span>
+                    <span className="flex-1">{t(`conversation_sidebar.${option.labelKey}`)}</span>
                     <Check className={selected ? "size-4" : "size-4 opacity-0"} />
                   </DropdownMenuItem>
                 );
@@ -865,14 +900,18 @@ export function ConversationSidebar({
                 variant="outline"
                 size="icon-sm"
                 type="button"
-                aria-label={`主题色：${currentColorThemeOption.label}`}
-                title={`主题色：${currentColorThemeOption.label}`}
+                aria-label={t("conversation_sidebar.theme_color_label", {
+                  label: t(`conversation_sidebar.${currentColorThemeOption.labelKey}`),
+                })}
+                title={t("conversation_sidebar.theme_color_label", {
+                  label: t(`conversation_sidebar.${currentColorThemeOption.labelKey}`),
+                })}
               >
                 <Palette className="size-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-44" side="top" align="end">
-              <DropdownMenuLabel>主题色</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("conversation_sidebar.theme_color")}</DropdownMenuLabel>
               {COLOR_THEME_OPTIONS.map((option) => {
                 const selected = option.value === colorTheme;
                 return (
@@ -885,7 +924,7 @@ export function ConversationSidebar({
                       }
                     }}
                   >
-                    <span className="flex-1">{option.label}</span>
+                    <span className="flex-1">{t(`conversation_sidebar.${option.labelKey}`)}</span>
                     <Check className={selected ? "size-4" : "size-4 opacity-0"} />
                   </DropdownMenuItem>
                 );
@@ -896,7 +935,7 @@ export function ConversationSidebar({
                   setCustomThemeOpen(true);
                 }}
               >
-                <span className="flex-1">编辑自定义 CSS</span>
+                <span className="flex-1">{t("conversation_sidebar.edit_custom_css")}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
