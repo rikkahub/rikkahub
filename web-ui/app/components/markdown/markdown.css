@@ -147,7 +147,7 @@
 
 /* Legacy Code - Block (fallback) */
 .markdown pre {
-  @apply my-4 rounded-lg border border-border bg-muted p-4 overflow-x-auto;
+  @apply my-4 rounded-lg border border-border p-4 overflow-x-auto;
 }
 
 .markdown pre code {
