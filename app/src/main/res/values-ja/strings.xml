@@ -806,5 +806,7 @@
   <string name="setting_page_web_server_lan_address">LANアドレス</string>
   <string name="setting_page_web_server_mdns_address">mDNSアドレス</string>
   <string name="setting_page_web_server_error">エラー</string>
+  <string name="setting_page_web_server_start">開始</string>
+  <string name="setting_page_web_server_stop">停止</string>
 </resources>
 

@@ -799,5 +799,7 @@
   <string name="setting_page_web_server_lan_address">LAN-адрес</string>
   <string name="setting_page_web_server_mdns_address">Адрес mDNS</string>
   <string name="setting_page_web_server_error">Ошибка</string>
+  <string name="setting_page_web_server_start">Запустить</string>
+  <string name="setting_page_web_server_stop">Остановить</string>
 </resources>
 

@@ -3,19 +3,18 @@ package me.rerere.rikkahub.ui.pages.setting
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -33,6 +32,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Play
+import com.composables.icons.lucide.Square
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -62,40 +64,55 @@ fun SettingWebPage() {
                 scrollBehavior = scrollBehavior,
             )
         },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = {
+                    if (serverState.isLoading) return@ExtendedFloatingActionButton
+                    val checked = !serverState.isRunning
+                    if (checked) {
+                        webServerManager.start(port = settings.webServerPort)
+                    } else {
+                        webServerManager.stop()
+                    }
+                    scope.launch {
+                        settingsStore.update { it.copy(webServerEnabled = checked) }
+                    }
+                },
+                icon = {
+                    if (serverState.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 3.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (serverState.isRunning) Lucide.Square else Lucide.Play,
+                            contentDescription = null,
+                        )
+                    }
+                },
+                text = {
+                    Text(
+                        if (serverState.isRunning) {
+                            stringResource(R.string.setting_page_web_server_stop)
+                        } else {
+                            stringResource(R.string.setting_page_web_server_start)
+                        }
+                    )
+                },
+                containerColor = if (serverState.isRunning) {
+                    MaterialTheme.colorScheme.errorContainer
+                } else {
+                    MaterialTheme.colorScheme.primaryContainer
+                },
+            )
+        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = innerPadding + PaddingValues(8.dp),
         ) {
-            item {
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.setting_page_web_server)) },
-                    supportingContent = { Text(stringResource(R.string.setting_page_web_server_enable)) },
-                    trailingContent = {
-                        if (serverState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Switch(
-                                checked = serverState.isRunning,
-                                onCheckedChange = { checked ->
-                                    if (checked) {
-                                        webServerManager.start(port = settings.webServerPort)
-                                    } else {
-                                        webServerManager.stop()
-                                    }
-                                    scope.launch {
-                                        settingsStore.update { it.copy(webServerEnabled = checked) }
-                                    }
-                                }
-                            )
-                        }
-                    }
-                )
-            }
 
             item {
                 ListItem(
