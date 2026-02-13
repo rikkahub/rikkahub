@@ -259,25 +259,73 @@ server: {
 
 **支持语言**: zh-CN (默认), en-US
 
+**命名空间组织** (`app/i18n.ts`):
+翻译文件按功能模块拆分为多个命名空间,避免单一文件过大:
+- `common`: 通用 UI 翻译(侧边栏、主题、快捷跳转等)
+- `input`: 输入相关翻译(聊天输入、模型选择、文件选择器等)
+- `markdown`: Markdown 渲染翻译(代码块、复制按钮等)
+- `message`: 消息显示翻译(消息部分、工具调用、推理步骤等)
+
 **配置** (`app/i18n.ts`):
 ```typescript
 // 语言检测优先级: localStorage > 浏览器语言 > 默认中文
 const fromStorage = window.localStorage.getItem("lang");
 const browserLanguage = window.navigator.language;
 const initialLanguage = fromStorage || (browserLanguage.startsWith("zh") ? "zh-CN" : "en-US");
+
+// 命名空间配置
+i18n.use(initReactI18next).init({
+  resources: {
+    "zh-CN": {
+      common: zhCNCommon,
+      input: zhCNInput,
+      markdown: zhCNMarkdown,
+      message: zhCNMessage,
+    },
+    "en-US": { /* ... */ },
+  },
+  defaultNS: "common",  // 默认命名空间
+  ns: ["common", "input", "markdown", "message"],
+});
 ```
 
-**翻译文件**: `app/locales/{lang}/common.json`
+**翻译文件结构**:
+```
+app/locales/
+├── zh-CN/
+│   ├── common.json     # 通用翻译
+│   ├── input.json      # 输入相关
+│   ├── markdown.json   # Markdown 渲染
+│   └── message.json    # 消息显示
+└── en-US/
+    ├── common.json
+    ├── input.json
+    ├── markdown.json
+    └── message.json
+```
 
 **使用方式**:
 ```typescript
 import { useTranslation } from "react-i18next";
 
 function MyComponent() {
+  // 默认命名空间 (common)
   const { t } = useTranslation();
   return <div>{t("chat.send_hint_enter")}</div>;
+
+  // 指定命名空间
+  const { t: tInput } = useTranslation("input");
+  return <div>{tInput("model_list.title")}</div>;
+
+  // 使用命名空间前缀 (推荐)
+  return <div>{t("input:model_list.title")}</div>;
 }
 ```
+
+**添加新翻译键**:
+1. 确定合适的命名空间 (common/input/markdown/message)
+2. 在对应的 `zh-CN/*.json` 和 `en-US/*.json` 中添加键值对
+3. 使用 `t("namespace:key")` 或 `t("key")` (默认命名空间) 访问
 
 ## Build Process
 
