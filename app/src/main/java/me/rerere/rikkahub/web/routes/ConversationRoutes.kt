@@ -10,14 +10,12 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.sse.heartbeat
 import io.ktor.server.sse.sse
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.merge
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
@@ -28,9 +26,9 @@ import me.rerere.rikkahub.web.dto.ConversationListInvalidateEvent
 import me.rerere.rikkahub.web.dto.ConversationNodeUpdateEvent
 import me.rerere.rikkahub.web.dto.ConversationSnapshotEvent
 import me.rerere.rikkahub.web.dto.EditMessageRequest
+import me.rerere.rikkahub.web.dto.ErrorEvent
 import me.rerere.rikkahub.web.dto.ForkConversationRequest
 import me.rerere.rikkahub.web.dto.ForkConversationResponse
-import me.rerere.rikkahub.web.dto.MessageNodeDto
 import me.rerere.rikkahub.web.dto.MoveConversationRequest
 import me.rerere.rikkahub.web.dto.PagedResult
 import me.rerere.rikkahub.web.dto.RegenerateRequest
@@ -303,42 +301,71 @@ fun Route.conversationRoutes(
                 var sequence = 0L
                 var previousDto: ConversationDto? = null
 
-                combine(
+                val knownErrorIds = chatService.errors.value.map { it.id }.toMutableSet()
+
+                val conversationEvents = combine(
                     chatService.getConversationFlow(uuid),
                     chatService
                         .getGenerationJobStateFlow(uuid)
                         .map { it != null }
                         .distinctUntilChanged()
                 ) { conversation, isGenerating ->
-                    conversation.toDto(isGenerating)
-                }.collect { currentDto ->
-                    sequence += 1
+                    ConversationStreamPayload.Conversation(conversation.toDto(isGenerating))
+                }
 
-                    val nodeDiff = previousDto?.singleNodeDiffOrNull(currentDto)
-                    if (nodeDiff != null) {
-                        val json = JsonInstant.encodeToString(
-                            ConversationNodeUpdateEvent(
-                                seq = sequence,
-                                conversationId = currentDto.id,
-                                nodeId = nodeDiff.node.id,
-                                nodeIndex = nodeDiff.nodeIndex,
-                                node = nodeDiff.node,
-                                updateAt = currentDto.updateAt,
-                                isGenerating = currentDto.isGenerating
-                            )
-                        )
-                        send(data = json, event = "node_update")
-                    } else {
-                        val json = JsonInstant.encodeToString(
-                            ConversationSnapshotEvent(
-                                seq = sequence,
-                                conversation = currentDto
-                            )
-                        )
-                        send(data = json, event = "snapshot")
+                val errorEvents = chatService.errors.map { errors ->
+                    errors
+                        .asSequence()
+                        .filter { it.conversationId == uuid && knownErrorIds.add(it.id) }
+                        .map { chatError ->
+                            chatError.error.message?.takeIf { it.isNotBlank() }
+                                ?: chatError.error.toString()
+                        }
+                        .toList()
+                }.map { events ->
+                    ConversationStreamPayload.BatchErrors(events)
+                }
+
+                merge(conversationEvents, errorEvents).collect { payload ->
+                    when (payload) {
+                        is ConversationStreamPayload.Conversation -> {
+                            sequence += 1
+                            val currentDto = payload.value
+                            val nodeDiff = previousDto?.singleNodeDiffOrNull(currentDto)
+                            if (nodeDiff != null) {
+                                val json = JsonInstant.encodeToString(
+                                    ConversationNodeUpdateEvent(
+                                        seq = sequence,
+                                        conversationId = currentDto.id,
+                                        nodeId = nodeDiff.node.id,
+                                        nodeIndex = nodeDiff.nodeIndex,
+                                        node = nodeDiff.node,
+                                        updateAt = currentDto.updateAt,
+                                        isGenerating = currentDto.isGenerating
+                                    )
+                                )
+                                send(data = json, event = "node_update")
+                            } else {
+                                val json = JsonInstant.encodeToString(
+                                    ConversationSnapshotEvent(
+                                        seq = sequence,
+                                        conversation = currentDto
+                                    )
+                                )
+                                send(data = json, event = "snapshot")
+                            }
+                            previousDto = currentDto
+                        }
+
+                        is ConversationStreamPayload.BatchErrors -> {
+                            payload.messages.forEach { message ->
+                                val json = JsonInstant.encodeToString(
+                                    ErrorEvent(message = message)
+                                )
+                                send(data = json, event = "error")
+                            }
+                        }
                     }
-
-                    previousDto = currentDto
                 }
             } finally {
                 chatService.removeConversationReference(uuid)
@@ -347,46 +374,7 @@ fun Route.conversationRoutes(
     }
 }
 
-private data class NodeDiff(
-    val nodeIndex: Int,
-    val node: MessageNodeDto
-)
-
-private fun ConversationDto.singleNodeDiffOrNull(current: ConversationDto): NodeDiff? {
-    if (id != current.id || assistantId != current.assistantId || createAt != current.createAt) {
-        return null
-    }
-
-    if (
-        title != current.title ||
-        truncateIndex != current.truncateIndex ||
-        chatSuggestions != current.chatSuggestions ||
-        isPinned != current.isPinned
-    ) {
-        return null
-    }
-
-    if (messages.size > current.messages.size) {
-        return null
-    }
-
-    var changedIndex = -1
-    val maxSize = maxOf(messages.size, current.messages.size)
-    for (index in 0 until maxSize) {
-        val previousNode = messages.getOrNull(index)
-        val currentNode = current.messages.getOrNull(index)
-        if (previousNode == currentNode) continue
-
-        if (changedIndex != -1) {
-            return null
-        }
-        changedIndex = index
-    }
-
-    if (changedIndex == -1) {
-        return null
-    }
-
-    val changedNode = current.messages.getOrNull(changedIndex) ?: return null
-    return NodeDiff(nodeIndex = changedIndex, node = changedNode)
+private sealed interface ConversationStreamPayload {
+    data class Conversation(val value: ConversationDto) : ConversationStreamPayload
+    data class BatchErrors(val messages: List<String>) : ConversationStreamPayload
 }

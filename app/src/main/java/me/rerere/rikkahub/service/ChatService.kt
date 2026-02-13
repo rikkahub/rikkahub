@@ -89,6 +89,7 @@ private const val TAG = "ChatService"
 data class ChatError(
     val id: Uuid = Uuid.random(),
     val error: Throwable,
+    val conversationId: Uuid? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -130,9 +131,9 @@ class ChatService(
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
     val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
 
-    fun addError(error: Throwable) {
+    fun addError(error: Throwable, conversationId: Uuid? = null) {
         if (error is CancellationException) return
-        _errors.update { it + ChatError(error = error) }
+        _errors.update { it + ChatError(error = error, conversationId = conversationId) }
     }
 
     fun dismissError(id: Uuid) {
@@ -290,7 +291,7 @@ class ChatService(
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
                 e.printStackTrace()
-                addError(e)
+                addError(e, conversationId)
             }
         }
         session.setJob(job)
@@ -350,7 +351,7 @@ class ChatService(
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
-                addError(e)
+                addError(e, conversationId)
             }
         }
 
@@ -412,7 +413,7 @@ class ChatService(
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
-                addError(e)
+                addError(e, conversationId)
             }
         }
 
@@ -437,7 +438,10 @@ class ChatService(
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
                 if (settings.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
-                    addError(IllegalStateException(context.getString(R.string.tools_warning)))
+                    addError(
+                        IllegalStateException(context.getString(R.string.tools_warning)),
+                        conversationId
+                    )
                 }
             }
 
@@ -526,7 +530,7 @@ class ChatService(
             cancelLiveUpdateNotification(conversationId)
 
             it.printStackTrace()
-            addError(it)
+            addError(it, conversationId)
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
         }.onSuccess {
@@ -637,7 +641,7 @@ class ChatService(
             }
         }.onFailure {
             it.printStackTrace()
-            addError(it)
+            addError(it, conversationId)
         }
     }
 
@@ -957,7 +961,7 @@ class ChatService(
             } catch (e: Exception) {
                 // Clear translation field on error
                 clearTranslationField(conversationId, message.id)
-                addError(e)
+                addError(e, conversationId)
             }
         }
     }

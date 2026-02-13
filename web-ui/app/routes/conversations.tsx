@@ -38,15 +38,20 @@ import {
   type MessageNodeDto,
   type MessageDto,
   type ConversationNodeUpdateEventDto,
+  type ConversationErrorEventDto,
   type ConversationSnapshotEventDto,
   type UIMessagePart,
 } from "~/types";
 import { MessageSquare } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
+import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 
-type ConversationStreamEvent = ConversationSnapshotEventDto | ConversationNodeUpdateEventDto;
+type ConversationStreamEvent =
+  | ConversationSnapshotEventDto
+  | ConversationNodeUpdateEventDto
+  | ConversationErrorEventDto;
 
 interface SelectedNodeMessage {
   node: MessageNodeDto;
@@ -333,6 +338,11 @@ function useConversationDetail(activeId: string | null, updateSummary: Conversat
       {
         onMessage: ({ event, data }) => {
           if (!mounted) return;
+
+          if (event === "error" && data.type === "error") {
+            toast.error(data.message);
+            return;
+          }
 
           if (event === "snapshot" && data.type === "snapshot") {
             setDetail(data.conversation);

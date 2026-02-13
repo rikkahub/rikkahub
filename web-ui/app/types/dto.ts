@@ -87,3 +87,8 @@ export interface ConversationNodeUpdateEventDto {
   updateAt: number;
   isGenerating: boolean;
 }
+
+export interface ConversationErrorEventDto {
+  type: "error";
+  message: string;
+}

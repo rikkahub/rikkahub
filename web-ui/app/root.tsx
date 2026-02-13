@@ -51,7 +51,7 @@ function AppContent() {
   return (
     <ThemeProvider defaultTheme="system">
       <Outlet />
-      <Toaster />
+      <Toaster position="top-center"/>
     </ThemeProvider>
   );
 }
