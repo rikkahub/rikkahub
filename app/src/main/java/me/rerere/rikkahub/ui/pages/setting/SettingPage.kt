@@ -256,8 +256,8 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
             item {
                 SettingItem(
                     navController = navController,
-                    title = { Text("Web Server") },
-                    description = { Text("Allow you access RikkaHub via Web") },
+                    title = { Text(stringResource(R.string.setting_page_web_server)) },
+                    description = { Text(stringResource(R.string.setting_page_web_server_desc)) },
                     icon = { Icon(Lucide.Globe, "Web Server") },
                     link = Screen.SettingWeb
                 )

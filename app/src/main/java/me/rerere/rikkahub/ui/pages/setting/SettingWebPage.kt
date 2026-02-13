@@ -29,10 +29,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -55,7 +57,7 @@ fun SettingWebPage() {
     Scaffold(
         topBar = {
             LargeTopAppBar(
-                title = { Text("Web Server") },
+                title = { Text(stringResource(R.string.setting_page_web_server)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
             )
@@ -68,8 +70,37 @@ fun SettingWebPage() {
         ) {
             item {
                 ListItem(
-                    headlineContent = { Text("Port") },
-                    supportingContent = { Text("Web server listen port (1024-65535)") },
+                    headlineContent = { Text(stringResource(R.string.setting_page_web_server)) },
+                    supportingContent = { Text(stringResource(R.string.setting_page_web_server_enable)) },
+                    trailingContent = {
+                        if (serverState.isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Switch(
+                                checked = serverState.isRunning,
+                                onCheckedChange = { checked ->
+                                    if (checked) {
+                                        webServerManager.start(port = settings.webServerPort)
+                                    } else {
+                                        webServerManager.stop()
+                                    }
+                                    scope.launch {
+                                        settingsStore.update { it.copy(webServerEnabled = checked) }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                )
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.setting_page_web_server_port)) },
+                    supportingContent = { Text(stringResource(R.string.setting_page_web_server_port_desc)) },
                     trailingContent = {
                         TextField(
                             value = portText,
@@ -100,38 +131,9 @@ fun SettingWebPage() {
             }
 
             item {
-                ListItem(
-                    headlineContent = { Text("Web Server") },
-                    supportingContent = { Text("Enable the embedded web server") },
-                    trailingContent = {
-                        if (serverState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Switch(
-                                checked = serverState.isRunning,
-                                onCheckedChange = { checked ->
-                                    if (checked) {
-                                        webServerManager.start(port = settings.webServerPort)
-                                    } else {
-                                        webServerManager.stop()
-                                    }
-                                    scope.launch {
-                                        settingsStore.update { it.copy(webServerEnabled = checked) }
-                                    }
-                                }
-                            )
-                        }
-                    }
-                )
-            }
-
-            item {
                 AnimatedVisibility(visible = serverState.isRunning) {
                     ListItem(
-                        headlineContent = { Text("LAN Address") },
+                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_lan_address)) },
                         supportingContent = {
                             Text("http://${serverState.address ?: "localhost"}:${serverState.port}")
                         }
@@ -142,7 +144,7 @@ fun SettingWebPage() {
             item {
                 AnimatedVisibility(visible = serverState.isRunning && serverState.hostname != null) {
                     ListItem(
-                        headlineContent = { Text("mDNS Address") },
+                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_mdns_address)) },
                         supportingContent = {
                             Text("http://${serverState.hostname}:${serverState.port}")
                         }
@@ -155,7 +157,7 @@ fun SettingWebPage() {
                     ListItem(
                         headlineContent = {
                             Text(
-                                text = "Error",
+                                text = stringResource(R.string.setting_page_web_server_error),
                                 color = MaterialTheme.colorScheme.error
                             )
                         },
