@@ -242,6 +242,11 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
                 try {
                     val jsonData = json.parseToJsonElement(data).jsonObject
+                    if (jsonData["promptFeedback"] != null) {
+                        val reason =
+                            jsonData["promptFeedback"]?.jsonObject?.get("blockReason")?.jsonPrimitiveOrNull?.contentOrNull
+                        close(RuntimeException("Prompt feedback: $reason"))
+                    }
                     val candidates = jsonData["candidates"]?.jsonArray ?: return
                     if (candidates.isEmpty()) return
                     val usage = parseUsageMeta(jsonData["usageMetadata"] as? JsonObject)
