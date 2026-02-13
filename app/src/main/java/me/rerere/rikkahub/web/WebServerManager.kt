@@ -22,9 +22,11 @@ private const val TAG = "WebServerManager"
 
 data class WebServerState(
     val isRunning: Boolean = false,
+    val isLoading: Boolean = false,
     val port: Int = 8080,
     val serviceName: String = DEFAULT_SERVICE_NAME,
     val hostname: String? = null,
+    val address: String? = null,
     val error: String? = null
 )
 
@@ -53,6 +55,7 @@ class WebServerManager(
 
         appScope.launch {
             try {
+                _state.value = _state.value.copy(isLoading = true)
                 Log.i(TAG, "Starting web server on port $port")
                 server = startWebServer(port = port) {
                     configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
@@ -70,7 +73,8 @@ class WebServerManager(
                         onRegistered = { info ->
                             _state.value = _state.value.copy(
                                 serviceName = info.serviceName,
-                                hostname = info.hostname
+                                hostname = info.hostname,
+                                address = info.address.hostAddress
                             )
                         }
                     )
@@ -91,6 +95,8 @@ class WebServerManager(
     }
 
     fun stop() {
+        _state.value =
+            _state.value.copy(isRunning = false, isLoading = true, hostname = null, address = null, error = null)
         appScope.launch {
             try {
                 Log.i(TAG, "Stopping web server")
@@ -101,11 +107,11 @@ class WebServerManager(
                 }.onFailure {
                     Log.w(TAG, "NSD unregister failed", it)
                 }
-                _state.value = _state.value.copy(isRunning = false, hostname = null, error = null)
+                _state.value = _state.value.copy(isLoading = false)
                 Log.i(TAG, "Web server stopped")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to stop web server", e)
-                _state.value = _state.value.copy(error = e.message)
+                _state.value = _state.value.copy(isLoading = false, error = e.message)
             }
         }
     }

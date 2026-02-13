@@ -98,7 +98,7 @@ class RikkaHubApp : Application() {
                 delay(500)
                 val settings = get<SettingsStore>().settingsFlowRaw.first()
                 if (settings.webServerEnabled) {
-                    get<WebServerManager>().start()
+                    get<WebServerManager>().start(port = settings.webServerPort)
                 }
             }.onFailure {
                 Log.e(TAG, "startWebServerIfEnabled failed", it)
