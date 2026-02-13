@@ -1,5 +1,6 @@
 import * as React from "react";
 import InfiniteScroll from "react-infinite-scroll-component";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "~/lib/utils";
 
@@ -16,21 +17,24 @@ export interface InfiniteScrollAreaProps extends Omit<React.ComponentProps<"div"
   scrollTargetId?: string;
 }
 
-const defaultLoader = (
-  <div className="px-2 py-2 text-center text-xs text-muted-foreground">加载更多...</div>
-);
-
 function InfiniteScrollArea({
   className,
   children,
   dataLength,
   next,
   hasMore,
-  loader = defaultLoader,
+  loader,
   scrollTargetId = "infinite-scroll-target",
   ...props
 }: InfiniteScrollAreaProps) {
+  const { t } = useTranslation();
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const defaultLoader = (
+    <div className="px-2 py-2 text-center text-xs text-muted-foreground">
+      {t("infinite_scroll.load_more")}
+    </div>
+  );
+  const effectiveLoader = loader ?? defaultLoader;
 
   // When the container isn't scrollable (content shorter than viewport)
   // but there's still more data, auto-trigger the next load.
@@ -60,7 +64,7 @@ function InfiniteScrollArea({
         dataLength={dataLength}
         next={next}
         hasMore={hasMore}
-        loader={loader}
+        loader={effectiveLoader}
         scrollableTarget={scrollTargetId}
       >
         {children}

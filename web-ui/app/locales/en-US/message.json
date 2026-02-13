@@ -49,5 +49,11 @@
     "parameters": "Parameters",
     "result": "Result",
     "not_executed": "Tool has not run yet"
+  },
+  "media_part": {
+    "video_load_failed": "Failed to load video: {{url}}",
+    "open_video_in_new_window": "Open video in new window",
+    "audio_load_failed": "Failed to load audio: {{url}}",
+    "open_audio_in_new_window": "Open audio in new window"
   }
 }

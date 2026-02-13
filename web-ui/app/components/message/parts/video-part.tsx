@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Video, VideoOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { resolveFileUrl } from "~/lib/files";
 
@@ -8,6 +9,7 @@ interface VideoPartProps {
 }
 
 export function VideoPart({ url }: VideoPartProps) {
+  const { t } = useTranslation("message");
   const [error, setError] = React.useState(false);
 
   if (!url) return null;
@@ -18,7 +20,7 @@ export function VideoPart({ url }: VideoPartProps) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
         <VideoOff className="h-4 w-4" />
-        <span>Failed to load video: {videoUrl}</span>
+        <span>{t("media_part.video_load_failed", { url: videoUrl })}</span>
       </div>
     );
   }
@@ -39,7 +41,7 @@ export function VideoPart({ url }: VideoPartProps) {
         target="_blank"
       >
         <Video className="h-3.5 w-3.5" />
-        在新窗口打开视频
+        {t("media_part.open_video_in_new_window")}
       </a>
     </div>
   );

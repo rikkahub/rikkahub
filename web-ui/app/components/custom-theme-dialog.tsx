@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -27,6 +28,7 @@ export function CustomThemeDialog({
   initialCss,
   onSave,
 }: CustomThemeDialogProps) {
+  const { t } = useTranslation();
   const [lightDraft, setLightDraft] = React.useState(initialCss.light);
   const [darkDraft, setDarkDraft] = React.useState(initialCss.dark);
 
@@ -43,34 +45,32 @@ export function CustomThemeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85svh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>自定义主题 CSS</DialogTitle>
-          <DialogDescription>
-            仅提取并应用 CSS 变量声明（例如 --primary: ...;），支持 Light 和 Dark 两套。
-          </DialogDescription>
+          <DialogTitle>{t("custom_theme_dialog.title")}</DialogTitle>
+          <DialogDescription>{t("custom_theme_dialog.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <div className="text-sm font-medium">Light 变量</div>
+            <div className="text-sm font-medium">{t("custom_theme_dialog.light_variables")}</div>
             <Textarea
               value={lightDraft}
               onChange={(event) => {
                 setLightDraft(event.target.value);
               }}
-              placeholder=":root {\n  --background: ...;\n  --primary: ...;\n}"
+              placeholder={t("custom_theme_dialog.light_placeholder")}
               rows={CUSTOM_THEME_EDITOR_ROWS}
               className="field-sizing-fixed h-56 max-h-56 overflow-y-auto font-mono text-xs"
             />
           </div>
 
           <div className="space-y-2">
-            <div className="text-sm font-medium">Dark 变量</div>
+            <div className="text-sm font-medium">{t("custom_theme_dialog.dark_variables")}</div>
             <Textarea
               value={darkDraft}
               onChange={(event) => {
                 setDarkDraft(event.target.value);
               }}
-              placeholder=":root.dark {\n  --background: ...;\n  --primary: ...;\n}"
+              placeholder={t("custom_theme_dialog.dark_placeholder")}
               rows={CUSTOM_THEME_EDITOR_ROWS}
               className="field-sizing-fixed h-56 max-h-56 overflow-y-auto font-mono text-xs"
             />
@@ -85,7 +85,7 @@ export function CustomThemeDialog({
               onOpenChange(false);
             }}
           >
-            取消
+            {t("custom_theme_dialog.cancel")}
           </Button>
           <Button
             type="button"
@@ -97,7 +97,7 @@ export function CustomThemeDialog({
               onOpenChange(false);
             }}
           >
-            保存并应用
+            {t("custom_theme_dialog.save_and_apply")}
           </Button>
         </DialogFooter>
       </DialogContent>

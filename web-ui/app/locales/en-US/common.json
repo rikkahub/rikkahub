@@ -83,5 +83,18 @@
     "empty_content": "(empty)",
     "type_label": "Type: {{type}}",
     "close_panel": "Close panel"
+  },
+  "custom_theme_dialog": {
+    "title": "Custom theme CSS",
+    "description": "Only CSS variable declarations are extracted and applied (for example, --primary: ...;), with both Light and Dark variants supported.",
+    "light_variables": "Light variables",
+    "dark_variables": "Dark variables",
+    "light_placeholder": ":root {\n  --background: ...;\n  --primary: ...;\n}",
+    "dark_placeholder": ":root.dark {\n  --background: ...;\n  --primary: ...;\n}",
+    "cancel": "Cancel",
+    "save_and_apply": "Save and apply"
+  },
+  "infinite_scroll": {
+    "load_more": "Loading more..."
   }
 }

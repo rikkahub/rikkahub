@@ -83,5 +83,18 @@
     "empty_content": "(空内容)",
     "type_label": "类型：{{type}}",
     "close_panel": "关闭面板"
+  },
+  "custom_theme_dialog": {
+    "title": "自定义主题 CSS",
+    "description": "仅提取并应用 CSS 变量声明（例如 --primary: ...;），支持 Light 和 Dark 两套。",
+    "light_variables": "Light 变量",
+    "dark_variables": "Dark 变量",
+    "light_placeholder": ":root {\n  --background: ...;\n  --primary: ...;\n}",
+    "dark_placeholder": ":root.dark {\n  --background: ...;\n  --primary: ...;\n}",
+    "cancel": "取消",
+    "save_and_apply": "保存并应用"
+  },
+  "infinite_scroll": {
+    "load_more": "加载更多..."
   }
 }
