@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.pebbletemplates.pebble.PebbleEngine
@@ -107,6 +108,10 @@ class SettingsStore(
 
         // S3
         val S3_CONFIG = stringPreferencesKey("s3_config")
+        val BACKUP_AUTOMATION_MIGRATED = booleanPreferencesKey("backup_automation_migrated")
+        val BACKUP_REMINDER_ENABLED = booleanPreferencesKey("backup_reminder_enabled")
+        val BACKUP_REMINDER_INTERVAL_DAYS = intPreferencesKey("backup_reminder_interval_days")
+        val LAST_BACKUP_REMINDER_AT_EPOCH_MILLIS = longPreferencesKey("last_backup_reminder_at_epoch_millis")
 
         // TTS
         val TTS_PROVIDERS = stringPreferencesKey("tts_providers")
@@ -181,6 +186,10 @@ class SettingsStore(
                 s3Config = preferences[S3_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: S3Config(),
+                backupAutomationMigrated = preferences[BACKUP_AUTOMATION_MIGRATED] == true,
+                backupReminderEnabled = preferences[BACKUP_REMINDER_ENABLED] == true,
+                backupReminderIntervalDays = preferences[BACKUP_REMINDER_INTERVAL_DAYS] ?: 7,
+                lastBackupReminderAtEpochMillis = preferences[LAST_BACKUP_REMINDER_AT_EPOCH_MILLIS] ?: 0L,
                 ttsProviders = preferences[TTS_PROVIDERS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -326,6 +335,10 @@ class SettingsStore(
             preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
             preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
             preferences[S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
+            preferences[BACKUP_AUTOMATION_MIGRATED] = settings.backupAutomationMigrated
+            preferences[BACKUP_REMINDER_ENABLED] = settings.backupReminderEnabled
+            preferences[BACKUP_REMINDER_INTERVAL_DAYS] = settings.backupReminderIntervalDays.coerceAtLeast(1)
+            preferences[LAST_BACKUP_REMINDER_AT_EPOCH_MILLIS] = settings.lastBackupReminderAtEpochMillis
             preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
             settings.selectedTTSProviderId?.let {
                 preferences[SELECTED_TTS_PROVIDER] = it.toString()
@@ -445,6 +458,10 @@ data class Settings(
     val mcpServers: List<McpServerConfig> = emptyList(),
     val webDavConfig: WebDavConfig = WebDavConfig(),
     val s3Config: S3Config = S3Config(),
+    val backupAutomationMigrated: Boolean = false,
+    val backupReminderEnabled: Boolean = false,
+    val backupReminderIntervalDays: Int = 7,
+    val lastBackupReminderAtEpochMillis: Long = 0L,
     val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
@@ -500,6 +517,12 @@ data class WebDavConfig(
         BackupItem.DATABASE,
         BackupItem.FILES
     ),
+    val autoBackupEnabled: Boolean = false,
+    val autoBackupIntervalDays: Int = 7,
+    val autoBackupOnAppLaunch: Boolean = false,
+    val lastBackupAtEpochMillis: Long = 0L,
+    val lastAutoBackupError: String = "",
+    val lastAutoBackupFailedAtEpochMillis: Long = 0L,
 ) {
     @Serializable
     enum class BackupItem {
