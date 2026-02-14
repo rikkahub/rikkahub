@@ -18,8 +18,8 @@ class MarkdownInlineMathPromotionTest {
 
     @Test
     fun `does not promote when ratio below threshold`() {
-        val text = "Before $x+1$ after"
-        val raw = "$x+1$"
+        val text = "Before \$x+1\$ after"
+        val raw = "\$x+1\$"
         val start = text.indexOf(raw)
         val segment = InlineMathSegment(
             start = start,
@@ -35,13 +35,13 @@ class MarkdownInlineMathPromotionTest {
             threshold = 0.8f
         )
 
-        assertEquals("Before $x+1$ after", promoted)
+        assertEquals("Before \$x+1\$ after", promoted)
     }
 
     @Test
     fun `promotes when ratio equals threshold`() {
-        val text = "Before $x+1$ after"
-        val raw = "$x+1$"
+        val text = "Before \$x+1\$ after"
+        val raw = "\$x+1\$"
         val start = text.indexOf(raw)
         val segment = InlineMathSegment(
             start = start,
@@ -57,13 +57,13 @@ class MarkdownInlineMathPromotionTest {
             threshold = 0.8f
         )
 
-        assertEquals("Before $$x+1$$ after", promoted)
+        assertEquals("Before \$\$x+1\$\$ after", promoted)
     }
 
     @Test
     fun `promotes when ratio above threshold`() {
-        val text = "Before $x+1$ after"
-        val raw = "$x+1$"
+        val text = "Before \$x+1\$ after"
+        val raw = "\$x+1\$"
         val start = text.indexOf(raw)
         val segment = InlineMathSegment(
             start = start,
@@ -79,14 +79,14 @@ class MarkdownInlineMathPromotionTest {
             threshold = 0.8f
         )
 
-        assertEquals("Before $$x+1$$ after", promoted)
+        assertEquals("Before \$\$x+1\$\$ after", promoted)
     }
 
     @Test
     fun `only promotes matched segments and keeps text order`() {
-        val text = "A $short$ B $longformula$ C"
-        val short = "$short$"
-        val long = "$longformula$"
+        val text = "A \$short\$ B \$longformula\$ C"
+        val short = "\$short\$"
+        val long = "\$longformula\$"
         val shortStart = text.indexOf(short)
         val longStart = text.indexOf(long)
         val segments = listOf(
@@ -111,6 +111,6 @@ class MarkdownInlineMathPromotionTest {
             threshold = 0.8f
         )
 
-        assertEquals("A $short$ B $$longformula$$ C", promoted)
+        assertEquals("A \$short\$ B \$\$longformula\$\$ C", promoted)
     }
 }
