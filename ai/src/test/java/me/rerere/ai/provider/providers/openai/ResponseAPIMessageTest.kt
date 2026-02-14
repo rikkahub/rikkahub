@@ -1,14 +1,20 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -31,14 +37,28 @@ class ResponseAPIMessageTest {
         api = ResponseAPI(OkHttpClient())
     }
 
-    // Helper to invoke private buildMessages method via reflection
+    // Helper to invoke buildMessages method
     private fun invokeBuildMessages(messages: List<UIMessage>): JsonArray {
-        val method = ResponseAPI::class.java.getDeclaredMethod(
-            "buildMessages",
-            List::class.java
+        return api.buildMessages(messages)
+    }
+
+    private fun invokeBuildRequestBody(
+        providerSetting: ProviderSetting.OpenAI,
+        params: TextGenerationParams,
+        stream: Boolean = false
+    ): JsonObject {
+        return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
+    }
+
+    private fun createReasoningParams(thinkingBudget: Int? = null): TextGenerationParams {
+        return TextGenerationParams(
+            model = Model(
+                modelId = "test-model",
+                displayName = "test-model",
+                abilities = listOf(ModelAbility.REASONING)
+            ),
+            thinkingBudget = thinkingBudget
         )
-        method.isAccessible = true
-        return method.invoke(api, messages) as JsonArray
     }
 
     @Test
@@ -286,6 +306,51 @@ class ResponseAPIMessageTest {
                 lastCallIndex = i
             }
         }
+    }
+
+    @Test
+    fun `volc response api should not include reasoning summary`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://ark.cn-beijing.volces.com/api/v3"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams()
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertTrue("reasoning should exist", reasoning != null)
+        assertFalse("volc should not include reasoning.summary", reasoning!!.containsKey("summary"))
+    }
+
+    @Test
+    fun `openai response api should include reasoning summary`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams()
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertTrue("reasoning should exist", reasoning != null)
+        assertEquals("auto", reasoning!!["summary"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `volc response api should keep reasoning effort when non auto`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://ark.cn-beijing.volces.com/api/v3"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(thinkingBudget = 1024)
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertTrue("reasoning should exist", reasoning != null)
+        assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================
