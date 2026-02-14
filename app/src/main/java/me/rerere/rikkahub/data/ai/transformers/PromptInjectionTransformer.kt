@@ -215,7 +215,7 @@ private fun createMergedInjectionMessages(injections: List<PromptInjection>): Li
             val mergedContent = grouped.joinToString("\n") { it.content }
             when (role) {
                 MessageRole.ASSISTANT -> UIMessage.assistant(mergedContent)
-                else -> UIMessage.user(wrapSystemTag(mergedContent))
+                else -> UIMessage.user(mergedContent)
             }
         }
 }
@@ -249,11 +249,4 @@ internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): I
     }
 
     return index
-}
-
-/**
- * 用 <system> 标签包裹内容
- */
-private fun wrapSystemTag(content: String): String {
-    return "<system>\n$content\n</system>"
 }
