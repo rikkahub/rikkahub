@@ -1,0 +1,232 @@
+@reference "../../app.css";
+
+/* Markdown Styles - shadcn inspired */
+.markdown {
+  @apply text-foreground leading-7;
+}
+
+.markdown > * + * {
+  @apply mt-4;
+}
+
+/* Headings */
+.markdown h1 {
+  @apply scroll-m-20 text-3xl font-bold tracking-tight mt-8 mb-4 first:mt-0;
+}
+
+.markdown h2 {
+  @apply scroll-m-20 text-2xl font-semibold tracking-tight border-b border-border pb-2 mt-8 mb-4 first:mt-0;
+}
+
+.markdown h3 {
+  @apply scroll-m-20 text-xl font-semibold tracking-tight mt-6 mb-3;
+}
+
+.markdown h4 {
+  @apply scroll-m-20 text-lg font-semibold tracking-tight mt-6 mb-2;
+}
+
+.markdown h5 {
+  @apply scroll-m-20 text-base font-semibold tracking-tight mt-4 mb-2;
+}
+
+.markdown h6 {
+  @apply scroll-m-20 text-sm font-semibold tracking-tight mt-4 mb-2 text-muted-foreground;
+}
+
+/* Paragraphs */
+.markdown p {
+  @apply leading-7;
+}
+
+.markdown p + p {
+  @apply mt-4;
+}
+
+/* Links */
+.markdown a {
+  @apply text-primary underline underline-offset-4 hover:text-primary/80 transition-colors;
+}
+
+/* Bold & Italic */
+.markdown strong {
+  @apply font-semibold;
+}
+
+.markdown em {
+  @apply italic;
+}
+
+/* Lists */
+.markdown ul {
+  @apply my-4 ml-6 list-disc [&>li]:mt-2;
+}
+
+.markdown ol {
+  @apply my-4 ml-6 list-decimal [&>li]:mt-2;
+}
+
+.markdown li {
+  @apply leading-7;
+}
+
+.markdown li > ul,
+.markdown li > ol {
+  @apply my-2;
+}
+
+/* Task Lists (GFM) */
+.markdown ul.contains-task-list {
+  @apply list-none ml-0;
+}
+
+.markdown li.task-list-item {
+  @apply flex items-start gap-2;
+}
+
+.markdown li.task-list-item input[type="checkbox"] {
+  @apply mt-1.5 h-4 w-4 rounded border border-primary accent-primary;
+}
+
+/* Blockquotes */
+.markdown blockquote {
+  @apply border-l-4 border-border pl-4 py-1 my-4 italic text-muted-foreground;
+}
+
+.markdown blockquote > p {
+  @apply my-0;
+}
+
+/* Horizontal Rule */
+.markdown hr {
+  @apply my-6 border-border;
+}
+
+/* Code - Inline */
+.markdown .inline-code {
+  @apply relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm;
+}
+
+/* Code Block with Header */
+.markdown .code-block {
+  @apply my-4 rounded-lg border border-border overflow-hidden;
+}
+
+.code-block-header {
+  @apply flex items-center justify-between px-3 py-0.5 bg-muted/50 border-b border-border;
+}
+
+.code-block-language {
+  @apply text-xs text-muted-foreground;
+}
+
+.code-block-copy {
+  @apply flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-muted;
+}
+
+.code-block-actions {
+  @apply flex items-center gap-1;
+}
+
+.code-block-copy:active {
+  @apply scale-95;
+}
+
+/* Code Block body */
+.markdown .code-block-content {
+  @apply overflow-x-auto;
+}
+
+.markdown .code-block-content pre {
+  @apply !m-0 !rounded-none !border-0 p-3 text-sm;
+}
+
+.markdown .code-block-content pre code {
+  @apply bg-transparent p-0 font-mono leading-relaxed;
+}
+
+/* Legacy Code - Block (fallback) */
+.markdown pre {
+  @apply my-4 rounded-lg border border-border p-4 overflow-x-auto;
+}
+
+.markdown pre code {
+  @apply bg-transparent p-0 text-sm font-mono leading-relaxed;
+}
+
+/* Tables (GFM) */
+.markdown table {
+  @apply my-4 w-full border-collapse overflow-hidden rounded-lg border border-border;
+}
+
+.markdown thead {
+  @apply bg-muted;
+}
+
+.markdown th {
+  @apply border border-border px-4 py-2 text-left font-semibold;
+}
+
+.markdown td {
+  @apply border border-border px-4 py-2;
+}
+
+.markdown tr:nth-child(even) {
+  @apply bg-muted/50;
+}
+
+/* Images */
+.markdown img {
+  @apply my-4 rounded-lg border border-border max-w-full h-auto;
+}
+
+/* Strikethrough (GFM) */
+.markdown del {
+  @apply text-muted-foreground line-through;
+}
+
+/* Footnotes (GFM) */
+.markdown .footnotes {
+  @apply mt-8 pt-4 border-t border-border text-sm text-muted-foreground;
+}
+
+.markdown .footnote-ref {
+  @apply text-primary no-underline hover:underline;
+}
+
+.markdown .footnote-backref {
+  @apply text-primary no-underline hover:underline ml-1;
+}
+
+/* Definition Lists */
+.markdown dl {
+  @apply my-4;
+}
+
+.markdown dt {
+  @apply font-semibold mt-4 first:mt-0;
+}
+
+.markdown dd {
+  @apply ml-6 mt-1 text-muted-foreground;
+}
+
+/* Keyboard Input */
+.markdown kbd {
+  @apply inline-flex items-center justify-center rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs font-medium shadow-sm;
+}
+
+/* Abbreviations */
+.markdown abbr {
+  @apply cursor-help border-b border-dotted border-muted-foreground;
+}
+
+/* Mark/Highlight */
+.markdown mark {
+  @apply bg-yellow-200 dark:bg-yellow-800 px-1 rounded;
+}
+
+/* Citation Badge */
+.markdown .citation-badge {
+  @apply inline-flex items-center justify-center rounded-full bg-primary/15 px-1.5 py-1 text-[10px] leading-none font-mono text-primary cursor-pointer hover:bg-primary/25 transition-colors;
+}

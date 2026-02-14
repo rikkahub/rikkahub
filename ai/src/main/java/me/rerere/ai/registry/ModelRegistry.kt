@@ -251,8 +251,18 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GLM_5 = defineModel {
+        tokens("glm", "5")
+        toolReasoningAbility()
+    }
+
     private val MINIMAX_M2 = defineModel {
         tokens("minimax", "m", "2")
+        toolReasoningAbility()
+    }
+
+    private val MINIMAX_M2_5 = defineModel {
+        tokens("minimax", "m", "2", "5")
         toolReasoningAbility()
     }
 
@@ -304,7 +314,9 @@ object ModelRegistry {
         GLM_4_5,
         GLM_4_6,
         GLM_4_7,
+        GLM_5,
         MINIMAX_M2,
+        MINIMAX_M2_5,
         XIAOMI_MIMO_V2,
         QWEN_MT
     )

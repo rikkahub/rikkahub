@@ -95,6 +95,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
+import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
@@ -362,6 +363,10 @@ class RouteActivity : ComponentActivity() {
                             SettingFilesPage()
                         }
 
+                        composable<Screen.SettingWeb> {
+                            SettingWebPage()
+                        }
+
                     composable<Screen.Developer> {
                         DeveloperPage()
                     }
@@ -520,6 +525,9 @@ sealed interface Screen {
 
     @Serializable
     data object SettingFiles : Screen
+
+    @Serializable
+    data object SettingWeb : Screen
 
     @Serializable
     data object Developer : Screen

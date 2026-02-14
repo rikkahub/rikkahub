@@ -1,0 +1,38 @@
+{
+  "conversations": {
+    "meta": {
+      "title": "RikkaHub Web",
+      "description": "RikkaHub web client"
+    },
+    "preview": {
+      "empty_message": "Empty message",
+      "image": "[Image]",
+      "video": "[Video]",
+      "audio": "[Audio]",
+      "document": "[Document]",
+      "document_with_name": "[Document] {{name}}",
+      "thinking": "[Thinking]",
+      "tool_call": "[Tool call]",
+      "tool_with_name": "[Tool] {{name}}"
+    },
+    "errors": {
+      "load_detail_failed": "Failed to load conversation details"
+    },
+    "empty_state": {
+      "select_title": "Select a conversation",
+      "select_description": "Pick a conversation from the sidebar to view messages",
+      "loading_title": "Loading...",
+      "loading_description": "Loading conversation details",
+      "error_title": "Load failed",
+      "no_message_title": "No messages yet",
+      "no_message_description": "This conversation does not have any messages yet"
+    },
+    "welcome_prompt": "How can I help you?",
+    "user": {
+      "default_name": "User"
+    },
+    "header": {
+      "select_conversation": "Select a conversation"
+    }
+  }
+}

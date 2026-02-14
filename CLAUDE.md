@@ -13,10 +13,13 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 
 - **app**: Main application module with UI, ViewModels, and core logic
 - **ai**: AI SDK abstraction layer for different providers (OpenAI, Google, Anthropic)
+- **common**: Common utilities and extensions
+- **document**: Document parsing module for handling PDF, DOCX, and PPTX files
 - **highlight**: Code syntax highlighting implementation
 - **search**: Search functionality SDK (Exa, Tavily, Zhipu)
 - **tts**: Text-to-speech implementation for different providers
-- **common**: Common utilities and extensions
+- **web**: Embedded web server module that provides Ktor server startup function and hosts static frontend build files (
+  built from web-ui/ React project)
 
 ### Key Technologies
 

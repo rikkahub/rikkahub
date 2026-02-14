@@ -1,0 +1,59 @@
+{
+  "message_parts": {
+    "tool_step_hint": "[工具步骤应在思维链中渲染]",
+    "collapse_thinking": "收起思考过程",
+    "expand_thinking_steps": "展开 {{count}} 条思考步骤"
+  },
+  "chat_message": {
+    "copy_image": "图片",
+    "copy_video": "视频",
+    "copy_audio": "音频",
+    "copy_document": "文档",
+    "copy_tool": "工具",
+    "regenerate_from_user_confirm": "将从这条用户消息重新生成，确认继续吗？",
+    "delete_confirm": "确认删除这条消息吗？",
+    "copy_message": "复制消息",
+    "copy": "复制",
+    "edit_message": "编辑消息",
+    "edit": "编辑",
+    "regenerate": "重新生成",
+    "previous_branch": "上一分支",
+    "next_branch": "下一分支",
+    "more_actions": "更多操作",
+    "create_fork": "创建分叉",
+    "delete": "删除",
+    "prompt_tokens_with_cache": "{{promptTokens}} tokens ({{cachedTokens}} cached)",
+    "prompt_tokens": "{{promptTokens}} tokens",
+    "completion_tokens": "{{completionTokens}} tokens",
+    "tokens_per_second": "{{value}} tok/s",
+    "duration_seconds": "{{value}}s"
+  },
+  "tool_part": {
+    "memory_create": "创建记忆",
+    "memory_edit": "编辑记忆",
+    "memory_delete": "删除记忆",
+    "search_web_with_query": "联网搜索：{{query}}",
+    "search_web": "联网搜索",
+    "scrape_web": "网页抓取",
+    "get_time_info": "获取时间信息",
+    "clipboard_read": "读取剪贴板",
+    "clipboard_write": "写入剪贴板",
+    "tool_call_with_name": "工具调用：{{toolName}}",
+    "search_query_label": "搜索词：{{query}}",
+    "empty": "(空)",
+    "deny_reason_prompt": "请输入拒绝原因（可选）",
+    "search_results_count": "检索到 {{count}} 条结果",
+    "denied": "已拒绝",
+    "denied_with_reason": "已拒绝: {{reason}}",
+    "tool_name_label": "工具名：{{toolName}}",
+    "parameters": "参数",
+    "result": "结果",
+    "not_executed": "工具尚未执行"
+  },
+  "media_part": {
+    "video_load_failed": "加载视频失败：{{url}}",
+    "open_video_in_new_window": "在新窗口打开视频",
+    "audio_load_failed": "加载音频失败：{{url}}",
+    "open_audio_in_new_window": "在新窗口打开音频"
+  }
+}

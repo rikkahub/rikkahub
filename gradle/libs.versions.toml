@@ -36,17 +36,17 @@ paging = "3.4.0"
 lucide-icons = "1.1.0"
 image-viewer = "1.1.0-alpha.7"
 google-services = "4.4.4"
-firebase-bom = "34.8.0"
+firebase-bom = "34.9.0"
 firebase-crashlytics = "3.0.6"
 jsoup = "1.22.1"
 zxing = "3.5.4"
 quickie-bundled = "1.11.0"
-sonner = "0.4.0"
+sonner = "0.3.9"
 leakcanary = "2.14"
-workmanager = "2.11.0"
+workmanager = "2.11.1"
 reorderable = "3.0.0"
 mcp = "0.8.3"
-pebble = "3.2.4"
+pebble = "4.1.0"
 browser = "1.9.0"
 appcompat = "1.7.1"
 material = "1.13.0"
@@ -57,6 +57,7 @@ baselineprofile = "1.4.1"
 profileinstaller = "1.4.1"
 ktor = "3.4.0"
 sqlite-vector = "0.9.70"
+jmdns = "3.6.3"
 
 [libraries]
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }
@@ -126,7 +127,7 @@ firebase-config = { group = "com.google.firebase", name = "firebase-config" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 quickie-bundled = { group = "io.github.g00fy2.quickie", name = "quickie-bundled", version.ref = "quickie-bundled" }
-sonner = { module = "io.github.brdominguez:compose-sonner", version.ref = "sonner" }
+sonner = { module = "io.github.dokar3:sonner", version.ref = "sonner" }
 leakcanary-android = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 commons-text = { module = "org.apache.commons:commons-text", version.ref = "commons-text" }
@@ -142,8 +143,22 @@ androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profi
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-server-default-headers = { module = "io.ktor:ktor-server-default-headers", version.ref = "ktor" }
+ktor-server-caching-headers = { module = "io.ktor:ktor-server-caching-headers", version.ref = "ktor" }
+ktor-server-conditional-headers = { module = "io.ktor:ktor-server-conditional-headers", version.ref = "ktor" }
+ktor-server-compression = { module = "io.ktor:ktor-server-compression", version.ref = "ktor" }
+ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-server-host-common = { module = "io.ktor:ktor-server-host-common", version.ref = "ktor" }
+ktor-server-content-negotiation = { module = "io.ktor:ktor-server-content-negotiation", version.ref = "ktor" }
+ktor-server-sse = { module = "io.ktor:ktor-server-sse", version.ref = "ktor" }
+ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
+ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
+ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
 sqlite-vector = { module = "ai.sqlite:vector", version.ref = "sqlite-vector" }
+jmdns = { module = "org.jmdns:jmdns", version.ref = "jmdns" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

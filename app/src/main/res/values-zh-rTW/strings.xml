@@ -798,5 +798,19 @@
   <string name="setting_files_page_no_files">無檔案</string>
   <string name="setting_files_page_folder_upload">上傳</string>
   <string name="setting_files_page_delete_content_description">刪除</string>
+  <string name="setting_page_web_server">Web伺服器</string>
+  <string name="setting_page_web_server_desc">允許您透過網頁存取 RikkaHub</string>
+  <string name="setting_page_web_server_port">連接埠</string>
+  <string name="setting_page_web_server_port_desc">網頁伺服器監聽連接埠（1024-65535）</string>
+  <string name="setting_page_web_server_enable">啟用內建網頁伺服器</string>
+  <string name="setting_page_web_server_lan_address">LAN 位址</string>
+  <string name="setting_page_web_server_mdns_address">mDNS 位址</string>
+  <string name="setting_page_web_server_error">錯誤</string>
+  <string name="setting_page_web_server_start">啟動</string>
+  <string name="setting_page_web_server_stop">停止</string>
+  <string name="setting_page_web_server_jwt_enable">啟用身分驗證</string>
+  <string name="setting_page_web_server_jwt_enable_desc">存取網頁介面時需要密碼驗證</string>
+  <string name="setting_page_web_server_password">存取密碼</string>
+  <string name="setting_page_web_server_password_desc">網頁介面存取所需的密碼</string>
 </resources>
 

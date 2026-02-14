@@ -112,6 +112,12 @@ class SettingsStore(
         val TTS_PROVIDERS = stringPreferencesKey("tts_providers")
         val SELECTED_TTS_PROVIDER = stringPreferencesKey("selected_tts_provider")
 
+        // Web Server
+        val WEB_SERVER_ENABLED = booleanPreferencesKey("web_server_enabled")
+        val WEB_SERVER_PORT = intPreferencesKey("web_server_port")
+        val WEB_SERVER_JWT_ENABLED = booleanPreferencesKey("web_server_jwt_enabled")
+        val WEB_SERVER_ACCESS_PASSWORD = stringPreferencesKey("web_server_access_password")
+
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
@@ -186,6 +192,10 @@ class SettingsStore(
                 lorebooks = preferences[LOREBOOKS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
+                webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
+                webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
+                webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
             )
         }
         .map {
@@ -322,6 +332,10 @@ class SettingsStore(
             } ?: preferences.remove(SELECTED_TTS_PROVIDER)
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
+            preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
+            preferences[WEB_SERVER_PORT] = settings.webServerPort
+            preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
+            preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
         }
     }
 
@@ -332,6 +346,69 @@ class SettingsStore(
     suspend fun updateAssistant(assistantId: Uuid) {
         dataStore.edit { preferences ->
             preferences[SELECT_ASSISTANT] = assistantId.toString()
+        }
+    }
+
+    suspend fun updateAssistantModel(assistantId: Uuid, modelId: Uuid) {
+        update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map { assistant ->
+                    if (assistant.id == assistantId) {
+                        assistant.copy(chatModelId = modelId)
+                    } else {
+                        assistant
+                    }
+                }
+            )
+        }
+    }
+
+    suspend fun updateAssistantThinkingBudget(assistantId: Uuid, thinkingBudget: Int?) {
+        update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map { assistant ->
+                    if (assistant.id == assistantId) {
+                        assistant.copy(thinkingBudget = thinkingBudget)
+                    } else {
+                        assistant
+                    }
+                }
+            )
+        }
+    }
+
+    suspend fun updateAssistantMcpServers(assistantId: Uuid, mcpServers: Set<Uuid>) {
+        update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map { assistant ->
+                    if (assistant.id == assistantId) {
+                        assistant.copy(mcpServers = mcpServers)
+                    } else {
+                        assistant
+                    }
+                }
+            )
+        }
+    }
+
+    suspend fun updateAssistantInjections(
+        assistantId: Uuid,
+        modeInjectionIds: Set<Uuid>,
+        lorebookIds: Set<Uuid>
+    ) {
+        update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map { assistant ->
+                    if (assistant.id == assistantId) {
+                        assistant.copy(
+                            modeInjectionIds = modeInjectionIds,
+                            lorebookIds = lorebookIds
+                        )
+                    } else {
+                        assistant
+                    }
+                }
+            )
         }
     }
 }
@@ -372,6 +449,10 @@ data class Settings(
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
+    val webServerEnabled: Boolean = false,
+    val webServerPort: Int = 8080,
+    val webServerJwtEnabled: Boolean = false,
+    val webServerAccessPassword: String = "",
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

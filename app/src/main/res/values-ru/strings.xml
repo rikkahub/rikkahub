@@ -791,5 +791,19 @@
   <string name="setting_files_page_no_files">Нет файлов</string>
   <string name="setting_files_page_folder_upload">Загрузить</string>
   <string name="setting_files_page_delete_content_description">Удалить</string>
+  <string name="setting_page_web_server">Веб-сервер</string>
+  <string name="setting_page_web_server_desc">Разрешить доступ к RikkaHub через веб</string>
+  <string name="setting_page_web_server_port">Порт</string>
+  <string name="setting_page_web_server_port_desc">Порт веб-сервера (1024-65535)</string>
+  <string name="setting_page_web_server_enable">Включить встроенный веб-сервер</string>
+  <string name="setting_page_web_server_lan_address">LAN-адрес</string>
+  <string name="setting_page_web_server_mdns_address">Адрес mDNS</string>
+  <string name="setting_page_web_server_error">Ошибка</string>
+  <string name="setting_page_web_server_start">Запустить</string>
+  <string name="setting_page_web_server_stop">Остановить</string>
+  <string name="setting_page_web_server_jwt_enable">Включить аутентификацию</string>
+  <string name="setting_page_web_server_jwt_enable_desc">Требовать проверку пароля при доступе к веб-интерфейсу</string>
+  <string name="setting_page_web_server_password">Пароль доступа</string>
+  <string name="setting_page_web_server_password_desc">Пароль для доступа к веб-интерфейсу</string>
 </resources>
 

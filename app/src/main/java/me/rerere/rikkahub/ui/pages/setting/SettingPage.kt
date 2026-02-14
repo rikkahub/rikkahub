@@ -45,6 +45,7 @@ import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.Drama
 import com.composables.icons.lucide.Earth
+import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Hammer
 import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Heart
@@ -249,6 +250,16 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     description = { Text(stringResource(R.string.setting_page_mcp_desc)) },
                     icon = { Icon(Lucide.Terminal, "MCP") },
                     link = Screen.SettingMcp
+                )
+            }
+
+            item {
+                SettingItem(
+                    navController = navController,
+                    title = { Text(stringResource(R.string.setting_page_web_server)) },
+                    description = { Text(stringResource(R.string.setting_page_web_server_desc)) },
+                    icon = { Icon(Lucide.Globe, "Web Server") },
+                    link = Screen.SettingWeb
                 )
             }
 

@@ -1,0 +1,101 @@
+{
+  "mcp": {
+    "title": "MCP",
+    "description": "Select MCP servers available to this assistant",
+    "update_failed": "Failed to update MCP settings",
+    "unnamed_server": "Unnamed MCP Server",
+    "tools_enabled": "{{enabled}}/{{total}} tools enabled",
+    "empty": "No MCP servers available"
+  },
+  "injection": {
+    "title": "Prompt Injection",
+    "description": "Enable mode injections and lorebooks for current assistant",
+    "update_failed": "Failed to update prompt injections",
+    "tab_mode": "Mode Injection",
+    "tab_lorebook": "Lorebook",
+    "unnamed_mode": "Unnamed Mode Injection",
+    "unnamed_lorebook": "Unnamed Lorebook",
+    "disabled": "Disabled",
+    "empty_mode": "No mode injections available",
+    "empty_lorebook": "No lorebooks available"
+  },
+  "reasoning": {
+    "title": "Reasoning",
+    "description": "Configure reasoning intensity and budget for current assistant",
+    "update_failed": "Failed to update reasoning budget",
+    "custom_budget": "Custom reasoning budget",
+    "custom_budget_placeholder": "Enter token budget",
+    "invalid_integer": "Please enter a valid integer",
+    "apply": "Apply",
+    "examples": "Examples: 0 (off), -1 (auto), 1024, 16000, 32000",
+    "presets": {
+      "off": {
+        "label": "Off",
+        "description": "Disable reasoning and answer directly."
+      },
+      "auto": {
+        "label": "Auto",
+        "description": "Let the model decide the reasoning level automatically."
+      },
+      "low": {
+        "label": "Light",
+        "description": "Use a small amount of reasoning to answer."
+      },
+      "medium": {
+        "label": "Medium",
+        "description": "Use more reasoning to answer."
+      },
+      "high": {
+        "label": "Heavy",
+        "description": "Use extensive reasoning to answer."
+      }
+    }
+  },
+  "model_list": {
+    "ability_tool": "Tools",
+    "ability_reasoning": "Reasoning",
+    "select_model": "Select model",
+    "switch_model_failed": "Failed to switch model",
+    "update_favorites_failed": "Failed to update favorites",
+    "title": "Select model",
+    "description": "Switch the chat model used by this assistant",
+    "search_placeholder": "Search models",
+    "empty": "No models available",
+    "favorites": "Favorites"
+  },
+  "search": {
+    "default_service_label": "Search",
+    "update_search_failed": "Failed to update web search",
+    "switch_service_failed": "Failed to switch search service",
+    "update_builtin_failed": "Failed to update built-in search",
+    "title": "Web Search",
+    "description": "Configure web search and search services",
+    "builtin_title": "Built-in model search",
+    "builtin_desc": "Use the model's native search capability",
+    "web_title": "Web search",
+    "status_enabled": "Enabled",
+    "status_disabled": "Disabled",
+    "unknown": "Unknown",
+    "empty": "No search services available",
+    "builtin_notice": "Built-in model search is enabled. App search service settings won't take effect."
+  },
+  "chat": {
+    "attachment_image": "Image",
+    "attachment_video": "Video",
+    "attachment_audio": "Audio",
+    "attachment_file": "Attachment",
+    "quick_message_default_title": "Quick Message",
+    "upload_failed": "Upload failed",
+    "send_failed": "Send failed",
+    "drop_to_upload": "Drop files here to upload",
+    "editing_tip": "Editing message, sending will create a new branch",
+    "cancel_edit": "Cancel Edit",
+    "delete_attachment_failed": "Failed to delete attachment",
+    "upload_image": "Upload Image",
+    "upload_document": "Upload Document",
+    "placeholder_ready": "Type a message...",
+    "placeholder_not_ready": "Please select a conversation first",
+    "send_hint_enter": "Press Enter to send, Shift + Enter for newline",
+    "send_hint_newline": "Press Enter for newline"
+  }
+}

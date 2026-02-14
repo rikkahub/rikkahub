@@ -1,0 +1,59 @@
+{
+  "message_parts": {
+    "tool_step_hint": "[Tool step should render in chain-of-thought]",
+    "collapse_thinking": "Collapse thinking",
+    "expand_thinking_steps": "Expand {{count}} thinking step(s)"
+  },
+  "chat_message": {
+    "copy_image": "Image",
+    "copy_video": "Video",
+    "copy_audio": "Audio",
+    "copy_document": "Document",
+    "copy_tool": "Tool",
+    "regenerate_from_user_confirm": "Regenerate from this user message and continue?",
+    "delete_confirm": "Delete this message?",
+    "copy_message": "Copy message",
+    "copy": "Copy",
+    "edit_message": "Edit message",
+    "edit": "Edit",
+    "regenerate": "Regenerate",
+    "previous_branch": "Previous branch",
+    "next_branch": "Next branch",
+    "more_actions": "More actions",
+    "create_fork": "Create fork",
+    "delete": "Delete",
+    "prompt_tokens_with_cache": "{{promptTokens}} tokens ({{cachedTokens}} cached)",
+    "prompt_tokens": "{{promptTokens}} tokens",
+    "completion_tokens": "{{completionTokens}} tokens",
+    "tokens_per_second": "{{value}} tok/s",
+    "duration_seconds": "{{value}}s"
+  },
+  "tool_part": {
+    "memory_create": "Create memory",
+    "memory_edit": "Edit memory",
+    "memory_delete": "Delete memory",
+    "search_web_with_query": "Web search: {{query}}",
+    "search_web": "Web search",
+    "scrape_web": "Web scrape",
+    "get_time_info": "Get time info",
+    "clipboard_read": "Read clipboard",
+    "clipboard_write": "Write clipboard",
+    "tool_call_with_name": "Tool call: {{toolName}}",
+    "search_query_label": "Query: {{query}}",
+    "empty": "(empty)",
+    "deny_reason_prompt": "Enter a rejection reason (optional)",
+    "search_results_count": "{{count}} results found",
+    "denied": "Denied",
+    "denied_with_reason": "Denied: {{reason}}",
+    "tool_name_label": "Tool: {{toolName}}",
+    "parameters": "Parameters",
+    "result": "Result",
+    "not_executed": "Tool has not run yet"
+  },
+  "media_part": {
+    "video_load_failed": "Failed to load video: {{url}}",
+    "open_video_in_new_window": "Open video in new window",
+    "audio_load_failed": "Failed to load audio: {{url}}",
+    "open_audio_in_new_window": "Open audio in new window"
+  }
+}

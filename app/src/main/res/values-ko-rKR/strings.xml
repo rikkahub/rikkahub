@@ -798,5 +798,19 @@
   <string name="setting_files_page_no_files">파일 없음</string>
   <string name="setting_files_page_folder_upload">업로드</string>
   <string name="setting_files_page_delete_content_description">삭제</string>
+  <string name="setting_page_web_server">웹 서버</string>
+  <string name="setting_page_web_server_desc">웹을 통해 RikkaHub에 접근할 수 있도록 허용</string>
+  <string name="setting_page_web_server_port">포트</string>
+  <string name="setting_page_web_server_port_desc">웹 서버 수신 포트(1024-65535)</string>
+  <string name="setting_page_web_server_enable">내장 웹 서버 활성화</string>
+  <string name="setting_page_web_server_lan_address">LAN 주소</string>
+  <string name="setting_page_web_server_mdns_address">mDNS 주소</string>
+  <string name="setting_page_web_server_error">오류</string>
+  <string name="setting_page_web_server_start">시작</string>
+  <string name="setting_page_web_server_stop">중지</string>
+  <string name="setting_page_web_server_jwt_enable">인증 활성화</string>
+  <string name="setting_page_web_server_jwt_enable_desc">웹 인터페이스에 접근할 때 비밀번호 인증이 필요합니다</string>
+  <string name="setting_page_web_server_password">접속 비밀번호</string>
+  <string name="setting_page_web_server_password_desc">웹 인터페이스 접근에 필요한 비밀번호</string>
 </resources>
 

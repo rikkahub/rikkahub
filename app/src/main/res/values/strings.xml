@@ -798,5 +798,19 @@
   <string name="setting_files_page_no_files">No Files</string>
   <string name="setting_files_page_folder_upload">Upload</string>
   <string name="setting_files_page_delete_content_description">Delete</string>
+  <string name="setting_page_web_server">Web Server</string>
+  <string name="setting_page_web_server_desc">Allow you access RikkaHub via Web</string>
+  <string name="setting_page_web_server_port">Port</string>
+  <string name="setting_page_web_server_port_desc">Web server listen port (1024-65535)</string>
+  <string name="setting_page_web_server_enable">Enable the embedded web server</string>
+  <string name="setting_page_web_server_jwt_enable">Enable authentication</string>
+  <string name="setting_page_web_server_jwt_enable_desc">Require password verification when accessing the web interface</string>
+  <string name="setting_page_web_server_password">Access password</string>
+  <string name="setting_page_web_server_password_desc">Password required for web interface access</string>
+  <string name="setting_page_web_server_lan_address">LAN Address</string>
+  <string name="setting_page_web_server_mdns_address">mDNS Address</string>
+  <string name="setting_page_web_server_error">Error</string>
+  <string name="setting_page_web_server_start">Start</string>
+  <string name="setting_page_web_server_stop">Stop</string>
 </resources>
 

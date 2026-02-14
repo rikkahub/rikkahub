@@ -1,0 +1,101 @@
+{
+  "mcp": {
+    "title": "MCP",
+    "description": "选择当前助手可用的 MCP 服务器",
+    "update_failed": "更新 MCP 设置失败",
+    "unnamed_server": "未命名 MCP 服务器",
+    "tools_enabled": "已启用 {{enabled}}/{{total}} 个工具",
+    "empty": "暂无可用 MCP 服务器"
+  },
+  "injection": {
+    "title": "提示词注入",
+    "description": "为当前助手启用模式注入和 Lorebook",
+    "update_failed": "更新提示词注入失败",
+    "tab_mode": "模式注入",
+    "tab_lorebook": "Lorebook",
+    "unnamed_mode": "未命名模式注入",
+    "unnamed_lorebook": "未命名 Lorebook",
+    "disabled": "已禁用",
+    "empty_mode": "暂无模式注入",
+    "empty_lorebook": "暂无 Lorebook"
+  },
+  "reasoning": {
+    "title": "推理",
+    "description": "配置当前助手的推理强度和预算",
+    "update_failed": "更新推理预算失败",
+    "custom_budget": "自定义推理预算",
+    "custom_budget_placeholder": "输入预算 token 数",
+    "invalid_integer": "请输入有效的整数",
+    "apply": "应用",
+    "examples": "示例：0（关闭）、-1（自动）、1024、16000、32000",
+    "presets": {
+      "off": {
+        "label": "关闭",
+        "description": "关闭推理功能，模型将直接回答问题。"
+      },
+      "auto": {
+        "label": "自动",
+        "description": "让模型自动决定推理级别。"
+      },
+      "low": {
+        "label": "轻度推理",
+        "description": "模型将使用少量推理来回答问题。"
+      },
+      "medium": {
+        "label": "中度推理",
+        "description": "模型将使用更多推理来回答问题。"
+      },
+      "high": {
+        "label": "重度推理",
+        "description": "模型将使用大量推理来回答问题。"
+      }
+    }
+  },
+  "model_list": {
+    "ability_tool": "工具",
+    "ability_reasoning": "推理",
+    "select_model": "选择模型",
+    "switch_model_failed": "切换模型失败",
+    "update_favorites_failed": "更新收藏失败",
+    "title": "选择模型",
+    "description": "切换当前助手使用的聊天模型",
+    "search_placeholder": "搜索模型",
+    "empty": "没有可用模型",
+    "favorites": "收藏"
+  },
+  "search": {
+    "default_service_label": "搜索",
+    "update_search_failed": "更新网络搜索失败",
+    "switch_service_failed": "切换搜索服务失败",
+    "update_builtin_failed": "更新内置搜索失败",
+    "title": "网络搜索",
+    "description": "配置联网搜索与搜索服务",
+    "builtin_title": "模型内置搜索",
+    "builtin_desc": "使用模型原生搜索能力",
+    "web_title": "联网搜索",
+    "status_enabled": "已启用",
+    "status_disabled": "已关闭",
+    "unknown": "未知",
+    "empty": "暂无可用搜索服务",
+    "builtin_notice": "当前已启用模型内置搜索，应用搜索服务设置暂不生效。"
+  },
+  "chat": {
+    "attachment_image": "图片",
+    "attachment_video": "视频",
+    "attachment_audio": "音频",
+    "attachment_file": "附件",
+    "quick_message_default_title": "快捷消息",
+    "upload_failed": "上传失败",
+    "send_failed": "发送失败",
+    "drop_to_upload": "拖拽文件到这里上传",
+    "editing_tip": "正在编辑消息，发送后会创建新分支",
+    "cancel_edit": "取消编辑",
+    "delete_attachment_failed": "删除附件失败",
+    "upload_image": "上传图片",
+    "upload_document": "上传文档",
+    "placeholder_ready": "输入消息...",
+    "placeholder_not_ready": "请先选择会话",
+    "send_hint_enter": "按 Enter 发送，Shift + Enter 换行",
+    "send_hint_newline": "按 Enter 换行"
+  }
+}

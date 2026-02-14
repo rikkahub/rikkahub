@@ -15,14 +15,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.utils.DatabaseUtil
+import me.rerere.rikkahub.web.WebServerManager
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -63,6 +67,9 @@ class RikkaHubApp : Application() {
             fetchAndActivate()
         }
 
+        // Start WebServer if enabled in settings
+        startWebServerIfEnabled()
+
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
 
@@ -81,6 +88,20 @@ class RikkaHubApp : Application() {
                 get<FilesManager>().syncFolder()
             }.onFailure {
                 Log.e(TAG, "syncManagedFiles failed", it)
+            }
+        }
+    }
+
+    private fun startWebServerIfEnabled() {
+        get<AppScope>().launch {
+            runCatching {
+                delay(500)
+                val settings = get<SettingsStore>().settingsFlowRaw.first()
+                if (settings.webServerEnabled) {
+                    get<WebServerManager>().start(port = settings.webServerPort)
+                }
+            }.onFailure {
+                Log.e(TAG, "startWebServerIfEnabled failed", it)
             }
         }
     }
@@ -111,6 +132,7 @@ class RikkaHubApp : Application() {
     override fun onTerminate() {
         super.onTerminate()
         get<AppScope>().cancel()
+        get<WebServerManager>().stop()
     }
 }
 

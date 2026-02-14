@@ -798,5 +798,19 @@
   <string name="setting_files_page_no_files">ファイルがありません</string>
   <string name="setting_files_page_folder_upload">アップロード</string>
   <string name="setting_files_page_delete_content_description">削除</string>
+  <string name="setting_page_web_server">Webサーバー</string>
+  <string name="setting_page_web_server_desc">Web経由でRikkaHubにアクセスできるようにする</string>
+  <string name="setting_page_web_server_port">ポート</string>
+  <string name="setting_page_web_server_port_desc">Webサーバーリスンポート（1024-65535）</string>
+  <string name="setting_page_web_server_enable">組み込みWebサーバーを有効にする</string>
+  <string name="setting_page_web_server_lan_address">LANアドレス</string>
+  <string name="setting_page_web_server_mdns_address">mDNSアドレス</string>
+  <string name="setting_page_web_server_error">エラー</string>
+  <string name="setting_page_web_server_start">開始</string>
+  <string name="setting_page_web_server_stop">停止</string>
+  <string name="setting_page_web_server_jwt_enable">認証を有効にする</string>
+  <string name="setting_page_web_server_jwt_enable_desc">Webインターフェースにアクセスする際にパスワード認証が必要</string>
+  <string name="setting_page_web_server_password">アクセスパスワード</string>
+  <string name="setting_page_web_server_password_desc">Webインターフェースへのアクセスに必要なパスワード</string>
 </resources>
 
