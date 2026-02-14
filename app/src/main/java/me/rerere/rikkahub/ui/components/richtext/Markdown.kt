@@ -762,7 +762,7 @@ private fun Paragraph(
             if (!enableLatexRendering || !allowInlinePromotion || containerWidthPx <= 0f) {
                 paragraphText
             } else {
-                // 超过阈值的行内公式提升为块级公式，避免句子被截断。
+                // 超过阈值的行内公式提升为块级避免句子被截断
                 val segments = collectInlineMathSegments(node, content, textSizePx)
                 promoteInlineMathByWidth(
                     text = paragraphText,
@@ -773,7 +773,7 @@ private fun Paragraph(
             }
         }
         if (rewrittenParagraph != paragraphText) {
-            // 避免重复提升导致递归改写。
+            // 避免重复导致递归改写
             MarkdownBlock(
                 content = rewrittenParagraph,
                 onClickCitation = onClickCitation,
@@ -858,7 +858,7 @@ internal fun promoteInlineMathByWidth(
         builder.append(text.substring(cursor, segment.start))
         val ratio = segment.estimatedWidthPx / containerWidthPx
         if (ratio >= threshold) {
-            // 命中阈值：$...$ 转为 $$...$$
+            // 命中阈值：$.$ 转为 $$.$$
             builder.append(inlineToBlockMath(segment.rawText))
         } else {
             builder.append(segment.rawText)
