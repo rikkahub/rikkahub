@@ -104,6 +104,11 @@ data class UpdateFavoriteModelsRequest(
     val modelIds: List<String>,
 )
 
+@Serializable
+data class WebAuthTokenRequest(
+    val password: String,
+)
+
 // ========== Response DTOs ==========
 
 @Serializable
@@ -175,6 +180,12 @@ data class MessageDto(
 @Serializable
 data class ForkConversationResponse(
     val conversationId: String
+)
+
+@Serializable
+data class WebAuthTokenResponse(
+    val token: String,
+    val expiresAt: Long,
 )
 
 // ========== Error Response ==========

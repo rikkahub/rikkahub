@@ -115,6 +115,8 @@ class SettingsStore(
         // Web Server
         val WEB_SERVER_ENABLED = booleanPreferencesKey("web_server_enabled")
         val WEB_SERVER_PORT = intPreferencesKey("web_server_port")
+        val WEB_SERVER_JWT_ENABLED = booleanPreferencesKey("web_server_jwt_enabled")
+        val WEB_SERVER_ACCESS_PASSWORD = stringPreferencesKey("web_server_access_password")
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -192,6 +194,8 @@ class SettingsStore(
                 } ?: emptyList(),
                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
+                webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
+                webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
             )
         }
         .map {
@@ -330,6 +334,8 @@ class SettingsStore(
             preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
             preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
             preferences[WEB_SERVER_PORT] = settings.webServerPort
+            preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
+            preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
         }
     }
 
@@ -445,6 +451,8 @@ data class Settings(
     val lorebooks: List<Lorebook> = emptyList(),
     val webServerEnabled: Boolean = false,
     val webServerPort: Int = 8080,
+    val webServerJwtEnabled: Boolean = false,
+    val webServerAccessPassword: String = "",
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
