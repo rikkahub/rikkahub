@@ -54,7 +54,7 @@ object LocalReader {
     }
 
     private fun calculateScore(element: Element): Double {
-        val text = element.ownText()
+        val text = element.text()
         if (text.isBlank()) return 0.0
 
         // 基础分：段落数量和文字长度
