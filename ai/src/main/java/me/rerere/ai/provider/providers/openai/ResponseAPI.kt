@@ -44,6 +44,7 @@ import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -63,6 +64,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         params: TextGenerationParams
     ): MessageChunk {
         val requestBody = buildRequestBody(
+            providerSetting = providerSetting,
             messages = messages,
             params = params,
             stream = false,
@@ -97,6 +99,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
         val requestBody = buildRequestBody(
+            providerSetting = providerSetting,
             messages = messages,
             params = params,
             stream = true,
@@ -171,10 +174,13 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
     }
 
     private fun buildRequestBody(
+        providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
         stream: Boolean
     ): JsonObject {
+        val host = providerSetting.baseUrl.toHttpUrl().host
+        val capabilities = resolveResponseProviderCapabilities(host)
         return buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)
@@ -201,7 +207,9 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
                 val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget ?: 0)
                 put("reasoning", buildJsonObject {
-                    put("summary", "auto")
+                    if (capabilities.supportsReasoningSummary) {
+                        put("summary", "auto")
+                    }
                     if (level != ReasoningLevel.AUTO) {
                         put("effort", level.effort)
                     }
