@@ -487,6 +487,7 @@ data class DisplaySetting(
     val pasteLongTextThreshold: Int = 1000,
     val sendOnEnter: Boolean = false,
     val enableAutoScroll: Boolean = true,
+    val enableLatexRendering: Boolean = true,
 )
 
 @Serializable

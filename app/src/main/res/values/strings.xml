@@ -812,5 +812,7 @@
   <string name="setting_page_web_server_error">Error</string>
   <string name="setting_page_web_server_start">Start</string>
   <string name="setting_page_web_server_stop">Stop</string>
+  <string name="setting_display_page_enable_latex_rendering_title">Enable LaTeX Rendering</string>
+  <string name="setting_display_page_enable_latex_rendering_desc">Render mathematical expressions and formulas using LaTeX syntax</string>
 </resources>
 

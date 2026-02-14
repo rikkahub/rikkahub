@@ -805,5 +805,7 @@
   <string name="setting_page_web_server_jwt_enable_desc">Требовать проверку пароля при доступе к веб-интерфейсу</string>
   <string name="setting_page_web_server_password">Пароль доступа</string>
   <string name="setting_page_web_server_password_desc">Пароль для доступа к веб-интерфейсу</string>
+  <string name="setting_display_page_enable_latex_rendering_title">Включить рендеринг LaTeX</string>
+  <string name="setting_display_page_enable_latex_rendering_desc">Отображать математические выражения и формулы с использованием синтаксиса LaTeX</string>
 </resources>
 

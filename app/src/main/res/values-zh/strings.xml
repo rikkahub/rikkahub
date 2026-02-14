@@ -812,5 +812,7 @@
   <string name="setting_page_web_server_jwt_enable_desc">访问网页界面时需要密码验证</string>
   <string name="setting_page_web_server_password">访问密码</string>
   <string name="setting_page_web_server_password_desc">网页界面访问所需的密码</string>
+  <string name="setting_display_page_enable_latex_rendering_title">启用 LaTeX 渲染</string>
+  <string name="setting_display_page_enable_latex_rendering_desc">使用 LaTeX 语法渲染数学表达式和公式</string>
 </resources>
 

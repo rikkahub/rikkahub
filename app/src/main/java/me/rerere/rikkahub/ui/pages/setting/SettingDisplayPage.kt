@@ -400,6 +400,26 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
 
             item {
                 ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_enable_latex_rendering_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_enable_latex_rendering_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.enableLatexRendering,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(enableLatexRendering = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
                     headlineContent = {
                         Text(stringResource(R.string.setting_display_page_font_size_title))
                     },

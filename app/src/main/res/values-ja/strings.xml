@@ -812,5 +812,7 @@
   <string name="setting_page_web_server_jwt_enable_desc">Webインターフェースにアクセスする際にパスワード認証が必要</string>
   <string name="setting_page_web_server_password">アクセスパスワード</string>
   <string name="setting_page_web_server_password_desc">Webインターフェースへのアクセスに必要なパスワード</string>
+  <string name="setting_display_page_enable_latex_rendering_title">LaTeXレンダリングを有効にする</string>
+  <string name="setting_display_page_enable_latex_rendering_desc">LaTeX構文を使用して数式や数値表現をレンダリングする</string>
 </resources>
 

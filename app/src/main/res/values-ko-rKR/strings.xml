@@ -812,5 +812,7 @@
   <string name="setting_page_web_server_jwt_enable_desc">웹 인터페이스에 접근할 때 비밀번호 인증이 필요합니다</string>
   <string name="setting_page_web_server_password">접속 비밀번호</string>
   <string name="setting_page_web_server_password_desc">웹 인터페이스 접근에 필요한 비밀번호</string>
+  <string name="setting_display_page_enable_latex_rendering_title">LaTeX 렌더링 활성화</string>
+  <string name="setting_display_page_enable_latex_rendering_desc">LaTeX 구문을 사용해 수식과 공식을 렌더링합니다</string>
 </resources>
 

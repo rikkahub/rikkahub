@@ -812,5 +812,7 @@
   <string name="setting_page_web_server_jwt_enable_desc">存取網頁介面時需要密碼驗證</string>
   <string name="setting_page_web_server_password">存取密碼</string>
   <string name="setting_page_web_server_password_desc">網頁介面存取所需的密碼</string>
+  <string name="setting_display_page_enable_latex_rendering_title">啟用 LaTeX 渲染</string>
+  <string name="setting_display_page_enable_latex_rendering_desc">使用 LaTeX 語法呈現數學表達式與公式</string>
 </resources>
 
