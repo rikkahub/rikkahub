@@ -174,7 +174,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         }
     }
 
-    private fun buildRequestBody(
+    internal fun buildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
@@ -243,7 +243,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         }.mergeCustomBody(params.customBody)
     }
 
-    private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+    internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->

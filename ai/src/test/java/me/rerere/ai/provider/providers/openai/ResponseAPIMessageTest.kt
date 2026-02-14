@@ -37,14 +37,9 @@ class ResponseAPIMessageTest {
         api = ResponseAPI(OkHttpClient())
     }
 
-    // Helper to invoke private buildMessages method via reflection
+    // Helper to invoke buildMessages method
     private fun invokeBuildMessages(messages: List<UIMessage>): JsonArray {
-        val method = ResponseAPI::class.java.getDeclaredMethod(
-            "buildMessages",
-            List::class.java
-        )
-        method.isAccessible = true
-        return method.invoke(api, messages) as JsonArray
+        return api.buildMessages(messages)
     }
 
     private fun invokeBuildRequestBody(
@@ -52,15 +47,7 @@ class ResponseAPIMessageTest {
         params: TextGenerationParams,
         stream: Boolean = false
     ): JsonObject {
-        val method = ResponseAPI::class.java.getDeclaredMethod(
-            "buildRequestBody",
-            ProviderSetting.OpenAI::class.java,
-            List::class.java,
-            TextGenerationParams::class.java,
-            Boolean::class.javaPrimitiveType
-        )
-        method.isAccessible = true
-        return method.invoke(api, providerSetting, listOf(UIMessage.user("hello")), params, stream) as JsonObject
+        return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
     }
 
     private fun createReasoningParams(thinkingBudget: Int? = null): TextGenerationParams {
