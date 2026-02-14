@@ -11,6 +11,8 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.data.datastore.CloudSyncPrompt
+import me.rerere.rikkahub.data.datastore.CloudSyncProvider
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
@@ -87,6 +89,109 @@ class BackupAutomationManager(
             now = now,
             isOnLaunch = true
         )
+    }
+
+    suspend fun detectCloudNewerBackupOnLaunch() {
+        val now = System.currentTimeMillis()
+        val settings = settingsStore.settingsFlow.value
+        val prompts = buildList {
+            if (isWebDavConfigured(settings.webDavConfig)) {
+                runCatching {
+                    webDavSync.listBackupFiles(settings.webDavConfig)
+                        .maxByOrNull { it.lastModified }
+                        ?.takeIf { it.lastModified.toEpochMilli() > settings.webDavConfig.lastBackupAtEpochMillis }
+                        ?.let { backup ->
+                            add(
+                                CloudSyncPrompt(
+                                    provider = CloudSyncProvider.WEBDAV,
+                                    backupId = backup.displayName,
+                                    backupDisplayName = backup.displayName,
+                                    backupLastModifiedEpochMillis = backup.lastModified.toEpochMilli(),
+                                )
+                            )
+                        }
+                }.onFailure {
+                    Log.w(TAG, "detectCloudNewerBackupOnLaunch webdav failed", it)
+                }
+            }
+
+            if (isS3Configured(settings.s3Config)) {
+                runCatching {
+                    s3Sync.listBackupFiles(settings.s3Config)
+                        .maxByOrNull { it.lastModified }
+                        ?.takeIf { it.lastModified.toEpochMilli() > settings.s3Config.lastBackupAtEpochMillis }
+                        ?.let { backup ->
+                            add(
+                                CloudSyncPrompt(
+                                    provider = CloudSyncProvider.S3,
+                                    backupId = backup.key,
+                                    backupDisplayName = backup.displayName,
+                                    backupLastModifiedEpochMillis = backup.lastModified.toEpochMilli(),
+                                )
+                            )
+                        }
+                }.onFailure {
+                    Log.w(TAG, "detectCloudNewerBackupOnLaunch s3 failed", it)
+                }
+            }
+        }
+
+        settingsStore.update {
+            it.copy(
+                pendingCloudSyncPrompt = selectLatestPrompt(prompts),
+                lastCloudSyncCheckAtEpochMillis = now
+            )
+        }
+    }
+
+    suspend fun dismissPendingCloudSyncPrompt() {
+        settingsStore.update {
+            it.copy(pendingCloudSyncPrompt = null)
+        }
+    }
+
+    suspend fun syncFromPendingCloudPrompt(): Result<Unit> {
+        val settings = settingsStore.settingsFlow.value
+        val prompt = settings.pendingCloudSyncPrompt
+            ?: return Result.failure(IllegalStateException("No pending cloud sync prompt"))
+        val now = System.currentTimeMillis()
+        return runCatching {
+            when (prompt.provider) {
+                CloudSyncProvider.WEBDAV -> {
+                    val item = webDavSync.listBackupFiles(settings.webDavConfig)
+                        .firstOrNull { it.displayName == prompt.backupId }
+                        ?: error("WebDAV backup not found: ${prompt.backupId}")
+                    webDavSync.restore(settings.webDavConfig, item)
+                    settingsStore.update {
+                        it.copy(
+                            pendingCloudSyncPrompt = null,
+                            webDavConfig = it.webDavConfig.copy(
+                                lastBackupAtEpochMillis = now,
+                                lastAutoBackupError = "",
+                                lastAutoBackupFailedAtEpochMillis = 0L
+                            )
+                        )
+                    }
+                }
+
+                CloudSyncProvider.S3 -> {
+                    val item = s3Sync.listBackupFiles(settings.s3Config)
+                        .firstOrNull { it.key == prompt.backupId }
+                        ?: error("S3 backup not found: ${prompt.backupId}")
+                    s3Sync.restoreFromS3(settings.s3Config, item)
+                    settingsStore.update {
+                        it.copy(
+                            pendingCloudSyncPrompt = null,
+                            s3Config = it.s3Config.copy(
+                                lastBackupAtEpochMillis = now,
+                                lastAutoBackupError = "",
+                                lastAutoBackupFailedAtEpochMillis = 0L
+                            )
+                        )
+                    }
+                }
+            }
+        }
     }
 
     suspend fun checkAndNotifyReminderIfNeeded() {
@@ -282,6 +387,22 @@ class BackupAutomationManager(
                 nowEpochMillis = nowEpochMillis
             )
             return webDavNeedReminder || s3NeedReminder
+        }
+
+        fun selectLatestPrompt(prompts: List<CloudSyncPrompt>): CloudSyncPrompt? {
+            if (prompts.isEmpty()) return null
+            return prompts.maxWithOrNull { a, b ->
+                val timeDiff = a.backupLastModifiedEpochMillis.compareTo(b.backupLastModifiedEpochMillis)
+                if (timeDiff != 0) {
+                    timeDiff
+                } else {
+                    when {
+                        a.provider == b.provider -> 0
+                        a.provider == CloudSyncProvider.WEBDAV -> 1
+                        else -> -1
+                    }
+                }
+            }
         }
     }
 }

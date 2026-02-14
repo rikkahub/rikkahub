@@ -738,6 +738,16 @@
   <string name="backup_auto_last_success">最近成功：%s</string>
   <string name="backup_auto_last_error">最近错误：%s</string>
   <string name="notification_channel_backup_reminder">备份提醒</string>
+  <string name="backup_cloud_sync_prompt_title">发现云端新备份</string>
+  <string name="backup_cloud_sync_prompt_desc">发现来自 %1$s 的更新备份：\n%2$s\n更新时间：%3$s</string>
+  <string name="backup_cloud_sync_provider_webdav">WebDAV</string>
+  <string name="backup_cloud_sync_provider_s3">S3</string>
+  <string name="backup_cloud_sync_now">立即同步</string>
+  <string name="backup_cloud_sync_later">稍后</string>
+  <string name="backup_cloud_sync_confirm_title">确认同步</string>
+  <string name="backup_cloud_sync_confirm_desc">同步将使用云端备份覆盖本地聊天/文件数据，是否继续？</string>
+  <string name="backup_cloud_sync_success">云端备份同步成功</string>
+  <string name="backup_cloud_sync_failed">云端备份同步失败：%s</string>
   <string name="setting_display_page_show_assistant_bubble_title">显示助手消息气泡</string>
   <string name="setting_display_page_show_assistant_bubble_desc">是否为助手消息显示气泡背景</string>
   <string name="setting_page_message_display_settings">消息显示</string>

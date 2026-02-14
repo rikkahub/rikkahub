@@ -753,6 +753,16 @@
   <string name="backup_auto_last_success">Last success: %s</string>
   <string name="backup_auto_last_error">Last error: %s</string>
   <string name="notification_channel_backup_reminder">Backup Reminder</string>
+  <string name="backup_cloud_sync_prompt_title">Cloud Backup Update Available</string>
+  <string name="backup_cloud_sync_prompt_desc">Found a newer backup from %1$s:\n%2$s\nUpdated at: %3$s</string>
+  <string name="backup_cloud_sync_provider_webdav">WebDAV</string>
+  <string name="backup_cloud_sync_provider_s3">S3</string>
+  <string name="backup_cloud_sync_now">Sync Now</string>
+  <string name="backup_cloud_sync_later">Later</string>
+  <string name="backup_cloud_sync_confirm_title">Confirm Sync</string>
+  <string name="backup_cloud_sync_confirm_desc">Syncing will overwrite local chat records/files with cloud backup data. Continue?</string>
+  <string name="backup_cloud_sync_success">Cloud backup synced successfully</string>
+  <string name="backup_cloud_sync_failed">Cloud backup sync failed: %s</string>
   <string name="setting_display_page_show_assistant_bubble_title">Show Assistant Message Bubble</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Whether to show bubble background for assistant messages</string>
   <string name="setting_page_message_display_settings">Message Display</string>

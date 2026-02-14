@@ -150,6 +150,7 @@ class RikkaHubApp : Application() {
                 manager.runMigrationIfNeeded()
                 manager.ensurePeriodicWorkState()
                 manager.runOnAppLaunchIfNeeded()
+                manager.detectCloudNewerBackupOnLaunch()
                 manager.checkAndNotifyReminderIfNeeded()
             }.onFailure {
                 Log.e(TAG, "runBackupAutomationStartup failed", it)

@@ -112,6 +112,8 @@ class SettingsStore(
         val BACKUP_REMINDER_ENABLED = booleanPreferencesKey("backup_reminder_enabled")
         val BACKUP_REMINDER_INTERVAL_DAYS = intPreferencesKey("backup_reminder_interval_days")
         val LAST_BACKUP_REMINDER_AT_EPOCH_MILLIS = longPreferencesKey("last_backup_reminder_at_epoch_millis")
+        val LAST_CLOUD_SYNC_CHECK_AT_EPOCH_MILLIS = longPreferencesKey("last_cloud_sync_check_at_epoch_millis")
+        val PENDING_CLOUD_SYNC_PROMPT = stringPreferencesKey("pending_cloud_sync_prompt")
 
         // TTS
         val TTS_PROVIDERS = stringPreferencesKey("tts_providers")
@@ -190,6 +192,10 @@ class SettingsStore(
                 backupReminderEnabled = preferences[BACKUP_REMINDER_ENABLED] == true,
                 backupReminderIntervalDays = preferences[BACKUP_REMINDER_INTERVAL_DAYS] ?: 7,
                 lastBackupReminderAtEpochMillis = preferences[LAST_BACKUP_REMINDER_AT_EPOCH_MILLIS] ?: 0L,
+                lastCloudSyncCheckAtEpochMillis = preferences[LAST_CLOUD_SYNC_CHECK_AT_EPOCH_MILLIS] ?: 0L,
+                pendingCloudSyncPrompt = preferences[PENDING_CLOUD_SYNC_PROMPT]?.let {
+                    JsonInstant.decodeFromString(it)
+                },
                 ttsProviders = preferences[TTS_PROVIDERS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -339,6 +345,10 @@ class SettingsStore(
             preferences[BACKUP_REMINDER_ENABLED] = settings.backupReminderEnabled
             preferences[BACKUP_REMINDER_INTERVAL_DAYS] = settings.backupReminderIntervalDays.coerceAtLeast(1)
             preferences[LAST_BACKUP_REMINDER_AT_EPOCH_MILLIS] = settings.lastBackupReminderAtEpochMillis
+            preferences[LAST_CLOUD_SYNC_CHECK_AT_EPOCH_MILLIS] = settings.lastCloudSyncCheckAtEpochMillis
+            settings.pendingCloudSyncPrompt?.let {
+                preferences[PENDING_CLOUD_SYNC_PROMPT] = JsonInstant.encodeToString(it)
+            } ?: preferences.remove(PENDING_CLOUD_SYNC_PROMPT)
             preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
             settings.selectedTTSProviderId?.let {
                 preferences[SELECTED_TTS_PROVIDER] = it.toString()
@@ -462,6 +472,8 @@ data class Settings(
     val backupReminderEnabled: Boolean = false,
     val backupReminderIntervalDays: Int = 7,
     val lastBackupReminderAtEpochMillis: Long = 0L,
+    val lastCloudSyncCheckAtEpochMillis: Long = 0L,
+    val pendingCloudSyncPrompt: CloudSyncPrompt? = null,
     val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
@@ -530,6 +542,26 @@ data class WebDavConfig(
         FILES,
     }
 }
+
+@Serializable
+enum class CloudSyncProvider {
+    WEBDAV,
+    S3,
+}
+
+@Serializable
+enum class CloudSyncPromptReason {
+    REMOTE_NEWER_THAN_LOCAL,
+}
+
+@Serializable
+data class CloudSyncPrompt(
+    val provider: CloudSyncProvider,
+    val backupId: String,
+    val backupDisplayName: String,
+    val backupLastModifiedEpochMillis: Long,
+    val reason: CloudSyncPromptReason = CloudSyncPromptReason.REMOTE_NEWER_THAN_LOCAL,
+)
 
 fun Settings.isNotConfigured() = providers.all { it.models.isEmpty() }
 

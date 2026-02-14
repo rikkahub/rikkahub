@@ -1,9 +1,12 @@
 package me.rerere.rikkahub.data.sync.backup
 
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.CloudSyncPrompt
+import me.rerere.rikkahub.data.datastore.CloudSyncProvider
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.TimeUnit
@@ -97,5 +100,47 @@ class BackupAutomationManagerTest {
             )
         )
         assertTrue(BackupAutomationManager.hasAnyConfiguredAndEnabledProvider(settings))
+    }
+
+    @Test
+    fun selectLatestPrompt_chooseNewerOne() {
+        val prompts = listOf(
+            CloudSyncPrompt(
+                provider = CloudSyncProvider.WEBDAV,
+                backupId = "a.zip",
+                backupDisplayName = "a.zip",
+                backupLastModifiedEpochMillis = 1000L
+            ),
+            CloudSyncPrompt(
+                provider = CloudSyncProvider.S3,
+                backupId = "b.zip",
+                backupDisplayName = "b.zip",
+                backupLastModifiedEpochMillis = 2000L
+            )
+        )
+        val selected = BackupAutomationManager.selectLatestPrompt(prompts)
+        assertEquals(CloudSyncProvider.S3, selected?.provider)
+        assertEquals("b.zip", selected?.backupId)
+    }
+
+    @Test
+    fun selectLatestPrompt_sameTimestampPreferWebDav() {
+        val prompts = listOf(
+            CloudSyncPrompt(
+                provider = CloudSyncProvider.S3,
+                backupId = "s3.zip",
+                backupDisplayName = "s3.zip",
+                backupLastModifiedEpochMillis = 2000L
+            ),
+            CloudSyncPrompt(
+                provider = CloudSyncProvider.WEBDAV,
+                backupId = "dav.zip",
+                backupDisplayName = "dav.zip",
+                backupLastModifiedEpochMillis = 2000L
+            )
+        )
+        val selected = BackupAutomationManager.selectLatestPrompt(prompts)
+        assertEquals(CloudSyncProvider.WEBDAV, selected?.provider)
+        assertEquals("dav.zip", selected?.backupId)
     }
 }
