@@ -22,7 +22,6 @@ import me.rerere.ai.ui.ImageGenerationResult
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.util.KeyRoulette
-import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.toHeaders
@@ -53,8 +52,7 @@ class OpenAIProvider(
                 .get()
                 .build()
 
-            val response =
-                client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
+            val response = client.newCall(request).await()
             if (!response.isSuccessful) {
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
@@ -86,7 +84,7 @@ class OpenAIProvider(
             .addHeader("Authorization", "Bearer $key")
             .get()
             .build()
-        val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
+        val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             error("Failed to get balance: ${response.code} ${response.body?.string()}")
         }
@@ -171,7 +169,7 @@ class OpenAIProvider(
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
+        val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             error("Failed to generate image: ${response.code} ${response.body?.string()}")
         }

@@ -530,7 +530,6 @@
   <string name="setting_provider_page_model_type">Тип модели</string>
   <string name="setting_provider_page_models">Модели</string>
   <string name="setting_provider_page_name">Имя</string>
-  <string name="setting_provider_page_network_proxy">Сетевой прокси</string>
   <string name="setting_provider_page_no_models">Нет моделей</string>
   <string name="setting_provider_page_no_permission">Нет разрешения</string>
   <string name="setting_provider_page_no_qr_found">Не найдено действительного QR-кода</string>
@@ -539,10 +538,6 @@
   <string name="setting_provider_page_project_id">Идентификатор проекта</string>
   <string name="setting_provider_page_provider_override">Переопределение поставщика</string>
   <string name="setting_provider_page_provider_override_desc">Настройте пользовательские параметры поставщика для этой конкретной модели. Будет наследовать общие свойства от родительского поставщика.</string>
-  <string name="setting_provider_page_proxy_host">Хост</string>
-  <string name="setting_provider_page_proxy_password">Пароль (необязательно)</string>
-  <string name="setting_provider_page_proxy_port">Порт</string>
-  <string name="setting_provider_page_proxy_username">Имя пользователя (необязательно)</string>
   <string name="setting_provider_page_qr_decode_failed">Не удалось распознать QR-код: %s</string>
   <string name="setting_provider_page_reasoning">Размышления</string>
   <string name="setting_provider_page_response_api">API ответов</string>

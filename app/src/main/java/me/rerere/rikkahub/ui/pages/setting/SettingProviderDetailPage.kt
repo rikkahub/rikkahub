@@ -81,7 +81,6 @@ import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Cable
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Network
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Share
@@ -96,7 +95,6 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
-import me.rerere.ai.provider.ProviderProxy
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.registry.ModelRegistry
@@ -135,7 +133,7 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
-    val pager = rememberPagerState { 3 }
+    val pager = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val context = LocalContext.current
@@ -210,16 +208,6 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                         }
                     }
                 )
-                NavigationBarItem(
-                    selected = pager.currentPage == 2,
-                    label = { Text(stringResource(id = R.string.setting_provider_page_network_proxy)) },
-                    icon = { Icon(Lucide.Network, null) },
-                    onClick = {
-                        scope.launch {
-                            pager.animateScrollToPage(2)
-                        }
-                    }
-                )
             }
         }
     ) {
@@ -248,13 +236,6 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
 
                 1 -> {
                     SettingProviderModelPage(
-                        provider = provider,
-                        onEdit = onEdit
-                    )
-                }
-
-                2 -> {
-                    SettingProviderProxyPage(
                         provider = provider,
                         onEdit = onEdit
                     )
@@ -377,113 +358,6 @@ private fun SettingProviderModelPage(
         providerSetting = provider,
         onUpdateProvider = onEdit
     )
-}
-
-@Composable
-private fun SettingProviderProxyPage(
-    provider: ProviderSetting,
-    onEdit: (ProviderSetting) -> Unit
-) {
-    val toaster = LocalToaster.current
-    val context = LocalContext.current
-    var editingProxy by remember(provider.proxy) {
-        mutableStateOf(provider.proxy)
-    }
-    val proxyType = when (editingProxy) {
-        is ProviderProxy.Http -> "HTTP"
-        is ProviderProxy.None -> "None"
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            val types = listOf("None", "HTTP")
-            types.forEachIndexed { index, type ->
-                SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(index, types.size),
-                    label = { Text(type) },
-                    selected = proxyType == type,
-                    onClick = {
-                        editingProxy = when (type) {
-                            "HTTP" -> ProviderProxy.Http(
-                                address = "",
-                                port = 8080
-                            )
-
-                            else -> ProviderProxy.None
-                        }
-                    }
-                )
-            }
-        }
-
-        when (editingProxy) {
-            is ProviderProxy.None -> {}
-            is ProviderProxy.Http -> {
-                OutlinedTextField(
-                    value = (editingProxy as ProviderProxy.Http).address,
-                    onValueChange = {
-                        editingProxy = (editingProxy as ProviderProxy.Http).copy(address = it)
-                    },
-                    label = { Text(stringResource(id = R.string.setting_provider_page_proxy_host)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                var portStr by remember { mutableStateOf((editingProxy as ProviderProxy.Http).port.toString()) }
-                OutlinedTextField(
-                    value = portStr,
-                    onValueChange = {
-                        portStr = it
-                        it.toIntOrNull()?.let { port ->
-                            editingProxy = (editingProxy as ProviderProxy.Http).copy(port = port)
-                        }
-                    },
-                    label = { Text(stringResource(id = R.string.setting_provider_page_proxy_port)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-                OutlinedTextField(
-                    value = (editingProxy as ProviderProxy.Http).username ?: "",
-                    onValueChange = {
-                        editingProxy = (editingProxy as ProviderProxy.Http).copy(username = it)
-                    },
-                    label = { Text(stringResource(id = R.string.setting_provider_page_proxy_username)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = (editingProxy as ProviderProxy.Http).password ?: "",
-                    onValueChange = {
-                        editingProxy = (editingProxy as ProviderProxy.Http).copy(password = it)
-                    },
-                    label = { Text(stringResource(id = R.string.setting_provider_page_proxy_password)) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            Button(
-                onClick = {
-                    onEdit(provider.copyProvider(proxy = editingProxy))
-                    toaster.show(
-                        context.getString(R.string.setting_provider_page_save_success),
-                        type = ToastType.Success
-                    )
-                }
-            ) {
-                Text(stringResource(id = R.string.setting_provider_page_save))
-            }
-        }
-    }
 }
 
 @Composable

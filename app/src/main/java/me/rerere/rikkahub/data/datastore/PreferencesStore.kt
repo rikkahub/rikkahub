@@ -547,7 +547,7 @@ fun Model.findProvider(providers: List<ProviderSetting>, checkOverwrite: Boolean
     val provider = findModelProviderFromList(providers) ?: return null
     val providerOverwrite = this.providerOverwrite
     if (checkOverwrite && providerOverwrite != null) {
-        return providerOverwrite.copyProvider(proxy = provider.proxy, models = emptyList())
+        return providerOverwrite.copyProvider(models = emptyList())
     }
     return provider
 }

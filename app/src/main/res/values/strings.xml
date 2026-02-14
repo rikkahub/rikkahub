@@ -544,7 +544,6 @@
   <string name="setting_provider_page_model_type">Model Type</string>
   <string name="setting_provider_page_models">Models</string>
   <string name="setting_provider_page_name">Name</string>
-  <string name="setting_provider_page_network_proxy">Network Proxy</string>
   <string name="setting_provider_page_no_models">No models</string>
   <string name="setting_provider_page_no_permission">No permission</string>
   <string name="setting_provider_page_no_qr_found">No valid QR code found</string>
@@ -553,10 +552,6 @@
   <string name="setting_provider_page_project_id">Project Id</string>
   <string name="setting_provider_page_provider_override">Provider Override</string>
   <string name="setting_provider_page_provider_override_desc">Configure custom provider settings for this specific model. Will inherit common properties from parent provider.</string>
-  <string name="setting_provider_page_proxy_host">Host</string>
-  <string name="setting_provider_page_proxy_password">Password (Optional)</string>
-  <string name="setting_provider_page_proxy_port">Port</string>
-  <string name="setting_provider_page_proxy_username">Username (Optional)</string>
   <string name="setting_provider_page_qr_decode_failed">Failed to parse QR code: %s</string>
   <string name="setting_provider_page_reasoning">Reasoning</string>
   <string name="setting_provider_page_response_api">Response API</string>

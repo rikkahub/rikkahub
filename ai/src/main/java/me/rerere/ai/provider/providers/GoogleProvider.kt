@@ -45,7 +45,6 @@ import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
-import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -116,7 +115,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     .get()
                     .build()
             )
-            val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
+            val response = client.newCall(request).await()
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: error("empty body")
                 Log.d(TAG, "listModels: $body")
@@ -173,7 +172,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .build()
         )
 
-        val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
+        val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
         }
@@ -327,8 +326,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             }
         }
 
-        val eventSource =
-            EventSources.createFactory(client.configureClientWithProxy(providerSetting.proxy))
+        val eventSource = EventSources.createFactory(client)
                 .newEventSource(request, listener)
 
         awaitClose {
@@ -786,7 +784,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .build()
         )
 
-        val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
+        val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             error("Failed to generate image: ${response.code} ${response.body.string()}")
         }

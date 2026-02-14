@@ -35,7 +35,6 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -68,8 +67,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .get()
                 .build()
 
-            val response =
-                client.configureClientWithProxy(providerSetting.proxy).newCall(request).execute()
+            val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
@@ -114,7 +112,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
+        val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
         }
@@ -245,8 +243,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             }
         }
 
-        val eventSource =
-            EventSources.createFactory(client.configureClientWithProxy(providerSetting.proxy))
+        val eventSource = EventSources.createFactory(client)
                 .newEventSource(request, listener)
 
         awaitClose {

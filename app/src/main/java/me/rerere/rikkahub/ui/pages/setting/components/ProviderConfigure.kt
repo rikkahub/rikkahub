@@ -91,7 +91,6 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id,
             enabled = this.enabled,
             models = this.models,
-            proxy = this.proxy,
             balanceOption = this.balanceOption,
             builtIn = this.builtIn,
             apiKey = apiKey
@@ -101,7 +100,6 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id,
             enabled = this.enabled,
             models = this.models,
-            proxy = this.proxy,
             balanceOption = this.balanceOption,
             builtIn = this.builtIn,
             apiKey = apiKey
@@ -111,7 +109,6 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id,
             enabled = this.enabled,
             models = this.models,
-            proxy = this.proxy,
             balanceOption = this.balanceOption,
             builtIn = this.builtIn,
             apiKey = apiKey

@@ -532,7 +532,6 @@
   <string name="setting_provider_page_model_type">模型類型</string>
   <string name="setting_provider_page_models">模型</string>
   <string name="setting_provider_page_name">名稱</string>
-  <string name="setting_provider_page_network_proxy">網路代理</string>
   <string name="setting_provider_page_no_models">暫無模型</string>
   <string name="setting_provider_page_no_permission">沒有權限</string>
   <string name="setting_provider_page_no_qr_found">未找到有效的二維碼</string>
@@ -541,10 +540,6 @@
   <string name="setting_provider_page_project_id">專案 ID</string>
   <string name="setting_provider_page_provider_override">提供商覆寫</string>
   <string name="setting_provider_page_provider_override_desc">為此特定模型配置自訂提供商設定。將從父提供商繼承通用屬性。</string>
-  <string name="setting_provider_page_proxy_host">主機位址</string>
-  <string name="setting_provider_page_proxy_password">密碼 (可選)</string>
-  <string name="setting_provider_page_proxy_port">埠號</string>
-  <string name="setting_provider_page_proxy_username">使用者名稱 (可選)</string>
   <string name="setting_provider_page_qr_decode_failed">解析二維碼失敗：%s</string>
   <string name="setting_provider_page_reasoning">推理</string>
   <string name="setting_provider_page_response_api">Response API</string>
