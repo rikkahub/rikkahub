@@ -97,6 +97,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.exportImage
 import me.rerere.rikkahub.utils.getActivity
+import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.utils.toLocalString
 import org.koin.compose.koinInject
@@ -269,6 +270,73 @@ private fun exportToMarkdown(
                                 append(it)
                             }
                         appendLine()
+                        appendLine()
+                    }
+
+                    is UIMessagePart.Tool -> {
+                        append("**Tool**: `${part.toolName}`")
+                        appendLine()
+                        if (part.toolCallId.isNotBlank()) {
+                            append("- Call ID: `${part.toolCallId}`")
+                            appendLine()
+                        }
+
+                        append("Input:")
+                        appendLine()
+                        append("```json")
+                        appendLine()
+                        append(JsonInstantPretty.encodeToString(part.inputAsJson()))
+                        appendLine()
+                        append("```")
+                        appendLine()
+
+                        if (part.output.isNotEmpty()) {
+                            append("Output:")
+                            appendLine()
+                            part.output.forEach { outputPart ->
+                                when (outputPart) {
+                                    is UIMessagePart.Text -> {
+                                        append("```text")
+                                        appendLine()
+                                        append(outputPart.text)
+                                        appendLine()
+                                        append("```")
+                                        appendLine()
+                                    }
+
+                                    is UIMessagePart.Reasoning -> {
+                                        outputPart.reasoning.lines()
+                                            .filter { it.isNotBlank() }
+                                            .forEach {
+                                                append("> $it")
+                                                appendLine()
+                                            }
+                                    }
+
+                                    is UIMessagePart.Image -> {
+                                        append("![Tool Image](${outputPart.encodeBase64().getOrNull()?.base64})")
+                                        appendLine()
+                                    }
+
+                                    is UIMessagePart.Document -> {
+                                        append("[Document: ${outputPart.fileName}](${outputPart.url})")
+                                        appendLine()
+                                    }
+
+                                    is UIMessagePart.Video -> {
+                                        append("[Video](${outputPart.url})")
+                                        appendLine()
+                                    }
+
+                                    is UIMessagePart.Audio -> {
+                                        append("[Audio](${outputPart.url})")
+                                        appendLine()
+                                    }
+
+                                    else -> {}
+                                }
+                            }
+                        }
                         appendLine()
                     }
 
