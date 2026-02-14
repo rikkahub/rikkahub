@@ -4,4 +4,5 @@
   <string name="click_to_get_api_key">点击获取API Key</string>
   <string name="searxng_desc_1">settings.yml内需要开启json format支持:</string>
   <string name="searxng_desc_2">search:\n  formats:\n    - html\n    - json</string>
+  <string name="rikka_local_desc">全内置本地搜索服务。支持多源并发搜索与本地网页抓取。无需 API Key。</string>
 </resources>

@@ -4,4 +4,5 @@
   <string name="click_to_get_api_key">Click to get API Key</string>
   <string name="searxng_desc_1">settings.yml needs to enable json format support:</string>
   <string name="searxng_desc_2">search:\n  formats:\n    - html\n    - json</string>
+  <string name="rikka_local_desc">All-in-one local search service. Supports multi-source concurrent search and local web scraping. No API Key required.</string>
 </resources>

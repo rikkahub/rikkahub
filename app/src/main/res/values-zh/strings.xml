@@ -481,6 +481,7 @@
   <string name="setting_page_search_service">搜索服务</string>
   <string name="setting_page_search_service_desc">设置搜索服务</string>
   <string name="setting_page_search_title">搜索服务</string>
+  <string name="rikka_local_desc">全内置本地搜索服务。支持多源并发搜索与本地网页抓取。无需 API Key。</string>
   <string name="setting_page_share">分享</string>
   <string name="setting_page_share_desc">分享本APP给朋友</string>
   <string name="setting_page_share_text">RikkaHub - 开源安卓AI助手\n\n官网: https://rikka-ai.com/</string>

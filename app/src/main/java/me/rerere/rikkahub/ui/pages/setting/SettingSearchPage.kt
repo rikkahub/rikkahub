@@ -371,6 +371,8 @@ private fun SearchProviderCard(
                                 onUpdateService(options)
                             }
                         }
+
+                        is SearchServiceOptions.RikkaLocalOptions -> {}
                     }
 
                     ProvideTextStyle(MaterialTheme.typography.labelMedium) {
@@ -840,6 +842,27 @@ private fun FirecrawlOptions(
     options: SearchServiceOptions.FirecrawlOptions,
     onUpdateOptions: (SearchServiceOptions.FirecrawlOptions) -> Unit
 ) {
+    FormItem(
+        label = {
+            Text("Base URL")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.baseUrl,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        baseUrl = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = {
+                Text("https://api.firecrawl.dev")
+            }
+        )
+    }
+
     FormItem(
         label = {
             Text("API Key")

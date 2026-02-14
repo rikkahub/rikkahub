@@ -493,6 +493,7 @@
   <string name="setting_page_search_service">Search Service</string>
   <string name="setting_page_search_service_desc">Set up search service</string>
   <string name="setting_page_search_title">Search Service</string>
+  <string name="rikka_local_desc">All-in-one local search service. Supports multi-source concurrent search and local web scraping. No API Key required.</string>
   <string name="setting_page_share">Share</string>
   <string name="setting_page_share_desc">Share this app with friends</string>
   <string name="setting_page_share_text">RikkaHub - Open Source Android AI Assistant\n\nWebsite: https://rikka-ai.com/</string>
