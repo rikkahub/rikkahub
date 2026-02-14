@@ -16,8 +16,10 @@ import me.rerere.rikkahub.data.datastore.CloudSyncProvider
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
+import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.S3Sync
 import me.rerere.rikkahub.data.sync.s3.S3Config
+import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.utils.sendNotification
 import java.util.concurrent.TimeUnit
@@ -294,6 +296,65 @@ class BackupAutomationManager(
         settingsStore.update {
             it.copy(s3Config = updated)
         }
+    }
+
+    private fun findWebDavBackupForPrompt(
+        prompt: CloudSyncPrompt,
+        backups: List<WebDavBackupItem>,
+    ): BackupCandidateResult<WebDavBackupItem> {
+        return findBackupForPrompt(
+            prompt = prompt,
+            backups = backups,
+            idSelector = { it.displayName },
+            timeSelector = { it.lastModified.toEpochMilli() },
+            providerName = "WebDAV"
+        )
+    }
+
+    private fun findS3BackupForPrompt(
+        prompt: CloudSyncPrompt,
+        backups: List<S3BackupItem>,
+    ): BackupCandidateResult<S3BackupItem> {
+        return findBackupForPrompt(
+            prompt = prompt,
+            backups = backups,
+            idSelector = { it.key },
+            timeSelector = { it.lastModified.toEpochMilli() },
+            providerName = "S3"
+        )
+    }
+
+    private fun <T> findBackupForPrompt(
+        prompt: CloudSyncPrompt,
+        backups: List<T>,
+        idSelector: (T) -> String,
+        timeSelector: (T) -> Long,
+        providerName: String,
+    ): BackupCandidateResult<T> {
+        val sameId = backups.filter { idSelector(it) == prompt.backupId }
+        if (sameId.isEmpty()) {
+            return BackupCandidateResult.NotFound(
+                "$providerName backup not found by id: ${prompt.backupId}"
+            )
+        }
+
+        val sameTimestamp = sameId.filter { timeSelector(it) == prompt.backupLastModifiedEpochMillis }
+        return when (sameTimestamp.size) {
+            0 -> BackupCandidateResult.NotFound(
+                "$providerName backup timestamp mismatch for id ${prompt.backupId}: ${prompt.backupLastModifiedEpochMillis}"
+            )
+
+            1 -> BackupCandidateResult.Unique(sameTimestamp.first())
+            else -> BackupCandidateResult.Ambiguous(
+                "$providerName backup candidates are not unique for id ${prompt.backupId}. Please restore manually."
+            )
+        }
+    }
+
+    private sealed interface BackupCandidateResult<out T> {
+        data class Unique<T>(val item: T) : BackupCandidateResult<T>
+        data class NotFound(val message: String) : BackupCandidateResult<Nothing>
+        data class Ambiguous(val message: String) : BackupCandidateResult<Nothing>
     }
 
     companion object {
