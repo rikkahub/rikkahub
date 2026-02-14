@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import androidx.core.net.toUri
@@ -102,6 +104,7 @@ private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MAT
 val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
+private const val INLINE_PROMOTION_THRESHOLD = 0.8f
 
 // 预处理markdown内容
 private fun preProcess(content: String): String {
@@ -194,7 +197,8 @@ fun MarkdownBlock(
     content: String,
     modifier: Modifier = Modifier,
     style: TextStyle = LocalTextStyle.current,
-    onClickCitation: (String) -> Unit = {}
+    onClickCitation: (String) -> Unit = {},
+    allowInlinePromotion: Boolean = true,
 ) {
     var (data, setData) = remember {
         val preprocessed = preProcess(content)
@@ -226,7 +230,10 @@ fun MarkdownBlock(
         ) {
             astTree.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = preprocessed, onClickCitation = onClickCitation
+                    node = child,
+                    content = preprocessed,
+                    onClickCitation = onClickCitation,
+                    allowInlinePromotion = allowInlinePromotion,
                 )
             }
         }
@@ -273,14 +280,19 @@ private fun MarkdownNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    listLevel: Int = 0
+    listLevel: Int = 0,
+    allowInlinePromotion: Boolean = true,
 ) {
     when (node.type) {
         // 文件根节点
         MarkdownElementTypes.MARKDOWN_FILE -> {
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    modifier = modifier,
+                    onClickCitation = onClickCitation,
+                    allowInlinePromotion = allowInlinePromotion,
                 )
             }
         }
@@ -288,7 +300,11 @@ private fun MarkdownNode(
         // 段落
         MarkdownElementTypes.PARAGRAPH -> {
             Paragraph(
-                node = node, content = content, modifier = modifier, onClickCitation = onClickCitation
+                node = node,
+                content = content,
+                modifier = modifier,
+                onClickCitation = onClickCitation,
+                allowInlinePromotion = allowInlinePromotion,
             )
         }
 
@@ -313,6 +329,7 @@ private fun MarkdownNode(
                                 onClickCitation = onClickCitation,
                                 modifier = modifier.padding(vertical = 16.dp),
                                 trim = true,
+                                allowInlinePromotion = allowInlinePromotion,
                             )
                         }
                     }
@@ -699,6 +716,7 @@ private fun Paragraph(
     trim: Boolean = false,
     onClickCitation: (String) -> Unit = {},
     modifier: Modifier,
+    allowInlinePromotion: Boolean = true,
 ) {
     // dumpAst(node, content)
     if (node.findChildOfTypeRecursive(MarkdownElementTypes.IMAGE, GFMElementTypes.BLOCK_MATH) != null) {
@@ -723,12 +741,44 @@ private fun Paragraph(
 
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
-    FlowRow(
+    BoxWithConstraints(
         modifier = modifier.then(
-            if (node.nextSibling() != null) Modifier.padding(bottom = 8.dp)
-            else Modifier
+            if (node.nextSibling() != null) Modifier.padding(bottom = 8.dp) else Modifier
         )
     ) {
+        val paragraphText = remember(node, content) { node.getTextInNode(content) }
+        val containerWidthPx = with(density) { maxWidth.toPx() }
+        val textSizePx = with(density) {
+            if (textStyle.fontSize.isSpecified) textStyle.fontSize.toPx() else LocalTextStyle.current.fontSize.toPx()
+        }
+        val rewrittenParagraph = remember(
+            node,
+            paragraphText,
+            containerWidthPx,
+            textSizePx,
+            enableLatexRendering,
+            allowInlinePromotion,
+        ) {
+            if (!enableLatexRendering || !allowInlinePromotion || containerWidthPx <= 0f) {
+                paragraphText
+            } else {
+                val segments = collectInlineMathSegments(node, content, textSizePx)
+                promoteInlineMathByWidth(
+                    text = paragraphText,
+                    inlineMathSegments = segments.map { it.relativeTo(node.startOffset) },
+                    containerWidthPx = containerWidthPx,
+                    threshold = INLINE_PROMOTION_THRESHOLD
+                )
+            }
+        }
+        if (rewrittenParagraph != paragraphText) {
+            MarkdownBlock(
+                content = rewrittenParagraph,
+                onClickCitation = onClickCitation,
+                allowInlinePromotion = false,
+            )
+            return@BoxWithConstraints
+        }
         val annotatedString = remember(content, enableLatexRendering) {
             buildAnnotatedString {
                 node.children.fastForEach { child ->
@@ -748,15 +798,82 @@ private fun Paragraph(
         }
         Text(
             text = annotatedString,
-            modifier = Modifier,
+            modifier = Modifier.fillMaxWidth(),
             inlineContent = inlineContents,
             softWrap = true,
             overflow = TextOverflow.Visible,
             style = LocalTextStyle.current.copy(
-                lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight
+                lineHeight = if (hasInlineMath && enableLatexRendering) {
+                    TextUnit.Unspecified
+                } else {
+                    LocalTextStyle.current.lineHeight
+                }
             )
         )
     }
+}
+
+internal data class InlineMathSegment(
+    val start: Int,
+    val end: Int,
+    val rawText: String,
+    val estimatedWidthPx: Float,
+)
+
+private fun InlineMathSegment.relativeTo(baseOffset: Int): InlineMathSegment {
+    return copy(start = start - baseOffset, end = end - baseOffset)
+}
+
+private fun collectInlineMathSegments(node: ASTNode, content: String, fontSizePx: Float): List<InlineMathSegment> {
+    val segments = mutableListOf<InlineMathSegment>()
+    node.traverseChildren { child ->
+        if (child.type == GFMElementTypes.INLINE_MATH) {
+            val raw = child.getTextInNode(content)
+            val width = assumeLatexSize(raw, fontSizePx).width().toFloat()
+            segments += InlineMathSegment(
+                start = child.startOffset,
+                end = child.endOffset,
+                rawText = raw,
+                estimatedWidthPx = width
+            )
+        }
+    }
+    return segments
+}
+
+internal fun promoteInlineMathByWidth(
+    text: String,
+    inlineMathSegments: List<InlineMathSegment>,
+    containerWidthPx: Float,
+    threshold: Float,
+): String {
+    if (inlineMathSegments.isEmpty() || containerWidthPx <= 0f) return text
+    val sorted = inlineMathSegments.sortedBy { it.start }
+    val builder = StringBuilder(text.length + 32)
+    var cursor = 0
+    sorted.fastForEach { segment ->
+        if (segment.start < cursor || segment.end > text.length) return@fastForEach
+        builder.append(text.substring(cursor, segment.start))
+        val ratio = segment.estimatedWidthPx / containerWidthPx
+        if (ratio >= threshold) {
+            builder.append(inlineToBlockMath(segment.rawText))
+        } else {
+            builder.append(segment.rawText)
+        }
+        cursor = segment.end
+    }
+    builder.append(text.substring(cursor))
+    return builder.toString()
+}
+
+internal fun inlineToBlockMath(raw: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.startsWith("$$") && trimmed.endsWith("$$")) return raw
+    if (trimmed.startsWith("$") && trimmed.endsWith("$") && trimmed.length >= 2) {
+        val inner = trimmed.removePrefix("$").removeSuffix("$")
+        return "$$${inner}$$"
+    }
+    return raw
 }
 
 @Composable
