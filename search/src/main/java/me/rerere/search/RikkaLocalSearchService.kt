@@ -505,12 +505,30 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
      * 记录源失败并按策略触发冷却
      */
     private fun markSourceFailure(source: String, statusCode: Int?) {
+        // 定期清理过期记录，防止 Map 无限增长
+        cleanupExpiredRecords()
+
         val failures = (sourceFailureCount[source] ?: 0) + 1
         sourceFailureCount[source] = failures
 
         val shouldCooldown = statusCode == 403 || statusCode == 429 || failures >= 3
         if (shouldCooldown) {
             sourceCooldownUntil[source] = System.currentTimeMillis() + SOURCE_COOLDOWN_MS
+        }
+    }
+
+    /**
+     * 清理过期的冷却记录和过大的失败计数
+     */
+    private fun cleanupExpiredRecords() {
+        val now = System.currentTimeMillis()
+        // 清理已过期的冷却记录
+        sourceCooldownUntil.entries.removeIf { it.value < now }
+
+        // 限制失败计数 Map 大小（超过 20 个源时清理最旧的）
+        if (sourceFailureCount.size > 20) {
+            // 简单策略：清空所有失败计数，让系统重新统计
+            sourceFailureCount.clear()
         }
     }
 

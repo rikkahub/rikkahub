@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * WebView-based crawler for handling dynamic content and JavaScript-heavy websites.
@@ -30,10 +31,16 @@ object WebViewCrawler {
             var isResumed = false
 
             val handler = Handler(Looper.getMainLooper())
+
+            // 追踪内部 Runnable，便于取消
+            val pageFinishedRunnableRef = AtomicReference<Runnable?>(null)
+
             val timeoutRunnable = Runnable {
                 if (!isResumed) {
                     isResumed = true
                     Log.w(TAG, "Scraping timeout for: $url")
+                    // 取消内部 Runnable
+                    pageFinishedRunnableRef.get()?.let { handler.removeCallbacks(it) }
                     // Try to rescue content on timeout
                     try {
                         webView.evaluateJavascript(
@@ -45,11 +52,11 @@ object WebViewCrawler {
                             } else {
                                 continuation.resumeWithException(TimeoutException("Scraping timeout"))
                             }
-                            cleanupWebView(webView)
+                            cleanupWebView(webView, handler)
                         }
                     } catch (e: Exception) {
                         continuation.resumeWithException(TimeoutException("Scraping timeout and failed to retrieve content"))
-                        cleanupWebView(webView)
+                        cleanupWebView(webView, handler)
                     }
                 }
             }
@@ -70,8 +77,7 @@ object WebViewCrawler {
                     super.onPageFinished(view, url)
                     if (!isResumed) {
                         // Wait for dynamic content (simple delay strategy)
-                        // TODO: Implement smarter wait strategy (e.g., check DOM changes)
-                        handler.postDelayed({
+                        val pageFinishedRunnable = Runnable {
                             if (!isResumed) {
                                 view?.evaluateJavascript(
                                     "(function() { return document.documentElement.outerHTML; })();"
@@ -80,10 +86,12 @@ object WebViewCrawler {
                                     handler.removeCallbacks(timeoutRunnable)
                                     val content = processHtml(html)
                                     continuation.resume(content)
-                                    cleanupWebView(webView)
+                                    cleanupWebView(webView, handler)
                                 }
                             }
-                        }, 1500) // Wait 1.5s for JS execution
+                        }
+                        pageFinishedRunnableRef.set(pageFinishedRunnable)
+                        handler.postDelayed(pageFinishedRunnable, 1500) // Wait 1.5s for JS execution
                     }
                 }
 
@@ -99,14 +107,16 @@ object WebViewCrawler {
                 if(!isResumed) {
                     isResumed = true
                     handler.removeCallbacks(timeoutRunnable)
+                    pageFinishedRunnableRef.get()?.let { handler.removeCallbacks(it) }
                     continuation.resumeWithException(e)
-                    cleanupWebView(webView)
+                    cleanupWebView(webView, handler)
                 }
             }
 
             continuation.invokeOnCancellation {
                 handler.removeCallbacks(timeoutRunnable)
-                cleanupWebView(webView)
+                pageFinishedRunnableRef.get()?.let { handler.removeCallbacks(it) }
+                cleanupWebView(webView, handler)
             }
         }
     }
@@ -120,14 +130,22 @@ object WebViewCrawler {
             ?: ""
     }
 
-    private fun cleanupWebView(webView: WebView) {
+    /**
+     * 清理 WebView 资源，防止内存泄漏
+     */
+    private fun cleanupWebView(webView: WebView, handler: Handler) {
+        handler.removeCallbacksAndMessages(null)
         try {
             webView.stopLoading()
+            webView.webViewClient = WebViewClient()  // 替换为空客户端，断开原回调引用
+            webView.settings.javaScriptEnabled = false  // 关闭 JS 引擎
             webView.clearHistory()
+            webView.clearCache(true)
+            webView.loadUrl("about:blank")  // 释放当前页面内存
             webView.removeAllViews()
             webView.destroy()
         } catch (e: Exception) {
-            // ignore
+            Log.w(TAG, "WebView cleanup error: ${e.message}")
         }
     }
 }
