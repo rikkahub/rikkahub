@@ -266,24 +266,47 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
                 .get()
 
             doc.select(".result").take(limit).mapNotNull { element ->
-                val rawUrl = element.select(".result__url").text().trim()
-                val normalizedUrl = when {
-                    rawUrl.startsWith("http") -> rawUrl
-                    rawUrl.isNotBlank() -> "https://$rawUrl"
-                    else -> ""
-                }
+                // 从 result__a 的 href 提取真实链接，并解码 uddg 跳转
+                val href = element.select("a.result__a").attr("href")
+                val realUrl = extractDuckDuckGoRealUrl(href)
 
-                if (normalizedUrl.isBlank()) {
+                if (realUrl.isBlank()) {
                     null
                 } else {
                     SearchResultItem(
-                        title = element.select(".result__title").text(),
-                        url = normalizedUrl,
+                        title = element.select(".result__a").text(),
+                        url = realUrl,
                         text = element.select(".result__snippet").text()
                     )
                 }
             }
         }
+    }
+
+    /**
+     * 解码 DuckDuckGo 跳转链接，提取真实 URL
+     */
+    private fun extractDuckDuckGoRealUrl(href: String): String {
+        if (href.isBlank()) return ""
+
+        // 直接是真实链接（非跳转）
+        if (href.startsWith("http") && !href.contains("duckduckgo.com/l/?")) {
+            return href
+        }
+
+        // 解析 uddg 跳转链接
+        if (href.contains("duckduckgo.com/l/?") && href.contains("uddg=")) {
+            val uddgStart = href.indexOf("uddg=") + 5
+            val uddgEnd = href.indexOf("&", uddgStart).takeIf { it > 0 } ?: href.length
+            val encodedUrl = href.substring(uddgStart, uddgEnd)
+            return try {
+                java.net.URLDecoder.decode(encodedUrl, "UTF-8")
+            } catch (_: Exception) {
+                ""
+            }
+        }
+
+        return ""
     }
 
     /**
@@ -439,6 +462,9 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
                 }
 
                 val results = fetcher()
+                if (results.isEmpty()) {
+                    throw SourceEmptyResultException("Empty results (possibly blocked)")
+                }
                 markSourceSuccess(source)
                 return results
             } catch (e: Exception) {
@@ -559,6 +585,11 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
      * 内部 HTTP 异常（用于非 Jsoup 通道的状态码传递）
      */
     private class SourceHttpException(val statusCode: Int) : IOException("HTTP $statusCode")
+
+    /**
+     * 搜索结果为空异常（可能是被拦截）
+     */
+    private class SourceEmptyResultException(message: String) : IOException(message)
 
 
     // ==================== 结果过滤和排序 ====================
