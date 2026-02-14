@@ -18,7 +18,14 @@ import {
 } from "lucide-react";
 
 import { useSettingsStore } from "~/stores";
-import type { MessageDto, MessageNodeDto, TokenUsage, UIMessagePart } from "~/types";
+import type {
+  AssistantProfile,
+  MessageDto,
+  MessageNodeDto,
+  ProviderModel,
+  TokenUsage,
+  UIMessagePart,
+} from "~/types";
 
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
@@ -29,13 +36,17 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { ChatMessageAnnotationsRow } from "./chat-message-annotations";
+import { ChatMessageAvatarRow } from "./chat-message-avatar-row";
 import { MessageParts } from "./message-part";
 
 interface ChatMessageProps {
   node: MessageNodeDto;
   message: MessageDto;
+  previousRole?: string | null;
   loading?: boolean;
   isLastMessage?: boolean;
+  assistant?: AssistantProfile | null;
+  model?: ProviderModel | null;
   onEdit?: (message: MessageDto) => void | Promise<void>;
   onRegenerate?: (messageId: string) => void | Promise<void>;
   onSelectBranch?: (nodeId: string, selectIndex: number) => void | Promise<void>;
@@ -432,8 +443,11 @@ function ChatMessageNerdLineRow({
 export function ChatMessage({
   node,
   message,
+  previousRole,
   loading = false,
   isLastMessage = false,
+  assistant,
+  model,
   onEdit,
   onRegenerate,
   onSelectBranch,
@@ -447,14 +461,25 @@ export function ChatMessage({
 
   return (
     <div className={cn("flex flex-col gap-4", isUser ? "items-end" : "items-start")}>
-      <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
-        <div
-          className={cn(
-            "flex flex-col gap-2 text-sm",
-            isUser ? "max-w-[85%] rounded-lg bg-muted px-4 py-3" : "w-full",
-          )}
-        >
-          <MessageParts parts={message.parts} loading={loading} onToolApproval={onToolApproval} />
+      <div className="flex w-full flex-col gap-2">
+        <ChatMessageAvatarRow
+          message={message}
+          previousRole={previousRole}
+          hasMessageContent={hasMessageContent}
+          loading={loading}
+          assistant={assistant}
+          model={model}
+        />
+
+        <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
+          <div
+            className={cn(
+              "flex flex-col gap-2 text-sm",
+              isUser ? "max-w-[85%] rounded-lg bg-muted px-4 py-3" : "w-full",
+            )}
+          >
+            <MessageParts parts={message.parts} loading={loading} onToolApproval={onToolApproval} />
+          </div>
         </div>
       </div>
 

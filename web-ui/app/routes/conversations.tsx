@@ -40,6 +40,8 @@ import {
   type ConversationNodeUpdateEventDto,
   type ConversationErrorEventDto,
   type ConversationSnapshotEventDto,
+  type ProviderModel,
+  type Settings,
   type UIMessagePart,
 } from "~/types";
 import { MessageSquare } from "lucide-react";
@@ -521,6 +523,8 @@ function ConversationTimeline({
   detailError,
   selectedNodeMessages,
   isGenerating,
+  settings,
+  conversationAssistantId,
   contentClassName,
   onEdit,
   onDelete,
@@ -535,6 +539,8 @@ function ConversationTimeline({
   detailError: string | null;
   selectedNodeMessages: SelectedNodeMessage[];
   isGenerating: boolean;
+  settings: Settings | null;
+  conversationAssistantId: string | null;
   contentClassName?: string;
   onEdit: (message: MessageDto) => void | Promise<void>;
   onDelete: (messageId: string) => Promise<void>;
@@ -546,6 +552,24 @@ function ConversationTimeline({
   const { t } = useTranslation("page");
   const canQuickJump =
     Boolean(activeId) && !detailLoading && !detailError && selectedNodeMessages.length > 1;
+  const assistant = React.useMemo(() => {
+    if (!settings || !conversationAssistantId) return null;
+    return settings.assistants.find((item) => item.id === conversationAssistantId) ?? null;
+  }, [conversationAssistantId, settings]);
+  const modelById = React.useMemo(() => {
+    const map = new Map<string, ProviderModel>();
+    if (!settings) return map;
+
+    for (const provider of settings.providers) {
+      for (const model of provider.models) {
+        if (!map.has(model.id)) {
+          map.set(model.id, model);
+        }
+      }
+    }
+
+    return map;
+  }, [settings]);
 
   return (
     <Conversation className="flex-1 min-h-0">
@@ -581,26 +605,33 @@ function ConversationTimeline({
         {!detailLoading &&
           !detailError &&
           activeId &&
-          selectedNodeMessages.map(({ node, message }, index) => (
-            <div
-              key={message.id}
-              id={getConversationMessageAnchorId(message.id)}
-              className="scroll-mt-24"
-            >
-              <ChatMessage
-                node={node}
-                message={message}
-                loading={isGenerating && index === selectedNodeMessages.length - 1}
-                isLastMessage={index === selectedNodeMessages.length - 1}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                onFork={onFork}
-                onRegenerate={onRegenerate}
-                onSelectBranch={onSelectBranch}
-                onToolApproval={onToolApproval}
-              />
-            </div>
-          ))}
+          selectedNodeMessages.map(({ node, message }, index) => {
+            const model = message.modelId ? (modelById.get(message.modelId) ?? null) : null;
+
+            return (
+              <div
+                key={message.id}
+                id={getConversationMessageAnchorId(message.id)}
+                className="scroll-mt-24"
+              >
+                <ChatMessage
+                  node={node}
+                  message={message}
+                  previousRole={index > 0 ? selectedNodeMessages[index - 1]?.message.role : null}
+                  loading={isGenerating && index === selectedNodeMessages.length - 1}
+                  isLastMessage={index === selectedNodeMessages.length - 1}
+                  assistant={assistant}
+                  model={model}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onFork={onFork}
+                  onRegenerate={onRegenerate}
+                  onSelectBranch={onSelectBranch}
+                  onToolApproval={onToolApproval}
+                />
+              </div>
+            );
+          })}
         {!detailLoading && !detailError && activeId && isGenerating && (
           <div className="flex items-start py-2">
             <TypingIndicator className="px-1 py-2" />
@@ -945,6 +976,8 @@ function ConversationsPageInner() {
             detailError={detailError}
             selectedNodeMessages={selectedNodeMessages}
             isGenerating={detail?.isGenerating ?? false}
+            settings={settings}
+            conversationAssistantId={detail?.assistantId ?? null}
             onEdit={handleStartEdit}
             onDelete={handleDeleteMessage}
             onFork={handleForkMessage}

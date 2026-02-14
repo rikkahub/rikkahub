@@ -6,6 +6,7 @@ export interface DisplaySetting {
   userNickname: string;
   userAvatar?: AssistantAvatar;
   showUserAvatar: boolean;
+  showModelIcon?: boolean;
   showModelName: boolean;
   showTokenUsage: boolean;
   autoCloseThinking: boolean;
@@ -59,6 +60,7 @@ export interface AssistantProfile {
   lorebookIds?: string[];
   name: string;
   avatar?: AssistantAvatar;
+  useAssistantAvatar?: boolean;
   tags: string[];
   quickMessages?: AssistantQuickMessage[];
   [key: string]: unknown;
