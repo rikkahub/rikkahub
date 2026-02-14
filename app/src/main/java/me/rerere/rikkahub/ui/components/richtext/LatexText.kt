@@ -20,6 +20,7 @@ private const val MIN_LATEX_BOUNDS_PX = 1
 
 fun assumeLatexSize(latex: String, fontSize: Float): Rect {
     return runCatching {
+        // 测量与渲染使用同一预处理，避免宽度判断偏差。
         JLatexMathDrawable.builder(processLatex(latex))
             .textSize(fontSize)
             .padding(0)
@@ -101,6 +102,7 @@ fun getLatexDrawable(
 }
 
 private fun Rect.sanitizeBounds(): Rect {
+    // 防止异常公式返回 0 尺寸，影响布局占位。
     val safeWidth = width().coerceAtLeast(MIN_LATEX_BOUNDS_PX)
     val safeHeight = height().coerceAtLeast(MIN_LATEX_BOUNDS_PX)
     return Rect(0, 0, safeWidth, safeHeight)
