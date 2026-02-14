@@ -4,9 +4,11 @@ import android.content.Context
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
@@ -16,6 +18,33 @@ import me.rerere.search.SearchService
 import me.rerere.search.SearchServiceOptions
 import java.time.LocalDate
 import kotlin.uuid.Uuid
+
+private const val MAX_TOOL_OUTPUT_CHARS = 140_000
+
+private fun limitToolOutput(text: String): String {
+    return if (text.length <= MAX_TOOL_OUTPUT_CHARS) {
+        text
+    } else {
+        text.substring(0, MAX_TOOL_OUTPUT_CHARS) + "\n...[truncated]"
+    }
+}
+
+private fun buildToolFailurePayload(
+    error: Throwable,
+    unavailableCode: String,
+    unavailableMessage: String
+): JsonObject {
+    val msg = error.message.orEmpty()
+    val isNoResults = msg.contains("no results", ignoreCase = true)
+    return buildJsonObject {
+        put("ok", JsonPrimitive(false))
+        put("error_code", JsonPrimitive(if (isNoResults) "NO_RESULTS" else unavailableCode))
+        put(
+            "message",
+            JsonPrimitive(if (isNoResults) "no results from current sources" else unavailableMessage)
+        )
+    }
+}
 
 fun createSearchTools(context: Context, settings: Settings): Set<Tool> {
     return buildSet {
@@ -58,19 +87,29 @@ fun createSearchTools(context: Context, settings: Settings): Set<Tool> {
                         commonOptions = settings.searchCommonOptions,
                         serviceOptions = options,
                     )
-                    val results =
-                        JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject.let { json ->
-                            val map = json.toMutableMap()
-                            map["items"] =
-                                JsonArray(map["items"]!!.jsonArray.mapIndexed { index, item ->
-                                    JsonObject(item.jsonObject.toMutableMap().apply {
-                                        put("id", JsonPrimitive(Uuid.random().toString().take(6)))
-                                        put("index", JsonPrimitive(index + 1))
+                    val payload = result.fold(
+                        onSuccess = { success ->
+                            JsonInstantPretty.encodeToJsonElement(success).jsonObject.let { json ->
+                                val map = json.toMutableMap()
+                                map["items"] =
+                                    JsonArray(map["items"]!!.jsonArray.mapIndexed { index, item ->
+                                        JsonObject(item.jsonObject.toMutableMap().apply {
+                                            put("id", JsonPrimitive(Uuid.random().toString().take(6)))
+                                            put("index", JsonPrimitive(index + 1))
+                                        })
                                     })
-                                })
-                            JsonObject(map)
+                                JsonObject(map)
+                            }
+                        },
+                        onFailure = {
+                            buildToolFailurePayload(
+                                error = it,
+                                unavailableCode = "SEARCH_UNAVAILABLE",
+                                unavailableMessage = "search temporarily unavailable"
+                            )
                         }
-                    listOf(UIMessagePart.Text(results.toString()))
+                    )
+                    listOf(UIMessagePart.Text(limitToolOutput(payload.toString())))
                 }
             )
         )
@@ -106,8 +145,17 @@ fun createSearchTools(context: Context, settings: Settings): Set<Tool> {
                             commonOptions = settings.searchCommonOptions,
                             serviceOptions = options,
                         )
-                        val payload = JsonInstantPretty.encodeToJsonElement(result.getOrThrow()).jsonObject
-                        listOf(UIMessagePart.Text(payload.toString()))
+                        val payload = result.fold(
+                            onSuccess = { JsonInstantPretty.encodeToJsonElement(it).jsonObject },
+                            onFailure = {
+                                buildToolFailurePayload(
+                                    error = it,
+                                    unavailableCode = "SCRAPE_UNAVAILABLE",
+                                    unavailableMessage = "scrape temporarily unavailable"
+                                )
+                            }
+                        )
+                        listOf(UIMessagePart.Text(limitToolOutput(payload.toString())))
                     }
                 ))
         }
