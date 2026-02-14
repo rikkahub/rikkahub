@@ -124,6 +124,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             ) {
                 if (data == "[DONE]") {
                     close()
+                    return
                 }
                 Log.d(TAG, "onEvent: $id/$type $data")
                 val json = json.parseToJsonElement(data).jsonObject
@@ -214,9 +215,11 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                         put("effort", level.effort)
                     }
                 })
-                put("include", buildJsonArray {
-                    add("reasoning.encrypted_content")
-                })
+                if (capabilities.supportEncryptedContent) {
+                    put("include", buildJsonArray {
+                        add("reasoning.encrypted_content")
+                    })
+                }
             }
 
             // tools
@@ -272,18 +275,23 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                                     put("type", "reasoning")
                                     put("summary", buildJsonArray {
                                         add(buildJsonObject {
-                                            put("type","summary_text")
+                                            put("type", "summary_text")
                                             put("text", part.reasoning)
                                         })
                                     })
                                     part.metadata?.get("encrypted_content")?.jsonPrimitiveOrNull?.contentOrNull?.let {
-                                        put("encrypted_content", part.metadata?.get("encrypted_content")?.jsonPrimitive?.contentOrNull ?: "")
+                                        put(
+                                            "encrypted_content",
+                                            part.metadata?.get("encrypted_content")?.jsonPrimitive?.contentOrNull ?: ""
+                                        )
                                     }
                                 })
                             }
+
                             is UIMessagePart.Text, is UIMessagePart.Image -> {
                                 contentBuffer.add(part)
                             }
+
                             else -> {}
                         }
                     }
@@ -647,3 +655,20 @@ private fun List<UIMessagePart>.isOnlyTextPart(): Boolean {
     val texts = filter { it is UIMessagePart.Text }.size
     return gonnaSend == texts && texts == 1
 }
+
+internal data class ResponseProviderCapabilities(
+    val supportsReasoningSummary: Boolean = true,
+    val supportEncryptedContent: Boolean = true
+)
+
+internal fun resolveResponseProviderCapabilities(host: String): ResponseProviderCapabilities {
+    return when (host) {
+        "ark.cn-beijing.volces.com" -> ResponseProviderCapabilities(
+            supportsReasoningSummary = false,
+            supportEncryptedContent = false
+        )
+
+        else -> ResponseProviderCapabilities()
+    }
+}
+
