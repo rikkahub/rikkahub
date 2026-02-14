@@ -33,6 +33,8 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -56,7 +58,10 @@ import kotlin.time.Clock
 
 private const val TAG = "ResponseAPI"
 
-class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
+class ResponseAPI(
+    private val client: OkHttpClient,
+    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
@@ -72,7 +77,10 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+            .addHeader(
+                "Authorization",
+                "Bearer ${keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)}"
+            )
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -107,7 +115,10 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+            .addHeader(
+                "Authorization",
+                "Bearer ${keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)}"
+            )
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()

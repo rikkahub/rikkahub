@@ -70,8 +70,10 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
 
-class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSetting.Google> {
-    private val keyRoulette = KeyRoulette.default()
+class GoogleProvider(
+    private val client: OkHttpClient,
+    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+) : Provider<ProviderSetting.Google> {
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
     }
@@ -97,7 +99,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .addHeader("Authorization", "Bearer $accessToken")
                 .build()
         } else {
-            val key = keyRoulette.next(providerSetting.apiKey)
+            val key = keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)
             request.newBuilder()
                 .addHeader("x-goog-api-key", key)
                 .build()
