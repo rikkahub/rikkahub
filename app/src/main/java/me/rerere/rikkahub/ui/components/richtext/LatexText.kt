@@ -16,14 +16,17 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.TextUnit
 import ru.noties.jlatexmath.JLatexMathDrawable
 
+private const val MIN_LATEX_BOUNDS_PX = 1
+
 fun assumeLatexSize(latex: String, fontSize: Float): Rect {
     return runCatching {
-        JLatexMathDrawable.builder(latex)
+        JLatexMathDrawable.builder(processLatex(latex))
             .textSize(fontSize)
             .padding(0)
             .build()
             .bounds
-    }.getOrElse { Rect(0, 0, 0, 0) }
+            .sanitizeBounds()
+    }.getOrElse { Rect(0, 0, MIN_LATEX_BOUNDS_PX, MIN_LATEX_BOUNDS_PX) }
 }
 
 @Composable
@@ -40,11 +43,12 @@ fun LatexText(
     )
     val density = LocalDensity.current
 
-    val drawable = remember(latex, fontSize, style) {
+    val processedLatex = remember(latex) { processLatex(latex) }
+    val drawable = remember(processedLatex, fontSize, style) {
         runCatching {
             with(density) {
                 getLatexDrawable(
-                    latex = processLatex(latex),
+                    latex = processedLatex,
                     fontSize = fontSize.toPx(),
                     color = style.color.toArgb(),
                     background = style.background.toArgb()
@@ -56,12 +60,13 @@ fun LatexText(
     }
 
     if (drawable != null) {
+        val safeBounds = drawable.bounds.sanitizeBounds()
         with(density) {
             Canvas(
                 modifier = modifier
                     .size(
-                        width = drawable.bounds.width().toDp(),
-                        height = drawable.bounds.height().toDp()
+                        width = safeBounds.width().toDp(),
+                        height = safeBounds.height().toDp()
                     )
             ) {
                 drawable.draw(drawContext.canvas.nativeCanvas)
@@ -83,7 +88,7 @@ fun getLatexDrawable(
     background: Int
 ): JLatexMathDrawable? {
     return runCatching {
-        JLatexMathDrawable.builder(processLatex(latex))
+        JLatexMathDrawable.builder(latex)
             .textSize(fontSize)
             .color(color)
             .background(background)
@@ -93,6 +98,12 @@ fun getLatexDrawable(
     }.onFailure {
         it.printStackTrace()
     }.getOrNull()
+}
+
+private fun Rect.sanitizeBounds(): Rect {
+    val safeWidth = width().coerceAtLeast(MIN_LATEX_BOUNDS_PX)
+    val safeHeight = height().coerceAtLeast(MIN_LATEX_BOUNDS_PX)
+    return Rect(0, 0, safeWidth, safeHeight)
 }
 
 private val inlineDollarRegex = Regex("""^\$(.*?)\$""", RegexOption.DOT_MATCHES_ALL)
