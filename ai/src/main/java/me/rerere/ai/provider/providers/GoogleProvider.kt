@@ -45,6 +45,7 @@ import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -70,15 +71,21 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
 
-class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSetting.Google> {
-    private val keyRoulette = KeyRoulette.default()
+class GoogleProvider(
+    private val client: OkHttpClient,
+    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+) : Provider<ProviderSetting.Google> {
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
     }
 
     private fun buildUrl(providerSetting: ProviderSetting.Google, path: String): HttpUrl {
         return if (!providerSetting.vertexAI) {
+            val key = keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)
             "${providerSetting.baseUrl}/$path".toHttpUrl()
+                .newBuilder()
+                .addQueryParameter("key", key)
+                .build()
         } else {
             "https://aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/$path".toHttpUrl()
         }
@@ -97,10 +104,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .addHeader("Authorization", "Bearer $accessToken")
                 .build()
         } else {
-            val key = keyRoulette.next(providerSetting.apiKey)
-            request.newBuilder()
-                .addHeader("x-goog-api-key", key)
-                .build()
+            request.newBuilder().build()
         }
     }
 
@@ -114,7 +118,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     .get()
                     .build()
             )
-            val response = client.newCall(request).await()
+            val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: error("empty body")
                 Log.d(TAG, "listModels: $body")
@@ -171,7 +175,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .build()
         )
 
-        val response = client.newCall(request).await()
+        val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
         if (!response.isSuccessful) {
             throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
         }
@@ -240,11 +244,6 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
                 try {
                     val jsonData = json.parseToJsonElement(data).jsonObject
-                    if (jsonData["promptFeedback"] != null) {
-                        val reason =
-                            jsonData["promptFeedback"]?.jsonObject?.get("blockReason")?.jsonPrimitiveOrNull?.contentOrNull
-                        close(RuntimeException("Prompt feedback: $reason"))
-                    }
                     val candidates = jsonData["candidates"]?.jsonArray ?: return
                     if (candidates.isEmpty()) return
                     val usage = parseUsageMeta(jsonData["usageMetadata"] as? JsonObject)
@@ -325,7 +324,8 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
+        val eventSource =
+            EventSources.createFactory(client.configureClientWithProxy(providerSetting.proxy))
                 .newEventSource(request, listener)
 
         awaitClose {
@@ -672,11 +672,11 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         }
 
         is UIMessagePart.Video -> {
-            encodeBase64(false).getOrNull()?.let { base64Data ->
+            encodeBase64(false).getOrNull()?.let { encodedVideo ->
                 buildJsonObject {
                     put("inline_data", buildJsonObject {
-                        put("mime_type", "video/mp4")
-                        put("data", base64Data)
+                        put("mime_type", encodedVideo.mimeType)
+                        put("data", encodedVideo.base64)
                     })
                 }
             }
@@ -783,7 +783,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .build()
         )
 
-        val response = client.newCall(request).await()
+        val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
         if (!response.isSuccessful) {
             error("Failed to generate image: ${response.code} ${response.body.string()}")
         }

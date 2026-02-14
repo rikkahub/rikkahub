@@ -33,6 +33,8 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -43,7 +45,6 @@ import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -56,14 +57,16 @@ import kotlin.time.Clock
 
 private const val TAG = "ResponseAPI"
 
-class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
+class ResponseAPI(
+    private val client: OkHttpClient,
+    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk {
         val requestBody = buildRequestBody(
-            providerSetting = providerSetting,
             messages = messages,
             params = params,
             stream = false,
@@ -72,14 +75,17 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+            .addHeader(
+                "Authorization",
+                "Bearer ${keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)}"
+            )
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = client.newCall(request).await()
+        val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
         if (!response.isSuccessful) {
             throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
         }
@@ -98,7 +104,6 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
         val requestBody = buildRequestBody(
-            providerSetting = providerSetting,
             messages = messages,
             params = params,
             stream = true,
@@ -107,7 +112,10 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+            .addHeader(
+                "Authorization",
+                "Bearer ${keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)}"
+            )
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -123,7 +131,6 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             ) {
                 if (data == "[DONE]") {
                     close()
-                    return
                 }
                 Log.d(TAG, "onEvent: $id/$type $data")
                 val json = json.parseToJsonElement(data).jsonObject
@@ -163,7 +170,8 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
+        val eventSource =
+            EventSources.createFactory(client.configureClientWithProxy(providerSetting.proxy))
                 .newEventSource(request, listener)
 
         awaitClose {
@@ -172,14 +180,11 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         }
     }
 
-    internal fun buildRequestBody(
-        providerSetting: ProviderSetting.OpenAI,
+    private fun buildRequestBody(
         messages: List<UIMessage>,
         params: TextGenerationParams,
         stream: Boolean
     ): JsonObject {
-        val host = providerSetting.baseUrl.toHttpUrl().host
-        val capabilities = resolveResponseProviderCapabilities(host)
         return buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)
@@ -206,18 +211,14 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
                 val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget ?: 0)
                 put("reasoning", buildJsonObject {
-                    if (capabilities.supportsReasoningSummary) {
-                        put("summary", "auto")
-                    }
+                    put("summary", "auto")
                     if (level != ReasoningLevel.AUTO) {
                         put("effort", level.effort)
                     }
                 })
-                if (capabilities.supportEncryptedContent) {
-                    put("include", buildJsonArray {
-                        add("reasoning.encrypted_content")
-                    })
-                }
+                put("include", buildJsonArray {
+                    add("reasoning.encrypted_content")
+                })
             }
 
             // tools
@@ -241,7 +242,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         }.mergeCustomBody(params.customBody)
     }
 
-    internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+    private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
@@ -273,23 +274,18 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                                     put("type", "reasoning")
                                     put("summary", buildJsonArray {
                                         add(buildJsonObject {
-                                            put("type", "summary_text")
+                                            put("type","summary_text")
                                             put("text", part.reasoning)
                                         })
                                     })
                                     part.metadata?.get("encrypted_content")?.jsonPrimitiveOrNull?.contentOrNull?.let {
-                                        put(
-                                            "encrypted_content",
-                                            part.metadata?.get("encrypted_content")?.jsonPrimitive?.contentOrNull ?: ""
-                                        )
+                                        put("encrypted_content", part.metadata?.get("encrypted_content")?.jsonPrimitive?.contentOrNull ?: "")
                                     }
                                 })
                             }
-
                             is UIMessagePart.Text, is UIMessagePart.Image -> {
                                 contentBuffer.add(part)
                             }
-
                             else -> {}
                         }
                     }
@@ -653,20 +649,3 @@ private fun List<UIMessagePart>.isOnlyTextPart(): Boolean {
     val texts = filter { it is UIMessagePart.Text }.size
     return gonnaSend == texts && texts == 1
 }
-
-internal data class ResponseProviderCapabilities(
-    val supportsReasoningSummary: Boolean = true,
-    val supportEncryptedContent: Boolean = true
-)
-
-internal fun resolveResponseProviderCapabilities(host: String): ResponseProviderCapabilities {
-    return when (host) {
-        "ark.cn-beijing.volces.com" -> ResponseProviderCapabilities(
-            supportsReasoningSummary = false,
-            supportEncryptedContent = false
-        )
-
-        else -> ResponseProviderCapabilities()
-    }
-}
-
