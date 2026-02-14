@@ -104,6 +104,10 @@ const highlighterCache = new Map<
   BundledLanguage,
   Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
 >();
+const resolvedHighlighters = new Map<
+  BundledLanguage,
+  HighlighterGeneric<BundledLanguage, BundledTheme>
+>();
 const tokensCache = new Map<string, TokenizedCode>();
 const subscribers = new Map<string, Set<(result: TokenizedCode) => void>>();
 
@@ -212,6 +216,28 @@ export function highlightCode(
     return cached;
   }
 
+  // Synchronous path: if the highlighter is already loaded, highlight immediately
+  const resolved = resolvedHighlighters.get(language);
+  if (resolved) {
+    const tokenResult = resolved.codeToTokens(code, {
+      lang: language,
+      themes: {
+        light: SHIKI_THEME_LIGHT,
+        dark: SHIKI_THEME_DARK,
+      },
+    });
+
+    const tokenized: TokenizedCode = {
+      bg: tokenResult.bg ?? "transparent",
+      fg: tokenResult.fg ?? "inherit",
+      tokens: tokenResult.tokens,
+    };
+
+    writeTokensToCache(tokensCacheKey, tokenized);
+    return tokenized;
+  }
+
+  // Async path: first time loading this language's highlighter
   if (callback) {
     if (!subscribers.has(tokensCacheKey)) {
       subscribers.set(tokensCacheKey, new Set());
@@ -221,6 +247,8 @@ export function highlightCode(
 
   void getHighlighter(language)
     .then((highlighter) => {
+      resolvedHighlighters.set(language, highlighter);
+
       const tokenResult = highlighter.codeToTokens(code, {
         lang: language,
         themes: {
@@ -420,8 +448,11 @@ export function CodeBlockContent({
       }
     };
 
-    const nextTokenized = highlightCode(code, language, onHighlighted) ?? rawTokens;
-    setTokenized(nextTokenized);
+    const nextTokenized = highlightCode(code, language, onHighlighted);
+    if (nextTokenized) {
+      setTokenized(nextTokenized);
+    }
+    // If null (async loading), keep previous tokenized state to avoid flash
 
     return () => {
       cancelled = true;
