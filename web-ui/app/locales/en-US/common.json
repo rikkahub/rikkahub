@@ -87,10 +87,9 @@
   "custom_theme_dialog": {
     "title": "Custom theme CSS",
     "description": "Only CSS variable declarations are extracted and applied (for example, --primary: ...;), with both Light and Dark variants supported.",
-    "light_variables": "Light variables",
-    "dark_variables": "Dark variables",
-    "light_placeholder": ":root {\n  --background: ...;\n  --primary: ...;\n}",
-    "dark_placeholder": ":root.dark {\n  --background: ...;\n  --primary: ...;\n}",
+    "theme_variables": "Theme variables",
+    "theme_placeholder": ":root {\n  --background: ...;\n  --primary: ...;\n}\n\n:root.dark {\n  --background: ...;\n  --primary: ...;\n}",
+    "tip": "You can download more themes from",
     "cancel": "Cancel",
     "save_and_apply": "Save and apply"
   },

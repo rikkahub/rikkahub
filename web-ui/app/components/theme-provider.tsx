@@ -61,18 +61,39 @@ function isColorTheme(value: string | null): value is ColorTheme {
   return !!value && COLOR_THEMES.includes(value as ColorTheme);
 }
 
-function sanitizeCustomThemeCss(value: string): string {
+function sanitizeCustomThemeCss(value: string, mode: "light" | "dark" = "light"): string {
   if (!value.trim()) {
     return "";
   }
 
-  const matches = value.match(/--[a-zA-Z0-9-_]+\s*:\s*[^;{}]+;/g);
-
-  if (!matches) {
-    return "";
+  // 尝试分别提取浅色和深色主题的变量
+  if (mode === "light") {
+    // 提取 :root 选择器下的变量
+    const rootMatch = value.match(/:root\s*\{([\s\S]*?)\}/);
+    if (rootMatch) {
+      const rootVars = rootMatch[1].match(/--[a-zA-Z0-9-_]+\s*:\s*[^;{}]+;/g);
+      if (rootVars) {
+        return rootVars.map((declaration) => declaration.trim()).join("\n  ");
+      }
+    }
+  } else {
+    // 提取 .dark 或 :root.dark 选择器下的变量
+    const darkMatch = value.match(/(?:\.dark|:root\.dark)\s*\{([\s\S]*?)\}/);
+    if (darkMatch) {
+      const darkVars = darkMatch[1].match(/--[a-zA-Z0-9-_]+\s*:\s*[^;{}]+;/g);
+      if (darkVars) {
+        return darkVars.map((declaration) => declaration.trim()).join("\n  ");
+      }
+    }
   }
 
-  return matches.map((declaration) => declaration.trim()).join("\n  ");
+  // 如果没有找到对应的选择器，回退到提取所有变量
+  const allMatches = value.match(/--[a-zA-Z0-9-_]+\s*:\s*[^;{}]+;/g);
+  if (allMatches) {
+    return allMatches.map((declaration) => declaration.trim()).join("\n  ");
+  }
+
+  return "";
 }
 
 export function ThemeProvider({
@@ -139,8 +160,8 @@ export function ThemeProvider({
   }, [colorTheme]);
 
   useEffect(() => {
-    const lightCss = sanitizeCustomThemeCss(customThemeCss.light);
-    const darkCss = sanitizeCustomThemeCss(customThemeCss.dark);
+    const lightCss = sanitizeCustomThemeCss(customThemeCss.light, "light");
+    const darkCss = sanitizeCustomThemeCss(customThemeCss.dark, "dark");
     const cssBlocks = [
       lightCss ? `:root[data-theme="custom"] {\n  ${lightCss}\n}` : "",
       darkCss ? `:root.dark[data-theme="custom"] {\n  ${darkCss}\n}` : "",

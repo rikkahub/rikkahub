@@ -87,10 +87,9 @@
   "custom_theme_dialog": {
     "title": "自定义主题 CSS",
     "description": "仅提取并应用 CSS 变量声明（例如 --primary: ...;），支持 Light 和 Dark 两套。",
-    "light_variables": "Light 变量",
-    "dark_variables": "Dark 变量",
-    "light_placeholder": ":root {\n  --background: ...;\n  --primary: ...;\n}",
-    "dark_placeholder": ":root.dark {\n  --background: ...;\n  --primary: ...;\n}",
+    "theme_variables": "主题变量",
+    "theme_placeholder": ":root {\n  --background: ...;\n  --primary: ...;\n}\n\n:root.dark {\n  --background: ...;\n  --primary: ...;\n}",
+    "tip": "您可以在 tweakcn.com 下载更多主题：",
     "cancel": "取消",
     "save_and_apply": "保存并应用"
   },
