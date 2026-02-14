@@ -532,7 +532,6 @@
   <string name="setting_provider_page_model_type">모델 유형</string>
   <string name="setting_provider_page_models">모델</string>
   <string name="setting_provider_page_name">이름</string>
-  <string name="setting_provider_page_network_proxy">네트워크 프록시</string>
   <string name="setting_provider_page_no_models">모델 없음</string>
   <string name="setting_provider_page_no_permission">권한 없음</string>
   <string name="setting_provider_page_no_qr_found">유효한 QR 코드를 찾을 수 없습니다</string>
@@ -541,10 +540,6 @@
   <string name="setting_provider_page_project_id">프로젝트 ID</string>
   <string name="setting_provider_page_provider_override">제공업체 재정의</string>
   <string name="setting_provider_page_provider_override_desc">이 특정 모델에 대한 사용자 정의 제공업체 설정 구성. 부모 제공업체의 일반 속성을 상속합니다</string>
-  <string name="setting_provider_page_proxy_host">호스트</string>
-  <string name="setting_provider_page_proxy_password">비밀번호 (선택 사항)</string>
-  <string name="setting_provider_page_proxy_port">포트</string>
-  <string name="setting_provider_page_proxy_username">사용자 이름 (선택 사항)</string>
   <string name="setting_provider_page_qr_decode_failed">QR 코드 파싱 실패: %s</string>
   <string name="setting_provider_page_reasoning">추론</string>
   <string name="setting_provider_page_response_api">응답 API</string>

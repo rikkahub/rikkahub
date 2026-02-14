@@ -7,22 +7,6 @@ import kotlinx.serialization.Transient
 import kotlin.uuid.Uuid
 
 @Serializable
-sealed class ProviderProxy {
-    @Serializable
-    @SerialName("none")
-    object None : ProviderProxy()
-
-    @Serializable
-    @SerialName("http")
-    data class Http(
-        val address: String,
-        val port: Int,
-        val username: String? = null,
-        val password: String? = null,
-    ) : ProviderProxy()
-}
-
-@Serializable
 data class BalanceOption(
     val enabled: Boolean = false, // 是否开启余额获取功能
     val apiPath: String = "/credits", // 余额获取API路径
@@ -35,7 +19,6 @@ sealed class ProviderSetting {
     abstract val enabled: Boolean
     abstract val name: String
     abstract val models: List<Model>
-    abstract val proxy: ProviderProxy
     abstract val balanceOption: BalanceOption
 
     abstract val builtIn: Boolean
@@ -51,7 +34,6 @@ sealed class ProviderSetting {
         enabled: Boolean = this.enabled,
         name: String = this.name,
         models: List<Model> = this.models,
-        proxy: ProviderProxy = this.proxy,
         balanceOption: BalanceOption = this.balanceOption,
         builtIn: Boolean = this.builtIn,
         description: @Composable (() -> Unit) = this.description,
@@ -65,7 +47,6 @@ sealed class ProviderSetting {
         override var enabled: Boolean = true,
         override var name: String = "OpenAI",
         override var models: List<Model> = emptyList(),
-        override var proxy: ProviderProxy = ProviderProxy.None,
         override val balanceOption: BalanceOption = BalanceOption(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
@@ -102,7 +83,6 @@ sealed class ProviderSetting {
             enabled: Boolean,
             name: String,
             models: List<Model>,
-            proxy: ProviderProxy,
             balanceOption: BalanceOption,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
@@ -115,7 +95,6 @@ sealed class ProviderSetting {
                 models = models,
                 builtIn = builtIn,
                 description = description,
-                proxy = proxy,
                 balanceOption = balanceOption,
                 shortDescription = shortDescription
             )
@@ -129,7 +108,6 @@ sealed class ProviderSetting {
         override var enabled: Boolean = true,
         override var name: String = "Google",
         override var models: List<Model> = emptyList(),
-        override var proxy: ProviderProxy = ProviderProxy.None,
         override val balanceOption: BalanceOption = BalanceOption(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
@@ -169,7 +147,6 @@ sealed class ProviderSetting {
             enabled: Boolean,
             name: String,
             models: List<Model>,
-            proxy: ProviderProxy,
             balanceOption: BalanceOption,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
@@ -183,7 +160,6 @@ sealed class ProviderSetting {
                 builtIn = builtIn,
                 description = description,
                 shortDescription = shortDescription,
-                proxy = proxy,
                 balanceOption = balanceOption
             )
         }
@@ -196,7 +172,6 @@ sealed class ProviderSetting {
         override var enabled: Boolean = true,
         override var name: String = "Claude",
         override var models: List<Model> = emptyList(),
-        override var proxy: ProviderProxy = ProviderProxy.None,
         override val balanceOption: BalanceOption = BalanceOption(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
@@ -231,7 +206,6 @@ sealed class ProviderSetting {
             enabled: Boolean,
             name: String,
             models: List<Model>,
-            proxy: ProviderProxy,
             balanceOption: BalanceOption,
             builtIn: Boolean,
             description: @Composable (() -> Unit),
@@ -242,7 +216,6 @@ sealed class ProviderSetting {
                 enabled = enabled,
                 name = name,
                 models = models,
-                proxy = proxy,
                 balanceOption = balanceOption,
                 builtIn = builtIn,
                 description = description,

@@ -532,7 +532,6 @@
   <string name="setting_provider_page_model_type">モデルタイプ</string>
   <string name="setting_provider_page_models">モデル</string>
   <string name="setting_provider_page_name">名前</string>
-  <string name="setting_provider_page_network_proxy">ネットワークプロキシ</string>
   <string name="setting_provider_page_no_models">モデルがありません</string>
   <string name="setting_provider_page_no_permission">権限がありません</string>
   <string name="setting_provider_page_no_qr_found">有効なQRコードが見つかりません</string>
@@ -541,10 +540,6 @@
   <string name="setting_provider_page_project_id">プロジェクト ID</string>
   <string name="setting_provider_page_provider_override">プロバイダーオーバーライド</string>
   <string name="setting_provider_page_provider_override_desc">この特定のモデル用にカスタムプロバイダー設定を構成します。親プロバイダーから共通プロパティを継承します。</string>
-  <string name="setting_provider_page_proxy_host">ホスト</string>
-  <string name="setting_provider_page_proxy_password">パスワード (オプション)</string>
-  <string name="setting_provider_page_proxy_port">ポート</string>
-  <string name="setting_provider_page_proxy_username">ユーザー名 (オプション)</string>
   <string name="setting_provider_page_qr_decode_failed">QRコードの解析に失敗しました：%s</string>
   <string name="setting_provider_page_reasoning">推論</string>
   <string name="setting_provider_page_response_api">Response API</string>

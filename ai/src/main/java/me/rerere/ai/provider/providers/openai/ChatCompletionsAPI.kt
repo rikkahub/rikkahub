@@ -39,7 +39,6 @@ import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
-import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -79,8 +78,6 @@ class ChatCompletionsAPI(
                 providerSetting = providerSetting
             )
 
-        val proxyClient = client.configureClientWithProxy(providerSetting.proxy)
-
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
@@ -91,7 +88,7 @@ class ChatCompletionsAPI(
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = proxyClient.newCall(request).await()
+        val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
         }
@@ -137,8 +134,6 @@ class ChatCompletionsAPI(
             providerSetting = providerSetting,
             stream = true,
         )
-
-        val proxyClient = client.configureClientWithProxy(providerSetting.proxy)
 
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
@@ -240,7 +235,7 @@ class ChatCompletionsAPI(
             }
         }
 
-        val eventSource = EventSources.createFactory(proxyClient).newEventSource(request, listener)
+        val eventSource = EventSources.createFactory(client).newEventSource(request, listener)
 
         awaitClose {
             println("[awaitClose] 关闭eventSource ")
