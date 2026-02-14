@@ -2,27 +2,30 @@ package me.rerere.search
 
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.search.SearchResult.SearchResultItem
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
+import org.jsoup.HttpStatusException
 import org.jsoup.Jsoup
+import java.io.IOException
 import java.net.URLEncoder
 import java.util.Locale
-
-import androidx.compose.ui.res.stringResource
-import kotlinx.serialization.json.Json
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOptions> {
     // Built-in SearXNG public instances - fast, stable, 100% uptime as of 2025-2026
@@ -40,6 +43,37 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
         .build()
 
     private val searXNGJson = Json { ignoreUnknownKeys = true }
+
+    // 搜索源标识
+    private const val SOURCE_SEARXNG = "searxng"
+    private const val SOURCE_DDG = "duckduckgo"
+    private const val SOURCE_BING = "bing"
+    private const val SOURCE_SOGOU = "sogou"
+    private const val SOURCE_GOOGLE = "google"
+
+    // 低复杂度稳定性参数
+    private const val GLOBAL_MIN_SEARCH_INTERVAL_MS = 450L
+    private const val SOURCE_COOLDOWN_MS = 90_000L
+    private const val MAX_RETRY_ATTEMPTS = 2
+    private const val INITIAL_RETRY_BACKOFF_MS = 350L
+
+    // 统一的请求指纹池（降低固定特征）
+    private val USER_AGENTS = listOf(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.91 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.116 Safari/537.36",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1"
+    )
+
+    private val inFlightSearches = ConcurrentHashMap<String, Deferred<List<SearchResultItem>>>()
+    private val sourceCooldownUntil = ConcurrentHashMap<String, Long>()
+    private val sourceFailureCount = ConcurrentHashMap<String, Int>()
+    private val searchLock = Any()
+
+    @Volatile
+    private var lastSearchAtMs: Long = 0L
+
     override val name: String = "Rikka内置"
 
     @Composable
@@ -77,31 +111,50 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
+            val normalizedQuery = "${query.trim().lowercase()}#${commonOptions.resultSize}"
 
-            // 并发调用多个源：Bing + DuckDuckGo + SearXNG + Sogou + Google
-            val tasks = listOf(
-                async { searchBing(query, commonOptions.resultSize) },
-                async { searchDuckDuckGo(query, commonOptions.resultSize) },
-                async { searchSearXNG(query, commonOptions.resultSize) },
-                async { searchSogou(query, commonOptions.resultSize) },
-                async { searchGoogle(query, commonOptions.resultSize) }
-            )
-
-            val allResults = tasks.awaitAll().flatten()
-
-            // 过滤和排序
-            val filteredResults = allResults
-                .filter { isValidResult(it) }  // 过滤低质量结果
-                .distinctBy { normalizeUrl(it.url) }  // URL 标准化去重
-                .sortedByDescending { scoreResult(it) }  // 简单评分排序
-
-            require(filteredResults.isNotEmpty()) {
-                "Search failed: no results found"
+            val currentDeferred = inFlightSearches[normalizedQuery]
+            if (currentDeferred != null) {
+                val mergedResults = currentDeferred.await()
+                require(mergedResults.isNotEmpty()) { "Search failed: no results found" }
+                return@runCatching SearchResult(items = mergedResults.take(commonOptions.resultSize * 2))
             }
 
-            SearchResult(items = filteredResults.take(commonOptions.resultSize * 2))  // 返回足够多的结果
+            val deferred = CompletableDeferred<List<SearchResultItem>>()
+            val existing = inFlightSearches.putIfAbsent(normalizedQuery, deferred)
+            if (existing != null) {
+                val mergedResults = existing.await()
+                require(mergedResults.isNotEmpty()) { "Search failed: no results found" }
+                return@runCatching SearchResult(items = mergedResults.take(commonOptions.resultSize * 2))
+            }
+
+            try {
+                enforceGlobalSearchInterval()
+
+                val allResults = runSearchPipelines(query, commonOptions.resultSize)
+
+                // 过滤和排序
+                val filteredResults = allResults
+                    .filter { isValidResult(it) }  // 过滤低质量结果
+                    .distinctBy { normalizeUrl(it.url) }  // URL 标准化去重
+                    .sortedByDescending { scoreResult(it) }  // 简单评分排序
+
+                require(filteredResults.isNotEmpty()) {
+                    "Search failed: no results found"
+                }
+
+                val finalResults = filteredResults.take(commonOptions.resultSize * 2)
+                deferred.complete(finalResults)
+                SearchResult(items = finalResults)  // 返回足够多的结果
+            } catch (e: Exception) {
+                deferred.completeExceptionally(e)
+                throw e
+            } finally {
+                inFlightSearches.remove(normalizedQuery)
+            }
         }
     }
+
 
     override suspend fun scrape(
         context: android.content.Context,
@@ -119,7 +172,8 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
                 // Fallback to Jsoup if WebView fails (though WebViewCrawler has its own timeout)
                 e.printStackTrace()
                 Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                    .userAgent(randomUserAgent())
+                    .header("Accept-Language", randomAcceptLanguage())
                     .timeout(10000)
                     .get()
                     .outerHtml()
@@ -144,14 +198,47 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
         }
     }
 
+    /**
+     * 搜索执行编排（低复杂度）：按稳定优先顺序逐源尝试，达到目标后提前停止
+     */
+    private suspend fun runSearchPipelines(query: String, limit: Int): List<SearchResultItem> {
+        val targetCount = (limit * 3).coerceAtLeast(limit + 4)
+        val sourceOrder = listOf(SOURCE_SEARXNG, SOURCE_DDG, SOURCE_BING, SOURCE_SOGOU, SOURCE_GOOGLE)
+        val collected = mutableListOf<SearchResultItem>()
+
+        for ((index, source) in sourceOrder.withIndex()) {
+            if (collected.size >= targetCount) break
+
+            if (index > 0) {
+                delay(Random.nextLong(120L, 320L))
+            }
+
+            val sourceResults = when (source) {
+                SOURCE_SEARXNG -> searchSearXNG(query, limit)
+                SOURCE_DDG -> searchDuckDuckGo(query, limit)
+                SOURCE_BING -> searchBing(query, limit)
+                SOURCE_SOGOU -> searchSogou(query, limit)
+                SOURCE_GOOGLE -> searchGoogle(query, limit)
+                else -> emptyList()
+            }
+
+            if (sourceResults.isNotEmpty()) {
+                collected += sourceResults
+            }
+        }
+
+        return collected
+    }
+
+    /**
+     * Bing 搜索入口（带重试、冷却和随机指纹）
+     */
     internal suspend fun searchBing(query: String, limit: Int): List<SearchResultItem> {
-        return try {
+        return executeSourceSearch(SOURCE_BING) {
             val url = "https://www.bing.com/search?q=" + URLEncoder.encode(query, "UTF-8")
-            val locale = Locale.getDefault()
-            val acceptLanguage = "${locale.language}-${locale.country},${locale.language}"
             val doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-                .header("Accept-Language", acceptLanguage)
+                .userAgent(randomUserAgent())
+                .header("Accept-Language", randomAcceptLanguage())
                 .referrer("https://www.bing.com/")
                 .timeout(5000)
                 .get()
@@ -163,40 +250,50 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
                     text = element.select(".b_caption p, .b_snippet").text()
                 )
             }.filter { it.url.startsWith("http") }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    internal suspend fun searchDuckDuckGo(query: String, limit: Int): List<SearchResultItem> {
-        return try {
-            // 使用 DDG 的 HTML 版本（不需要 JS）
-            val url = "https://html.duckduckgo.com/html/?q=" + URLEncoder.encode(query, "UTF-8")
-            val doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-                .timeout(5000)
-                .get()
-
-            doc.select(".result").take(limit).map { element ->
-                SearchResultItem(
-                    title = element.select(".result__title").text(),
-                    url = element.select(".result__url").text().trim(),
-                    text = element.select(".result__snippet").text()
-                )
-            }.filter { it.url.isNotEmpty() }
-        } catch (e: Exception) {
-            emptyList()
         }
     }
 
     /**
-     * 搜狗搜索 - 可获取微信公众号内容
+     * DuckDuckGo 搜索入口（带重试、冷却和随机指纹）
+     */
+    internal suspend fun searchDuckDuckGo(query: String, limit: Int): List<SearchResultItem> {
+        return executeSourceSearch(SOURCE_DDG) {
+            val url = "https://html.duckduckgo.com/html/?q=" + URLEncoder.encode(query, "UTF-8")
+            val doc = Jsoup.connect(url)
+                .userAgent(randomUserAgent())
+                .header("Accept-Language", randomAcceptLanguage())
+                .timeout(5000)
+                .get()
+
+            doc.select(".result").take(limit).mapNotNull { element ->
+                val rawUrl = element.select(".result__url").text().trim()
+                val normalizedUrl = when {
+                    rawUrl.startsWith("http") -> rawUrl
+                    rawUrl.isNotBlank() -> "https://$rawUrl"
+                    else -> ""
+                }
+
+                if (normalizedUrl.isBlank()) {
+                    null
+                } else {
+                    SearchResultItem(
+                        title = element.select(".result__title").text(),
+                        url = normalizedUrl,
+                        text = element.select(".result__snippet").text()
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 搜狗搜索入口（带重试、冷却和随机指纹）
      */
     internal suspend fun searchSogou(query: String, limit: Int): List<SearchResultItem> {
-        return try {
+        return executeSourceSearch(SOURCE_SOGOU) {
             val url = "https://www.sogou.com/web?query=" + URLEncoder.encode(query, "UTF-8")
             val doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                .userAgent(randomUserAgent())
                 .header("Accept-Language", "zh-CN,zh;q=0.9")
                 .referrer("https://www.sogou.com/")
                 .timeout(5000)
@@ -209,50 +306,43 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
                     text = element.select(".str-text-info, .space-txt").text()
                 )
             }.filter { it.url.startsWith("http") }
-        } catch (e: Exception) {
-            emptyList()
         }
     }
 
     /**
-     * Google 搜索 (通过 Startpage 代理，避免直接被墙)
-     * Startpage 使用 Google 搜索结果但保护隐私
+     * Google 搜索入口（优先 Startpage，失败时回退 Google 直连）
      */
     internal suspend fun searchGoogle(query: String, limit: Int): List<SearchResultItem> {
-        return try {
-            // 使用 Startpage 作为 Google 代理
-            val url = "https://www.startpage.com/sp/search?query=" + URLEncoder.encode(query, "UTF-8")
-            val doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .timeout(8000)
-                .get()
-
-            doc.select(".w-gl__result").take(limit).map { element ->
-                SearchResultItem(
-                    title = element.select("h3").text(),
-                    url = element.select("a").attr("href"),
-                    text = element.select(".w-gl__description").text()
-                )
-            }.filter { it.url.startsWith("http") }
-        } catch (e: Exception) {
-            // Startpage 失败时尝试直接 Google (可能在某些网络环境下可用)
+        return executeSourceSearch(SOURCE_GOOGLE) {
             try {
+                val url = "https://www.startpage.com/sp/search?query=" + URLEncoder.encode(query, "UTF-8")
+                val doc = Jsoup.connect(url)
+                    .userAgent(randomUserAgent())
+                    .header("Accept-Language", randomAcceptLanguage(Locale.US))
+                    .timeout(8000)
+                    .get()
+
+                doc.select(".w-gl__result").take(limit).map { element ->
+                    SearchResultItem(
+                        title = element.select("h3").text(),
+                        url = element.select("a").attr("href"),
+                        text = element.select(".w-gl__description").text()
+                    )
+                }.filter { it.url.startsWith("http") }
+            } catch (_: Exception) {
                 searchGoogleDirect(query, limit)
-            } catch (e2: Exception) {
-                emptyList()
             }
         }
     }
 
     /**
-     * 直接 Google 搜索 (备用方案)
+     * 直接 Google 搜索（备用）
      */
     private fun searchGoogleDirect(query: String, limit: Int): List<SearchResultItem> {
         val url = "https://www.google.com/search?q=" + URLEncoder.encode(query, "UTF-8") + "&num=$limit"
         val doc = Jsoup.connect(url)
-            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-            .header("Accept-Language", "en-US,en;q=0.9")
+            .userAgent(randomUserAgent())
+            .header("Accept-Language", randomAcceptLanguage(Locale.US))
             .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .cookie("CONSENT", "YES+")
             .timeout(5000)
@@ -266,6 +356,210 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
             )
         }.filter { it.url.startsWith("http") }
     }
+
+    /**
+     * SearXNG 搜索入口（实例随机顺序，成功即返回）
+     */
+    internal suspend fun searchSearXNG(query: String, limit: Int): List<SearchResultItem> {
+        return executeSourceSearch(SOURCE_SEARXNG) {
+            val instances = SEARXNG_INSTANCES.shuffled()
+            for ((index, instanceUrl) in instances.withIndex()) {
+                if (index > 0) {
+                    delay(Random.nextLong(80L, 220L))
+                }
+
+                val results = try {
+                    searchSearXNGInstance(instanceUrl, query, limit)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+
+                if (results.isNotEmpty()) {
+                    return@executeSourceSearch results
+                }
+            }
+            emptyList()
+        }
+    }
+
+    /**
+     * 从单个 SearXNG 实例获取结果
+     */
+    private fun searchSearXNGInstance(instanceUrl: String, query: String, limit: Int): List<SearchResultItem> {
+        val url = instanceUrl.trimEnd('/') +
+                "/search?q=" + URLEncoder.encode(query, "UTF-8") +
+                "&format=json"
+
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Accept", "application/json")
+            .header("Accept-Language", randomAcceptLanguage())
+            .header("User-Agent", randomUserAgent())
+            .build()
+
+        searXNGClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw SourceHttpException(response.code)
+            }
+
+            val body = response.body.string()
+            val searchResponse = searXNGJson.decodeFromString<SearXNGResponse>(body)
+
+            return searchResponse.results
+                .take(limit)
+                .map { result ->
+                    SearchResultItem(
+                        title = result.title,
+                        url = result.url,
+                        text = result.content
+                    )
+                }
+                .filter { it.url.startsWith("http") }
+        }
+    }
+
+    /**
+     * 统一源请求执行器：负责冷却、重试退避、失败统计
+     */
+    private suspend fun executeSourceSearch(
+        source: String,
+        fetcher: suspend () -> List<SearchResultItem>
+    ): List<SearchResultItem> {
+        if (isSourceCoolingDown(source)) {
+            return emptyList()
+        }
+
+        var backoffMs = INITIAL_RETRY_BACKOFF_MS
+        repeat(MAX_RETRY_ATTEMPTS + 1) { attempt ->
+            try {
+                if (attempt > 0) {
+                    delay(backoffMs + Random.nextLong(80L, 220L))
+                    backoffMs = (backoffMs * 2).coerceAtMost(2_400L)
+                }
+
+                val results = fetcher()
+                markSourceSuccess(source)
+                return results
+            } catch (e: Exception) {
+                val statusCode = extractStatusCode(e)
+                markSourceFailure(source, statusCode)
+
+                val canRetry = attempt < MAX_RETRY_ATTEMPTS && isRetriable(e, statusCode) && !isSourceCoolingDown(source)
+                if (!canRetry) {
+                    return emptyList()
+                }
+            }
+        }
+
+        return emptyList()
+    }
+
+    /**
+     * 判断搜索源是否处于冷却期
+     */
+    private fun isSourceCoolingDown(source: String): Boolean {
+        val cooldownUntil = sourceCooldownUntil[source] ?: return false
+        if (System.currentTimeMillis() >= cooldownUntil) {
+            sourceCooldownUntil.remove(source)
+            return false
+        }
+        return true
+    }
+
+    /**
+     * 源请求成功后清理失败计数
+     */
+    private fun markSourceSuccess(source: String) {
+        sourceFailureCount.remove(source)
+        sourceCooldownUntil.remove(source)
+    }
+
+    /**
+     * 记录源失败并按策略触发冷却
+     */
+    private fun markSourceFailure(source: String, statusCode: Int?) {
+        val failures = (sourceFailureCount[source] ?: 0) + 1
+        sourceFailureCount[source] = failures
+
+        val shouldCooldown = statusCode == 403 || statusCode == 429 || failures >= 3
+        if (shouldCooldown) {
+            sourceCooldownUntil[source] = System.currentTimeMillis() + SOURCE_COOLDOWN_MS
+        }
+    }
+
+    /**
+     * 是否属于可重试错误
+     */
+    private fun isRetriable(error: Exception, statusCode: Int?): Boolean {
+        if (statusCode != null) {
+            return statusCode == 408 || statusCode == 429 || statusCode >= 500
+        }
+        return error is IOException || error.cause is IOException
+    }
+
+    /**
+     * 从异常中提取 HTTP 状态码
+     */
+    private fun extractStatusCode(error: Exception): Int? {
+        return when (error) {
+            is HttpStatusException -> error.statusCode
+            is SourceHttpException -> error.statusCode
+            else -> {
+                (error.cause as? HttpStatusException)?.statusCode
+                    ?: (error.cause as? SourceHttpException)?.statusCode
+            }
+        }
+    }
+
+    /**
+     * 生成随机 User-Agent
+     */
+    private fun randomUserAgent(): String {
+        return USER_AGENTS[Random.nextInt(USER_AGENTS.size)]
+    }
+
+    /**
+     * 生成轻量随机 Accept-Language
+     */
+    private fun randomAcceptLanguage(locale: Locale = Locale.getDefault()): String {
+        val language = locale.language.ifBlank { "en" }
+        val country = locale.country.ifBlank { if (language == "zh") "CN" else "US" }
+        val primary = "$language-$country"
+        val candidates = listOf(
+            "$primary,$language;q=0.9,en;q=0.6",
+            "$primary,$language;q=0.8,en-US;q=0.6,en;q=0.4",
+            "$language,$primary;q=0.9,en;q=0.5"
+        )
+        return candidates[Random.nextInt(candidates.size)]
+    }
+
+    /**
+     * 控制全局查询间隔，避免短时间高频请求
+     */
+    private suspend fun enforceGlobalSearchInterval() {
+        val waitMs = synchronized(searchLock) {
+            val now = System.currentTimeMillis()
+            val earliest = lastSearchAtMs + GLOBAL_MIN_SEARCH_INTERVAL_MS
+            val scheduledAt = if (now >= earliest) {
+                now
+            } else {
+                earliest + Random.nextLong(60L, 180L)
+            }
+            lastSearchAtMs = scheduledAt
+            (scheduledAt - now).coerceAtLeast(0L)
+        }
+
+        if (waitMs > 0) {
+            delay(waitMs)
+        }
+    }
+
+    /**
+     * 内部 HTTP 异常（用于非 Jsoup 通道的状态码传递）
+     */
+    private class SourceHttpException(val statusCode: Int) : IOException("HTTP $statusCode")
+
 
     // ==================== 结果过滤和排序 ====================
 
@@ -322,62 +616,6 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
         if (item.text.length < 20) score -= 5
 
         return score
-    }
-
-    /**
-     * 使用内置的 SearXNG 公共实例进行搜索
-     * 会并发尝试多个实例，返回第一个成功的结果
-     */
-    internal suspend fun searchSearXNG(query: String, limit: Int): List<SearchResultItem> = withContext(Dispatchers.IO) {
-        // 并发尝试所有实例，谁先返回用谁
-        val tasks = SEARXNG_INSTANCES.map { instanceUrl ->
-            async {
-                try {
-                    searchSearXNGInstance(instanceUrl, query, limit)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    emptyList()
-                }
-            }
-        }
-
-        // 等待所有完成，取第一个非空结果
-        val results = tasks.awaitAll()
-        results.firstOrNull { it.isNotEmpty() } ?: emptyList()
-    }
-
-    /**
-     * 从单个 SearXNG 实例获取搜索结果
-     */
-    private fun searchSearXNGInstance(instanceUrl: String, query: String, limit: Int): List<SearchResultItem> {
-        val url = instanceUrl.trimEnd('/') +
-                "/search?q=" + URLEncoder.encode(query, "UTF-8") +
-                "&format=json"
-
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .header("Accept", "application/json")
-            .build()
-
-        val response = searXNGClient.newCall(request).execute()
-        if (!response.isSuccessful) {
-            return emptyList()
-        }
-
-        val body = response.body?.string() ?: return emptyList()
-        val searchResponse = searXNGJson.decodeFromString<SearXNGResponse>(body)
-
-        return searchResponse.results
-            .take(limit)
-            .map { result ->
-                SearchResultItem(
-                    title = result.title,
-                    url = result.url,
-                    text = result.content
-                )
-            }
-            .filter { it.url.startsWith("http") }
     }
 
     // SearXNG 响应数据类
