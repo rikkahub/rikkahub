@@ -5,6 +5,18 @@ import org.junit.Test
 
 class MarkdownInlineMathPromotionTest {
     @Test
+    fun `keeps plain long text unchanged`() {
+        val text = "This is a long plain text paragraph that should keep wrapping naturally without any inline math segments."
+        val promoted = promoteInlineMathByWidth(
+            text = text,
+            inlineMathSegments = emptyList(),
+            containerWidthPx = 100f,
+            threshold = 0.8f
+        )
+        assertEquals(text, promoted)
+    }
+
+    @Test
     fun `does not promote when ratio below threshold`() {
         val text = "Before $x+1$ after"
         val raw = "$x+1$"
