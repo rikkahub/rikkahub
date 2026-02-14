@@ -110,7 +110,20 @@ fun Route.conversationRoutes(
                 .map { it.assistantId }
                 .distinctUntilChanged()
                 .collectLatest { assistantId ->
-                    conversationRepo.getConversationsOfAssistant(assistantId).collect {
+                    combine(
+                        conversationRepo.getConversationsOfAssistant(assistantId),
+                        chatService.getConversationJobs()
+                    ) { conversations, generationJobs ->
+                        // Include generation state in the list stream key so stop/start generation
+                        // can invalidate sidebar list even when conversation content isn't persisted.
+                        conversations.map { conversation ->
+                            Triple(
+                                conversation.id,
+                                conversation.updateAt.toEpochMilli(),
+                                generationJobs[conversation.id] != null
+                            )
+                        }
+                    }.distinctUntilChanged().collect {
                         val json = JsonInstant.encodeToString(
                             ConversationListInvalidateEvent(
                                 assistantId = assistantId.toString(),
