@@ -487,6 +487,7 @@ function LanguageSwitcher() {
         <Button
           variant="outline"
           size="icon-sm"
+          className="text-foreground"
           type="button"
           aria-label={`Language: ${currentOption.label}`}
           title={`Language: ${currentOption.label}`}
@@ -770,7 +771,11 @@ export function ConversationSidebar({
           }}
         >
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full justify-start gap-2" type="button">
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-2 text-foreground"
+              type="button"
+            >
               {currentAssistant ? (
                 <>
                   <UIAvatar
@@ -869,6 +874,7 @@ export function ConversationSidebar({
             <Button
               variant="outline"
               size="icon-sm"
+              className="text-foreground"
               type="button"
               onClick={handleWebLogout}
               aria-label="Clear web session"
@@ -885,6 +891,7 @@ export function ConversationSidebar({
               <Button
                 variant="outline"
                 size="icon-sm"
+                className="text-foreground"
                 type="button"
                 aria-label={t("conversation_sidebar.theme_mode_label", {
                   label: t(`conversation_sidebar.${currentThemeOption.labelKey}`),
@@ -922,6 +929,7 @@ export function ConversationSidebar({
               <Button
                 variant="outline"
                 size="icon-sm"
+                className="text-foreground"
                 type="button"
                 aria-label={t("conversation_sidebar.theme_color_label", {
                   label: t(`conversation_sidebar.${currentColorThemeOption.labelKey}`),
