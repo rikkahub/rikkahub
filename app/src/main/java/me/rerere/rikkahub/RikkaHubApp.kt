@@ -137,7 +137,7 @@ class RikkaHubApp : Application() {
                 BACKUP_REMINDER_NOTIFICATION_CHANNEL_ID,
                 NotificationManagerCompat.IMPORTANCE_DEFAULT
             )
-            .setName("Backup Reminder")
+            .setName(getString(R.string.notification_channel_backup_reminder))
             .setVibrationEnabled(true)
             .build()
         notificationManager.createNotificationChannel(backupReminderChannel)

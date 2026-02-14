@@ -736,6 +736,23 @@
   <string name="backup_page_s3_region">Region</string>
   <string name="backup_page_s3_backup_files">S3 Backup Files</string>
   <string name="backup_page_s3_backup">S3 Backup</string>
+  <string name="backup_page_auto_backup">Auto Backup</string>
+  <string name="backup_auto_reminder_title">Backup Reminder</string>
+  <string name="backup_auto_reminder_desc">Send reminder when automatic backups are overdue</string>
+  <string name="backup_auto_reminder_content">Automatic backup is overdue. Tap to review backup settings.</string>
+  <string name="backup_auto_reminder_interval_days">Reminder Interval (Days)</string>
+  <string name="backup_auto_interval_days">Backup Interval (Days)</string>
+  <string name="backup_auto_interval_desc">Backup interval in days (minimum 1 day)</string>
+  <string name="backup_auto_configured">Configured</string>
+  <string name="backup_auto_not_configured">Not configured</string>
+  <string name="backup_auto_never">Never</string>
+  <string name="backup_auto_enable">Enable automatic backup</string>
+  <string name="backup_auto_enable_desc">Only configured providers can be enabled</string>
+  <string name="backup_auto_on_launch">Backup on app launch</string>
+  <string name="backup_auto_on_launch_desc">Run backup after app launch when due</string>
+  <string name="backup_auto_last_success">Last success: %s</string>
+  <string name="backup_auto_last_error">Last error: %s</string>
+  <string name="notification_channel_backup_reminder">Backup Reminder</string>
   <string name="setting_display_page_show_assistant_bubble_title">Show Assistant Message Bubble</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Whether to show bubble background for assistant messages</string>
   <string name="setting_page_message_display_settings">Message Display</string>
@@ -810,4 +827,3 @@
   <string name="setting_display_page_enable_latex_rendering_title">Enable LaTeX Rendering</string>
   <string name="setting_display_page_enable_latex_rendering_desc">Render mathematical expressions and formulas using LaTeX syntax</string>
 </resources>
-
