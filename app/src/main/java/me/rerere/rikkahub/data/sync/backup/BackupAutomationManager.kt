@@ -36,21 +36,7 @@ class BackupAutomationManager(
     suspend fun runMigrationIfNeeded() {
         val settings = settingsStore.settingsFlow.value
         if (settings.backupAutomationMigrated) return
-        settingsStore.update {
-            it.copy(
-                backupAutomationMigrated = true,
-                webDavConfig = it.webDavConfig.copy(
-                    autoBackupEnabled = isWebDavConfigured(it.webDavConfig),
-                    autoBackupOnAppLaunch = isWebDavConfigured(it.webDavConfig),
-                    autoBackupIntervalDays = it.webDavConfig.autoBackupIntervalDays.coerceAtLeast(1)
-                ),
-                s3Config = it.s3Config.copy(
-                    autoBackupEnabled = isS3Configured(it.s3Config),
-                    autoBackupOnAppLaunch = isS3Configured(it.s3Config),
-                    autoBackupIntervalDays = it.s3Config.autoBackupIntervalDays.coerceAtLeast(1)
-                )
-            )
-        }
+        settingsStore.update { migrateSettings(it) }
     }
 
     fun ensurePeriodicWorkState() {
@@ -106,23 +92,7 @@ class BackupAutomationManager(
     suspend fun checkAndNotifyReminderIfNeeded() {
         val settings = settingsStore.settingsFlow.value
         if (!settings.backupReminderEnabled) return
-        if (!shouldRunByInterval(
-                lastAtEpochMillis = settings.lastBackupReminderAtEpochMillis,
-                intervalDays = settings.backupReminderIntervalDays,
-                nowEpochMillis = System.currentTimeMillis()
-            )
-        ) {
-            return
-        }
-
-        val webDavNeedReminder = isWebDavConfigured(settings.webDavConfig)
-            && settings.webDavConfig.autoBackupEnabled
-            && shouldRunBackupNow(settings.webDavConfig.lastBackupAtEpochMillis, settings.webDavConfig.autoBackupIntervalDays)
-        val s3NeedReminder = isS3Configured(settings.s3Config)
-            && settings.s3Config.autoBackupEnabled
-            && shouldRunBackupNow(settings.s3Config.lastBackupAtEpochMillis, settings.s3Config.autoBackupIntervalDays)
-        val needReminder = webDavNeedReminder || s3NeedReminder
-        if (!needReminder) return
+        if (!shouldSendReminder(settings, System.currentTimeMillis())) return
 
         val openBackupPageIntent = Intent(context, RouteActivity::class.java)
             .putExtra(EXTRA_OPEN_SCREEN, OPEN_SCREEN_BACKUP)
@@ -151,15 +121,18 @@ class BackupAutomationManager(
 
     private suspend fun runWebDavBackupIfNeeded(settings: Settings, now: Long, isOnLaunch: Boolean) {
         val config = settings.webDavConfig
-        if (!isWebDavConfigured(config)) return
-        if (!config.autoBackupEnabled) return
-        if (isOnLaunch && !config.autoBackupOnAppLaunch) return
-        if (!shouldRunByInterval(config.lastBackupAtEpochMillis, config.autoBackupIntervalDays, now)) return
+        if (!shouldExecuteProvider(
+                isConfigured = isWebDavConfigured(config),
+                autoEnabled = config.autoBackupEnabled,
+                onLaunchEnabled = config.autoBackupOnAppLaunch,
+                isOnLaunch = isOnLaunch,
+                hasItems = config.items.isNotEmpty(),
+                lastBackupAtEpochMillis = config.lastBackupAtEpochMillis,
+                intervalDays = config.autoBackupIntervalDays,
+                nowEpochMillis = now
+            )
+        ) return
         val updated = runCatching {
-            if (config.items.isEmpty()) {
-                logSkip("webdav", "empty items")
-                return
-            }
             webDavSync.backup(config)
         }.fold(
             onSuccess = {
@@ -184,15 +157,18 @@ class BackupAutomationManager(
 
     private suspend fun runS3BackupIfNeeded(settings: Settings, now: Long, isOnLaunch: Boolean) {
         val config = settings.s3Config
-        if (!isS3Configured(config)) return
-        if (!config.autoBackupEnabled) return
-        if (isOnLaunch && !config.autoBackupOnAppLaunch) return
-        if (!shouldRunByInterval(config.lastBackupAtEpochMillis, config.autoBackupIntervalDays, now)) return
+        if (!shouldExecuteProvider(
+                isConfigured = isS3Configured(config),
+                autoEnabled = config.autoBackupEnabled,
+                onLaunchEnabled = config.autoBackupOnAppLaunch,
+                isOnLaunch = isOnLaunch,
+                hasItems = config.items.isNotEmpty(),
+                lastBackupAtEpochMillis = config.lastBackupAtEpochMillis,
+                intervalDays = config.autoBackupIntervalDays,
+                nowEpochMillis = now
+            )
+        ) return
         val updated = runCatching {
-            if (config.items.isEmpty()) {
-                logSkip("s3", "empty items")
-                return
-            }
             s3Sync.backupToS3(config)
         }.fold(
             onSuccess = {
@@ -215,11 +191,23 @@ class BackupAutomationManager(
         }
     }
 
-    private fun logSkip(provider: String, reason: String) {
-        Log.i(TAG, "skip auto backup for $provider: $reason")
-    }
-
     companion object {
+        fun migrateSettings(settings: Settings): Settings {
+            return settings.copy(
+                backupAutomationMigrated = true,
+                webDavConfig = settings.webDavConfig.copy(
+                    autoBackupEnabled = isWebDavConfigured(settings.webDavConfig),
+                    autoBackupOnAppLaunch = isWebDavConfigured(settings.webDavConfig),
+                    autoBackupIntervalDays = settings.webDavConfig.autoBackupIntervalDays.coerceAtLeast(1)
+                ),
+                s3Config = settings.s3Config.copy(
+                    autoBackupEnabled = isS3Configured(settings.s3Config),
+                    autoBackupOnAppLaunch = isS3Configured(settings.s3Config),
+                    autoBackupIntervalDays = settings.s3Config.autoBackupIntervalDays.coerceAtLeast(1)
+                )
+            )
+        }
+
         fun isWebDavConfigured(config: WebDavConfig): Boolean {
             return config.url.isNotBlank()
                 && config.username.isNotBlank()
@@ -248,6 +236,52 @@ class BackupAutomationManager(
             val webDavEnabled = isWebDavConfigured(settings.webDavConfig) && settings.webDavConfig.autoBackupEnabled
             val s3Enabled = isS3Configured(settings.s3Config) && settings.s3Config.autoBackupEnabled
             return webDavEnabled || s3Enabled
+        }
+
+        fun shouldExecuteProvider(
+            isConfigured: Boolean,
+            autoEnabled: Boolean,
+            onLaunchEnabled: Boolean,
+            isOnLaunch: Boolean,
+            hasItems: Boolean,
+            lastBackupAtEpochMillis: Long,
+            intervalDays: Int,
+            nowEpochMillis: Long,
+        ): Boolean {
+            if (!isConfigured) return false
+            if (!autoEnabled) return false
+            if (isOnLaunch && !onLaunchEnabled) return false
+            if (!hasItems) return false
+            return shouldRunByInterval(lastBackupAtEpochMillis, intervalDays, nowEpochMillis)
+        }
+
+        fun shouldSendReminder(settings: Settings, nowEpochMillis: Long): Boolean {
+            if (!settings.backupReminderEnabled) return false
+            if (!shouldRunByInterval(settings.lastBackupReminderAtEpochMillis, settings.backupReminderIntervalDays, nowEpochMillis)) {
+                return false
+            }
+
+            val webDavNeedReminder = shouldExecuteProvider(
+                isConfigured = isWebDavConfigured(settings.webDavConfig),
+                autoEnabled = settings.webDavConfig.autoBackupEnabled,
+                onLaunchEnabled = settings.webDavConfig.autoBackupOnAppLaunch,
+                isOnLaunch = false,
+                hasItems = settings.webDavConfig.items.isNotEmpty(),
+                lastBackupAtEpochMillis = settings.webDavConfig.lastBackupAtEpochMillis,
+                intervalDays = settings.webDavConfig.autoBackupIntervalDays,
+                nowEpochMillis = nowEpochMillis
+            )
+            val s3NeedReminder = shouldExecuteProvider(
+                isConfigured = isS3Configured(settings.s3Config),
+                autoEnabled = settings.s3Config.autoBackupEnabled,
+                onLaunchEnabled = settings.s3Config.autoBackupOnAppLaunch,
+                isOnLaunch = false,
+                hasItems = settings.s3Config.items.isNotEmpty(),
+                lastBackupAtEpochMillis = settings.s3Config.lastBackupAtEpochMillis,
+                intervalDays = settings.s3Config.autoBackupIntervalDays,
+                nowEpochMillis = nowEpochMillis
+            )
+            return webDavNeedReminder || s3NeedReminder
         }
     }
 }
