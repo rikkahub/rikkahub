@@ -109,15 +109,22 @@ import kotlin.uuid.Uuid
 private const val TAG = "RouteActivity"
 
 class RouteActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_OPEN_SCREEN = "open_screen"
+        const val OPEN_SCREEN_BACKUP = "backup"
+    }
+
     private val highlighter by inject<Highlighter>()
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
     private var navStack by mutableStateOf<NavHostController?>(null)
+    private var pendingOpenScreen by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         disableNavigationBarContrast()
         super.onCreate(savedInstanceState)
+        pendingOpenScreen = intent?.getStringExtra(EXTRA_OPEN_SCREEN)
         setContent {
             val navStack = rememberNavController()
             this.navStack = navStack
@@ -176,6 +183,7 @@ class RouteActivity : ComponentActivity() {
         intent.getStringExtra("conversationId")?.let { text ->
             navStack?.navigate(Screen.Chat(text))
         }
+        pendingOpenScreen = intent.getStringExtra(EXTRA_OPEN_SCREEN)
     }
 
     @Composable
@@ -183,6 +191,14 @@ class RouteActivity : ComponentActivity() {
         val toastState = rememberToasterState()
         val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
         val tts = rememberCustomTtsState()
+        LaunchedEffect(navBackStack, pendingOpenScreen) {
+            when (pendingOpenScreen) {
+                OPEN_SCREEN_BACKUP -> {
+                    navBackStack.navigate(Screen.Backup)
+                    pendingOpenScreen = null
+                }
+            }
+        }
         SharedTransitionLayout {
             CompositionLocalProvider(
                 LocalNavController provides navBackStack,

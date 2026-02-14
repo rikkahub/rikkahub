@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import me.rerere.common.android.appTempFolder
+import me.rerere.rikkahub.data.sync.backup.BackupAutomationManager
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.repositoryModule
@@ -37,6 +38,7 @@ private const val TAG = "RikkaHubApp"
 
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
+const val BACKUP_REMINDER_NOTIFICATION_CHANNEL_ID = "backup_reminder"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -69,6 +71,8 @@ class RikkaHubApp : Application() {
 
         // Start WebServer if enabled in settings
         startWebServerIfEnabled()
+
+        runBackupAutomationStartup()
 
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
@@ -127,6 +131,30 @@ class RikkaHubApp : Application() {
             .setVibrationEnabled(false)
             .build()
         notificationManager.createNotificationChannel(chatLiveUpdateChannel)
+
+        val backupReminderChannel = NotificationChannelCompat
+            .Builder(
+                BACKUP_REMINDER_NOTIFICATION_CHANNEL_ID,
+                NotificationManagerCompat.IMPORTANCE_DEFAULT
+            )
+            .setName("Backup Reminder")
+            .setVibrationEnabled(true)
+            .build()
+        notificationManager.createNotificationChannel(backupReminderChannel)
+    }
+
+    private fun runBackupAutomationStartup() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val manager = get<BackupAutomationManager>()
+                manager.runMigrationIfNeeded()
+                manager.ensurePeriodicWorkState()
+                manager.runOnAppLaunchIfNeeded()
+                manager.checkAndNotifyReminderIfNeeded()
+            }.onFailure {
+                Log.e(TAG, "runBackupAutomationStartup failed", it)
+            }
+        }
     }
 
     override fun onTerminate() {
