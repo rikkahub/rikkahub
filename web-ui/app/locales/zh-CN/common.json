@@ -95,5 +95,14 @@
   },
   "infinite_scroll": {
     "load_more": "加载更多..."
+  },
+  "web_auth_gate": {
+    "title": "Web API 已锁定",
+    "description": "请输入访问密码以继续使用内置网页客户端。",
+    "password_placeholder": "访问密码",
+    "password_required": "请输入访问密码。",
+    "unlock": "解锁",
+    "unlocking": "正在解锁...",
+    "unlock_failed": "Web API 解锁失败。"
   }
 }

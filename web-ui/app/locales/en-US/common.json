@@ -95,5 +95,14 @@
   },
   "infinite_scroll": {
     "load_more": "Loading more..."
+  },
+  "web_auth_gate": {
+    "title": "Web API is locked",
+    "description": "Enter your access password to continue using the embedded web client.",
+    "password_placeholder": "Access password",
+    "password_required": "Please enter your access password.",
+    "unlock": "Unlock",
+    "unlocking": "Unlocking...",
+    "unlock_failed": "Failed to unlock Web API access."
   }
 }

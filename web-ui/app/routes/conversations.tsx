@@ -1017,6 +1017,7 @@ function ConversationsPageInner() {
         onUpdateTitle={handleUpdateConversationTitle}
         onDelete={handleDeleteConversation}
         onCreateConversation={handleCreateConversation}
+        webAuthEnabled={settings?.webServerJwtEnabled === true}
       />
       <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
         <div className="flex items-center gap-2 border-b px-4 py-3">

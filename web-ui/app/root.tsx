@@ -13,6 +13,7 @@ import "./app.css";
 import "./i18n";
 import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./components/theme-provider";
+import { WebAuthGate } from "./components/web-auth-gate";
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
@@ -51,6 +52,7 @@ function AppContent() {
   return (
     <ThemeProvider defaultTheme="system">
       <Outlet />
+      <WebAuthGate />
       <Toaster position="top-center"/>
     </ThemeProvider>
   );

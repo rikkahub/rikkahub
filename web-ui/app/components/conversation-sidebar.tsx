@@ -17,6 +17,7 @@ import {
   PinOff,
   Plus,
   RefreshCw,
+  LogOut,
   Sun,
   Trash2,
 } from "lucide-react";
@@ -66,6 +67,7 @@ import {
 import { ConversationSearchButton } from "~/components/conversation-search-button";
 import { CustomThemeDialog } from "~/components/custom-theme-dialog";
 import { getAssistantDisplayName } from "~/lib/display";
+import { clearWebAuthToken } from "~/services/api";
 import type { AssistantAvatar, AssistantProfile, AssistantTag, ConversationListDto } from "~/types";
 
 const THEME_OPTIONS: Array<{
@@ -196,6 +198,7 @@ export interface ConversationSidebarProps {
   onUpdateTitle?: (id: string, title: string) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   onCreateConversation?: () => void;
+  webAuthEnabled?: boolean;
 }
 
 interface ConversationListRowProps {
@@ -532,6 +535,7 @@ export function ConversationSidebar({
   onUpdateTitle,
   onDelete,
   onCreateConversation,
+  webAuthEnabled = false,
 }: ConversationSidebarProps) {
   const { t, i18n } = useTranslation();
   const { theme, setTheme, colorTheme, setColorTheme, customThemeCss, setCustomThemeCss } =
@@ -614,6 +618,12 @@ export function ConversationSidebar({
     const scrollContainer = document.getElementById("conversationScrollTarget");
     if (!scrollContainer) return;
     scrollContainer.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const handleWebLogout = React.useCallback(() => {
+    clearWebAuthToken();
+    toast.success("Web session cleared");
+    window.location.reload();
   }, []);
 
   React.useEffect(() => {
@@ -855,6 +865,19 @@ export function ConversationSidebar({
         />
 
         <div className="flex items-center gap-2">
+          {webAuthEnabled && (
+            <Button
+              variant="outline"
+              size="icon-sm"
+              type="button"
+              onClick={handleWebLogout}
+              aria-label="Clear web session"
+              title="Clear web session"
+            >
+              <LogOut className="size-4" />
+            </Button>
+          )}
+
           <LanguageSwitcher />
 
           <DropdownMenu>

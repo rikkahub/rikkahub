@@ -1,3 +1,5 @@
+import { appendWebAuthQuery } from "~/services/api";
+
 /**
  * Convert file URL to the correct API endpoint
  * - data: URLs are returned as-is (base64 encoded files)
@@ -19,7 +21,7 @@ export function resolveFileUrl(url: string): string {
     // Format: file:///data/user/0/package.name/files/upload/xxx
     const match = url.match(/file:\/\/.*?\/files\/(.+)/);
     if (match && match[1]) {
-      return `/api/files/path/${match[1]}`;
+      return appendWebAuthQuery(`/api/files/path/${match[1]}`);
     }
     // If we can't extract the path, return as-is (will fail to load with error)
     return url;
@@ -28,5 +30,5 @@ export function resolveFileUrl(url: string): string {
   // Relative path - convert to API endpoint
   // Remove leading slash if present
   const path = url.startsWith("/") ? url.slice(1) : url;
-  return `/api/files/path/${path}`;
+  return appendWebAuthQuery(`/api/files/path/${path}`);
 }
