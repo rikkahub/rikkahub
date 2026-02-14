@@ -975,7 +975,7 @@ export function ConversationSidebar({
             href="https://rikka-ai.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="ml-auto text-xs font-light text-muted-foreground hover:text-foreground transition-colors"
+            className="ml-auto text-xs font-normal text-foreground/80 hover:text-foreground transition-colors"
           >
             RikkaHub
           </a>
