@@ -61,6 +61,7 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
         )
 
     override suspend fun search(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.LinkUpOptions
@@ -108,6 +109,7 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
     }
 
     override suspend fun scrape(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.LinkUpOptions

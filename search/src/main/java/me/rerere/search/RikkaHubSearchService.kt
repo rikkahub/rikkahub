@@ -41,6 +41,7 @@ object RikkaHubSearchService : SearchService<SearchServiceOptions.RikkaHubOption
         get() = null
 
     override suspend fun search(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.RikkaHubOptions
@@ -88,6 +89,7 @@ object RikkaHubSearchService : SearchService<SearchServiceOptions.RikkaHubOption
     }
 
     override suspend fun scrape(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.RikkaHubOptions

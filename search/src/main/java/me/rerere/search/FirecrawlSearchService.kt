@@ -27,6 +27,8 @@ import me.rerere.search.SearchService.Companion.json
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
+private const val DEFAULT_FIRECRAWL_BASE_URL = "https://api.firecrawl.dev"
+
 object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOptions> {
     override val name: String = "Firecrawl"
 
@@ -86,6 +88,7 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
         )
 
     override suspend fun search(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.FirecrawlOptions
@@ -112,7 +115,7 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
             }
 
             val request = Request.Builder()
-                .url("https://api.firecrawl.dev/v2/search")
+                .url(serviceOptions.resolveUrl("/v2/search"))
                 .post(body.toString().toRequestBody())
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
@@ -152,6 +155,7 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
     }
 
     override suspend fun scrape(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.FirecrawlOptions
@@ -171,7 +175,7 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
             }
 
             val request = Request.Builder()
-                .url("https://api.firecrawl.dev/v2/scrape")
+                .url(serviceOptions.resolveUrl("/v2/scrape"))
                 .post(body.toString().toRequestBody())
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
@@ -202,6 +206,12 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
                 )
             )
         }
+    }
+
+    private fun SearchServiceOptions.FirecrawlOptions.resolveUrl(path: String): String {
+        val normalizedBaseUrl = baseUrl.trim().ifEmpty { DEFAULT_FIRECRAWL_BASE_URL }.removeSuffix("/")
+        val normalizedPath = if (path.startsWith("/")) path else "/$path"
+        return normalizedBaseUrl + normalizedPath
     }
 
     private fun JsonElement?.asStringList(): List<String>? {

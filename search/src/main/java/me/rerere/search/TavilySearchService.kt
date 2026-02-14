@@ -73,6 +73,7 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
         )
 
     override suspend fun search(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.TavilyOptions
@@ -121,6 +122,7 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
     }
 
     override suspend fun scrape(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.TavilyOptions

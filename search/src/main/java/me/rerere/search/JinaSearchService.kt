@@ -57,6 +57,7 @@ object JinaSearchService : SearchService<SearchServiceOptions.JinaOptions> {
         )
 
     override suspend fun search(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.JinaOptions
@@ -100,6 +101,7 @@ object JinaSearchService : SearchService<SearchServiceOptions.JinaOptions> {
     }
 
     override suspend fun scrape(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.JinaOptions

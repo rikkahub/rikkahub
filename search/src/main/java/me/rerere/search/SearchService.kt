@@ -28,12 +28,14 @@ interface SearchService<T : SearchServiceOptions> {
     fun Description()
 
     suspend fun search(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: T
     ): Result<SearchResult>
 
     suspend fun scrape(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: T

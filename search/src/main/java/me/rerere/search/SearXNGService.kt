@@ -46,6 +46,7 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
     override val scrapingParameters: InputSchema? = null
 
     override suspend fun search(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.SearXNGOptions
@@ -119,6 +120,7 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
     }
 
     override suspend fun scrape(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.SearXNGOptions

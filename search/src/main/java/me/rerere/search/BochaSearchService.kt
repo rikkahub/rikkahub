@@ -51,6 +51,7 @@ object BochaSearchService : SearchService<SearchServiceOptions.BochaOptions> {
     override val scrapingParameters: InputSchema? = null
 
     override suspend fun search(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.BochaOptions
@@ -105,6 +106,7 @@ object BochaSearchService : SearchService<SearchServiceOptions.BochaOptions> {
     }
 
     override suspend fun scrape(
+        context: android.content.Context,
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.BochaOptions

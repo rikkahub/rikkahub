@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import android.content.Context
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -16,7 +17,7 @@ import me.rerere.search.SearchServiceOptions
 import java.time.LocalDate
 import kotlin.uuid.Uuid
 
-fun createSearchTools(settings: Settings): Set<Tool> {
+fun createSearchTools(context: Context, settings: Settings): Set<Tool> {
     return buildSet {
         add(
             Tool(
@@ -52,6 +53,7 @@ fun createSearchTools(settings: Settings): Set<Tool> {
                         defaultValue = { SearchServiceOptions.DEFAULT })
                     val service = SearchService.getService(options)
                     val result = service.search(
+                        context = context,
                         params = it.jsonObject,
                         commonOptions = settings.searchCommonOptions,
                         serviceOptions = options,
@@ -99,6 +101,7 @@ fun createSearchTools(settings: Settings): Set<Tool> {
                             defaultValue = { SearchServiceOptions.DEFAULT })
                         val service = SearchService.getService(options)
                         val result = service.scrape(
+                            context = context,
                             params = it.jsonObject,
                             commonOptions = settings.searchCommonOptions,
                             serviceOptions = options,

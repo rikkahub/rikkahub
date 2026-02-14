@@ -472,7 +472,7 @@ class ChatService(
                 outputTransformers = outputTransformers,
                 tools = buildList {
                     if (settings.enableWebSearch) {
-                        addAll(createSearchTools(settings))
+                        addAll(createSearchTools(context, settings))
                     }
                     addAll(localTools.getTools(settings.getCurrentAssistant().localTools))
                     mcpManager.getAllAvailableTools().forEach { tool ->

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.subagent
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -31,6 +32,7 @@ private const val TAG = "SubAgentExecutor"
  */
 class SubAgentExecutor(
     private val generationHandler: GenerationHandler,
+    private val context: Context,
 ) {
     /**
      * 执行子代理任务（流式返回进度）
@@ -268,7 +270,7 @@ class SubAgentExecutor(
 
         // 网络搜索工具
         if (toolSet.enableWebSearch) {
-            tools.addAll(createSearchTools(settings))
+            tools.addAll(createSearchTools(context, settings))
         }
 
         // 沙箱文件操作（所有子代理默认都有）
