@@ -78,23 +78,28 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 
-            // 并发调用多个源：Bing + DuckDuckGo + SearXNG
+            // 并发调用多个源：Bing + DuckDuckGo + SearXNG + Sogou + Google
             val tasks = listOf(
                 async { searchBing(query, commonOptions.resultSize) },
                 async { searchDuckDuckGo(query, commonOptions.resultSize) },
-                async { searchSearXNG(query, commonOptions.resultSize) }
+                async { searchSearXNG(query, commonOptions.resultSize) },
+                async { searchSogou(query, commonOptions.resultSize) },
+                async { searchGoogle(query, commonOptions.resultSize) }
             )
 
             val allResults = tasks.awaitAll().flatten()
 
-            // URL 去重
-            val uniqueResults = allResults.distinctBy { it.url }
+            // 过滤和排序
+            val filteredResults = allResults
+                .filter { isValidResult(it) }  // 过滤低质量结果
+                .distinctBy { normalizeUrl(it.url) }  // URL 标准化去重
+                .sortedByDescending { scoreResult(it) }  // 简单评分排序
 
-            require(uniqueResults.isNotEmpty()) {
+            require(filteredResults.isNotEmpty()) {
                 "Search failed: no results found"
             }
 
-            SearchResult(items = uniqueResults)
+            SearchResult(items = filteredResults.take(commonOptions.resultSize * 2))  // 返回足够多的结果
         }
     }
 
@@ -182,6 +187,141 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    /**
+     * 搜狗搜索 - 可获取微信公众号内容
+     */
+    private suspend fun searchSogou(query: String, limit: Int): List<SearchResultItem> {
+        return try {
+            val url = "https://www.sogou.com/web?query=" + URLEncoder.encode(query, "UTF-8")
+            val doc = Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                .header("Accept-Language", "zh-CN,zh;q=0.9")
+                .referrer("https://www.sogou.com/")
+                .timeout(5000)
+                .get()
+
+            doc.select(".vrwrap").take(limit).map { element ->
+                SearchResultItem(
+                    title = element.select("h3 a").text(),
+                    url = element.select("h3 a").attr("href"),
+                    text = element.select(".str-text-info, .space-txt").text()
+                )
+            }.filter { it.url.startsWith("http") }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Google 搜索 (通过 Startpage 代理，避免直接被墙)
+     * Startpage 使用 Google 搜索结果但保护隐私
+     */
+    private suspend fun searchGoogle(query: String, limit: Int): List<SearchResultItem> {
+        return try {
+            // 使用 Startpage 作为 Google 代理
+            val url = "https://www.startpage.com/sp/search?query=" + URLEncoder.encode(query, "UTF-8")
+            val doc = Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .timeout(8000)
+                .get()
+
+            doc.select(".w-gl__result").take(limit).map { element ->
+                SearchResultItem(
+                    title = element.select("h3").text(),
+                    url = element.select("a").attr("href"),
+                    text = element.select(".w-gl__description").text()
+                )
+            }.filter { it.url.startsWith("http") }
+        } catch (e: Exception) {
+            // Startpage 失败时尝试直接 Google (可能在某些网络环境下可用)
+            try {
+                searchGoogleDirect(query, limit)
+            } catch (e2: Exception) {
+                emptyList()
+            }
+        }
+    }
+
+    /**
+     * 直接 Google 搜索 (备用方案)
+     */
+    private fun searchGoogleDirect(query: String, limit: Int): List<SearchResultItem> {
+        val url = "https://www.google.com/search?q=" + URLEncoder.encode(query, "UTF-8") + "&num=$limit"
+        val doc = Jsoup.connect(url)
+            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .cookie("CONSENT", "YES+")
+            .timeout(5000)
+            .get()
+
+        return doc.select("#search .g").take(limit).map { element ->
+            SearchResultItem(
+                title = element.select("h3").text(),
+                url = element.select("a").attr("href"),
+                text = element.select("[data-sncf], .VwiC3b").text()
+            )
+        }.filter { it.url.startsWith("http") }
+    }
+
+    // ==================== 结果过滤和排序 ====================
+
+    /**
+     * 检查是否为有效的搜索结果
+     */
+    private fun isValidResult(item: SearchResultItem): Boolean {
+        // 过滤空白标题
+        if (item.title.isBlank()) return false
+        // 过滤无效 URL
+        if (!item.url.startsWith("http")) return false
+        // 过滤广告链接
+        val adPatterns = listOf("/ad/", "/ads/", "/sponsored", "/promo/", "advertising", "doubleclick", "googlesyndication")
+        if (adPatterns.any { item.url.contains(it, ignoreCase = true) }) return false
+        return true
+    }
+
+    /**
+     * URL 标准化，用于去重
+     */
+    private fun normalizeUrl(url: String): String {
+        return url
+            .lowercase()
+            .removeSuffix("/")
+            .removePrefix("https://")
+            .removePrefix("http://")
+            .removePrefix("www.")
+    }
+
+    /**
+     * 对搜索结果进行简单评分 (分数越高越好)
+     */
+    private fun scoreResult(item: SearchResultItem): Int {
+        var score = 0
+
+        // 标题长度适中加分
+        if (item.title.length in 10..80) score += 10
+
+        // 摘要长度加分 (有内容的摘要更好)
+        if (item.text.length > 50) score += 5
+        if (item.text.length > 100) score += 5
+
+        // 来自高质量域名加分
+        val highQualityDomains = listOf(
+            "wikipedia.org", "github.com", "stackoverflow.com", "reddit.com",
+            "medium.com", "zhihu.com", "csdn.net", "juejin.cn",
+            "docs.", "developer.", "documentation"
+        )
+        if (highQualityDomains.any { item.url.contains(it, ignoreCase = true) }) {
+            score += 15
+        }
+
+        // 过于短的摘要减分
+        if (item.text.length < 20) score -= 5
+
+        return score
     }
 
     /**
