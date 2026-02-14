@@ -68,7 +68,7 @@ val appModule = module {
     }
 
     single {
-        SubAgentExecutor(get())
+        SubAgentExecutor(get(), get())
     }
 
     single {

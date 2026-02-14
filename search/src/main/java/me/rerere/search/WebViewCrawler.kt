@@ -10,12 +10,9 @@ import android.webkit.WebViewClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import java.util.concurrent.TimeoutException
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import java.util.concurrent.TimeoutException
 
 /**
  * WebView-based crawler for handling dynamic content and JavaScript-heavy websites.
@@ -23,152 +20,114 @@ import kotlin.coroutines.resumeWithException
  */
 object WebViewCrawler {
     private const val TAG = "WebViewCrawler"
-    private const val USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+    // Use a modern desktop/mobile Chrome UA to pass some basic checks
+    private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
 
-    // Hard limits to avoid very large WebView payloads from causing memory pressure.
-    private const val MAX_RAW_HTML_CHARS = 2_000_000
-    private const val MAX_PROCESSED_HTML_CHARS = 1_200_000
-    private val scrapeSemaphore = Semaphore(1)
+    suspend fun scrape(context: Context, url: String, timeout: Long = 20000L): String = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { continuation ->
+            // Create a headless WebView
+            val webView = WebView(context)
+            var isResumed = false
 
-    suspend fun scrape(context: Context, url: String, timeout: Long = 20000L): String =
-        scrapeSemaphore.withPermit {
-            withContext(Dispatchers.Main) {
-                suspendCancellableCoroutine { continuation ->
-                    val webView = WebView(context)
-                    var isResumed = false
-
-                    val handler = Handler(Looper.getMainLooper())
-                    val pageFinishedRunnableRef = AtomicReference<Runnable?>(null)
-
-                    val timeoutRunnable = Runnable {
-                        if (!isResumed) {
-                            isResumed = true
-                            Log.w(TAG, "Scraping timeout for: $url")
-                            pageFinishedRunnableRef.get()?.let { handler.removeCallbacks(it) }
-                            try {
-                                webView.evaluateJavascript(
-                                    "(function() { return document.documentElement.outerHTML; })();"
-                                ) { html ->
-                                    val content = processHtml(html)
-                                    if (content.isNotEmpty()) {
-                                        continuation.resume(content)
-                                    } else {
-                                        continuation.resumeWithException(TimeoutException("Scraping timeout"))
-                                    }
-                                    cleanupWebView(webView, handler)
-                                }
-                            } catch (_: Exception) {
-                                continuation.resumeWithException(TimeoutException("Scraping timeout and failed to retrieve content"))
-                                cleanupWebView(webView, handler)
-                            }
-                        }
-                    }
-                    handler.postDelayed(timeoutRunnable, timeout)
-
-                    webView.settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        databaseEnabled = true
-                        blockNetworkImage = true
-                        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                        userAgentString = USER_AGENT
-                        cacheMode = WebSettings.LOAD_NO_CACHE
-                    }
-
-                    webView.webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            super.onPageFinished(view, url)
-                            if (!isResumed) {
-                                val pageFinishedRunnable = Runnable {
-                                    if (!isResumed) {
-                                        view?.evaluateJavascript(
-                                            "(function() { return document.documentElement.outerHTML; })();"
-                                        ) { html ->
-                                            isResumed = true
-                                            handler.removeCallbacks(timeoutRunnable)
-                                            val content = processHtml(html)
-                                            continuation.resume(content)
-                                            cleanupWebView(webView, handler)
-                                        }
-                                    }
-                                }
-                                pageFinishedRunnableRef.set(pageFinishedRunnable)
-                                handler.postDelayed(pageFinishedRunnable, 1500)
-                            }
-                        }
-
-                        override fun onReceivedError(
-                            view: WebView?,
-                            errorCode: Int,
-                            description: String?,
-                            failingUrl: String?
-                        ) {
-                            Log.e(TAG, "WebView error: $errorCode, $description")
-                        }
-                    }
-
+            val handler = Handler(Looper.getMainLooper())
+            val timeoutRunnable = Runnable {
+                if (!isResumed) {
+                    isResumed = true
+                    Log.w(TAG, "Scraping timeout for: $url")
+                    // Try to rescue content on timeout
                     try {
-                        webView.loadUrl(url)
-                    } catch (e: Exception) {
-                        if (!isResumed) {
-                            isResumed = true
-                            handler.removeCallbacks(timeoutRunnable)
-                            pageFinishedRunnableRef.get()?.let { handler.removeCallbacks(it) }
-                            continuation.resumeWithException(e)
-                            cleanupWebView(webView, handler)
+                        webView.evaluateJavascript(
+                            "(function() { return document.documentElement.outerHTML; })();"
+                        ) { html ->
+                            val content = processHtml(html)
+                            if (content.isNotEmpty()) {
+                                continuation.resume(content)
+                            } else {
+                                continuation.resumeWithException(TimeoutException("Scraping timeout"))
+                            }
+                            cleanupWebView(webView)
                         }
-                    }
-
-                    continuation.invokeOnCancellation {
-                        handler.removeCallbacks(timeoutRunnable)
-                        pageFinishedRunnableRef.get()?.let { handler.removeCallbacks(it) }
-                        cleanupWebView(webView, handler)
+                    } catch (e: Exception) {
+                        continuation.resumeWithException(TimeoutException("Scraping timeout and failed to retrieve content"))
+                        cleanupWebView(webView)
                     }
                 }
             }
-        }
+            handler.postDelayed(timeoutRunnable, timeout)
 
-    private fun processHtml(html: String?): String {
-        if (html.isNullOrBlank()) return ""
+            webView.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                blockNetworkImage = true // Block images for speed
+                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                userAgentString = USER_AGENT
+                cacheMode = WebSettings.LOAD_NO_CACHE
+            }
 
-        val raw = html.trim('"')
-        if (raw.isEmpty()) return ""
+            webView.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    if (!isResumed) {
+                        // Wait for dynamic content (simple delay strategy)
+                        // TODO: Implement smarter wait strategy (e.g., check DOM changes)
+                        handler.postDelayed({
+                            if (!isResumed) {
+                                view?.evaluateJavascript(
+                                    "(function() { return document.documentElement.outerHTML; })();"
+                                ) { html ->
+                                    isResumed = true
+                                    handler.removeCallbacks(timeoutRunnable)
+                                    val content = processHtml(html)
+                                    continuation.resume(content)
+                                    cleanupWebView(webView)
+                                }
+                            }
+                        }, 1500) // Wait 1.5s for JS execution
+                    }
+                }
 
-        val boundedRaw = if (raw.length > MAX_RAW_HTML_CHARS) {
-            raw.substring(0, MAX_RAW_HTML_CHARS)
-        } else {
-            raw
-        }
+                override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
+                    Log.e(TAG, "WebView error: $errorCode, $description")
+                    // Do not fail immediately as many sites have non-critical resource errors
+                }
+            }
 
-        val processed = boundedRaw
-            .replace("\\u003C", "<")
-            .replace("\\u003E", ">")
-            .replace("\\u0026", "&")
-            .replace("\\\"", "\"")
-            .replace("\\n", "\n")
-            .replace("\\t", "\t")
+            try {
+                webView.loadUrl(url)
+            } catch (e: Exception) {
+                if(!isResumed) {
+                    isResumed = true
+                    handler.removeCallbacks(timeoutRunnable)
+                    continuation.resumeWithException(e)
+                    cleanupWebView(webView)
+                }
+            }
 
-        return if (processed.length > MAX_PROCESSED_HTML_CHARS) {
-            processed.substring(0, MAX_PROCESSED_HTML_CHARS)
-        } else {
-            processed
+            continuation.invokeOnCancellation {
+                handler.removeCallbacks(timeoutRunnable)
+                cleanupWebView(webView)
+            }
         }
     }
 
-    private fun cleanupWebView(webView: WebView, handler: Handler) {
-        handler.removeCallbacksAndMessages(null)
+    private fun processHtml(html: String?): String {
+        return html?.trim('"')
+            ?.replace("\\u003C", "<")
+            ?.replace("\\\"", "\"")
+            ?.replace("\\n", "\n")
+            ?.replace("\\t", "\t")
+            ?: ""
+    }
+
+    private fun cleanupWebView(webView: WebView) {
         try {
             webView.stopLoading()
-            webView.webViewClient = WebViewClient()
-            webView.settings.javaScriptEnabled = false
             webView.clearHistory()
-            webView.clearCache(true)
-            webView.loadUrl("about:blank")
             webView.removeAllViews()
             webView.destroy()
         } catch (e: Exception) {
-            Log.w(TAG, "WebView cleanup error: ${e.message}")
+            // ignore
         }
     }
 }

@@ -498,7 +498,7 @@ class ChatService(
                 tools = buildList {
                     // 网络搜索工具（主代理）
                     if (settings.enableWebSearch) {
-                        addAll(createSearchTools(settings))
+                        addAll(createSearchTools(context, settings))
                     }
 
                     // 准备MCP工具列表（主代理和子代理共享）
