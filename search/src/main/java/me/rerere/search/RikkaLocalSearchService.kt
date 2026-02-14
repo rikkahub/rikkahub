@@ -144,7 +144,7 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
         }
     }
 
-    private suspend fun searchBing(query: String, limit: Int): List<SearchResultItem> {
+    internal suspend fun searchBing(query: String, limit: Int): List<SearchResultItem> {
         return try {
             val url = "https://www.bing.com/search?q=" + URLEncoder.encode(query, "UTF-8")
             val locale = Locale.getDefault()
@@ -168,7 +168,7 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
         }
     }
 
-    private suspend fun searchDuckDuckGo(query: String, limit: Int): List<SearchResultItem> {
+    internal suspend fun searchDuckDuckGo(query: String, limit: Int): List<SearchResultItem> {
         return try {
             // 使用 DDG 的 HTML 版本（不需要 JS）
             val url = "https://html.duckduckgo.com/html/?q=" + URLEncoder.encode(query, "UTF-8")
@@ -192,7 +192,7 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
     /**
      * 搜狗搜索 - 可获取微信公众号内容
      */
-    private suspend fun searchSogou(query: String, limit: Int): List<SearchResultItem> {
+    internal suspend fun searchSogou(query: String, limit: Int): List<SearchResultItem> {
         return try {
             val url = "https://www.sogou.com/web?query=" + URLEncoder.encode(query, "UTF-8")
             val doc = Jsoup.connect(url)
@@ -218,7 +218,7 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
      * Google 搜索 (通过 Startpage 代理，避免直接被墙)
      * Startpage 使用 Google 搜索结果但保护隐私
      */
-    private suspend fun searchGoogle(query: String, limit: Int): List<SearchResultItem> {
+    internal suspend fun searchGoogle(query: String, limit: Int): List<SearchResultItem> {
         return try {
             // 使用 Startpage 作为 Google 代理
             val url = "https://www.startpage.com/sp/search?query=" + URLEncoder.encode(query, "UTF-8")
@@ -328,7 +328,7 @@ object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOp
      * 使用内置的 SearXNG 公共实例进行搜索
      * 会并发尝试多个实例，返回第一个成功的结果
      */
-    private suspend fun searchSearXNG(query: String, limit: Int): List<SearchResultItem> = withContext(Dispatchers.IO) {
+    internal suspend fun searchSearXNG(query: String, limit: Int): List<SearchResultItem> = withContext(Dispatchers.IO) {
         // 并发尝试所有实例，谁先返回用谁
         val tasks = SEARXNG_INSTANCES.map { instanceUrl ->
             async {
