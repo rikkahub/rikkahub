@@ -47,6 +47,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.data.sync.backup.BackupAutomationManager
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.UiState
@@ -68,6 +69,7 @@ class ChatVM(
     val updateChecker: UpdateChecker,
     private val analytics: FirebaseAnalytics,
     private val filesManager: FilesManager,
+    private val backupAutomationManager: BackupAutomationManager,
     private val favoriteRepository: FavoriteRepository,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
@@ -94,6 +96,11 @@ class ChatVM(
         // 初始化对话
         viewModelScope.launch {
             chatService.initializeConversation(_conversationId)
+        }
+
+        // 与应用更新同入口触发云端备份更新检查，避免仅依赖启动链路导致漏检。
+        viewModelScope.launch {
+            backupAutomationManager.detectCloudNewerBackupIfNeeded(force = false)
         }
 
         // 记住对话ID, 方便下次启动恢复
@@ -337,6 +344,18 @@ class ChatVM(
     fun saveConversationAsync() {
         viewModelScope.launch {
             chatService.saveConversation(_conversationId, conversation.value)
+        }
+    }
+
+    fun dismissPendingCloudSyncPrompt() {
+        viewModelScope.launch {
+            backupAutomationManager.dismissPendingCloudSyncPrompt()
+        }
+    }
+
+    fun syncFromPendingCloudPrompt(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            onResult(backupAutomationManager.syncFromPendingCloudPrompt())
         }
     }
 

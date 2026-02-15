@@ -736,6 +736,28 @@
   <string name="backup_page_s3_region">Region</string>
   <string name="backup_page_s3_backup_files">S3 Backup Files</string>
   <string name="backup_page_s3_backup">S3 Backup</string>
+  <string name="backup_page_auto_backup">Auto Backup</string>
+  <string name="backup_auto_interval_days">Backup Interval (Days)</string>
+  <string name="backup_auto_interval_desc">Backup interval in days (minimum 1 day)</string>
+  <string name="backup_auto_configured">Configured</string>
+  <string name="backup_auto_not_configured">Not configured</string>
+  <string name="backup_auto_never">Never</string>
+  <string name="backup_auto_enable">Enable automatic backup</string>
+  <string name="backup_auto_enable_desc">Master switch: enables scheduled automatic backup.&#10;To auto backup on app launch, also enable "Backup on app launch" below.</string>
+  <string name="backup_auto_on_launch">Backup on app launch</string>
+  <string name="backup_auto_on_launch_desc">Sub-switch: controls whether backup is attempted on app launch; it still runs only when the backup interval is due.</string>
+  <string name="backup_auto_last_success">Last success: %s</string>
+  <string name="backup_auto_last_error">Last error: %s</string>
+  <string name="backup_cloud_sync_prompt_title">Cloud Backup Update Available</string>
+  <string name="backup_cloud_sync_prompt_desc">Found a newer backup from %1$s:\n%2$s\nUpdated at: %3$s</string>
+  <string name="backup_cloud_sync_provider_webdav">WebDAV</string>
+  <string name="backup_cloud_sync_provider_s3">S3</string>
+  <string name="backup_cloud_sync_now">Sync Now</string>
+  <string name="backup_cloud_sync_later">Later</string>
+  <string name="backup_cloud_sync_confirm_title">Confirm Sync</string>
+  <string name="backup_cloud_sync_confirm_desc">Syncing will overwrite local chat records/files with cloud backup data. Continue?</string>
+  <string name="backup_cloud_sync_success">Cloud backup synced successfully</string>
+  <string name="backup_cloud_sync_failed">Cloud backup sync failed: %s</string>
   <string name="setting_display_page_show_assistant_bubble_title">Show Assistant Message Bubble</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Whether to show bubble background for assistant messages</string>
   <string name="setting_page_message_display_settings">Message Display</string>
@@ -818,4 +840,3 @@
   <string name="chat_page_menu_ai_translator">AI Translator</string>
   <string name="chat_page_menu_image_generation">Image Generation</string>
 </resources>
-

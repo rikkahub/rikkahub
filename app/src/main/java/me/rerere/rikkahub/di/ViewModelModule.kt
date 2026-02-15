@@ -29,6 +29,8 @@ val viewModelModule = module {
             analytics = get(),
             filesManager = get(),
             favoriteRepository = get(),
+            filesManager = get(),
+            backupAutomationManager = get()
         )
     }
     viewModelOf(::SettingVM)

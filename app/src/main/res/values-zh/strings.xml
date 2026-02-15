@@ -721,6 +721,28 @@
   <string name="backup_page_s3_region">区域</string>
   <string name="backup_page_s3_backup_files">S3备份文件</string>
   <string name="backup_page_s3_backup">S3备份</string>
+  <string name="backup_page_auto_backup">自动备份</string>
+  <string name="backup_auto_interval_days">备份间隔（天）</string>
+  <string name="backup_auto_interval_desc">按天设置备份间隔（最少 1 天）</string>
+  <string name="backup_auto_configured">已配置</string>
+  <string name="backup_auto_not_configured">未配置</string>
+  <string name="backup_auto_never">从未</string>
+  <string name="backup_auto_enable">启用自动备份</string>
+  <string name="backup_auto_enable_desc">总开关：开启后才会自动备份（定时）。&#10;要在启动时自动备份，还需打开下方“应用启动时备份”。</string>
+  <string name="backup_auto_on_launch">应用启动时备份</string>
+  <string name="backup_auto_on_launch_desc">子开关：仅控制“启动时”是否尝试备份；仍需到达备份间隔才会执行。</string>
+  <string name="backup_auto_last_success">最近成功：%s</string>
+  <string name="backup_auto_last_error">最近错误：%s</string>
+  <string name="backup_cloud_sync_prompt_title">发现云端新备份</string>
+  <string name="backup_cloud_sync_prompt_desc">发现来自 %1$s 的更新备份：\n%2$s\n更新时间：%3$s</string>
+  <string name="backup_cloud_sync_provider_webdav">WebDAV</string>
+  <string name="backup_cloud_sync_provider_s3">S3</string>
+  <string name="backup_cloud_sync_now">立即同步</string>
+  <string name="backup_cloud_sync_later">稍后</string>
+  <string name="backup_cloud_sync_confirm_title">确认同步</string>
+  <string name="backup_cloud_sync_confirm_desc">同步将使用云端备份覆盖本地聊天/文件数据，是否继续？</string>
+  <string name="backup_cloud_sync_success">云端备份同步成功</string>
+  <string name="backup_cloud_sync_failed">云端备份同步失败：%s</string>
   <string name="setting_display_page_show_assistant_bubble_title">显示助手消息气泡</string>
   <string name="setting_display_page_show_assistant_bubble_desc">是否为助手消息显示气泡背景</string>
   <string name="setting_page_message_display_settings">消息显示</string>
@@ -818,4 +840,3 @@
   <string name="chat_page_menu_ai_translator">AI翻译</string>
   <string name="chat_page_menu_image_generation">图像生成</string>
 </resources>
-
