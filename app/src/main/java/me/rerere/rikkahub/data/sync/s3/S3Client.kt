@@ -14,12 +14,14 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ktor.utils.io.readAvailable
+import io.ktor.util.cio.readChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import java.io.File
 import java.io.InputStream
 import java.io.StringReader
+import java.security.MessageDigest
 import java.time.Instant
 
 private const val TAG = "S3Client"
@@ -67,7 +69,36 @@ class S3Client(
         file: File,
         contentType: String = "application/octet-stream",
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        putObject(key, file.readBytes(), contentType)
+        runCatching {
+            val path = "/${key.trimStart('/')}"
+            val fileSha256 = file.sha256Hex()
+            val signed = AwsSignatureV4.sign(
+                config = config,
+                method = "PUT",
+                path = path,
+                payloadHash = fileSha256,
+                contentLength = file.length(),
+                contentType = contentType,
+            )
+
+            val response: HttpResponse = httpClient.request(signed.url) {
+                method = HttpMethod.Put
+                headers {
+                    signed.headers.forEach { (k, v) -> append(k, v) }
+                }
+                // Stream large files to avoid loading backup archives into heap.
+                setBody(file.readChannel())
+            }
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                Log.e(TAG, "putObject(file) failed: ${response.status} - $errorBody")
+                throw S3Exception("Failed to put object: ${response.status}", errorBody)
+            }
+
+            Log.d(TAG, "putObject(file) success: $key (${file.length()} bytes)")
+            Unit
+        }
     }
 
     suspend fun getObject(key: String): Result<ByteArray> = withContext(Dispatchers.IO) {
@@ -271,6 +302,19 @@ class S3Client(
             val scheme = if (config.isHttps) "https://" else "http://"
             "$scheme${config.bucket}.${config.host}$path"
         }
+    }
+
+    private fun File.sha256Hex(): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        inputStream().buffered().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun parseListObjectsResponse(xml: String): S3ListResult {

@@ -28,13 +28,15 @@ internal object AwsSignatureV4 {
         queryParams: Map<String, String> = emptyMap(),
         headers: Map<String, String> = emptyMap(),
         payload: ByteArray? = null,
+        payloadHash: String? = null,
+        contentLength: Long? = null,
         contentType: String? = null,
     ): SignedRequest {
         val now = ZonedDateTime.now(ZoneOffset.UTC)
         val dateStamp = now.format(dateFormatter)
         val amzDate = now.format(timestampFormatter)
 
-        val payloadHash = payload?.sha256Hex() ?: UNSIGNED_PAYLOAD
+        val resolvedPayloadHash = payloadHash ?: payload?.sha256Hex() ?: UNSIGNED_PAYLOAD
 
         val host = config.host
         val canonicalUri = if (config.pathStyle) {
@@ -45,11 +47,12 @@ internal object AwsSignatureV4 {
 
         val allHeaders = mutableMapOf(
             "host" to (if (config.pathStyle) host else "${config.bucket}.$host"),
-            "x-amz-content-sha256" to payloadHash,
+            "x-amz-content-sha256" to resolvedPayloadHash,
             "x-amz-date" to amzDate,
         )
         contentType?.let { allHeaders["content-type"] = it }
         payload?.let { allHeaders["content-length"] = it.size.toString() }
+        contentLength?.let { allHeaders["content-length"] = it.toString() }
         allHeaders.putAll(headers.mapKeys { it.key.lowercase() })
 
         val signedHeaders = allHeaders.keys.sorted().joinToString(";")
@@ -68,7 +71,7 @@ internal object AwsSignatureV4 {
             append(canonicalHeaders)
             appendLine()
             appendLine(signedHeaders)
-            append(payloadHash)
+            append(resolvedPayloadHash)
         }
 
         val credentialScope = "$dateStamp/${config.region}/$SERVICE/aws4_request"
