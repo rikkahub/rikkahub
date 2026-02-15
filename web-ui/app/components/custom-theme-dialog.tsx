@@ -15,6 +15,14 @@ import type { CustomThemeCss } from "~/components/theme-provider";
 
 const CUSTOM_THEME_EDITOR_ROWS = 14;
 
+function mergeThemeCss(light: string, dark: string): string {
+  if (light && dark) {
+    return `${light}\n\n${dark}`;
+  }
+
+  return light || dark || "";
+}
+
 type CustomThemeDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -29,14 +37,16 @@ export function CustomThemeDialog({
   onSave,
 }: CustomThemeDialogProps) {
   const { t } = useTranslation();
-  const [cssDraft, setCssDraft] = React.useState(initialCss.light || initialCss.dark || "");
+  const [cssDraft, setCssDraft] = React.useState(() =>
+    mergeThemeCss(initialCss.light, initialCss.dark),
+  );
 
   React.useEffect(() => {
     if (!open) {
       return;
     }
 
-    setCssDraft(initialCss.light || initialCss.dark || "");
+    setCssDraft(mergeThemeCss(initialCss.light, initialCss.dark));
   }, [initialCss.light, initialCss.dark, open]);
 
   return (
@@ -87,20 +97,12 @@ export function CustomThemeDialog({
           <Button
             type="button"
             onClick={() => {
-              // 分离浅色和深色主题变量
-              let lightCss = "";
-              let darkCss = "";
+              let lightCss = cssDraft.match(/:root\s*\{[\s\S]*?\}/)?.[0]?.trim() ?? "";
+              let darkCss =
+                cssDraft.match(/(?:\.dark|:root\.dark)\s*\{[\s\S]*?\}/)?.[0]?.trim() ?? "";
 
-              // 提取 :root 选择器下的变量作为浅色主题
-              const rootMatch = cssDraft.match(/:root\s*\{([\s\S]*?)\}/);
-              if (rootMatch) {
-                lightCss = rootMatch[1];
-              }
-
-              // 提取 .dark 或 :root.dark 选择器下的变量作为深色主题
-              const darkMatch = cssDraft.match(/(?:\.dark|:root\.dark)\s*\{([\s\S]*?)\}/);
-              if (darkMatch) {
-                darkCss = darkMatch[1];
+              if (!lightCss && !darkCss && cssDraft.trim()) {
+                lightCss = cssDraft.trim();
               }
 
               onSave({

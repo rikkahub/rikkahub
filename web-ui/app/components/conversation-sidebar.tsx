@@ -950,9 +950,6 @@ export function ConversationSidebar({
                     key={option.value}
                     onClick={() => {
                       setColorTheme(option.value);
-                      if (option.value === "custom") {
-                        setCustomThemeOpen(true);
-                      }
                     }}
                   >
                     <span className="flex-1">{t(`conversation_sidebar.${option.labelKey}`)}</span>

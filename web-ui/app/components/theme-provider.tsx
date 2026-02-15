@@ -61,39 +61,51 @@ function isColorTheme(value: string | null): value is ColorTheme {
   return !!value && COLOR_THEMES.includes(value as ColorTheme);
 }
 
-function sanitizeCustomThemeCss(value: string, mode: "light" | "dark" = "light"): string {
-  if (!value.trim()) {
+function removeBlacklistedCss(value: string): string {
+  return value
+    .replace(/@theme\s+inline\s*\{[\s\S]*?\}/g, "")
+    .replace(/(^|\n)\s*body\s*\{[\s\S]*?\}/g, "")
+    .trim();
+}
+
+function scopeCustomThemeCss(value: string, mode: "light" | "dark"): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
     return "";
   }
 
-  // 尝试分别提取浅色和深色主题的变量
+  const filtered = removeBlacklistedCss(trimmed);
+  if (!filtered) {
+    return "";
+  }
+
   if (mode === "light") {
-    // 提取 :root 选择器下的变量
-    const rootMatch = value.match(/:root\s*\{([\s\S]*?)\}/);
-    if (rootMatch) {
-      const rootVars = rootMatch[1].match(/--[a-zA-Z0-9-_]+\s*:\s*[^;{}]+;/g);
-      if (rootVars) {
-        return rootVars.map((declaration) => declaration.trim()).join("\n  ");
-      }
+    const scoped = filtered.replace(
+      /(^|\n)\s*:root(?!\.dark)(?!\[data-theme="custom"\])\s*\{/g,
+      '$1:root[data-theme="custom"] {',
+    );
+
+    if (/:root\[data-theme="custom"\]\s*\{/.test(scoped)) {
+      return scoped;
     }
-  } else {
-    // 提取 .dark 或 :root.dark 选择器下的变量
-    const darkMatch = value.match(/(?:\.dark|:root\.dark)\s*\{([\s\S]*?)\}/);
-    if (darkMatch) {
-      const darkVars = darkMatch[1].match(/--[a-zA-Z0-9-_]+\s*:\s*[^;{}]+;/g);
-      if (darkVars) {
-        return darkVars.map((declaration) => declaration.trim()).join("\n  ");
-      }
-    }
+
+    return `:root[data-theme="custom"] {\n${filtered}\n}`;
   }
 
-  // 如果没有找到对应的选择器，回退到提取所有变量
-  const allMatches = value.match(/--[a-zA-Z0-9-_]+\s*:\s*[^;{}]+;/g);
-  if (allMatches) {
-    return allMatches.map((declaration) => declaration.trim()).join("\n  ");
+  const scopedDarkRoot = filtered.replace(
+    /(^|\n)\s*:root\.dark(?!\[data-theme="custom"\])\s*\{/g,
+    '$1:root.dark[data-theme="custom"] {',
+  );
+  const scoped = scopedDarkRoot.replace(
+    /(^|\n)\s*\.dark(?![a-zA-Z0-9_-])\s*\{/g,
+    '$1:root.dark[data-theme="custom"] {',
+  );
+
+  if (/:root\.dark\[data-theme="custom"\]\s*\{/.test(scoped)) {
+    return scoped;
   }
 
-  return "";
+  return `:root.dark[data-theme="custom"] {\n${filtered}\n}`;
 }
 
 export function ThemeProvider({
@@ -160,14 +172,9 @@ export function ThemeProvider({
   }, [colorTheme]);
 
   useEffect(() => {
-    const lightCss = sanitizeCustomThemeCss(customThemeCss.light, "light");
-    const darkCss = sanitizeCustomThemeCss(customThemeCss.dark, "dark");
-    const cssBlocks = [
-      lightCss ? `:root[data-theme="custom"] {\n  ${lightCss}\n}` : "",
-      darkCss ? `:root.dark[data-theme="custom"] {\n  ${darkCss}\n}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    const lightCss = scopeCustomThemeCss(customThemeCss.light, "light");
+    const darkCss = scopeCustomThemeCss(customThemeCss.dark, "dark");
+    const cssBlocks = [lightCss, darkCss].filter(Boolean).join("\n\n");
 
     const existingStyle = document.getElementById(CUSTOM_THEME_STYLE_ID);
 
