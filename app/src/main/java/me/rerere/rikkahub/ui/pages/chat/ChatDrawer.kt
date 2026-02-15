@@ -58,12 +58,14 @@ import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import me.rerere.rikkahub.ui.components.ui.Greeting
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.components.ui.CloudSyncPromptCard
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
+import me.rerere.rikkahub.ui.pages.backup.components.BackupDialog
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
@@ -103,6 +105,7 @@ fun ChatDrawerContent(
     // 移动对话状态
     var showMoveToAssistantSheet by remember { mutableStateOf(false) }
     var conversationToMove by remember { mutableStateOf<Conversation?>(null) }
+    var showRestartDialog by remember { mutableStateOf(false) }
     val bottomSheetState = rememberModalBottomSheetState()
 
     ModalDrawerSheet(
@@ -115,6 +118,11 @@ fun ChatDrawerContent(
             if (settings.displaySetting.showUpdates && !isPlayStore) {
                 UpdateCard(vm)
             }
+            CloudSyncPromptCard(
+                vm = vm,
+                settings = settings,
+                onShowRestartDialog = { showRestartDialog = true }
+            )
 
             // 用户头像和昵称自定义区域
             Row(
@@ -363,6 +371,10 @@ fun ChatDrawerContent(
                 }
             }
         }
+    }
+
+    if (showRestartDialog) {
+        BackupDialog()
     }
 }
 
