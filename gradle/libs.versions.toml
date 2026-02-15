@@ -57,6 +57,7 @@ baselineprofile = "1.4.1"
 profileinstaller = "1.4.1"
 ktor = "3.4.0"
 sqlite-vector = "0.9.85"
+sqlite-android = "3.49.0"
 jmdns = "3.6.3"
 
 [libraries]
@@ -158,6 +159,7 @@ ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
 ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
 ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
 sqlite-vector = { module = "ai.sqlite:vector", version.ref = "sqlite-vector" }
+sqlite-android = { module = "com.github.requery:sqlite-android", version.ref = "sqlite-android" }
 jmdns = { module = "org.jmdns:jmdns", version.ref = "jmdns" }
 
 [plugins]
