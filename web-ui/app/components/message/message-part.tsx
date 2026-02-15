@@ -95,7 +95,7 @@ function renderContentPart(
   }
 }
 
-export function MessageParts({ parts, loading = false, onToolApproval }: MessagePartsProps) {
+export const MessageParts = React.memo(({ parts, loading = false, onToolApproval }: MessagePartsProps) => {
   const { t } = useTranslation("message");
   const groupedParts = React.useMemo(() => groupMessageParts(parts), [parts]);
 
@@ -151,7 +151,7 @@ export function MessageParts({ parts, loading = false, onToolApproval }: Message
       })}
     </>
   );
-}
+});
 
 interface MessagePartProps {
   part: UIMessagePart;

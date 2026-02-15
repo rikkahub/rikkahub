@@ -213,7 +213,7 @@ interface ConversationListRowProps {
   onDelete?: (id: string) => Promise<void>;
 }
 
-function ConversationListRow({
+const ConversationListRow = React.memo(({
   conversation,
   isActive,
   assistants,
@@ -223,7 +223,7 @@ function ConversationListRow({
   onMoveToAssistant,
   onUpdateTitle,
   onDelete,
-}: ConversationListRowProps) {
+}: ConversationListRowProps) => {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [pendingAction, setPendingAction] = React.useState<string | null>(null);
@@ -469,7 +469,7 @@ function ConversationListRow({
       </DropdownMenu>
     </SidebarMenuItem>
   );
-}
+});
 
 function resolveLanguage(language: string): (typeof LANGUAGE_OPTIONS)[number]["value"] {
   return language.startsWith("zh") ? "zh-CN" : "en-US";

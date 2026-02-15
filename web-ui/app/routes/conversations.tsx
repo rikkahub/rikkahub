@@ -516,7 +516,7 @@ function useDraftInputController({
   };
 }
 
-function ConversationTimeline({
+const ConversationTimeline = React.memo(({
   activeId,
   isHomeRoute,
   detailLoading,
@@ -548,7 +548,7 @@ function ConversationTimeline({
   onRegenerate: (messageId: string) => Promise<void>;
   onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
   onToolApproval: (toolCallId: string, approved: boolean, reason: string) => Promise<void>;
-}) {
+}) => {
   const { t } = useTranslation("page");
   const canQuickJump =
     Boolean(activeId) && !detailLoading && !detailError && selectedNodeMessages.length > 1;
@@ -652,7 +652,7 @@ function ConversationTimeline({
       <ConversationScrollButton />
     </Conversation>
   );
-}
+});
 
 export function meta() {
   return [

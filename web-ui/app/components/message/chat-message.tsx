@@ -179,7 +179,7 @@ function getNerdStats(
   return stats;
 }
 
-function ChatMessageActionsRow({
+const ChatMessageActionsRow = React.memo(({
   node,
   message,
   loading,
@@ -199,7 +199,7 @@ function ChatMessageActionsRow({
   onSelectBranch?: (nodeId: string, selectIndex: number) => void | Promise<void>;
   onDelete?: (messageId: string) => void | Promise<void>;
   onFork?: (messageId: string) => void | Promise<void>;
-}) {
+}) => {
   const { t } = useTranslation("message");
   const [regenerating, setRegenerating] = React.useState(false);
   const [switchingBranch, setSwitchingBranch] = React.useState(false);
@@ -404,15 +404,15 @@ function ChatMessageActionsRow({
       )}
     </div>
   );
-}
+});
 
-function ChatMessageNerdLineRow({
+const ChatMessageNerdLineRow = React.memo(({
   message,
   alignRight,
 }: {
   message: MessageDto;
   alignRight: boolean;
-}) {
+}) => {
   const { t } = useTranslation("message");
   const displaySetting = useSettingsStore((state) => state.settings?.displaySetting);
 
@@ -438,9 +438,9 @@ function ChatMessageNerdLineRow({
       ))}
     </div>
   );
-}
+});
 
-export function ChatMessage({
+export const ChatMessage = React.memo(({
   node,
   message,
   previousRole,
@@ -454,7 +454,7 @@ export function ChatMessage({
   onDelete,
   onFork,
   onToolApproval,
-}: ChatMessageProps) {
+}: ChatMessageProps) => {
   const isUser = message.role === "USER";
   const hasMessageContent = message.parts.some(hasRenderablePart);
   const showActions = isLastMessage ? !loading : hasMessageContent;
@@ -502,4 +502,4 @@ export function ChatMessage({
       <ChatMessageNerdLineRow message={message} alignRight={isUser} />
     </div>
   );
-}
+});
