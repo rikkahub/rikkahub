@@ -78,11 +78,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
     private fun buildUrl(providerSetting: ProviderSetting.Google, path: String): HttpUrl {
         return if (!providerSetting.vertexAI) {
-            val key = keyRoulette.next(providerSetting.apiKey)
             "${providerSetting.baseUrl}/$path".toHttpUrl()
-                .newBuilder()
-                .addQueryParameter("key", key)
-                .build()
         } else {
             "https://aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/$path".toHttpUrl()
         }
@@ -101,7 +97,10 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .addHeader("Authorization", "Bearer $accessToken")
                 .build()
         } else {
-            request.newBuilder().build()
+            val key = keyRoulette.next(providerSetting.apiKey)
+            request.newBuilder()
+                .addHeader("x-goog-api-key", key)
+                .build()
         }
     }
 
