@@ -16,6 +16,8 @@ import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
@@ -109,8 +111,11 @@ class FilesManager(
         )
     }
 
-    suspend fun list(folder: String = FileFolders.UPLOAD): List<ManagedFileEntity> =
+    fun observe(folder: String = FileFolders.UPLOAD): Flow<List<ManagedFileEntity>> =
         repository.listByFolder(folder)
+
+    suspend fun list(folder: String = FileFolders.UPLOAD): List<ManagedFileEntity> =
+        repository.listByFolder(folder).first()
 
     suspend fun get(id: Long): ManagedFileEntity? = repository.getById(id)
 

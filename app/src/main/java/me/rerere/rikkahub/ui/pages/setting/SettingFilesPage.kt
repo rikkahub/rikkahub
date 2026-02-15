@@ -28,7 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,23 +69,9 @@ fun SettingFilesPage(
     val deletedToast = stringResource(R.string.setting_files_page_deleted_toast)
     val deleteFailedToast = stringResource(R.string.setting_files_page_delete_failed_toast)
 
-    var filesByFolder by remember { mutableStateOf<Map<String, List<ManagedFileEntity>>>(emptyMap()) }
     var selectedFolder by remember { mutableStateOf(FileFolders.UPLOAD) }
     var pendingDelete by remember { mutableStateOf<ManagedFileEntity?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        isLoading = true
-        val data = mutableMapOf<String, List<ManagedFileEntity>>()
-        folders.forEach { folder ->
-            filesManager.syncFolder(folder)
-            data[folder] = filesManager.list(folder)
-        }
-        filesByFolder = data
-        isLoading = false
-    }
-
-    val files = filesByFolder[selectedFolder].orEmpty()
+    val files by filesManager.observe(selectedFolder).collectAsState(initial = emptyList())
 
     if (pendingDelete != null) {
         val target = pendingDelete!!
@@ -99,11 +85,6 @@ fun SettingFilesPage(
                         scope.launch {
                             val ok = filesManager.delete(target.id, deleteFromDisk = true)
                             if (ok) {
-                                filesByFolder = filesByFolder.toMutableMap().apply {
-                                    val current = (this[selectedFolder] ?: emptyList())
-                                        .filterNot { it.id == target.id }
-                                    this[selectedFolder] = current
-                                }
                                 toaster.show(deletedToast)
                             } else {
                                 toaster.show(deleteFailedToast)
@@ -144,15 +125,7 @@ fun SettingFilesPage(
                 onFolderSelected = { selectedFolder = it }
             )
 
-            if (isLoading && files.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(stringResource(R.string.setting_files_page_loading))
-                }
-            } else if (files.isEmpty()) {
+            if (files.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize(),
