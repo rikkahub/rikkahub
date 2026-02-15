@@ -135,26 +135,31 @@ fun Route.filesRoutes(
                 throw NotFoundException("File not found")
             }
 
-            // Determine content type from file extension
-            val contentType = when (file.extension.lowercase()) {
-                "jpg", "jpeg" -> ContentType.Image.JPEG
-                "png" -> ContentType.Image.PNG
-                "gif" -> ContentType.Image.GIF
-                "webp" -> ContentType("image", "webp")
-                "svg" -> ContentType.Image.SVG
-                "pdf" -> ContentType.Application.Pdf
-                "json" -> ContentType.Application.Json
-                "txt" -> ContentType.Text.Plain
-                "html" -> ContentType.Text.Html
-                "mp4" -> ContentType("video", "mp4")
-                "webm" -> ContentType("video", "webm")
-                "mp3" -> ContentType.Audio.MPEG
-                "wav" -> ContentType("audio", "wav")
-                "ogg" -> ContentType("audio", "ogg")
-                else -> ContentType.Application.OctetStream
+            // Use managed file MIME type first because on-disk file names are UUID-only.
+            val managedFileMime = filesManager.getByRelativePath(relativePath)?.mimeType
+            val contentType = if (!managedFileMime.isNullOrBlank()) {
+                managedFileMime
+            } else {
+                when (file.extension.lowercase()) {
+                    "jpg", "jpeg" -> ContentType.Image.JPEG.toString()
+                    "png" -> ContentType.Image.PNG.toString()
+                    "gif" -> ContentType.Image.GIF.toString()
+                    "webp" -> ContentType("image", "webp").toString()
+                    "svg" -> ContentType.Image.SVG.toString()
+                    "pdf" -> ContentType.Application.Pdf.toString()
+                    "json" -> ContentType.Application.Json.toString()
+                    "txt" -> ContentType.Text.Plain.toString()
+                    "html" -> ContentType.Text.Html.toString()
+                    "mp4" -> ContentType("video", "mp4").toString()
+                    "webm" -> ContentType("video", "webm").toString()
+                    "mp3" -> ContentType.Audio.MPEG.toString()
+                    "wav" -> ContentType("audio", "wav").toString()
+                    "ogg" -> ContentType("audio", "ogg").toString()
+                    else -> ContentType.Application.OctetStream.toString()
+                }
             }
 
-            call.response.header("Content-Type", contentType.toString())
+            call.response.header("Content-Type", contentType)
             call.respondFile(file)
         }
     }

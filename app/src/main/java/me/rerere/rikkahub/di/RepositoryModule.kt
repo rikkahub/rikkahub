@@ -25,6 +25,6 @@ val repositoryModule = module {
     }
 
     single {
-        FilesManager(get(), get())
+        FilesManager(get(), get(), get())
     }
 }

@@ -16,10 +16,12 @@ import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.Logging
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.utils.exportImage
@@ -32,6 +34,7 @@ import kotlin.uuid.Uuid
 class FilesManager(
     private val context: Context,
     private val repository: FilesRepository,
+    private val appScope: AppScope,
 ) {
     companion object {
         private const val TAG = "FilesManager"
@@ -44,7 +47,7 @@ class FilesManager(
     ): ManagedFileEntity = withContext(Dispatchers.IO) {
         val resolvedName = displayName ?: getFileNameFromUri(uri) ?: "file"
         val resolvedMime = mimeType ?: getFileMimeType(uri) ?: "application/octet-stream"
-        val target = createTargetFile(FileFolders.UPLOAD, resolvedName)
+        val target = createTargetFile(FileFolders.UPLOAD, resolvedName, resolvedMime)
         context.contentResolver.openInputStream(uri)?.use { input ->
             target.outputStream().use { output ->
                 input.copyTo(output)
@@ -69,7 +72,7 @@ class FilesManager(
         displayName: String,
         mimeType: String = "application/octet-stream",
     ): ManagedFileEntity = withContext(Dispatchers.IO) {
-        val target = createTargetFile(FileFolders.UPLOAD, displayName)
+        val target = createTargetFile(FileFolders.UPLOAD, displayName, mimeType)
         target.writeBytes(bytes)
         val now = System.currentTimeMillis()
         repository.insert(
@@ -90,7 +93,7 @@ class FilesManager(
         displayName: String = "pasted_text.txt",
         mimeType: String = "text/plain",
     ): ManagedFileEntity = withContext(Dispatchers.IO) {
-        val target = createTargetFile(FileFolders.UPLOAD, displayName)
+        val target = createTargetFile(FileFolders.UPLOAD, displayName, mimeType)
         target.writeText(text)
         val now = System.currentTimeMillis()
         repository.insert(
@@ -111,6 +114,8 @@ class FilesManager(
 
     suspend fun get(id: Long): ManagedFileEntity? = repository.getById(id)
 
+    suspend fun getByRelativePath(relativePath: String): ManagedFileEntity? = repository.getByPath(relativePath)
+
     fun getFile(entity: ManagedFileEntity): File =
         File(context.filesDir, entity.relativePath)
 
@@ -121,8 +126,10 @@ class FilesManager(
             dir.mkdirs()
         }
         uris.forEach { uri ->
-            val fileName = Uuid.random()
-            val file = dir.resolve("$fileName")
+            val sourceName = getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "file"
+            val sourceMime = getFileMimeType(uri)
+            val fileName = buildUuidFileName(displayName = sourceName, mimeType = sourceMime)
+            val file = dir.resolve(fileName)
             if (!file.exists()) {
                 file.createNewFile()
             }
@@ -133,6 +140,8 @@ class FilesManager(
                         inputStream.copyTo(outputStream)
                     }
                 }
+                val guessedMime = sourceMime ?: guessMimeType(file, sourceName)
+                trackUploadFile(file = file, displayName = sourceName, mimeType = guessedMime)
                 newUris.add(newUri)
             }.onFailure {
                 it.printStackTrace()
@@ -153,8 +162,8 @@ class FilesManager(
             dir.mkdirs()
         }
         byteArrays.forEach { byteArray ->
-            val fileName = Uuid.random()
-            val file = dir.resolve("$fileName")
+            val fileName = buildUuidFileName(displayName = "image.png", mimeType = "image/png")
+            val file = dir.resolve(fileName)
             if (!file.exists()) {
                 file.createNewFile()
             }
@@ -162,6 +171,7 @@ class FilesManager(
             file.outputStream().use { outputStream ->
                 outputStream.write(byteArray)
             }
+            trackUploadFile(file = file, displayName = "image.png", mimeType = "image/png")
             newUris.add(newUri)
         }
         return newUris
@@ -206,13 +216,6 @@ class FilesManager(
         }
     }
 
-    fun deleteAllChatFiles() {
-        val dir = context.filesDir.resolve(FileFolders.UPLOAD)
-        if (dir.exists()) {
-            dir.deleteRecursively()
-        }
-    }
-
     suspend fun countChatFiles(): Pair<Int, Long> = withContext(Dispatchers.IO) {
         val dir = context.filesDir.resolve(FileFolders.UPLOAD)
         if (!dir.exists()) {
@@ -229,9 +232,10 @@ class FilesManager(
         if (!dir.exists()) {
             dir.mkdirs()
         }
-        val fileName = "${Uuid.random()}.txt"
+        val fileName = buildUuidFileName(displayName = "pasted_text.txt", mimeType = "text/plain")
         val file = dir.resolve(fileName)
         file.writeText(text)
+        trackUploadFile(file = file, displayName = "pasted_text.txt", mimeType = "text/plain")
         return UIMessagePart.Document(
             url = file.toUri().toString(),
             fileName = "pasted_text.txt",
@@ -344,18 +348,55 @@ class FilesManager(
         repository.deleteById(id) > 0
     }
 
-    private fun createTargetFile(folder: String, displayName: String): File {
+    private fun createTargetFile(folder: String, displayName: String, mimeType: String?): File {
         val dir = File(context.filesDir, folder)
         if (!dir.exists()) {
             dir.mkdirs()
         }
-        val ext = displayName.substringAfterLast('.', "")
-        val name = if (ext.isNotEmpty() && ext != displayName) {
-            "${Uuid.random()}.$ext"
-        } else {
-            Uuid.random().toString()
+        return File(dir, buildUuidFileName(displayName = displayName, mimeType = mimeType))
+    }
+
+    private fun buildUuidFileName(displayName: String?, mimeType: String?): String {
+        val extFromName = displayName
+            ?.substringAfterLast('.', "")
+            ?.takeIf { it.isNotBlank() && it != displayName }
+            ?.lowercase()
+        val extFromMime = mimeType
+            ?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it.lowercase()) }
+            ?.takeIf { it.isNotBlank() }
+            ?.lowercase()
+        val ext = extFromName ?: extFromMime ?: "bin"
+        return "${Uuid.random()}.$ext"
+    }
+
+    private fun trackUploadFile(file: File, displayName: String, mimeType: String) {
+        val relativePath = "${FileFolders.UPLOAD}/${file.name}"
+        appScope.launch(Dispatchers.IO) {
+            runCatching {
+                val existing = repository.getByPath(relativePath)
+                if (existing != null) {
+                    return@runCatching
+                }
+                val now = System.currentTimeMillis()
+                repository.insert(
+                    ManagedFileEntity(
+                        folder = FileFolders.UPLOAD,
+                        relativePath = relativePath,
+                        displayName = displayName,
+                        mimeType = mimeType,
+                        sizeBytes = file.length(),
+                        createdAt = now,
+                        updatedAt = now,
+                    )
+                )
+            }.onFailure {
+                Log.e(TAG, "trackUploadFile: Failed to track file ${file.absolutePath}", it)
+                Logging.log(
+                    TAG,
+                    "trackUploadFile: Failed to track file ${file.absolutePath} ${it.message} | ${it.stackTraceToString()}"
+                )
+            }
         }
-        return File(dir, name)
     }
 
     fun getFileNameFromUri(uri: Uri): String? {
