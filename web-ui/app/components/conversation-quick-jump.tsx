@@ -59,7 +59,7 @@ export function ConversationQuickJump({ items }: ConversationQuickJumpProps) {
   const { t } = useTranslation();
   const { scrollRef } = useStickToBottomContext();
   const [activeMessageId, setActiveMessageId] = React.useState<string | null>(null);
-  const canQuickJump = items.length > 1;
+  const canQuickJump = items.length > 1 && items.length <= 128;
   const activeIndex = React.useMemo(() => {
     if (!activeMessageId) return 0;
     const index = items.findIndex((item) => item.id === activeMessageId);
