@@ -17,6 +17,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ktor.utils.io.readAvailable
+import io.ktor.util.cio.readChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.WebDavConfig
@@ -82,7 +83,30 @@ class WebDavClient(
         file: File,
         contentType: String = "application/octet-stream",
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        put(path, file.readBytes(), contentType)
+        runCatching {
+            val url = config.buildUrl(path)
+            Log.d(TAG, "PUT (stream file): $url")
+
+            val response: HttpResponse = httpClient.request(url) {
+                method = HttpMethod.Put
+                basicAuth(config.username, config.password)
+                headers {
+                    append("Content-Type", contentType)
+                    append("Content-Length", file.length().toString())
+                }
+                // Stream file content to avoid loading the whole backup zip into heap.
+                setBody(file.readChannel())
+            }
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                Log.e(TAG, "put(file) failed: ${response.status} - $errorBody")
+                throw WebDavException("Failed to put file: ${response.status}", response.status.value, errorBody)
+            }
+
+            Log.d(TAG, "put(file) success: $path (${file.length()} bytes)")
+            Unit
+        }
     }
 
     suspend fun get(path: String): Result<ByteArray> = withContext(Dispatchers.IO) {
