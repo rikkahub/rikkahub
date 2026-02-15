@@ -208,10 +208,19 @@ class FilesManager(
         }
 
     fun deleteChatFiles(uris: List<Uri>) {
+        val relativePaths = mutableSetOf<String>()
         uris.filter { it.toString().startsWith("file:") }.forEach { uri ->
             val file = uri.toFile()
+            getRelativePathInFilesDir(file)?.let { relativePaths.add(it) }
             if (file.exists()) {
                 file.delete()
+            }
+        }
+        if (relativePaths.isNotEmpty()) {
+            appScope.launch(Dispatchers.IO) {
+                relativePaths.forEach { path ->
+                    repository.deleteByPath(path)
+                }
             }
         }
     }
@@ -397,6 +406,17 @@ class FilesManager(
                 )
             }
         }
+    }
+
+    private fun getRelativePathInFilesDir(file: File): String? {
+        val canonicalFile = runCatching { file.canonicalFile }.getOrNull() ?: return null
+        val canonicalFilesDir = runCatching { context.filesDir.canonicalFile }.getOrNull() ?: return null
+        val basePath = canonicalFilesDir.path
+        val filePath = canonicalFile.path
+        if (!filePath.startsWith("$basePath${File.separator}")) {
+            return null
+        }
+        return canonicalFile.relativeTo(canonicalFilesDir).path.replace(File.separatorChar, '/')
     }
 
     fun getFileNameFromUri(uri: Uri): String? {

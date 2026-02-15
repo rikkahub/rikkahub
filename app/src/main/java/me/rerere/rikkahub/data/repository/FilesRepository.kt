@@ -22,4 +22,8 @@ class FilesRepository(
     suspend fun listByFolder(folder: String): List<ManagedFileEntity> = dao.listByFolder(folder)
 
     suspend fun deleteById(id: Long): Int = dao.deleteById(id)
+
+    suspend fun deleteByPath(relativePath: String): Int = dao.deleteByPath(relativePath)
+
+    suspend fun deleteByFolder(folder: String): Int = dao.deleteByFolder(folder)
 }
