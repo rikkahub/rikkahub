@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import me.rerere.common.android.appTempFolder
+import me.rerere.rikkahub.data.sync.backup.BackupAutomationManager
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.repositoryModule
@@ -69,6 +70,8 @@ class RikkaHubApp : Application() {
 
         // Start WebServer if enabled in settings
         startWebServerIfEnabled()
+
+        runBackupAutomationStartup()
 
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
@@ -127,6 +130,21 @@ class RikkaHubApp : Application() {
             .setVibrationEnabled(false)
             .build()
         notificationManager.createNotificationChannel(chatLiveUpdateChannel)
+
+    }
+
+    private fun runBackupAutomationStartup() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val manager = get<BackupAutomationManager>()
+                // 启动阶段只处理迁移/调度/自动备份；云端更新检查放到聊天页入口触发。
+                manager.runMigrationIfNeeded()
+                manager.ensurePeriodicWorkState()
+                manager.runOnAppLaunchIfNeeded()
+            }.onFailure {
+                Log.e(TAG, "runBackupAutomationStartup failed", it)
+            }
+        }
     }
 
     override fun onTerminate() {

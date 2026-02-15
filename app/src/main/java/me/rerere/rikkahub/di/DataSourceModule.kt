@@ -23,11 +23,14 @@ import me.rerere.rikkahub.data.db.migrations.Migration_11_12
 import me.rerere.rikkahub.data.db.migrations.Migration_13_14
 import me.rerere.rikkahub.data.db.migrations.Migration_14_15
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.sync.backup.AutoBackupWorker
+import me.rerere.rikkahub.data.sync.backup.BackupAutomationManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import org.koin.androidx.workmanager.dsl.workerOf
 import org.koin.dsl.module
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -165,6 +168,17 @@ val dataSourceModule = module {
             httpClient = get()
         )
     }
+
+    single {
+        BackupAutomationManager(
+            context = get(),
+            settingsStore = get(),
+            webDavSync = get(),
+            s3Sync = get()
+        )
+    }
+
+    workerOf(::AutoBackupWorker)
 
     single<Retrofit> {
         Retrofit.Builder()
