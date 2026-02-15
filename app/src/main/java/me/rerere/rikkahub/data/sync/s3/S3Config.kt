@@ -14,6 +14,12 @@ data class S3Config(
         BackupItem.DATABASE,
         BackupItem.FILES
     ),
+    val autoBackupEnabled: Boolean = false,
+    val autoBackupIntervalDays: Int = 7,
+    val autoBackupOnAppLaunch: Boolean = false,
+    val lastBackupAtEpochMillis: Long = 0L,
+    val lastAutoBackupError: String = "",
+    val lastAutoBackupFailedAtEpochMillis: Long = 0L,
 ) {
     val host: String
         get() = endpoint
