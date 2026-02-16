@@ -809,5 +809,9 @@
   <string name="setting_page_web_server_stop">Stop</string>
   <string name="setting_display_page_enable_latex_rendering_title">Enable LaTeX Rendering</string>
   <string name="setting_display_page_enable_latex_rendering_desc">Render mathematical expressions and formulas using LaTeX syntax</string>
+  <string name="favorite_page_title">Favorites</string>
+  <string name="favorite_page_no_favorites">No favorites yet</string>
+  <string name="favorite_page_removed">Favorite removed</string>
+  <string name="favorite_page_untitled_conversation">Untitled Conversation</string>
 </resources>
 

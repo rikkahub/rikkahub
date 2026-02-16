@@ -33,12 +33,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Heart
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.navigateToChatPage
@@ -53,6 +55,8 @@ fun FavoritePage(vm: FavoriteVM = koinViewModel()) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val favorites = vm.nodeFavorites.collectAsStateWithLifecycle().value
+    val favoriteRemovedText = stringResource(R.string.favorite_page_removed)
+    val undoText = stringResource(R.string.history_page_undo)
 
     Scaffold(
         topBar = {
@@ -61,7 +65,7 @@ fun FavoritePage(vm: FavoriteVM = koinViewModel()) {
                     BackButton()
                 },
                 title = {
-                    Text("Favorites")
+                    Text(stringResource(R.string.favorite_page_title))
                 },
             )
         },
@@ -77,7 +81,7 @@ fun FavoritePage(vm: FavoriteVM = koinViewModel()) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "No favorites yet",
+                    text = stringResource(R.string.favorite_page_no_favorites),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 )
             }
@@ -98,8 +102,8 @@ fun FavoritePage(vm: FavoriteVM = koinViewModel()) {
                             val entity = vm.getEntityByRefKey(item.refKey) ?: return@launch
                             vm.removeFavorite(item.refKey)
                             val result = snackbarHostState.showSnackbar(
-                                message = "Favorite removed",
-                                actionLabel = "Undo",
+                                message = favoriteRemovedText,
+                                actionLabel = undoText,
                                 withDismissAction = true,
                             )
                             if (result == SnackbarResult.ActionPerformed) {
@@ -156,7 +160,7 @@ private fun SwipeableFavoriteCard(
             ) {
                 Icon(
                     imageVector = Lucide.Trash2,
-                    contentDescription = "Remove",
+                    contentDescription = stringResource(R.string.assistant_page_remove),
                     tint = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
@@ -189,7 +193,7 @@ private fun FavoriteCard(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = item.conversationTitle.ifBlank { "Untitled Conversation" },
+                text = item.conversationTitle.ifBlank { stringResource(R.string.favorite_page_untitled_conversation) },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium,

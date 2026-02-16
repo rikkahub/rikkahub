@@ -809,5 +809,9 @@
   <string name="setting_page_web_server_password_desc">网页界面访问所需的密码</string>
   <string name="setting_display_page_enable_latex_rendering_title">启用 LaTeX 渲染</string>
   <string name="setting_display_page_enable_latex_rendering_desc">使用 LaTeX 语法渲染数学表达式和公式</string>
+  <string name="favorite_page_title">收藏</string>
+  <string name="favorite_page_no_favorites">暂无收藏</string>
+  <string name="favorite_page_removed">收藏已移除</string>
+  <string name="favorite_page_untitled_conversation">未命名对话</string>
 </resources>
 
