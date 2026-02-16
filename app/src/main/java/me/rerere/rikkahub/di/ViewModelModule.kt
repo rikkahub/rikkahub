@@ -26,7 +26,8 @@ val viewModelModule = module {
             chatService = get(),
             updateChecker = get(),
             analytics = get(),
-            filesManager = get()
+            filesManager = get(),
+            backupAutomationManager = get()
         )
     }
     viewModelOf(::SettingVM)
