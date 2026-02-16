@@ -813,5 +813,7 @@
   <string name="favorite_page_no_favorites">尚無收藏</string>
   <string name="favorite_page_removed">已移除最愛</string>
   <string name="favorite_page_untitled_conversation">未命名對話</string>
+  <string name="chat_message_add_favorite">加入最愛</string>
+  <string name="chat_message_remove_favorite">移除最愛</string>
 </resources>
 

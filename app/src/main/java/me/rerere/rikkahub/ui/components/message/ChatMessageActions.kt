@@ -169,7 +169,7 @@ fun ColumnScope.ChatMessageActionButtons(
 
         Icon(
             imageVector = Lucide.Ellipsis,
-            contentDescription = "More Options",
+            contentDescription = stringResource(R.string.more_options),
             modifier = Modifier
                 .clip(CircleShape)
                 .clickable(
@@ -417,7 +417,10 @@ fun ChatMessageActionsSheet(
                             modifier = Modifier.padding(4.dp)
                         )
                         Text(
-                            text = if (isFavorite) "Remove Favorite" else "Add Favorite",
+                            text = stringResource(
+                                if (isFavorite) R.string.chat_message_remove_favorite
+                                else R.string.chat_message_add_favorite
+                            ),
                             style = MaterialTheme.typography.titleMedium,
                         )
                     }

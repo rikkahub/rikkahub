@@ -813,5 +813,7 @@
   <string name="favorite_page_no_favorites">No favorites yet</string>
   <string name="favorite_page_removed">Favorite removed</string>
   <string name="favorite_page_untitled_conversation">Untitled Conversation</string>
+  <string name="chat_message_add_favorite">Add Favorite</string>
+  <string name="chat_message_remove_favorite">Remove Favorite</string>
 </resources>
 

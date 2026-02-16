@@ -806,5 +806,7 @@
   <string name="favorite_page_no_favorites">Пока нет избранного</string>
   <string name="favorite_page_removed">Избранное удалено</string>
   <string name="favorite_page_untitled_conversation">Безымянный разговор</string>
+  <string name="chat_message_add_favorite">Добавить в избранное</string>
+  <string name="chat_message_remove_favorite">Удалить из избранного</string>
 </resources>
 

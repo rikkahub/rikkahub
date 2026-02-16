@@ -813,5 +813,7 @@
   <string name="favorite_page_no_favorites">お気に入りはまだありません</string>
   <string name="favorite_page_removed">お気に入りを削除しました</string>
   <string name="favorite_page_untitled_conversation">無題の会話</string>
+  <string name="chat_message_add_favorite">お気に入りに追加</string>
+  <string name="chat_message_remove_favorite">お気に入りから削除</string>
 </resources>
 
