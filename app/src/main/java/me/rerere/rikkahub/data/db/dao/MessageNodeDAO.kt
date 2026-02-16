@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import me.rerere.rikkahub.data.db.entity.MessageNodeMessageRow
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 
 @Dao
@@ -22,6 +23,9 @@ interface MessageNodeDAO {
         offset: Int
     ): List<MessageNodeEntity>
 
+    @Query("SELECT id, messages FROM message_node ORDER BY conversation_id ASC, node_index ASC LIMIT :limit OFFSET :offset")
+    suspend fun getNodeMessagesPaged(limit: Int, offset: Int): List<MessageNodeMessageRow>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(nodes: List<MessageNodeEntity>)
 
@@ -36,4 +40,7 @@ interface MessageNodeDAO {
 
     @Query("DELETE FROM message_node WHERE id = :nodeId")
     suspend fun deleteById(nodeId: String)
+
+    @Query("UPDATE message_node SET messages = :messages WHERE id = :nodeId")
+    suspend fun updateMessages(nodeId: String, messages: String): Int
 }

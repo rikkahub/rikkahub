@@ -114,6 +114,9 @@ class SettingsStore(
         val LAST_BACKUP_REMINDER_AT_EPOCH_MILLIS = longPreferencesKey("last_backup_reminder_at_epoch_millis")
         val LAST_CLOUD_SYNC_CHECK_AT_EPOCH_MILLIS = longPreferencesKey("last_cloud_sync_check_at_epoch_millis")
         val PENDING_CLOUD_SYNC_PROMPT = stringPreferencesKey("pending_cloud_sync_prompt")
+        val PENDING_POST_RESTORE_URI_REPAIR = booleanPreferencesKey("pending_post_restore_uri_repair")
+        val LAST_POST_RESTORE_URI_REPAIR_AT_EPOCH_MILLIS =
+            longPreferencesKey("last_post_restore_uri_repair_at_epoch_millis")
 
         // TTS
         val TTS_PROVIDERS = stringPreferencesKey("tts_providers")
@@ -196,6 +199,9 @@ class SettingsStore(
                 pendingCloudSyncPrompt = preferences[PENDING_CLOUD_SYNC_PROMPT]?.let {
                     JsonInstant.decodeFromString(it)
                 },
+                pendingPostRestoreUriRepair = preferences[PENDING_POST_RESTORE_URI_REPAIR] == true,
+                lastPostRestoreUriRepairAtEpochMillis =
+                    preferences[LAST_POST_RESTORE_URI_REPAIR_AT_EPOCH_MILLIS] ?: 0L,
                 ttsProviders = preferences[TTS_PROVIDERS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -349,6 +355,9 @@ class SettingsStore(
             settings.pendingCloudSyncPrompt?.let {
                 preferences[PENDING_CLOUD_SYNC_PROMPT] = JsonInstant.encodeToString(it)
             } ?: preferences.remove(PENDING_CLOUD_SYNC_PROMPT)
+            preferences[PENDING_POST_RESTORE_URI_REPAIR] = settings.pendingPostRestoreUriRepair
+            preferences[LAST_POST_RESTORE_URI_REPAIR_AT_EPOCH_MILLIS] =
+                settings.lastPostRestoreUriRepairAtEpochMillis
             preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
             settings.selectedTTSProviderId?.let {
                 preferences[SELECTED_TTS_PROVIDER] = it.toString()
@@ -474,6 +483,8 @@ data class Settings(
     val lastBackupReminderAtEpochMillis: Long = 0L,
     val lastCloudSyncCheckAtEpochMillis: Long = 0L,
     val pendingCloudSyncPrompt: CloudSyncPrompt? = null,
+    val pendingPostRestoreUriRepair: Boolean = false,
+    val lastPostRestoreUriRepairAtEpochMillis: Long = 0L,
     val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,

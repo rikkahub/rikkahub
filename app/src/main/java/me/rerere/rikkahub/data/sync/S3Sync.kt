@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.sync.backup.decodeSettingsWithLegacyCompat
+import me.rerere.rikkahub.data.sync.backup.rewriteLegacyUploadUrisInSettings
 import me.rerere.rikkahub.data.sync.s3.S3Client
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.utils.fileSizeToString
@@ -178,7 +179,11 @@ class S3Sync(
                             Log.i(TAG, "restoreFromBackupFile: Restoring settings")
                             try {
                                 val settings = decodeSettingsWithLegacyCompat(json, settingsJson)
-                                settingsStore.update(settings)
+                                val rewrittenSettings = rewriteLegacyUploadUrisInSettings(settings, context.filesDir).copy(
+                                    pendingPostRestoreUriRepair = true,
+                                    lastPostRestoreUriRepairAtEpochMillis = 0L
+                                )
+                                settingsStore.update(rewrittenSettings)
                                 Log.i(TAG, "restoreFromBackupFile: Settings restored successfully")
                             } catch (e: Exception) {
                                 Log.e(TAG, "restoreFromBackupFile: Failed to restore settings", e)

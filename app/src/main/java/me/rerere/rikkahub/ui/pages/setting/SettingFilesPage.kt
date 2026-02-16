@@ -37,10 +37,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
@@ -48,8 +50,12 @@ import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.sync.backup.clearBrokenSettingsMediaRefs
+import me.rerere.rikkahub.data.sync.backup.collectBrokenSettingsMediaRefs
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.compose.koinInject
@@ -58,20 +64,27 @@ import java.io.File
 @Composable
 fun SettingFilesPage(
     filesManager: FilesManager = koinInject(),
+    settingsStore: SettingsStore = koinInject(),
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val context = LocalContext.current
     val folders = remember { listOf(FileFolders.UPLOAD) }
 
     // 预先获取字符串资源
     val deletedToast = stringResource(R.string.setting_files_page_deleted_toast)
     val deleteFailedToast = stringResource(R.string.setting_files_page_delete_failed_toast)
+    val refsCleanedToast = stringResource(R.string.setting_files_page_broken_refs_cleaned_toast)
 
     var selectedFolder by remember { mutableStateOf(FileFolders.UPLOAD) }
     var pendingDelete by remember { mutableStateOf<ManagedFileEntity?>(null) }
     val files by filesManager.observe(selectedFolder).collectAsState(initial = emptyList())
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle(initialValue = Settings.dummy())
+    val brokenRefs = remember(settings, context.filesDir.path) {
+        collectBrokenSettingsMediaRefs(settings, context.filesDir)
+    }
 
     if (pendingDelete != null) {
         val target = pendingDelete!!
@@ -124,6 +137,52 @@ fun SettingFilesPage(
                 selectedFolder = selectedFolder,
                 onFolderSelected = { selectedFolder = it }
             )
+
+            if (brokenRefs.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.setting_files_page_broken_refs_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.setting_files_page_broken_refs_desc,
+                                brokenRefs.size
+                            ),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        val cleaned = clearBrokenSettingsMediaRefs(settings, context.filesDir)
+                                        settingsStore.update(cleaned)
+                                        toaster.show(refsCleanedToast)
+                                    }
+                                }
+                            ) {
+                                Text(stringResource(R.string.setting_files_page_broken_refs_action))
+                            }
+                        }
+                    }
+                }
+            }
 
             if (files.isEmpty()) {
                 Box(

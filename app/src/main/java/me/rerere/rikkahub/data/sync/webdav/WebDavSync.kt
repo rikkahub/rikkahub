@@ -10,6 +10,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.backup.decodeSettingsWithLegacyCompat
+import me.rerere.rikkahub.data.sync.backup.rewriteLegacyUploadUrisInSettings
 import me.rerere.rikkahub.utils.fileSizeToString
 import java.io.File
 import java.io.FileInputStream
@@ -201,7 +202,11 @@ class WebDavSync(
                             Log.i(TAG, "restoreFromBackupFile: Restoring settings")
                             try {
                                 val settings = decodeSettingsWithLegacyCompat(json, settingsJson)
-                                settingsStore.update(settings)
+                                val rewrittenSettings = rewriteLegacyUploadUrisInSettings(settings, context.filesDir).copy(
+                                    pendingPostRestoreUriRepair = true,
+                                    lastPostRestoreUriRepairAtEpochMillis = 0L
+                                )
+                                settingsStore.update(rewrittenSettings)
                                 Log.i(TAG, "restoreFromBackupFile: Settings restored successfully")
                             } catch (e: Exception) {
                                 Log.e(TAG, "restoreFromBackupFile: Failed to restore settings", e)

@@ -815,6 +815,10 @@
   <string name="setting_files_page_no_files">无文件</string>
   <string name="setting_files_page_folder_upload">上传</string>
   <string name="setting_files_page_delete_content_description">删除</string>
+  <string name="setting_files_page_broken_refs_title">检测到失效的本地媒体引用</string>
+  <string name="setting_files_page_broken_refs_desc">发现 %1$d 个设置项媒体引用失效，通常由旧备份恢复后的路径变化导致。</string>
+  <string name="setting_files_page_broken_refs_action">一键清理失效引用</string>
+  <string name="setting_files_page_broken_refs_cleaned_toast">已清理设置项失效引用</string>
   <string name="setting_page_web_server">Web服务器</string>
   <string name="setting_page_web_server_desc">允许你通过网页访问 RikkaHub</string>
   <string name="setting_page_web_server_port">端口</string>

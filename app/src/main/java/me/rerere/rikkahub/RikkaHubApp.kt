@@ -26,6 +26,7 @@ import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.sync.backup.BackupLegacyUriRepairManager
 import me.rerere.rikkahub.utils.DatabaseUtil
 import me.rerere.rikkahub.web.WebServerManager
 import org.koin.android.ext.android.get
@@ -89,6 +90,7 @@ class RikkaHubApp : Application() {
         get<AppScope>().launch(Dispatchers.IO) {
             runCatching {
                 get<FilesManager>().syncFolder()
+                get<BackupLegacyUriRepairManager>().runIfPendingRestoreRepair()
             }.onFailure {
                 Log.e(TAG, "syncManagedFiles failed", it)
             }

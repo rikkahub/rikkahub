@@ -25,6 +25,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_14_15
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.backup.AutoBackupWorker
 import me.rerere.rikkahub.data.sync.backup.BackupAutomationManager
+import me.rerere.rikkahub.data.sync.backup.BackupLegacyUriRepairManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
@@ -175,6 +176,14 @@ val dataSourceModule = module {
             settingsStore = get(),
             webDavSync = get(),
             s3Sync = get()
+        )
+    }
+
+    single {
+        BackupLegacyUriRepairManager(
+            context = get(),
+            settingsStore = get(),
+            messageNodeDAO = get()
         )
     }
 
