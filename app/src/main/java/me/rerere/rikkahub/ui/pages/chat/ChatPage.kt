@@ -408,6 +408,9 @@ private fun ChatPageContent(
                 onToolApproval = { toolCallId, approved, reason ->
                     vm.handleToolApproval(toolCallId, approved, reason)
                 },
+                onToggleFavorite = { node ->
+                    vm.toggleMessageFavorite(node)
+                },
             )
         }
     }

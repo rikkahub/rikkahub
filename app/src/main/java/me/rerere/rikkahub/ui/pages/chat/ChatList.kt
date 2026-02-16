@@ -124,6 +124,7 @@ fun ChatList(
     onClearTranslation: (UIMessage) -> Unit = {},
     onJumpToMessage: (Int) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onToggleFavorite: ((MessageNode) -> Unit)? = null,
 ) {
     AnimatedContent(
         targetState = previewMode,
@@ -160,6 +161,7 @@ fun ChatList(
                 onClearTranslation = onClearTranslation,
                 animatedVisibilityScope = this@AnimatedContent,
                 onToolApproval = onToolApproval,
+                onToggleFavorite = onToggleFavorite,
             )
         }
     }
@@ -185,6 +187,7 @@ private fun ChatListNormal(
     onClearTranslation: (UIMessage) -> Unit,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onToggleFavorite: ((MessageNode) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -300,6 +303,10 @@ private fun ChatListNormal(
                             },
                             onUpdate = {
                                 onUpdateMessage(it)
+                            },
+                            isFavorite = node.isFavorite,
+                            onToggleFavorite = {
+                                onToggleFavorite?.invoke(node)
                             },
                             onTranslate = onTranslate,
                             onClearTranslation = onClearTranslation,
