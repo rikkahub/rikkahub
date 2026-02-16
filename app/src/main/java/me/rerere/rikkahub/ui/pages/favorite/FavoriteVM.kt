@@ -6,10 +6,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.favorite.NodeFavoriteAdapter
 import me.rerere.rikkahub.data.model.FavoriteType
-import me.rerere.rikkahub.data.model.buildFavoritePreview
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import kotlin.uuid.Uuid
 
@@ -20,7 +18,6 @@ data class NodeFavoriteListItem(
     val nodeId: Uuid,
     val conversationTitle: String,
     val preview: String,
-    val role: MessageRole?,
     val createdAt: Long,
 )
 
@@ -32,7 +29,6 @@ class FavoriteVM(
         .map { favorites ->
             favorites.mapNotNull { entity ->
                 val ref = NodeFavoriteAdapter.decodeRef(entity) ?: return@mapNotNull null
-                val snapshot = NodeFavoriteAdapter.decodeSnapshot(entity)
                 val meta = NodeFavoriteAdapter.decodeMeta(entity)
 
                 NodeFavoriteListItem(
@@ -40,11 +36,8 @@ class FavoriteVM(
                     refKey = entity.refKey,
                     conversationId = ref.conversationId,
                     nodeId = ref.nodeId,
-                    conversationTitle = meta?.title ?: snapshot?.conversationTitle.orEmpty(),
-                    preview = meta?.previewText
-                        ?: snapshot?.node?.buildFavoritePreview()
-                        ?: "",
-                    role = snapshot?.node?.currentMessage?.role,
+                    conversationTitle = meta?.title.orEmpty(),
+                    preview = meta?.previewText ?: "",
                     createdAt = entity.createdAt,
                 )
             }

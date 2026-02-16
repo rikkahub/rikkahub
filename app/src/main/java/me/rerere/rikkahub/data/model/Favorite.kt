@@ -34,14 +34,6 @@ data class NodeFavoriteRef(
     val nodeId: Uuid,
 )
 
-@Serializable
-data class NodeFavoriteSnapshot(
-    val conversationId: Uuid,
-    val conversationTitle: String = "",
-    val nodeId: Uuid,
-    val node: MessageNode,
-)
-
 data class NodeFavoriteTarget(
     val conversationId: Uuid,
     val conversationTitle: String,
