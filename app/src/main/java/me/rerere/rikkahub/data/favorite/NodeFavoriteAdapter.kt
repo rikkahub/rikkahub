@@ -13,10 +13,10 @@ object NodeFavoriteAdapter : FavoriteAdapter<NodeFavoriteTarget> {
     override val type: FavoriteType = FavoriteType.NODE
 
     override fun buildRefKey(target: NodeFavoriteTarget): String {
-        return buildRefKey(target.nodeId.toString())
+        return buildRefKey(target.conversationId.toString(), target.nodeId.toString())
     }
 
-    fun buildRefKey(nodeId: String): String = "node:$nodeId"
+    fun buildRefKey(conversationId: String, nodeId: String): String = "node:$conversationId:$nodeId"
 
     override fun buildFavoriteEntity(
         target: NodeFavoriteTarget,

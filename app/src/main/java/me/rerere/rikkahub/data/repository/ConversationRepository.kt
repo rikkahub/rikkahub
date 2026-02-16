@@ -20,7 +20,6 @@ import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.FavoriteType
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
@@ -303,12 +302,8 @@ class ConversationRepository(
 
     private suspend fun loadMessageNodes(conversationId: String): List<MessageNode> {
         val favoriteNodeIds = favoriteDAO
-            .getRefKeysByType(FavoriteType.NODE.value)
-            .mapNotNull { refKey ->
-                refKey.removePrefix("node:")
-                    .takeIf { it != refKey }
-                    ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
-            }
+            .getFavoriteNodeIdsOfConversation(conversationId)
+            .mapNotNull { runCatching { Uuid.parse(it) }.getOrNull() }
             .toSet()
 
         return database.withTransaction {

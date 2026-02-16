@@ -21,6 +21,9 @@ interface FavoriteDAO {
     @Query("SELECT ref_key FROM favorites WHERE type = :type")
     suspend fun getRefKeysByType(type: String): List<String>
 
+    @Query("SELECT substr(ref_key, length('node:' || :conversationId || ':') + 1) FROM favorites WHERE ref_key LIKE 'node:' || :conversationId || ':%'")
+    suspend fun getFavoriteNodeIdsOfConversation(conversationId: String): List<String>
+
     @Query("SELECT * FROM favorites WHERE ref_key = :refKey LIMIT 1")
     suspend fun getByRefKey(refKey: String): FavoriteEntity?
 

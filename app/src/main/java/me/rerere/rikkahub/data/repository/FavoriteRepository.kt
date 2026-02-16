@@ -34,11 +34,11 @@ class FavoriteRepository(
         return favorite
     }
 
-    suspend fun removeNodeFavorite(nodeId: Uuid): Int {
-        return dao.deleteByRefKey(NodeFavoriteAdapter.buildRefKey(nodeId.toString()))
+    suspend fun removeNodeFavorite(conversationId: Uuid, nodeId: Uuid): Int {
+        return dao.deleteByRefKey(NodeFavoriteAdapter.buildRefKey(conversationId.toString(), nodeId.toString()))
     }
 
-    suspend fun isNodeFavorited(nodeId: Uuid): Boolean {
-        return dao.existsByRefKey(NodeFavoriteAdapter.buildRefKey(nodeId.toString()))
+    suspend fun isNodeFavorited(conversationId: Uuid, nodeId: Uuid): Boolean {
+        return dao.existsByRefKey(NodeFavoriteAdapter.buildRefKey(conversationId.toString(), nodeId.toString()))
     }
 }

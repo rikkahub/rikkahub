@@ -396,9 +396,9 @@ class ChatVM(
 
     fun toggleMessageFavorite(node: MessageNode) {
         viewModelScope.launch {
-            val currentlyFavorited = favoriteRepository.isNodeFavorited(node.id)
+            val currentlyFavorited = favoriteRepository.isNodeFavorited(_conversationId, node.id)
             if (currentlyFavorited) {
-                favoriteRepository.removeNodeFavorite(node.id)
+                favoriteRepository.removeNodeFavorite(_conversationId, node.id)
             } else {
                 favoriteRepository.addNodeFavorite(
                     NodeFavoriteTarget(
