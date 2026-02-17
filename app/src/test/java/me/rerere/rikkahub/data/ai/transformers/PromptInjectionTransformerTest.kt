@@ -91,10 +91,6 @@ class PromptInjectionTransformerTest {
             .joinToString("") { it.text }
     }
 
-    private fun wrapSystemTag(content: String): String {
-        return "<system>\n$content\n</system>"
-    }
-
     private fun createAssistantWithUnexecutedTool(toolCallId: String, toolName: String): UIMessage {
         return UIMessage(
             role = MessageRole.ASSISTANT,
@@ -298,7 +294,7 @@ class PromptInjectionTransformerTest {
         assertEquals(MessageRole.SYSTEM, result[0].role)
         assertEquals("System prompt", getMessageText(result[0]))
         assertEquals(MessageRole.USER, result[1].role)
-        assertEquals(wrapSystemTag("Top of chat content"), getMessageText(result[1]))
+        assertEquals("Top of chat content", getMessageText(result[1]))
         assertEquals(MessageRole.USER, result[2].role)
     }
     // endregion
@@ -329,7 +325,7 @@ class PromptInjectionTransformerTest {
 
         assertEquals(5, result.size)
         assertEquals(MessageRole.USER, result[3].role)
-        assertEquals(wrapSystemTag("Bottom of chat content"), getMessageText(result[3]))
+        assertEquals("Bottom of chat content", getMessageText(result[3]))
         assertEquals(MessageRole.USER, result[4].role)
         assertEquals("How are you?", getMessageText(result[4]))
     }
@@ -366,7 +362,7 @@ class PromptInjectionTransformerTest {
         // Insert at index 5-2=3, so: [System, User1, Asst1, Injected, User2, Asst2]
         assertEquals(6, result.size)
         assertEquals(MessageRole.USER, result[3].role)
-        assertEquals(wrapSystemTag("At depth 2 content"), getMessageText(result[3]))
+        assertEquals("At depth 2 content", getMessageText(result[3]))
         assertEquals(MessageRole.USER, result[4].role)
         assertEquals("Message 2", getMessageText(result[4]))
     }
@@ -395,7 +391,7 @@ class PromptInjectionTransformerTest {
         )
 
         assertEquals(4, result.size)
-        assertEquals(wrapSystemTag("Before last"), getMessageText(result[2]))
+        assertEquals("Before last", getMessageText(result[2]))
         assertEquals("Hi!", getMessageText(result[3]))
     }
 
@@ -422,7 +418,7 @@ class PromptInjectionTransformerTest {
         )
 
         assertEquals(3, result.size)
-        assertEquals(wrapSystemTag("Large depth content"), getMessageText(result[0]))
+        assertEquals("Large depth content", getMessageText(result[0]))
     }
 
     @Test
@@ -900,7 +896,7 @@ class PromptInjectionTransformerTest {
         assertTrue(systemText.startsWith("Before"))
         assertTrue(systemText.contains("System"))
         assertTrue(systemText.endsWith("After"))
-        assertEquals(wrapSystemTag("Top"), getMessageText(result[1]))
+        assertEquals("Top", getMessageText(result[1]))
     }
 
     @Test
