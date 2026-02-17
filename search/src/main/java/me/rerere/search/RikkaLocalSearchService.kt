@@ -28,13 +28,57 @@ import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 object RikkaLocalSearchService : SearchService<SearchServiceOptions.RikkaLocalOptions> {
-    // Built-in SearXNG public instances - fast, stable, 100% uptime as of 2025-2026
+    // Built-in SearXNG public instances (expanded pool, 2026-02 curation)
     private val SEARXNG_INSTANCES = listOf(
-        "https://searx.lunar.icu",      // DE, 0.038s, 99% uptime
-        "https://search.url4irl.com",   // DE, 0.074s, 100% uptime
-        "https://sx.catgirl.cloud",     // DE, 0.108s, 100% uptime
-        "https://search.inetol.net",    // ES, 0.546s, 100% uptime
-        "https://search.rowie.at"       // AT, 0.748s, 100% uptime
+        "https://searx.lunar.icu",
+        "https://search.url4irl.com",
+        "https://searx.mbuf.net",
+        "https://sx.catgirl.cloud",
+        "https://searx.mxchange.org",
+        "https://searx.ox2.fr",
+        "https://o5.gg",
+        "https://searxng.site",
+        "https://searx.stream",
+        "https://search.rhscz.eu",
+        "https://searx.tiekoetter.com",
+        "https://search.hbubli.cc",
+        "https://search.darkness.services",
+        "https://searx.dresden.network",
+        "https://search.inetol.net",
+        "https://searx.rhscz.eu",
+        "https://search.zina.dev",
+        "https://search.bladerunn.in",
+        "https://search.indst.eu",
+        "https://ooglester.com",
+        "https://opnxng.com",
+        "https://search.rowie.at",
+        "https://priv.au",
+        "https://search.unredacted.org",
+        "https://searx.ankha.ac",
+        "https://search.anoni.net",
+        "https://searx.tuxcloud.net",
+        "https://search.internetsucks.net",
+        "https://find.xenorio.xyz",
+        "https://search.im-in.space",
+        "https://search.charliewhiskey.net",
+        "https://searxng.canine.tools",
+        "https://s.mble.dk",
+        "https://searxng.shreven.org",
+        "https://kantan.cat",
+        "https://search.freestater.org",
+        "https://search.abohiccups.com",
+        "https://search.ipsys.bf",
+        "https://search.minus27315.dev",
+        "https://grep.vim.wtf",
+        "https://searxng.cups.moe",
+        "https://search.mdosch.de",
+        "https://search.catboy.house",
+        "https://search.einfachzocken.eu",
+        "https://search.ethibox.fr",
+        "https://search.pi.vps.pw",
+        "https://search.femboy.ad",
+        "https://search.2b9t.xyz",
+        "https://seek.fyi",
     )
 
     private val searXNGClient = okhttp3.OkHttpClient.Builder()
