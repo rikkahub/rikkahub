@@ -10,6 +10,7 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
         maven("https://repo.itextsupport.com/android")
+        maven("https://chaquo.com/maven")
     }
     resolutionStrategy {
         eachPlugin {
@@ -26,6 +27,7 @@ dependencyResolutionManagement {
         mavenCentral()
         maven("https://jitpack.io")
         mavenLocal()
+        maven("https://chaquo.com/maven")
     }
 }
 
@@ -38,3 +40,4 @@ include(":tts")
 include(":common")
 include(":document")
 include(":web")
+

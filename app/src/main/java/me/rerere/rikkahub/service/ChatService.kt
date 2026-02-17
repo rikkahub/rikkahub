@@ -70,6 +70,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.TodoState
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -125,6 +126,7 @@ class ChatService(
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
+    private val todoStates = ConcurrentHashMap<Uuid, TodoState>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
     // 错误状态
@@ -169,6 +171,7 @@ class ChatService(
         ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
+        todoStates.clear()
     }
 
     // ---- Session 管理 ----
@@ -199,6 +202,7 @@ class ChatService(
         }
         if (sessions.remove(conversationId, session)) {
             session.cleanup()
+            todoStates.remove(conversationId)
             _sessionsVersion.value++
             Log.i(TAG, "removeSession: $conversationId (remaining: ${sessions.size})")
         }
@@ -474,7 +478,18 @@ class ChatService(
                     if (settings.enableWebSearch) {
                         addAll(createSearchTools(context, settings))
                     }
-                    addAll(localTools.getTools(settings.getCurrentAssistant().localTools))
+                    addAll(
+                        localTools.getTools(
+                            options = settings.getCurrentAssistant().localTools,
+                            sandboxId = conversationId,
+                            todoStateProvider = {
+                                todoStates.computeIfAbsent(conversationId) { TodoState(isEnabled = true) }
+                            },
+                            onTodoStateUpdate = { state ->
+                                todoStates[conversationId] = state
+                            }
+                        )
+                    )
                     mcpManager.getAllAvailableTools().forEach { tool ->
                         add(
                             Tool(

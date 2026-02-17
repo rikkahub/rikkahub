@@ -67,6 +67,14 @@
   <string name="assistant_page_local_tools_time_info_title">Time Info</string>
   <string name="assistant_page_local_tools_clipboard_desc">Read or write plain text from the device clipboard</string>
   <string name="assistant_page_local_tools_clipboard_title">Clipboard</string>
+  <string name="assistant_page_local_tools_sandbox_file_title">Sandbox File Tool</string>
+  <string name="assistant_page_local_tools_sandbox_file_desc">Enable isolated sandbox file management operations (read, write, list, copy, delete)</string>
+  <string name="assistant_page_local_tools_chaquopy_title">Chaquopy Python Tool</string>
+  <string name="assistant_page_local_tools_chaquopy_desc">Enable built-in Python sandbox execution and plotting support</string>
+  <string name="assistant_page_local_tools_container_title">Container Runtime Tool</string>
+  <string name="assistant_page_local_tools_container_desc">Enable PRoot container runtime management and container shell/python execution</string>
+  <string name="assistant_page_local_tools_workflow_todo_title">Workflow TODO Tool</string>
+  <string name="assistant_page_local_tools_workflow_todo_desc">Enable TODO read/update tools for conversation workflow planning</string>
   <string name="assistant_page_manage_memory_title">Manage Memory</string>
   <string name="assistant_page_max_tokens">Max Tokens</string>
   <string name="assistant_page_max_tokens_desc">Maximum number of tokens to generate. Leave empty for no limit.</string>
@@ -811,4 +819,5 @@
   <string name="setting_display_page_enable_latex_rendering_title">Enable LaTeX Rendering</string>
   <string name="setting_display_page_enable_latex_rendering_desc">Render mathematical expressions and formulas using LaTeX syntax</string>
 </resources>
+
 

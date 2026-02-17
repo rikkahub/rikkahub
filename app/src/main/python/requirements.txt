@@ -1,0 +1,40 @@
+# 基础科学计算与数据处理
+numpy
+pandas
+openpyxl
+
+# 图像处理
+pillow
+
+# 数据可视化
+matplotlib
+
+# 网络请求与网页解析
+requests
+beautifulsoup4
+lxml
+
+# PDF处理
+PyPDF2
+pypdf
+
+# 代码质量工具
+pylint
+black
+
+# 数据格式处理
+pyyaml
+toml
+
+# 文本处理
+textblob
+python-docx
+
+# 其他实用工具
+python-dateutil
+
+# Git 支持 (纯 Python，无需 git 二进制)
+dulwich
+
+# 代码分析与AST处理
+astor

@@ -63,6 +63,15 @@ private fun AssistantLocalToolContent(
     assistant: Assistant,
     onUpdate: (Assistant) -> Unit
 ) {
+    fun updateLocalTool(option: LocalToolOption, enabled: Boolean) {
+        val newLocalTools = if (enabled) {
+            if (assistant.localTools.contains(option)) assistant.localTools else assistant.localTools + option
+        } else {
+            assistant.localTools - option
+        }
+        onUpdate(assistant.copy(localTools = newLocalTools))
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -71,49 +80,53 @@ private fun AssistantLocalToolContent(
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // JavaScript 引擎工具卡片
         LocalToolCard(
             title = stringResource(R.string.assistant_page_local_tools_javascript_engine_title),
             description = stringResource(R.string.assistant_page_local_tools_javascript_engine_desc),
             isEnabled = assistant.localTools.contains(LocalToolOption.JavascriptEngine),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.JavascriptEngine
-                } else {
-                    assistant.localTools - LocalToolOption.JavascriptEngine
-                }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
+            onToggle = { enabled -> updateLocalTool(LocalToolOption.JavascriptEngine, enabled) }
         )
 
-        // 时间信息工具卡片
         LocalToolCard(
             title = stringResource(R.string.assistant_page_local_tools_time_info_title),
             description = stringResource(R.string.assistant_page_local_tools_time_info_desc),
             isEnabled = assistant.localTools.contains(LocalToolOption.TimeInfo),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.TimeInfo
-                } else {
-                    assistant.localTools - LocalToolOption.TimeInfo
-                }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
+            onToggle = { enabled -> updateLocalTool(LocalToolOption.TimeInfo, enabled) }
         )
 
-        // 剪贴板工具卡片
         LocalToolCard(
             title = stringResource(R.string.assistant_page_local_tools_clipboard_title),
             description = stringResource(R.string.assistant_page_local_tools_clipboard_desc),
             isEnabled = assistant.localTools.contains(LocalToolOption.Clipboard),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.Clipboard
-                } else {
-                    assistant.localTools - LocalToolOption.Clipboard
-                }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
+            onToggle = { enabled -> updateLocalTool(LocalToolOption.Clipboard, enabled) }
+        )
+
+        LocalToolCard(
+            title = stringResource(R.string.assistant_page_local_tools_sandbox_file_title),
+            description = stringResource(R.string.assistant_page_local_tools_sandbox_file_desc),
+            isEnabled = assistant.localTools.contains(LocalToolOption.SandboxFile),
+            onToggle = { enabled -> updateLocalTool(LocalToolOption.SandboxFile, enabled) }
+        )
+
+        LocalToolCard(
+            title = stringResource(R.string.assistant_page_local_tools_chaquopy_title),
+            description = stringResource(R.string.assistant_page_local_tools_chaquopy_desc),
+            isEnabled = assistant.localTools.contains(LocalToolOption.ChaquoPy),
+            onToggle = { enabled -> updateLocalTool(LocalToolOption.ChaquoPy, enabled) }
+        )
+
+        LocalToolCard(
+            title = stringResource(R.string.assistant_page_local_tools_container_title),
+            description = stringResource(R.string.assistant_page_local_tools_container_desc),
+            isEnabled = assistant.localTools.contains(LocalToolOption.Container),
+            onToggle = { enabled -> updateLocalTool(LocalToolOption.Container, enabled) }
+        )
+
+        LocalToolCard(
+            title = stringResource(R.string.assistant_page_local_tools_workflow_todo_title),
+            description = stringResource(R.string.assistant_page_local_tools_workflow_todo_desc),
+            isEnabled = assistant.localTools.contains(LocalToolOption.WorkflowTodo),
+            onToggle = { enabled -> updateLocalTool(LocalToolOption.WorkflowTodo, enabled) }
         )
     }
 }

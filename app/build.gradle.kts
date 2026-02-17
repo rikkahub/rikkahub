@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services) apply false
     alias(libs.plugins.firebase.crashlytics) apply false
+    id("com.chaquo.python") version "17.0.0"
 }
 
 val hasGoogleServicesConfig = file("google-services.json").exists() ||
@@ -141,6 +142,14 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+chaquopy {
+    defaultConfig {
+        version = "3.11"
+        pip {
+            install("-r", "src/main/python/requirements.txt")
+        }
+    }
+}
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
