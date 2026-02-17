@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.repository
 
-import android.content.Context`r`nimport android.database.sqlite.SQLiteBlobTooBigException`r`nimport androidx.paging.Pager
+import android.content.Context
+import android.database.sqlite.SQLiteBlobTooBigException
+import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.PagingSource
@@ -18,7 +20,9 @@ import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.MessageNode`r`nimport me.rerere.rikkahub.sandbox.SandboxEngine`r`nimport me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.sandbox.SandboxEngine
+import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
 import kotlin.uuid.Uuid
 
@@ -26,7 +30,9 @@ class ConversationRepository(
     private val conversationDAO: ConversationDAO,
     private val messageNodeDAO: MessageNodeDAO,
     private val database: AppDatabase,
-    private val filesManager: FilesManager,`r`n    private val context: Context,`r`n) {
+    private val filesManager: FilesManager,
+    private val context: Context,
+) {
     companion object {
         private const val PAGE_SIZE = 20
         private const val INITIAL_LOAD_SIZE = 40
@@ -225,7 +231,8 @@ class ConversationRepository(
                 conversationToConversationEntity(conversation)
             )
         }
-        filesManager.deleteChatFiles(fullConversation.files)`r`n        SandboxEngine.deleteSandbox(context, fullConversation.id.toString())
+        filesManager.deleteChatFiles(fullConversation.files)
+        SandboxEngine.deleteSandbox(context, fullConversation.id.toString())
     }
 
     suspend fun deleteConversationOfAssistant(assistantId: Uuid) {
@@ -245,7 +252,8 @@ class ConversationRepository(
             assistantId = conversation.assistantId.toString(),
             truncateIndex = conversation.truncateIndex,
             chatSuggestions = JsonInstant.encodeToString(conversation.chatSuggestions),
-            isPinned = conversation.isPinned
+            isPinned = conversation.isPinned,
+            workflowState = conversation.workflowState?.let { JsonInstant.encodeToString(it) } ?: "",
         )
     }
 
@@ -263,6 +271,9 @@ class ConversationRepository(
             truncateIndex = conversationEntity.truncateIndex,
             chatSuggestions = JsonInstant.decodeFromString(conversationEntity.chatSuggestions),
             isPinned = conversationEntity.isPinned,
+            workflowState = conversationEntity.workflowState.takeIf { it.isNotBlank() }?.let {
+                JsonInstant.decodeFromString(it)
+            },
         )
     }
 
@@ -292,6 +303,9 @@ class ConversationRepository(
             createAt = Instant.ofEpochMilli(entity.createAt),
             updateAt = Instant.ofEpochMilli(entity.updateAt),
             messageNodes = emptyList(),
+            workflowState = entity.workflowState?.takeIf { it.isNotBlank() }?.let {
+                JsonInstant.decodeFromString(it)
+            },
         )
     }
 
@@ -353,6 +367,7 @@ data class LightConversationEntity(
     val isPinned: Boolean,
     val createAt: Long,
     val updateAt: Long,
+    val workflowState: String? = null,
 )
 
 data class ConversationPageResult(

@@ -99,14 +99,7 @@ class SubAgentExecutor(
                 contextMessageSize = 0,  // 0 = 不限制消息数量
             )
 
-            // 6. 根据子代理类型确定WorkflowPhase
-            val effectivePhase = when (subAgent.name) {
-                "Explore", "Plan" -> WorkflowPhase.PLAN
-                "Task" -> parentWorkflowPhase
-                else -> parentWorkflowPhase
-            }
-
-            // 7. 执行生成（流式）
+            // 6. 执行生成（流式）
             var resultText = ""
             var finalMessages: List<UIMessage> = emptyList()
             var stepIndex = 0
@@ -120,7 +113,6 @@ class SubAgentExecutor(
                 assistant = assistant,
                 tools = tools,
                 maxSteps = 50,
-                workflowPhase = effectivePhase,
             ).collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {

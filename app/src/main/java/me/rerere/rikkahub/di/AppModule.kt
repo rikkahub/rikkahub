@@ -92,7 +92,7 @@ val appModule = module {
             providerManager = get(),
             localTools = get(),
             mcpManager = get(),
-            prootManager = get()
+            filesManager = get()
         )
     }
 }

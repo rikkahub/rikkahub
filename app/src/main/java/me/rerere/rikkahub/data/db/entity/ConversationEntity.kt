@@ -24,4 +24,6 @@ data class ConversationEntity(
     val chatSuggestions: String,
     @ColumnInfo("is_pinned", defaultValue = "0")
     val isPinned: Boolean,
+    @ColumnInfo("workflow_state", defaultValue = "")
+    val workflowState: String = "",
 )

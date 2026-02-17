@@ -205,12 +205,12 @@ class LocalTools(
                 val action = params["action"]?.jsonPrimitive?.contentOrNull ?: error("action is required")
                 val resultText = when (action) {
                     "read" -> {
-                        "Clipboard content: ${readClipboardText(context)}"
+                        "Clipboard content: ${context.readClipboardText()}"
                     }
 
                     "write" -> {
                         val text = params["text"]?.jsonPrimitive?.contentOrNull ?: error("text is required")
-                        writeClipboardText(context, text)
+                        context.writeClipboardText(text)
                         "Text written to clipboard: $text"
                     }
 

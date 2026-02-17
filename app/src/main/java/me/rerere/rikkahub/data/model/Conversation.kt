@@ -21,6 +21,8 @@ data class Conversation(
     val truncateIndex: Int = -1,
     val chatSuggestions: List<String> = emptyList(),
     val isPinned: Boolean = false,
+    val workflowState: WorkflowState? = null,
+    val todoState: TodoState? = null,
     @Serializable(with = InstantSerializer::class)
     val createAt: Instant = Instant.now(),
     @Serializable(with = InstantSerializer::class)
