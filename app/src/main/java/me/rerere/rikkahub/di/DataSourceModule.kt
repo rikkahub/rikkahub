@@ -7,11 +7,9 @@ import io.ktor.http.HttpHeaders
 import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
-import me.rerere.ai.util.KeyCursorStore
 import me.rerere.common.http.AcceptLanguageBuilder
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
-import me.rerere.rikkahub.data.ai.ProviderKeyCursorStore
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
@@ -127,11 +125,7 @@ val dataSourceModule = module {
     }
 
     single {
-        ProviderManager(client = get(), keyCursorStore = get())
-    }
-
-    single<KeyCursorStore> {
-        ProviderKeyCursorStore(context = get())
+        ProviderManager(client = get())
     }
 
     single {

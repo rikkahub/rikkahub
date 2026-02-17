@@ -37,16 +37,17 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 class OpenAIProvider(
-    private val client: OkHttpClient,
-    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+    private val client: OkHttpClient
 ) : Provider<ProviderSetting.OpenAI> {
+    private val keyRoulette = KeyRoulette.default()
+
     private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
-    private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
+    private val responseAPI = ResponseAPI(client = client)
 
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
-            val key = keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)
+            val key = keyRoulette.next(providerSetting.apiKey)
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
                 .addHeader("Authorization", "Bearer $key")
@@ -74,7 +75,7 @@ class OpenAIProvider(
         }
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
-        val key = keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)
+        val key = keyRoulette.next(providerSetting.apiKey)
         val url = if (providerSetting.balanceOption.apiPath.startsWith("http")) {
             providerSetting.balanceOption.apiPath
         } else {
@@ -196,7 +197,7 @@ class OpenAIProvider(
             "Expected OpenAI provider setting"
         }
 
-        val key = keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)
+        val key = keyRoulette.next(providerSetting.apiKey)
 
         val requestBody = json.encodeToString(
             buildJsonObject {

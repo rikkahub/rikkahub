@@ -35,8 +35,6 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.util.KeyRoulette
-import me.rerere.ai.util.configureClientWithProxy
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -59,24 +57,17 @@ import kotlin.time.Clock
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
 
-class ClaudeProvider(
-    private val client: OkHttpClient,
-    private val keyRoulette: KeyRoulette = KeyRoulette.default()
-) : Provider<ProviderSetting.Claude> {
+class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSetting.Claude> {
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader(
-                    "x-api-key",
-                    keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)
-                )
+                .addHeader("x-api-key", providerSetting.apiKey)
                 .addHeader("anthropic-version", ANTHROPIC_VERSION)
                 .get()
                 .build()
 
-            val response =
-                client.configureClientWithProxy(providerSetting.proxy).newCall(request).execute()
+            val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
@@ -114,17 +105,14 @@ class ClaudeProvider(
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader(
-                "x-api-key",
-                keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)
-            )
+            .addHeader("x-api-key", providerSetting.apiKey)
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
+        val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
         }
@@ -164,10 +152,7 @@ class ClaudeProvider(
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader(
-                "x-api-key",
-                keyRoulette.next(providerSetting.id.toString(), providerSetting.apiKey)
-            )
+            .addHeader("x-api-key", providerSetting.apiKey)
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
@@ -258,8 +243,7 @@ class ClaudeProvider(
             }
         }
 
-        val eventSource =
-            EventSources.createFactory(client.configureClientWithProxy(providerSetting.proxy))
+        val eventSource = EventSources.createFactory(client)
                 .newEventSource(request, listener)
 
         awaitClose {
@@ -405,23 +389,6 @@ class ClaudeProvider(
                 })
             }.onFailure {
                 Log.w(TAG, "encode image failed: $url", it)
-                put("type", "text")
-                put("text", "")
-            }
-        }
-
-        is UIMessagePart.Video -> buildJsonObject {
-            Log.d(TAG, "[VideoUpload] Processing video: $url")
-            encodeBase64(withPrefix = false).onSuccess { encoded ->
-                Log.d(TAG, "[VideoUpload] Video encoded success: mimeType=${encoded.mimeType}, base64 length=${encoded.base64.length}")
-                put("type", "image")
-                put("source", buildJsonObject {
-                    put("type", "base64")
-                    put("media_type", encoded.mimeType)
-                    put("data", encoded.base64)
-                })
-            }.onFailure {
-                Log.e(TAG, "[VideoUpload] encode video failed: $url", it)
                 put("type", "text")
                 put("text", "")
             }
