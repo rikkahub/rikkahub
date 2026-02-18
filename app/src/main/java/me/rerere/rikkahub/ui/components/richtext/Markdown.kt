@@ -243,27 +243,27 @@ private fun dumpAst(node: ASTNode, text: String, indent: String = "") {
 
 object HeaderStyle {
     val H1 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 30.sp
+        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 24.sp
     )
 
     val H2 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 26.sp
-    )
-
-    val H3 = TextStyle(
         fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 22.sp
     )
 
-    val H4 = TextStyle(
+    val H3 = TextStyle(
         fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 20.sp
     )
 
-    val H5 = TextStyle(
+    val H4 = TextStyle(
         fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 18.sp
     )
 
-    val H6 = TextStyle(
+    val H5 = TextStyle(
         fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 16.sp
+    )
+
+    val H6 = TextStyle(
+        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 14.sp
     )
 }
 
