@@ -148,7 +148,7 @@
   <string name="backup_page_files">文件</string>
   <string name="backup_page_import_chatbox_desc">导入ChatBox数据</string>
   <string name="backup_page_import_desc">导入本地备份文件</string>
-  <string name="backup_page_import_export">导入和导出</string>
+  <string name="backup_page_import_export">本地</string>
   <string name="backup_page_import_from_chatbox">从ChatBox导入</string>
   <string name="backup_page_import_from_other_app">从其他APP导入</string>
   <string name="backup_page_importing">正在恢复...</string>
@@ -818,5 +818,15 @@
   <string name="chat_message_remove_favorite">取消收藏</string>
   <string name="chat_page_menu_ai_translator">AI翻译</string>
   <string name="chat_page_menu_image_generation">图像生成</string>
+  <string name="backup_page_reminder">提醒</string>
+  <string name="backup_page_reminder_title">备份提醒</string>
+  <string name="backup_page_reminder_never_backed_up">从未备份</string>
+  <string name="backup_page_reminder_last_days">上次备份于 %1$d 天前</string>
+  <string name="backup_page_reminder_enable">启用备份提醒</string>
+  <string name="backup_page_reminder_interval">提醒间隔</string>
+  <string name="backup_page_reminder_interval_days">%1$d天</string>
+  <string name="backup_page_reminder_no_record">未记录备份时间</string>
+  <string name="backup_page_reminder_last_time">上次备份：%1$s</string>
+  <string name="backup_page_reminder_dismiss">忽略</string>
 </resources>
 

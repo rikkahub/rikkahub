@@ -160,7 +160,7 @@
   <string name="backup_page_files">Files</string>
   <string name="backup_page_import_chatbox_desc">Import data from ChatBox</string>
   <string name="backup_page_import_desc">Import local backup file</string>
-  <string name="backup_page_import_export">Import and Export</string>
+  <string name="backup_page_import_export">Local</string>
   <string name="backup_page_import_from_chatbox">Import from ChatBox</string>
   <string name="backup_page_import_from_other_app">Import from other app</string>
   <string name="backup_page_importing">Importing...</string>
@@ -826,6 +826,16 @@
   <string name="chat_message_remove_favorite">Remove Favorite</string>
   <string name="chat_page_menu_ai_translator">AI Translator</string>
   <string name="chat_page_menu_image_generation">Image Generation</string>
+  <string name="backup_page_reminder">Reminder</string>
+  <string name="backup_page_reminder_title">Backup Reminder</string>
+  <string name="backup_page_reminder_never_backed_up">Never backed up</string>
+  <string name="backup_page_reminder_last_days">Last backup %1$d days ago</string>
+  <string name="backup_page_reminder_enable">Enable Backup Reminder</string>
+  <string name="backup_page_reminder_interval">Reminder Interval</string>
+  <string name="backup_page_reminder_interval_days">%1$d days</string>
+  <string name="backup_page_reminder_no_record">No backup time recorded</string>
+  <string name="backup_page_reminder_last_time">Last backup: %1$s</string>
+  <string name="backup_page_reminder_dismiss">Dismiss</string>
 </resources>
 
 

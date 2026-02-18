@@ -75,6 +75,7 @@ class BackupVM(
 
     suspend fun backup() {
         webDavSync.backup(settings.value.webDavConfig)
+        recordBackupTime()
     }
 
     suspend fun restore(item: WebDavBackupItem) {
@@ -86,7 +87,9 @@ class BackupVM(
     }
 
     suspend fun exportToFile(): File {
-        return webDavSync.prepareBackupFile(settings.value.webDavConfig.copy())
+        val file = webDavSync.prepareBackupFile(settings.value.webDavConfig.copy())
+        recordBackupTime()
+        return file
     }
 
     suspend fun restoreFromLocalFile(file: File) {
@@ -195,6 +198,7 @@ class BackupVM(
 
     suspend fun backupToS3() {
         s3Sync.backupToS3(settings.value.s3Config)
+        recordBackupTime()
     }
 
     suspend fun restoreFromS3(item: S3BackupItem) {
@@ -203,5 +207,15 @@ class BackupVM(
 
     suspend fun deleteS3BackupFile(item: S3BackupItem) {
         s3Sync.deleteS3BackupFile(settings.value.s3Config, item)
+    }
+
+    private suspend fun recordBackupTime() {
+        settingsStore.update { settings ->
+            settings.copy(
+                backupReminderConfig = settings.backupReminderConfig.copy(
+                    lastBackupTime = System.currentTimeMillis()
+                )
+            )
+        }
     }
 }

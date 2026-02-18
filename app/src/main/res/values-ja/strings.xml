@@ -148,7 +148,7 @@
   <string name="backup_page_files">ファイル</string>
   <string name="backup_page_import_chatbox_desc">ChatBoxデータをインポート</string>
   <string name="backup_page_import_desc">ローカルバックアップファイルをインポート</string>
-  <string name="backup_page_import_export">インポートとエクスポート</string>
+  <string name="backup_page_import_export">ローカル</string>
   <string name="backup_page_import_from_chatbox">ChatBoxからインポート</string>
   <string name="backup_page_import_from_other_app">他のアプリからインポート</string>
   <string name="backup_page_importing">インポート中...</string>
@@ -817,5 +817,15 @@
   <string name="chat_message_remove_favorite">お気に入りから削除</string>
   <string name="chat_page_menu_ai_translator">AI翻訳</string>
   <string name="chat_page_menu_image_generation">画像生成</string>
+  <string name="backup_page_reminder">リマインダー</string>
+  <string name="backup_page_reminder_title">バックアップのリマインダー</string>
+  <string name="backup_page_reminder_never_backed_up">バックアップしたことがありません</string>
+  <string name="backup_page_reminder_last_days">最終バックアップは%1$d日前</string>
+  <string name="backup_page_reminder_enable">バックアップリマインダーを有効にする</string>
+  <string name="backup_page_reminder_interval">リマインダー間隔</string>
+  <string name="backup_page_reminder_interval_days">%1$d日</string>
+  <string name="backup_page_reminder_no_record">バックアップ時刻が記録されていません</string>
+  <string name="backup_page_reminder_last_time">最終バックアップ: %1$s</string>
+  <string name="backup_page_reminder_dismiss">閉じる</string>
 </resources>
 

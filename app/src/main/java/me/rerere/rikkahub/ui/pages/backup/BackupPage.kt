@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.backup
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -17,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import com.composables.icons.lucide.Bell
 import com.composables.icons.lucide.Cloud
 import com.composables.icons.lucide.DatabaseBackup
 import com.composables.icons.lucide.Import
@@ -26,13 +28,15 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.pages.backup.components.BackupDialog
 import me.rerere.rikkahub.ui.pages.backup.tabs.ImportExportTab
+import me.rerere.rikkahub.ui.pages.backup.tabs.ReminderTab
 import me.rerere.rikkahub.ui.pages.backup.tabs.S3Tab
 import me.rerere.rikkahub.ui.pages.backup.tabs.WebDavTab
 import org.koin.androidx.compose.koinViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupPage(vm: BackupVM = koinViewModel()) {
-    val pagerState = rememberPagerState { 3 }
+    val pagerState = rememberPagerState { 4 }
     val scope = rememberCoroutineScope()
     var showRestartDialog by remember { mutableStateOf(false) }
 
@@ -85,6 +89,18 @@ fun BackupPage(vm: BackupVM = koinViewModel()) {
                         scope.launch { pagerState.animateScrollToPage(2) }
                     },
                 )
+                NavigationBarItem(
+                    selected = pagerState.currentPage == 3,
+                    icon = {
+                        Icon(Lucide.Bell, null)
+                    },
+                    label = {
+                        Text(stringResource(R.string.backup_page_reminder))
+                    },
+                    onClick = {
+                        scope.launch { pagerState.animateScrollToPage(3) }
+                    },
+                )
             }
         }
     ) {
@@ -113,6 +129,10 @@ fun BackupPage(vm: BackupVM = koinViewModel()) {
                         vm = vm,
                         onShowRestartDialog = { showRestartDialog = true }
                     )
+                }
+
+                3 -> {
+                    ReminderTab(vm = vm)
                 }
             }
         }

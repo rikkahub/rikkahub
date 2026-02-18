@@ -927,9 +927,7 @@ private fun ModelPicker(
     if (showModal) {
         ModalBottomSheet(
             onDismissRequest = { showModal = false },
-            sheetState = rememberModalBottomSheetState(
-                skipPartiallyExpanded = true
-            )
+            sheetState = rememberModalBottomSheetState(),
         ) {
             var filterText by remember { mutableStateOf("") }
             val filterKeywords = filterText.split(" ").filter { it.isNotBlank() }
@@ -946,7 +944,7 @@ private fun ModelPicker(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(500.dp)
+                    .fillMaxHeight(0.9f)
                     .padding(8.dp)
                     .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
