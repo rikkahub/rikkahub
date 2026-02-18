@@ -30,15 +30,21 @@ import kotlinx.coroutines.Job
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.RandomGridLoading
 
+enum class CompressType {
+    NORMAL,
+    CODE
+}
+
 @Composable
 fun CompressContextDialog(
     onDismiss: () -> Unit,
-    onConfirm: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job
+    onConfirm: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int, compressType: CompressType) -> Job
 ) {
     var additionalPrompt by remember { mutableStateOf("") }
     var selectedTokens by remember { mutableIntStateOf(2000) }
     var keepRecentMessages by remember { mutableIntStateOf(32) }
-    val tokenOptions = listOf(500, 1000, 2000, 4000)
+    var selectedTab by remember { mutableIntStateOf(0) }
+    val tokenOptions = listOf(500, 1000, 2000, 4000, 8000, 12000, 16000)
     val keepRecentOptions = listOf(0, 16, 32, 64)
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val isLoading = currentJob?.isActive == true
@@ -79,7 +85,27 @@ fun CompressContextDialog(
                         Text(stringResource(R.string.chat_page_compressing))
                     }
                 } else {
-                    Text(stringResource(R.string.chat_page_compress_context_desc))
+                    androidx.compose.material3.TabRow(selectedTabIndex = selectedTab) {
+                        androidx.compose.material3.Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = { Text("普通压缩") }
+                        )
+                        androidx.compose.material3.Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { Text("编码压缩") }
+                        )
+                    }
+
+                    Text(
+                        text = if (selectedTab == 0) {
+                            "普通压缩：适用于一般对话，保留关键事实和决策"
+                        } else {
+                            "编码压缩：适用于技术对话，保留代码结构和架构细节"
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
 
                     // Token size selector
                     Text(
@@ -158,7 +184,8 @@ fun CompressContextDialog(
                 }
             } else {
                 TextButton(onClick = {
-                    currentJob = onConfirm(additionalPrompt, selectedTokens, keepRecentMessages)
+                    val compressType = if (selectedTab == 0) CompressType.NORMAL else CompressType.CODE
+                    currentJob = onConfirm(additionalPrompt, selectedTokens, keepRecentMessages, compressType)
                 }) {
                     Text(stringResource(R.string.confirm))
                 }

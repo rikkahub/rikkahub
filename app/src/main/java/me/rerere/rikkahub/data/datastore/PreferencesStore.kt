@@ -22,6 +22,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_CODE_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
@@ -85,6 +86,8 @@ class SettingsStore(
         val OCR_PROMPT = stringPreferencesKey("ocr_prompt")
         val COMPRESS_MODEL = stringPreferencesKey("compress_model")
         val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
+        val CODE_COMPRESS_MODEL = stringPreferencesKey("code_compress_model")
+        val CODE_COMPRESS_PROMPT = stringPreferencesKey("code_compress_prompt")
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
@@ -117,6 +120,7 @@ class SettingsStore(
         val WEB_SERVER_PORT = intPreferencesKey("web_server_port")
         val WEB_SERVER_JWT_ENABLED = booleanPreferencesKey("web_server_jwt_enabled")
         val WEB_SERVER_ACCESS_PASSWORD = stringPreferencesKey("web_server_access_password")
+        val ENABLE_CONTAINER_RUNTIME = booleanPreferencesKey("enable_container_runtime")
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -154,6 +158,9 @@ class SettingsStore(
                 ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
                 compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
+                codeCompressModelId = preferences[CODE_COMPRESS_MODEL]?.let { Uuid.parse(it) }
+                    ?: DEFAULT_AUTO_MODEL_ID,
+                codeCompressPrompt = preferences[CODE_COMPRESS_PROMPT] ?: DEFAULT_CODE_COMPRESS_PROMPT,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -196,6 +203,7 @@ class SettingsStore(
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
                 webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
+                enableContainerRuntime = preferences[ENABLE_CONTAINER_RUNTIME] != false,
             )
         }
         .map {
@@ -312,6 +320,8 @@ class SettingsStore(
             preferences[OCR_PROMPT] = settings.ocrPrompt
             preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
+            preferences[CODE_COMPRESS_MODEL] = settings.codeCompressModelId.toString()
+            preferences[CODE_COMPRESS_PROMPT] = settings.codeCompressPrompt
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
 
@@ -336,6 +346,7 @@ class SettingsStore(
             preferences[WEB_SERVER_PORT] = settings.webServerPort
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
             preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
+            preferences[ENABLE_CONTAINER_RUNTIME] = settings.enableContainerRuntime
         }
     }
 
@@ -435,6 +446,8 @@ data class Settings(
     val ocrPrompt: String = DEFAULT_OCR_PROMPT,
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
+    val codeCompressModelId: Uuid = Uuid.random(),
+    val codeCompressPrompt: String = DEFAULT_CODE_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
@@ -453,6 +466,7 @@ data class Settings(
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,
     val webServerAccessPassword: String = "",
+    val enableContainerRuntime: Boolean = true,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

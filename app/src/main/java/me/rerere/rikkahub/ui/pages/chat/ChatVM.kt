@@ -15,7 +15,6 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import androidx.paging.insertSeparators
 import androidx.paging.map
-import com.google.firebase.analytics.FirebaseAnalytics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +42,7 @@ import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.ui.components.ai.CompressType
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
@@ -63,7 +63,6 @@ class ChatVM(
     private val conversationRepo: ConversationRepository,
     private val chatService: ChatService,
     val updateChecker: UpdateChecker,
-    private val analytics: FirebaseAnalytics,
     private val filesManager: FilesManager,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
@@ -262,14 +261,12 @@ class ChatVM(
      */
     fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
         if (content.isEmptyInputMessage()) return
-        analytics.logEvent("ai_send_message", null)
 
         chatService.sendMessage(_conversationId, content, answer)
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
         if (parts.isEmptyInputMessage()) return
-        analytics.logEvent("ai_edit_message", null)
 
         viewModelScope.launch {
             chatService.editMessage(_conversationId, messageId, parts)
@@ -289,14 +286,20 @@ class ChatVM(
         }
     }
 
-    fun handleCompressContext(additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int): Job {
+    fun handleCompressContext(
+        additionalPrompt: String,
+        targetTokens: Int,
+        keepRecentMessages: Int,
+        compressType: CompressType = CompressType.NORMAL
+    ): Job {
         return viewModelScope.launch {
             chatService.compressConversation(
                 _conversationId,
                 conversation.value,
                 additionalPrompt,
                 targetTokens,
-                keepRecentMessages
+                keepRecentMessages,
+                compressType
             ).onFailure {
                 chatService.addError(it)
             }
@@ -317,7 +320,6 @@ class ChatVM(
         message: UIMessage,
         regenerateAssistantMsg: Boolean = true
     ) {
-        analytics.logEvent("ai_regenerate_at_message", null)
         chatService.regenerateAtMessage(_conversationId, message, regenerateAssistantMsg)
     }
 
@@ -326,7 +328,6 @@ class ChatVM(
         approved: Boolean,
         reason: String = ""
     ) {
-        analytics.logEvent("ai_tool_approval", null)
         chatService.handleToolApproval(_conversationId, toolCallId, approved, reason)
     }
 
@@ -387,6 +388,39 @@ class ChatVM(
     fun updateConversation(newConversation: Conversation) {
         viewModelScope.launch {
             chatService.saveConversation(_conversationId, newConversation)
+        }
+    }
+
+    fun updateWorkflowPhase(phase: me.rerere.rikkahub.data.model.WorkflowPhase) {
+        viewModelScope.launch {
+            val currentConversation = conversation.value
+            val currentState = currentConversation.workflowState
+            if (currentState != null) {
+                val newState = currentState.copy(phase = phase)
+                val updatedConversation = currentConversation.copy(workflowState = newState)
+                chatService.saveConversation(_conversationId, updatedConversation)
+            }
+        }
+    }
+
+    fun initializeWorkflowState() {
+        viewModelScope.launch {
+            val currentConversation = conversation.value
+            if (currentConversation.workflowState == null) {
+                val newWorkflowState = me.rerere.rikkahub.data.model.WorkflowState()
+                val updatedConversation = currentConversation.copy(workflowState = newWorkflowState)
+                chatService.saveConversation(_conversationId, updatedConversation)
+            }
+        }
+    }
+
+    fun disableWorkflowState() {
+        viewModelScope.launch {
+            val currentConversation = conversation.value
+            if (currentConversation.workflowState != null) {
+                val updatedConversation = currentConversation.copy(workflowState = null)
+                chatService.saveConversation(_conversationId, updatedConversation)
+            }
         }
     }
 

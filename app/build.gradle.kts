@@ -8,18 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.google.services) apply false
-    alias(libs.plugins.firebase.crashlytics) apply false
     id("com.chaquo.python") version "17.0.0"
-}
-
-val hasGoogleServicesConfig = file("google-services.json").exists() ||
-    file("src/debug/google-services.json").exists() ||
-    file("src/release/google-services.json").exists()
-
-if (hasGoogleServicesConfig) {
-    apply(plugin = "com.google.gms.google-services")
-    apply(plugin = "com.google.firebase.crashlytics")
 }
 
 android {
@@ -29,7 +18,7 @@ android {
     defaultConfig {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 28
         versionCode = 135
         versionName = "1.9.0-beta.1"
 
@@ -79,7 +68,8 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            applicationIdSuffix = ".mod"
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -114,7 +104,7 @@ android {
         buildConfig = true
     }
     sourceSets {
-        getByName("androidTest").assets.srcDirs("$projectDir/schemas")
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
     androidResources {
         generateLocaleConfig = true
@@ -182,12 +172,6 @@ dependencies {
 //    implementation(libs.androidx.navigation3.ui)
 //    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 //    implementation(libs.androidx.material3.adaptive.navigation3)
-
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.crashlytics)
-    implementation(libs.firebase.config)
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)

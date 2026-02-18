@@ -7,8 +7,6 @@ import androidx.compose.runtime.Composer
 import androidx.compose.runtime.tooling.ComposeStackTraceMode
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
-import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import com.google.firebase.remoteconfig.remoteConfigSettings
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +21,7 @@ import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
+import me.rerere.rikkahub.data.container.PRootManager
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.utils.DatabaseUtil
@@ -58,14 +57,8 @@ class RikkaHubApp : Application() {
         // sync upload files to DB
         syncManagedFiles()
 
-        // Init remote config
-        get<FirebaseRemoteConfig>().apply {
-            setConfigSettingsAsync(remoteConfigSettings {
-                minimumFetchIntervalInSeconds = 1800
-            })
-            setDefaultsAsync(R.xml.remote_config_defaults)
-            fetchAndActivate()
-        }
+        // restore container state if runtime has been initialized before
+        restoreContainerState()
 
         // Start WebServer if enabled in settings
         startWebServerIfEnabled()
@@ -88,6 +81,19 @@ class RikkaHubApp : Application() {
                 get<FilesManager>().syncFolder()
             }.onFailure {
                 Log.e(TAG, "syncManagedFiles failed", it)
+            }
+        }
+    }
+
+    private fun restoreContainerState() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val prootManager = get<PRootManager>()
+                if (prootManager.checkInitializationStatus()) {
+                    prootManager.restoreState()
+                }
+            }.onFailure {
+                Log.e(TAG, "restoreContainerState failed", it)
             }
         }
     }

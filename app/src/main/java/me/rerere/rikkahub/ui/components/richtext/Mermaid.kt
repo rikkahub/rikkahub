@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.richtext
 
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.util.LruCache
 import android.webkit.JavascriptInterface
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.animateContentSize
@@ -37,7 +38,6 @@ import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
-import com.google.common.cache.CacheBuilder
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
@@ -47,9 +47,7 @@ import me.rerere.rikkahub.utils.escapeHtml
 import me.rerere.rikkahub.utils.exportImage
 import me.rerere.rikkahub.utils.toCssHex
 
-private val mermaidHeightCache = CacheBuilder.newBuilder()
-    .maximumSize(100)
-    .build<String, Int>()
+private val mermaidHeightCache = LruCache<String, Int>(100)
 
 /**
  * A component that renders Mermaid diagrams.
@@ -69,7 +67,7 @@ fun Mermaid(
     val activity = LocalActivity.current
     val toaster = LocalToaster.current
 
-    var contentHeight by remember { mutableIntStateOf(mermaidHeightCache.getIfPresent(code) ?: 150) }
+    var contentHeight by remember { mutableIntStateOf(mermaidHeightCache.get(code) ?: 150) }
     val height = with(density) {
         contentHeight.toDp()
     }

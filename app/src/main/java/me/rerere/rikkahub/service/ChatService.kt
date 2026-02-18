@@ -743,10 +743,21 @@ class ChatService(
         conversation: Conversation,
         additionalPrompt: String,
         targetTokens: Int,
-        keepRecentMessages: Int = 32
+        keepRecentMessages: Int = 32,
+        compressType: me.rerere.rikkahub.ui.components.ai.CompressType = me.rerere.rikkahub.ui.components.ai.CompressType.NORMAL
     ): Result<Unit> = runCatching {
         val settings = settingsStore.settingsFlow.first()
-        val model = settings.findModelById(settings.compressModelId)
+
+        val modelId = when (compressType) {
+            me.rerere.rikkahub.ui.components.ai.CompressType.NORMAL -> settings.compressModelId
+            me.rerere.rikkahub.ui.components.ai.CompressType.CODE -> settings.codeCompressModelId
+        }
+        val promptTemplate = when (compressType) {
+            me.rerere.rikkahub.ui.components.ai.CompressType.NORMAL -> settings.compressPrompt
+            me.rerere.rikkahub.ui.components.ai.CompressType.CODE -> settings.codeCompressPrompt
+        }
+
+        val model = settings.findModelById(modelId)
             ?: settings.getCurrentChatModel()
             ?: throw IllegalStateException("No model available for compression")
         val provider = model.findProvider(settings.providers)
@@ -782,7 +793,7 @@ class ChatService(
 
         suspend fun compressMessages(messages: List<UIMessage>): String {
             val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText() }
-            val prompt = settings.compressPrompt.applyPlaceholders(
+            val prompt = promptTemplate.applyPlaceholders(
                 "content" to contentToCompress,
                 "target_tokens" to targetTokens.toString(),
                 "additional_context" to if (additionalPrompt.isNotBlank()) {

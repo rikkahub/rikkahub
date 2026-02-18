@@ -1,16 +1,9 @@
 package me.rerere.rikkahub.data.ai
 
-import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.jsonObject
-import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import okhttp3.Interceptor
-import okhttp3.Request
 import okhttp3.Response
-import kotlin.io.encoding.Base64
 
-class AIRequestInterceptor(private val remoteConfig: FirebaseRemoteConfig) : Interceptor {
+class AIRequestInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         var request = chain.request()
         val host = request.url.host

@@ -1652,6 +1652,16 @@ private fun String.isSQLiteFile(): Boolean {
 private fun ContainerStatusCard() {
     val prootManager: me.rerere.rikkahub.data.container.PRootManager = koinInject()
     val containerState by prootManager.containerState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+
+    // Try restoring persisted container state when opening this card.
+    LaunchedEffect(prootManager) {
+        runCatching {
+            if (prootManager.checkInitializationStatus()) {
+                prootManager.restoreState()
+            }
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1666,14 +1676,54 @@ private fun ContainerStatusCard() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             when (val state = containerState) {
+                is me.rerere.rikkahub.data.container.ContainerStateEnum.NotInitialized -> {
+                    Text("未初始化", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { scope.launch { prootManager.initialize() } }
+                    ) {
+                        Text("初始化容器")
+                    }
+                }
+                is me.rerere.rikkahub.data.container.ContainerStateEnum.Initializing -> {
+                    val progress = state.progress.coerceIn(0f, 1f)
+                    Text("初始化中 ${(progress * 100).toInt()}%", color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 is me.rerere.rikkahub.data.container.ContainerStateEnum.Running -> {
                     Text("运行中", color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { scope.launch { prootManager.stop() } }) {
+                            Text("停止")
+                        }
+                        TextButton(onClick = { scope.launch { prootManager.destroy() } }) {
+                            Text("销毁", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
                 is me.rerere.rikkahub.data.container.ContainerStateEnum.Stopped -> {
                     Text("已停止", color = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { scope.launch { prootManager.start() } }) {
+                            Text("启动")
+                        }
+                        TextButton(onClick = { scope.launch { prootManager.destroy() } }) {
+                            Text("销毁", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
-                else -> {
-                    Text("未知状态", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                is me.rerere.rikkahub.data.container.ContainerStateEnum.Error -> {
+                    Text("初始化失败: ${state.message}", color = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = { scope.launch { prootManager.initialize() } }) {
+                        Text("重试初始化")
+                    }
                 }
             }
         }

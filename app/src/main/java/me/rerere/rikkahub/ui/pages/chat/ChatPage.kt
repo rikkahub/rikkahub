@@ -2,9 +2,11 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -32,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -55,6 +58,8 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.container.PRootManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -64,6 +69,10 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.ai.core.MessageRole
+import me.rerere.rikkahub.ui.components.container.ContainerManagerSheet
+import me.rerere.rikkahub.ui.components.sandbox.SandboxFileManagerDialog
+import me.rerere.rikkahub.ui.components.workflow.DraggableWorkflowFab
+import me.rerere.rikkahub.ui.components.workflow.WorkflowMenuSheet
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -247,6 +256,16 @@ private fun ChatPageContent(
     }
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
+    val assistant = setting.assistants.find { it.id == conversation.assistantId }
+        ?: setting.getCurrentAssistant()
+    val workflowEnabled = assistant.localTools.contains(LocalToolOption.ChaquoPy) ||
+        assistant.localTools.contains(LocalToolOption.Container) ||
+        assistant.localTools.contains(LocalToolOption.WorkflowTodo)
+    val prootManager: PRootManager = koinInject()
+    val containerState by prootManager.containerState.collectAsStateWithLifecycle()
+    var showWorkflowMenu by rememberSaveable { mutableStateOf(false) }
+    var showSandboxFileManager by rememberSaveable { mutableStateOf(false) }
+    var showContainerManager by rememberSaveable { mutableStateOf(false) }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -284,6 +303,15 @@ private fun ChatPageContent(
                     enableSearch = enableWebSearch,
                     onToggleSearch = {
                         vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
+                    },
+                    workflowEnabled = workflowEnabled,
+                    workflowActive = conversation.workflowState != null,
+                    onToggleWorkflow = {
+                        if (conversation.workflowState == null) {
+                            vm.initializeWorkflowState()
+                        } else {
+                            vm.disableWorkflowState()
+                        }
                     },
                     onSendClick = {
                         if (currentChatModel == null) {
@@ -343,8 +371,8 @@ private fun ChatPageContent(
                     onClearContext = {
                         vm.handleMessageTruncate()
                     },
-                    onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
-                        vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+                    onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages, compressType ->
+                        vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages, compressType)
                     },
                 )
             },
@@ -409,6 +437,53 @@ private fun ChatPageContent(
                     vm.handleToolApproval(toolCallId, approved, reason)
                 },
             )
+        }
+
+        if (workflowEnabled && conversation.workflowState != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 80.dp, end = 16.dp),
+                contentAlignment = Alignment.TopEnd
+            ) {
+                DraggableWorkflowFab(
+                    onClick = { showWorkflowMenu = true },
+                    modifier = Modifier.padding(top = 80.dp, end = 16.dp)
+                )
+            }
+
+            WorkflowMenuSheet(
+                visible = showWorkflowMenu,
+                onDismiss = { showWorkflowMenu = false },
+                currentPhase = conversation.workflowState.phase,
+                onPhaseChange = { phase ->
+                    vm.updateWorkflowPhase(phase)
+                },
+                onOpenSandbox = {
+                    showSandboxFileManager = true
+                    showWorkflowMenu = false
+                },
+                containerState = containerState,
+                onOpenContainerManager = {
+                    showContainerManager = true
+                    showWorkflowMenu = false
+                }
+            )
+
+            if (showSandboxFileManager) {
+                SandboxFileManagerDialog(
+                    sandboxId = conversation.id.toString(),
+                    onDismiss = { showSandboxFileManager = false }
+                )
+            }
+
+            if (showContainerManager) {
+                ContainerManagerSheet(
+                    visible = showContainerManager,
+                    onDismiss = { showContainerManager = false },
+                    prootManager = prootManager
+                )
+            }
         }
     }
 }

@@ -104,6 +104,7 @@ import com.composables.icons.lucide.FileArchive
 import com.composables.icons.lucide.FileAudio
 import com.composables.icons.lucide.Files
 import com.composables.icons.lucide.Fullscreen
+import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Music
@@ -158,12 +159,15 @@ fun ChatInput(
     mcpManager: McpManager,
     enableSearch: Boolean,
     onToggleSearch: (Boolean) -> Unit,
+    workflowEnabled: Boolean = false,
+    workflowActive: Boolean = false,
+    onToggleWorkflow: () -> Unit = {},
     modifier: Modifier = Modifier,
     onUpdateChatModel: (Model) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
     onClearContext: () -> Unit,
-    onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
+    onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int, compressType: CompressType) -> Job,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
     onLongSendClick: () -> Unit,
@@ -286,6 +290,13 @@ fun ChatInput(
                                 onUpdateAssistant(assistant.copy(thinkingBudget = it))
                             },
                             onlyIcon = true,
+                        )
+                    }
+
+                    if (workflowEnabled) {
+                        WorkflowButton(
+                            active = workflowActive,
+                            onToggle = onToggleWorkflow,
                         )
                     }
 
@@ -746,7 +757,7 @@ private fun FilesPicker(
     assistant: Assistant,
     state: ChatInputState,
     onClearContext: () -> Unit,
-    onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
+    onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int, compressType: CompressType) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     showInjectionSheet: Boolean,
     onShowInjectionSheetChange: (Boolean) -> Unit,
@@ -902,8 +913,8 @@ private fun FilesPicker(
                 onShowCompressDialogChange(false)
                 onDismiss()
             },
-            onConfirm = { additionalPrompt, targetTokens, keepRecentMessages ->
-                onCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+            onConfirm = { additionalPrompt, targetTokens, keepRecentMessages, compressType ->
+                onCompressContext(additionalPrompt, targetTokens, keepRecentMessages, compressType)
             }
         )
     }
@@ -1343,6 +1354,24 @@ private fun InjectionQuickConfigSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable
+private fun WorkflowButton(
+    active: Boolean,
+    onToggle: () -> Unit,
+) {
+    IconButton(onClick = onToggle) {
+        Icon(
+            imageVector = Lucide.GitBranch,
+            contentDescription = "Workflow",
+            tint = if (active) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                LocalContentColor.current.copy(alpha = 0.6f)
+            }
+        )
     }
 }
 
