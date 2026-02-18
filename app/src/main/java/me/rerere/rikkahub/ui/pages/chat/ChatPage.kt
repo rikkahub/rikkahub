@@ -40,7 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavHostController
+import me.rerere.rikkahub.ui.context.Navigator
 import com.composables.icons.lucide.List
 import com.composables.icons.lucide.ListTree
 import com.composables.icons.lucide.Lucide
@@ -229,7 +229,7 @@ private fun ChatPageContent(
     bigScreen: Boolean,
     conversation: Conversation,
     drawerState: DrawerState,
-    navController: NavHostController,
+    navController: Navigator,
     vm: ChatVM,
     chatListState: LazyListState,
     enableWebSearch: Boolean,

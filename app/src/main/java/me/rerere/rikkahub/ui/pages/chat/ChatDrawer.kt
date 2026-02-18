@@ -42,7 +42,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavHostController
+import me.rerere.rikkahub.ui.context.Navigator
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.composables.icons.lucide.Drama
 import com.composables.icons.lucide.Heart
@@ -80,7 +80,7 @@ import kotlin.uuid.Uuid
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatDrawerContent(
-    navController: NavHostController,
+    navController: Navigator,
     vm: ChatVM,
     settings: Settings,
     current: Conversation,
@@ -232,7 +232,7 @@ fun ChatDrawerContent(
                                 .firstOrNull()
                                 ?.id ?: Uuid.random()
                         }
-                        navigateToChatPage(navController = navController, chatId = id)
+                        navigateToChatPage(navigator = navController, chatId = id)
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

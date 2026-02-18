@@ -86,7 +86,7 @@ fun ShareHandlerPage(text: String, image: String?) {
                         scope.launch {
                             vm.updateAssistant(assistant.id)
                             navigateToChatPage(
-                                navController = navController,
+                                navigator = navController,
                                 initText = vm.shareText.base64Encode(),
                                 initFiles = image?.let { listOf(it.toUri()) } ?: emptyList()
                             )

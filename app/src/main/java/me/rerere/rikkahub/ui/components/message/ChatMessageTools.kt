@@ -390,7 +390,7 @@ private fun ToolCallPreviewSheet(
 private fun SearchWebPreview(
     arguments: JsonElement,
     content: JsonElement,
-    navController: androidx.navigation.NavController
+    navController: me.rerere.rikkahub.ui.context.Navigator
 ) {
     val items = content.jsonObject["items"]?.jsonArray ?: emptyList()
     val answer = content.getStringContent("answer")
