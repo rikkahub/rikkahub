@@ -817,6 +817,25 @@ private fun PerplexityOptions(
 
     FormItem(
         label = {
+            Text("Max Tokens")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.maxTokens?.takeIf { it > 0 }?.toString() ?: "",
+            onValueChange = { value ->
+                onUpdateOptions(
+                    options.copy(
+                        maxTokens = value.toIntOrNull()
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+    }
+
+    FormItem(
+        label = {
             Text("Max Tokens / Page")
         }
     ) {

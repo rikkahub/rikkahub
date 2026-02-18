@@ -69,6 +69,11 @@ object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOp
             val body = buildJsonObject {
                 put("query", JsonPrimitive(query))
                 put("max_results", JsonPrimitive(commonOptions.resultSize))
+                serviceOptions.maxTokens?.let {
+                    if (it > 0) {
+                        put("max_tokens", JsonPrimitive(it))
+                    }
+                }
                 serviceOptions.maxTokensPerPage?.let {
                     if (it > 0) {
                         put("max_tokens_per_page", JsonPrimitive(it))

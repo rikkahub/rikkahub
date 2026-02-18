@@ -213,7 +213,8 @@ sealed class SearchServiceOptions {
     data class PerplexityOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
-        val maxTokensPerPage: Int? = 1024,
+        val maxTokens: Int? = null,
+        val maxTokensPerPage: Int? = null,
     ) : SearchServiceOptions()
 
     @Serializable
