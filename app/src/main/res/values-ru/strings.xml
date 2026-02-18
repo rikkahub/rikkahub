@@ -808,5 +808,7 @@
   <string name="favorite_page_untitled_conversation">Безымянный разговор</string>
   <string name="chat_message_add_favorite">Добавить в избранное</string>
   <string name="chat_message_remove_favorite">Удалить из избранного</string>
+  <string name="chat_page_menu_ai_translator">AI-переводчик</string>
+  <string name="chat_page_menu_image_generation">Генерация изображений</string>
 </resources>
 

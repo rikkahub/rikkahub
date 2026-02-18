@@ -815,5 +815,7 @@
   <string name="favorite_page_untitled_conversation">無題の会話</string>
   <string name="chat_message_add_favorite">お気に入りに追加</string>
   <string name="chat_message_remove_favorite">お気に入りから削除</string>
+  <string name="chat_page_menu_ai_translator">AI翻訳</string>
+  <string name="chat_page_menu_image_generation">画像生成</string>
 </resources>
 

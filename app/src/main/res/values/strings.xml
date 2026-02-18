@@ -815,5 +815,7 @@
   <string name="favorite_page_untitled_conversation">Untitled Conversation</string>
   <string name="chat_message_add_favorite">Add Favorite</string>
   <string name="chat_message_remove_favorite">Remove Favorite</string>
+  <string name="chat_page_menu_ai_translator">AI Translator</string>
+  <string name="chat_page_menu_image_generation">Image Generation</string>
 </resources>
 

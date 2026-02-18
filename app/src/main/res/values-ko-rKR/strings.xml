@@ -815,5 +815,7 @@
   <string name="favorite_page_untitled_conversation">제목 없는 대화</string>
   <string name="chat_message_add_favorite">즐겨찌기 추가</string>
   <string name="chat_message_remove_favorite">즐겨찾기 제거</string>
+  <string name="chat_page_menu_ai_translator">AI 번역기</string>
+  <string name="chat_page_menu_image_generation">이미지 생성</string>
 </resources>
 

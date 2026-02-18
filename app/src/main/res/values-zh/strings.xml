@@ -815,5 +815,7 @@
   <string name="favorite_page_untitled_conversation">未命名对话</string>
   <string name="chat_message_add_favorite">添加收藏</string>
   <string name="chat_message_remove_favorite">取消收藏</string>
+  <string name="chat_page_menu_ai_translator">AI翻译</string>
+  <string name="chat_page_menu_image_generation">图像生成</string>
 </resources>
 

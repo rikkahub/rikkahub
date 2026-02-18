@@ -15,7 +15,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -43,10 +46,13 @@ import androidx.navigation.NavHostController
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.composables.icons.lucide.Drama
 import com.composables.icons.lucide.Heart
+import com.composables.icons.lucide.Image
+import com.composables.icons.lucide.Languages
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Sparkles
+import com.composables.icons.lucide.Trophy
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
@@ -66,6 +72,7 @@ import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.utils.navigateToChatPage
+import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
@@ -105,6 +112,9 @@ fun ChatDrawerContent(
     var showMoveToAssistantSheet by remember { mutableStateOf(false) }
     var conversationToMove by remember { mutableStateOf<Conversation?>(null) }
     val bottomSheetState = rememberModalBottomSheetState()
+
+    // Menu popup 状态
+    var showMenuPopup by remember { mutableStateOf(false) }
 
     ModalDrawerSheet(
         modifier = Modifier.width(300.dp)
@@ -254,17 +264,40 @@ fun ChatDrawerContent(
                     },
                 )
 
-                DrawerAction(
-                    icon = {
-                        Icon(Lucide.Sparkles, "Menu")
-                    },
-                    label = {
-                        Text(stringResource(R.string.menu))
-                    },
-                    onClick = {
-                        navController.navigate(Screen.Menu)
-                    },
-                )
+                Box {
+                    DrawerAction(
+                        icon = {
+                            Icon(Lucide.Sparkles, "Menu")
+                        },
+                        label = {
+                            Text(stringResource(R.string.menu))
+                        },
+                        onClick = {
+                            showMenuPopup = true
+                        },
+                    )
+                    DropdownMenu(
+                        expanded = showMenuPopup,
+                        onDismissRequest = { showMenuPopup = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.chat_page_menu_ai_translator)) },
+                            leadingIcon = { Icon(Lucide.Languages, null) },
+                            onClick = {
+                                showMenuPopup = false
+                                navController.navigate(Screen.Translator)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.chat_page_menu_image_generation)) },
+                            leadingIcon = { Icon(Lucide.Image, null) },
+                            onClick = {
+                                showMenuPopup = false
+                                navController.navigate(Screen.ImageGen)
+                            }
+                        )
+                    }
+                }
 
                 DrawerAction(
                     icon = {
