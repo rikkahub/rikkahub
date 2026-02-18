@@ -26,7 +26,7 @@ import { useCurrentModel } from "~/hooks/use-current-model";
 import { getAssistantDisplayName, getModelDisplayName } from "~/lib/display";
 import { cn } from "~/lib/utils";
 import api, { sse } from "~/services/api";
-import { useChatInputStore } from "~/stores";
+import { useChatInputStore, useAppStore } from "~/stores";
 import { WorkbenchHost } from "~/components/workbench/workbench-host";
 import {
   useWorkbench,
@@ -357,6 +357,7 @@ function useConversationDetail(activeId: string | null, updateSummary: Conversat
           }
 
           if (event === "snapshot" && data.type === "snapshot") {
+            useAppStore.getState().setClockOffset(data.serverTime);
             setDetail(data.conversation);
             updateSummary(toConversationSummaryUpdate(data.conversation));
             setDetailError(null);
@@ -366,6 +367,7 @@ function useConversationDetail(activeId: string | null, updateSummary: Conversat
 
           if (event !== "node_update" || data.type !== "node_update") return;
 
+          useAppStore.getState().setClockOffset(data.serverTime);
           setDetail((prev) => {
             if (!prev) return prev;
             const next = applyNodeUpdate(prev, data);

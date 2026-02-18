@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import Markdown from "~/components/markdown/markdown";
 import type { ReasoningPart as UIReasoningPart } from "~/types";
 import Think from "~/assets/think.svg?react";
+import { serverNow } from "~/lib/utils";
 
 import { ControlledChainOfThoughtStep } from "../chain-of-thought";
 
@@ -26,7 +27,7 @@ function formatDuration(createdAt?: string, finishedAt?: string | null): number 
   const start = Date.parse(createdAt);
   if (Number.isNaN(start)) return null;
 
-  const end = finishedAt ? Date.parse(finishedAt) : Date.now();
+  const end = finishedAt ? Date.parse(finishedAt) : serverNow();
   if (Number.isNaN(end)) return null;
 
   const seconds = Math.max((end - start) / 1000, 0);
@@ -71,7 +72,19 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
     setExpandState(nextExpanded ? ReasoningCardState.Expanded : ReasoningCardState.Collapsed);
   };
 
-  const duration = formatDuration(reasoning.createdAt, reasoning.finishedAt);
+  const [duration, setDuration] = React.useState<number | null>(
+    () => formatDuration(reasoning.createdAt, reasoning.finishedAt),
+  );
+
+  React.useEffect(() => {
+    setDuration(formatDuration(reasoning.createdAt, reasoning.finishedAt));
+    if (!loading) return;
+    const id = setInterval(() => {
+      setDuration(formatDuration(reasoning.createdAt, reasoning.finishedAt));
+    }, 100);
+    return () => clearInterval(id);
+  }, [loading, reasoning.createdAt, reasoning.finishedAt]);
+
   const preview = expandState === ReasoningCardState.Preview;
 
   return (

@@ -75,6 +75,7 @@ export interface ConversationSnapshotEventDto {
   type: "snapshot";
   seq: number;
   conversation: ConversationDto;
+  serverTime: number;
 }
 
 export interface ConversationNodeUpdateEventDto {
@@ -86,6 +87,7 @@ export interface ConversationNodeUpdateEventDto {
   node: MessageNodeDto;
   updateAt: number;
   isGenerating: boolean;
+  serverTime: number;
 }
 
 export interface ConversationErrorEventDto {
