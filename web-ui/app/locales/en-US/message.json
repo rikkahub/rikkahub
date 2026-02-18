@@ -2,7 +2,9 @@
   "message_parts": {
     "tool_step_hint": "[Tool step should render in chain-of-thought]",
     "collapse_thinking": "Collapse thinking",
-    "expand_thinking_steps": "Expand {{count}} thinking step(s)"
+    "expand_thinking_steps": "Expand {{count}} thinking step(s)",
+    "deep_thinking": "Deep Thinking",
+    "thinking_seconds": "Thought for {{seconds}} seconds"
   },
   "chat_message": {
     "copy_image": "Image",
