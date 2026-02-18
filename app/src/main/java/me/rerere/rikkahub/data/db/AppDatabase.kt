@@ -30,7 +30,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         ManagedFileEntity::class,
         FavoriteEntity::class
     ],
-    version = 15,
+    version = 16,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
