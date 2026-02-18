@@ -836,6 +836,7 @@
   <string name="backup_page_reminder_no_record">No backup time recorded</string>
   <string name="backup_page_reminder_last_time">Last backup: %1$s</string>
   <string name="backup_page_reminder_dismiss">Dismiss</string>
+  <string name="deep_thinking_seconds">Thought for %1$.1f seconds</string>
 </resources>
 
 

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Brain, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import Markdown from "~/components/markdown/markdown";
 import type { ReasoningPart as UIReasoningPart } from "~/types";
@@ -19,7 +20,7 @@ enum ReasoningCardState {
   Expanded = "expanded",
 }
 
-function formatDuration(createdAt?: string, finishedAt?: string | null): string | null {
+function formatDuration(createdAt?: string, finishedAt?: string | null): number | null {
   if (!createdAt) return null;
 
   const start = Date.parse(createdAt);
@@ -31,11 +32,12 @@ function formatDuration(createdAt?: string, finishedAt?: string | null): string 
   const seconds = Math.max((end - start) / 1000, 0);
   if (seconds <= 0) return null;
 
-  return `${seconds.toFixed(1)}s`;
+  return Math.round(seconds * 10) / 10;
 }
 
 export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepPartProps) {
   const loading = reasoning.finishedAt == null;
+  const { t } = useTranslation("message");
   const [expandState, setExpandState] = React.useState<ReasoningCardState>(
     ReasoningCardState.Collapsed,
   );
@@ -85,9 +87,17 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
           <Think className="h-4 w-4 text-primary" />
         )
       }
-      label={<span className="text-foreground text-xs font-medium">深度思考</span>}
+      label={
+        <span className="text-foreground text-xs font-medium">
+          {duration !== null
+            ? t("message_parts.thinking_seconds", { seconds: duration.toFixed(1) })
+            : t("message_parts.deep_thinking")}
+        </span>
+      }
       extra={
-        duration ? <span className="text-muted-foreground text-xs">{duration}</span> : undefined
+        loading && duration !== null
+          ? <span className="text-muted-foreground text-xs">{duration.toFixed(1)}s</span>
+          : undefined
       }
       contentVisible={expandState !== ReasoningCardState.Collapsed}
     >

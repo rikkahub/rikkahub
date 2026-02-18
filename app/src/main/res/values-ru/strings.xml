@@ -820,5 +820,6 @@
   <string name="backup_page_reminder_no_record">Время резервного копирования не зафиксировано</string>
   <string name="backup_page_reminder_last_time">Последнее резервное копирование: %1$s</string>
   <string name="backup_page_reminder_dismiss">Отклонить</string>
+  <string name="deep_thinking_seconds">Думал %1$.1f секунд</string>
 </resources>
 

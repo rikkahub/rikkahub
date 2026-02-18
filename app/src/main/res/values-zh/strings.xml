@@ -828,5 +828,6 @@
   <string name="backup_page_reminder_no_record">未记录备份时间</string>
   <string name="backup_page_reminder_last_time">上次备份：%1$s</string>
   <string name="backup_page_reminder_dismiss">忽略</string>
+  <string name="deep_thinking_seconds">思考了 %1$.1f 秒</string>
 </resources>
 
