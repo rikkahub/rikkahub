@@ -438,6 +438,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                         val reasoning = UIMessagePart.Reasoning(
                             reasoning = thinking,
                             createdAt = Clock.System.now(),
+                            finishedAt = null
                         )
                         if (signature != null) {
                             reasoning.metadata = buildJsonObject {
