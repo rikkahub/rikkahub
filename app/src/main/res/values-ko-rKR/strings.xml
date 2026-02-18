@@ -817,5 +817,15 @@
   <string name="chat_message_remove_favorite">즐겨찾기 제거</string>
   <string name="chat_page_menu_ai_translator">AI 번역기</string>
   <string name="chat_page_menu_image_generation">이미지 생성</string>
+  <string name="backup_page_reminder">알림</string>
+  <string name="backup_page_reminder_title">백업 알림</string>
+  <string name="backup_page_reminder_never_backed_up">백업한 적 없음</string>
+  <string name="backup_page_reminder_last_days">마지막 백업이 %1$d일 전이에요</string>
+  <string name="backup_page_reminder_enable">백업 알림 활성화</string>
+  <string name="backup_page_reminder_interval">알림 간격</string>
+  <string name="backup_page_reminder_interval_days">%1$d일</string>
+  <string name="backup_page_reminder_no_record">백업 기록 없음</string>
+  <string name="backup_page_reminder_last_time">마지막 백업: %1$s</string>
+  <string name="backup_page_reminder_dismiss">무시</string>
 </resources>
 

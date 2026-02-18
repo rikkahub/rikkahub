@@ -810,5 +810,15 @@
   <string name="chat_message_remove_favorite">Удалить из избранного</string>
   <string name="chat_page_menu_ai_translator">AI-переводчик</string>
   <string name="chat_page_menu_image_generation">Генерация изображений</string>
+  <string name="backup_page_reminder">Напоминание</string>
+  <string name="backup_page_reminder_title">Напоминание о резервном копировании</string>
+  <string name="backup_page_reminder_never_backed_up">Резервное копирование не выполнялось</string>
+  <string name="backup_page_reminder_last_days">Последняя резервная копия создана %1$d дн. назад</string>
+  <string name="backup_page_reminder_enable">Включить напоминание о резервном копировании</string>
+  <string name="backup_page_reminder_interval">Интервал напоминания</string>
+  <string name="backup_page_reminder_interval_days">%1$d дн.</string>
+  <string name="backup_page_reminder_no_record">Время резервного копирования не зафиксировано</string>
+  <string name="backup_page_reminder_last_time">Последнее резервное копирование: %1$s</string>
+  <string name="backup_page_reminder_dismiss">Отклонить</string>
 </resources>
 

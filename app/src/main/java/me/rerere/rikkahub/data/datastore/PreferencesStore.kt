@@ -121,6 +121,9 @@ class SettingsStore(
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
+
+        // 备份提醒
+        val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
     }
 
     private val dataStore = context.settingsStore
@@ -196,6 +199,9 @@ class SettingsStore(
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
                 webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
+                backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: BackupReminderConfig(),
             )
         }
         .map {
@@ -336,6 +342,7 @@ class SettingsStore(
             preferences[WEB_SERVER_PORT] = settings.webServerPort
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
             preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
+            preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
         }
     }
 
@@ -453,6 +460,7 @@ data class Settings(
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,
     val webServerAccessPassword: String = "",
+    val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
@@ -507,6 +515,13 @@ data class WebDavConfig(
         FILES,
     }
 }
+
+@Serializable
+data class BackupReminderConfig(
+    val enabled: Boolean = false,
+    val intervalDays: Int = 7,
+    val lastBackupTime: Long = 0L,
+)
 
 fun Settings.isNotConfigured() = providers.all { it.models.isEmpty() }
 
