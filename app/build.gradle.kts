@@ -160,10 +160,10 @@ dependencies {
     implementation(libs.androidx.navigation2)
 
     // Navigation 3
-//    implementation(libs.androidx.navigation3.runtime)
-//    implementation(libs.androidx.navigation3.ui)
-//    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
-//    implementation(libs.androidx.material3.adaptive.navigation3)
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation(libs.androidx.material3.adaptive.navigation3)
 
     // Firebase
     implementation(platform(libs.firebase.bom))
