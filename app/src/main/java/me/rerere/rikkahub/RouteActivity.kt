@@ -83,7 +83,6 @@ import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
-import me.rerere.rikkahub.ui.pages.menu.MenuPage
 import me.rerere.rikkahub.ui.pages.prompts.PromptPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
@@ -301,10 +300,6 @@ class RouteActivity : ComponentActivity() {
                         AssistantInjectionsPage(route.id)
                     }
 
-                    composable<Screen.Menu> {
-                        MenuPage()
-                    }
-
                     composable<Screen.Translator> {
                         TranslatorPage()
                     }
@@ -485,9 +480,6 @@ sealed interface Screen {
 
     @Serializable
     data class AssistantInjections(val id: String) : Screen
-
-    @Serializable
-    data object Menu : Screen
 
     @Serializable
     data object Translator : Screen
