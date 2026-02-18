@@ -827,5 +827,6 @@
   <string name="backup_page_reminder_no_record">백업 기록 없음</string>
   <string name="backup_page_reminder_last_time">마지막 백업: %1$s</string>
   <string name="backup_page_reminder_dismiss">무시</string>
+  <string name="deep_thinking_seconds">%1$.1f 초 동안 생각했습니다</string>
 </resources>
 

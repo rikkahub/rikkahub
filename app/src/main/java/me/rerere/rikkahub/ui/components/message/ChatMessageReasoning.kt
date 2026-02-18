@@ -129,7 +129,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
                 GeminiReasoningTitle(reasoning = reasoning)
             } else {
                 Text(
-                    text = stringResource(R.string.deep_thinking),
+                    text = stringResource(R.string.deep_thinking_seconds, duration.toDouble(DurationUnit.SECONDS).toFloat()),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.shimmer(isLoading = loading),
@@ -137,7 +137,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
             }
         },
         extra = {
-            if (duration > 0.seconds) {
+            if (loading && duration > 0.seconds) {
                 Text(
                     text = duration.toString(DurationUnit.SECONDS, 1),
                     style = MaterialTheme.typography.labelSmall,
