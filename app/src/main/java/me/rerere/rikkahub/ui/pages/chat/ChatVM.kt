@@ -40,7 +40,10 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.CompressType
 import me.rerere.rikkahub.service.ChatService
@@ -64,6 +67,7 @@ class ChatVM(
     private val chatService: ChatService,
     val updateChecker: UpdateChecker,
     private val filesManager: FilesManager,
+    private val favoriteRepository: FavoriteRepository,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
@@ -388,6 +392,36 @@ class ChatVM(
     fun updateConversation(newConversation: Conversation) {
         viewModelScope.launch {
             chatService.saveConversation(_conversationId, newConversation)
+        }
+    }
+
+    fun toggleMessageFavorite(node: MessageNode) {
+        viewModelScope.launch {
+            val currentlyFavorited = favoriteRepository.isNodeFavorited(_conversationId, node.id)
+            if (currentlyFavorited) {
+                favoriteRepository.removeNodeFavorite(_conversationId, node.id)
+            } else {
+                favoriteRepository.addNodeFavorite(
+                    NodeFavoriteTarget(
+                        conversationId = _conversationId,
+                        conversationTitle = conversation.value.title,
+                        nodeId = node.id,
+                        node = node
+                    )
+                )
+            }
+
+            chatService.updateConversationState(_conversationId) { currentConversation ->
+                currentConversation.copy(
+                    messageNodes = currentConversation.messageNodes.map { existingNode ->
+                        if (existingNode.id == node.id) {
+                            existingNode.copy(isFavorite = !currentlyFavorited)
+                        } else {
+                            existingNode
+                        }
+                    }
+                )
+            }
         }
     }
 

@@ -809,5 +809,13 @@
   <string name="setting_page_web_server_password_desc">Webインターフェースへのアクセスに必要なパスワード</string>
   <string name="setting_display_page_enable_latex_rendering_title">LaTeXレンダリングを有効にする</string>
   <string name="setting_display_page_enable_latex_rendering_desc">LaTeX構文を使用して数式や数値表現をレンダリングする</string>
+  <string name="favorite_page_title">お気に入り</string>
+  <string name="favorite_page_no_favorites">お気に入りはまだありません</string>
+  <string name="favorite_page_removed">お気に入りを削除しました</string>
+  <string name="favorite_page_untitled_conversation">無題の会話</string>
+  <string name="chat_message_add_favorite">お気に入りに追加</string>
+  <string name="chat_message_remove_favorite">お気に入りから削除</string>
+  <string name="chat_page_menu_ai_translator">AI翻訳</string>
+  <string name="chat_page_menu_image_generation">画像生成</string>
 </resources>
 

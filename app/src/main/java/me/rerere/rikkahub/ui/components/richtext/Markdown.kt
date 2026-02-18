@@ -247,23 +247,23 @@ object HeaderStyle {
     )
 
     val H2 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 20.sp
+        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 22.sp
     )
 
     val H3 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 18.sp
+        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 20.sp
     )
 
     val H4 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 16.sp
+        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 18.sp
     )
 
     val H5 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 14.sp
+        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 16.sp
     )
 
     val H6 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 12.sp
+        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 14.sp
     )
 }
 
@@ -303,6 +303,15 @@ private fun MarkdownNode(
                 MarkdownElementTypes.ATX_6 -> HeaderStyle.H6
                 else -> throw IllegalArgumentException("Unknown header type")
             }
+            val headingPadding = when (node.type) {
+                MarkdownElementTypes.ATX_1 -> 16.dp
+                MarkdownElementTypes.ATX_2 -> 14.dp
+                MarkdownElementTypes.ATX_3 -> 12.dp
+                MarkdownElementTypes.ATX_4 -> 10.dp
+                MarkdownElementTypes.ATX_5 -> 8.dp
+                MarkdownElementTypes.ATX_6 -> 6.dp
+                else -> 8.dp
+            }
             ProvideTextStyle(value = style) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     node.children.fastForEach { node ->
@@ -311,7 +320,7 @@ private fun MarkdownNode(
                                 node = node,
                                 content = content,
                                 onClickCitation = onClickCitation,
-                                modifier = modifier.padding(vertical = 16.dp),
+                                modifier = modifier.padding(vertical = headingPadding),
                                 trim = true,
                             )
                         }

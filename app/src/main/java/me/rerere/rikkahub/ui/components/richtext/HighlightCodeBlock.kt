@@ -49,7 +49,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavHostController
+import me.rerere.rikkahub.ui.context.Navigator
 import com.composables.icons.lucide.ChevronsDown
 import com.composables.icons.lucide.ChevronsUp
 import com.composables.icons.lucide.Lucide
@@ -330,7 +330,7 @@ private fun HighlightCodeActions(
     clipboardManager: Clipboard,
     code: String,
     createDocumentLauncher: ManagedActivityResultLauncher<String, Uri?>,
-    navController: NavHostController,
+    navController: Navigator,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),

@@ -809,5 +809,13 @@
   <string name="setting_page_web_server_password_desc">웹 인터페이스 접근에 필요한 비밀번호</string>
   <string name="setting_display_page_enable_latex_rendering_title">LaTeX 렌더링 활성화</string>
   <string name="setting_display_page_enable_latex_rendering_desc">LaTeX 구문을 사용해 수식과 공식을 렌더링합니다</string>
+  <string name="favorite_page_title">즐겨찾기</string>
+  <string name="favorite_page_no_favorites">즐겨찾기 없음</string>
+  <string name="favorite_page_removed">즐겨찾기에서 제거됨</string>
+  <string name="favorite_page_untitled_conversation">제목 없는 대화</string>
+  <string name="chat_message_add_favorite">즐겨찌기 추가</string>
+  <string name="chat_message_remove_favorite">즐겨찾기 제거</string>
+  <string name="chat_page_menu_ai_translator">AI 번역기</string>
+  <string name="chat_page_menu_image_generation">이미지 생성</string>
 </resources>
 

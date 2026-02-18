@@ -81,6 +81,10 @@ val dataSourceModule = module {
         get<AppDatabase>().managedFileDao()
     }
 
+    single {
+        get<AppDatabase>().favoriteDao()
+    }
+
     single { McpManager(settingsStore = get(), appScope = get()) }
 
     single {

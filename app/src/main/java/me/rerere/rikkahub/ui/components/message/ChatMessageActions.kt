@@ -42,6 +42,7 @@ import com.composables.icons.lucide.CircleStop
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Ellipsis
 import com.composables.icons.lucide.GitFork
+import com.composables.icons.lucide.Heart
 import com.composables.icons.lucide.Languages
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
@@ -168,7 +169,7 @@ fun ColumnScope.ChatMessageActionButtons(
 
         Icon(
             imageVector = Lucide.Ellipsis,
-            contentDescription = "More Options",
+            contentDescription = stringResource(R.string.more_options),
             modifier = Modifier
                 .clip(CircleShape)
                 .clickable(
@@ -239,6 +240,8 @@ fun ChatMessageActionsSheet(
     onShare: () -> Unit,
     onFork: () -> Unit,
     onSelectAndCopy: () -> Unit,
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
     onWebViewPreview: () -> Unit,
     onDismissRequest: () -> Unit
 ) {
@@ -390,6 +393,37 @@ fun ChatMessageActionsSheet(
                         text = stringResource(R.string.create_fork),
                         style = MaterialTheme.typography.titleMedium,
                     )
+                }
+            }
+
+            if (onToggleFavorite != null) {
+                Card(
+                    onClick = {
+                        onDismissRequest()
+                        onToggleFavorite()
+                    },
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Lucide.Heart,
+                            contentDescription = null,
+                            modifier = Modifier.padding(4.dp)
+                        )
+                        Text(
+                            text = stringResource(
+                                if (isFavorite) R.string.chat_message_remove_favorite
+                                else R.string.chat_message_add_favorite
+                            ),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
                 }
             }
 

@@ -38,7 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavHostController
+import me.rerere.rikkahub.ui.context.Navigator
 import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Boxes
@@ -143,12 +143,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                             selectedOption = colorMode,
                             onOptionSelected = {
                                 colorMode = it
-                                navController.navigate(Screen.Setting) {
-                                    launchSingleTop = true
-                                    popUpTo(Screen.Setting) {
-                                        inclusive = true
-                                    }
-                                }
+                                navController.clearAndNavigate(Screen.Setting)
                             },
                             optionToString = {
                                 when (it) {
@@ -427,7 +422,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
 }
 
 @Composable
-private fun ProviderConfigWarningCard(navController: NavHostController) {
+private fun ProviderConfigWarningCard(navController: Navigator) {
     Card(
         modifier = Modifier.padding(8.dp),
         colors = CardDefaults.cardColors(
@@ -468,7 +463,7 @@ private fun ProviderConfigWarningCard(navController: NavHostController) {
 
 @Composable
 fun SettingItem(
-    navController: NavHostController,
+    navController: Navigator,
     title: @Composable () -> Unit,
     description: @Composable () -> Unit,
     icon: @Composable () -> Unit,

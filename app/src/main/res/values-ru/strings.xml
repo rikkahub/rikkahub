@@ -802,5 +802,13 @@
   <string name="setting_page_web_server_password_desc">Пароль для доступа к веб-интерфейсу</string>
   <string name="setting_display_page_enable_latex_rendering_title">Включить рендеринг LaTeX</string>
   <string name="setting_display_page_enable_latex_rendering_desc">Отображать математические выражения и формулы с использованием синтаксиса LaTeX</string>
+  <string name="favorite_page_title">Избранное</string>
+  <string name="favorite_page_no_favorites">Пока нет избранного</string>
+  <string name="favorite_page_removed">Избранное удалено</string>
+  <string name="favorite_page_untitled_conversation">Безымянный разговор</string>
+  <string name="chat_message_add_favorite">Добавить в избранное</string>
+  <string name="chat_message_remove_favorite">Удалить из избранного</string>
+  <string name="chat_page_menu_ai_translator">AI-переводчик</string>
+  <string name="chat_page_menu_image_generation">Генерация изображений</string>
 </resources>
 

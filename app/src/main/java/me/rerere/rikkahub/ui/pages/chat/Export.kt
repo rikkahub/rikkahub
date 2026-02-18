@@ -50,7 +50,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
-import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.mutableStateListOf
+import androidx.navigation3.runtime.NavKey
+import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.context.Navigator
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
@@ -451,12 +454,13 @@ private fun ExportedChatImage(
     messages: List<UIMessage>,
     options: ImageExportOptions = ImageExportOptions()
 ) {
-    val navBackStack = rememberNavController()
+    val navBackStack = remember { mutableStateListOf<NavKey>() }
+    val navigator = Navigator(navBackStack)
     val highlighter = koinInject<Highlighter>()
     val toasterState = rememberToasterState()
     RikkahubTheme {
         CompositionLocalProvider(
-            LocalNavController provides navBackStack,
+            LocalNavController provides navigator,
             LocalHighlighter provides highlighter,
             LocalToaster provides toasterState
         ) {

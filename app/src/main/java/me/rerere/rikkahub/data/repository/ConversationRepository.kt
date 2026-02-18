@@ -15,6 +15,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.migrateToolNodes
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
+import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
@@ -29,6 +30,7 @@ import kotlin.uuid.Uuid
 class ConversationRepository(
     private val conversationDAO: ConversationDAO,
     private val messageNodeDAO: MessageNodeDAO,
+    private val favoriteDAO: FavoriteDAO,
     private val database: AppDatabase,
     private val filesManager: FilesManager,
     private val context: Context,
@@ -310,6 +312,11 @@ class ConversationRepository(
     }
 
     private suspend fun loadMessageNodes(conversationId: String): List<MessageNode> {
+        val favoriteNodeIds = favoriteDAO
+            .getFavoriteNodeIdsOfConversation(conversationId)
+            .mapNotNull { runCatching { Uuid.parse(it) }.getOrNull() }
+            .toSet()
+
         return database.withTransaction {
             val nodes = mutableListOf<MessageNode>()
             var offset = 0
@@ -325,11 +332,13 @@ class ConversationRepository(
                 if (page.isEmpty()) break
                 page.forEach { entity ->
                     val messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages)
+                    val nodeId = Uuid.parse(entity.id)
                     nodes.add(
                         MessageNode(
-                            id = Uuid.parse(entity.id),
+                            id = nodeId,
                             messages = messages,
-                            selectIndex = entity.selectIndex
+                            selectIndex = entity.selectIndex,
+                            isFavorite = favoriteNodeIds.contains(nodeId)
                         )
                     )
                 }

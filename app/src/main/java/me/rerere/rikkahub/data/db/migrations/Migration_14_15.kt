@@ -48,6 +48,24 @@ private fun recreateManagedFilesTable(db: SupportSQLiteDatabase) {
 
 val Migration_14_15 = object : Migration(14, 15) {
     override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS favorites (
+                id TEXT NOT NULL PRIMARY KEY,
+                type TEXT NOT NULL,
+                ref_key TEXT NOT NULL,
+                ref_json TEXT NOT NULL,
+                snapshot_json TEXT NOT NULL,
+                meta_json TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_favorites_ref_key ON favorites(ref_key)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_type ON favorites(type)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_created_at ON favorites(created_at)")
+
         runCatching {
             val cursor = db.query("PRAGMA table_info(conversationentity)")
             var hasWorkflowState = false
