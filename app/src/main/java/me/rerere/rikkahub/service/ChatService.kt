@@ -537,11 +537,8 @@ class ChatService(
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
 
-            // title/suggestion 在当前 job 内执行，由 session.setJob 管理生命周期
-            coroutineScope {
-                launch { generateTitle(conversationId, finalConversation) }
-                launch { generateSuggestion(conversationId, finalConversation) }
-            }
+            appScope.launch { generateTitle(conversationId, finalConversation) }
+            appScope.launch { generateSuggestion(conversationId, finalConversation) }
         }
     }
 
