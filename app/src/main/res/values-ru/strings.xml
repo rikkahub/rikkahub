@@ -148,7 +148,7 @@
   <string name="backup_page_files">Файлы</string>
   <string name="backup_page_import_chatbox_desc">Импорт данных из ChatBox</string>
   <string name="backup_page_import_desc">Импортировать локальный файл резервной копии</string>
-  <string name="backup_page_import_export">Импорт и экспорт</string>
+  <string name="backup_page_import_export">Локальный</string>
   <string name="backup_page_import_from_chatbox">Импорт из ChatBox</string>
   <string name="backup_page_import_from_other_app">Импорт из другого приложения</string>
   <string name="backup_page_importing">Импорт…</string>

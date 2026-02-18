@@ -148,7 +148,7 @@
   <string name="backup_page_files">檔案</string>
   <string name="backup_page_import_chatbox_desc">導入ChatBox數據</string>
   <string name="backup_page_import_desc">導入本地備份檔案</string>
-  <string name="backup_page_import_export">導入和導出</string>
+  <string name="backup_page_import_export">本地</string>
   <string name="backup_page_import_from_chatbox">從ChatBox導入</string>
   <string name="backup_page_import_from_other_app">從其他APP導入</string>
   <string name="backup_page_importing">正在恢復...</string>

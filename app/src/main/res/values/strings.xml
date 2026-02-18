@@ -152,7 +152,7 @@
   <string name="backup_page_files">Files</string>
   <string name="backup_page_import_chatbox_desc">Import data from ChatBox</string>
   <string name="backup_page_import_desc">Import local backup file</string>
-  <string name="backup_page_import_export">Import and Export</string>
+  <string name="backup_page_import_export">Local</string>
   <string name="backup_page_import_from_chatbox">Import from ChatBox</string>
   <string name="backup_page_import_from_other_app">Import from other app</string>
   <string name="backup_page_importing">Importing...</string>

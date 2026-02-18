@@ -148,7 +148,7 @@
   <string name="backup_page_files">ファイル</string>
   <string name="backup_page_import_chatbox_desc">ChatBoxデータをインポート</string>
   <string name="backup_page_import_desc">ローカルバックアップファイルをインポート</string>
-  <string name="backup_page_import_export">インポートとエクスポート</string>
+  <string name="backup_page_import_export">ローカル</string>
   <string name="backup_page_import_from_chatbox">ChatBoxからインポート</string>
   <string name="backup_page_import_from_other_app">他のアプリからインポート</string>
   <string name="backup_page_importing">インポート中...</string>

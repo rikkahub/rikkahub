@@ -148,7 +148,7 @@
   <string name="backup_page_files">파일</string>
   <string name="backup_page_import_chatbox_desc">ChatBox 데이터 가져오기</string>
   <string name="backup_page_import_desc">로컬 백업 파일 가져오기</string>
-  <string name="backup_page_import_export">가져오기 및 내보내기</string>
+  <string name="backup_page_import_export">로컬</string>
   <string name="backup_page_import_from_chatbox">ChatBox에서 가져오기</string>
   <string name="backup_page_import_from_other_app">다른 앱에서 가져오기</string>
   <string name="backup_page_importing">가져오는 중...</string>

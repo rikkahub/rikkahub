@@ -255,7 +255,7 @@ private fun AppSearchSettings(
                 onClick = {
                     onUpdateSearchService(index)
                 },
-                shape = RoundedCornerShape(50),
+                shape = MaterialTheme.shapes.large
             ) {
                 Row(
                     modifier = Modifier
@@ -266,7 +266,7 @@ private fun AppSearchSettings(
                 ) {
                     AutoAIIcon(
                         name = SearchServiceOptions.TYPES[service::class] ?: "Search",
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                     Column(
                         modifier = Modifier.weight(1f),
