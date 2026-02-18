@@ -127,6 +127,8 @@ data class MessageNode(
     val id: Uuid = Uuid.random(),
     val messages: List<UIMessage>,
     val selectIndex: Int = 0,
+    @Transient
+    val isFavorite: Boolean = false,
 ) {
     val currentMessage get() = if (messages.isEmpty() || selectIndex !in messages.indices) {
         throw IllegalStateException("MessageNode has no valid current message: messages.size=${messages.size}, selectIndex=$selectIndex")

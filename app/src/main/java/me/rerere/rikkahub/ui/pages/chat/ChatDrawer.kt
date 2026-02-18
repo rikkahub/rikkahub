@@ -42,6 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.composables.icons.lucide.Drama
+import com.composables.icons.lucide.Heart
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Settings
@@ -262,6 +263,18 @@ fun ChatDrawerContent(
                     },
                     onClick = {
                         navController.navigate(Screen.Menu)
+                    },
+                )
+
+                DrawerAction(
+                    icon = {
+                        Icon(Lucide.Heart, "Favorites")
+                    },
+                    label = {
+                        Text("Favorites")
+                    },
+                    onClick = {
+                        navController.navigate(Screen.Favorite)
                     },
                 )
 

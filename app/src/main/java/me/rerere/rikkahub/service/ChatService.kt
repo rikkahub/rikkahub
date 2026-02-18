@@ -901,6 +901,11 @@ class ChatService(
         session.state.value = conversation
     }
 
+    fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
+        val current = getConversationFlow(conversationId).value
+        updateConversation(conversationId, update(current))
+    }
+
     private fun checkFilesDelete(newConversation: Conversation, oldConversation: Conversation) {
         val newFiles = newConversation.files
         val oldFiles = oldConversation.files

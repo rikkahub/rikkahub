@@ -79,6 +79,7 @@ import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
+import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
@@ -251,6 +252,10 @@ class RouteActivity : ComponentActivity() {
                     composable<Screen.History> {
                         HistoryPage()
                     }
+
+                        composable<Screen.Favorite> {
+                            FavoritePage()
+                        }
 
                     composableWrapper<Screen.Assistant> {
                         AssistantPage()
@@ -450,6 +455,9 @@ sealed interface Screen {
 
     @Serializable
     data object History : Screen
+
+    @Serializable
+    data object Favorite : Screen
 
     @Serializable
     data object Assistant : Screen
