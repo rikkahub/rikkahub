@@ -1,102 +1,76 @@
-<div align="center">
-  <img src="docs/icon.png" alt="App Icon" width="100" />
-  <h1>RikkaHub</h1>
+# RikkaHub Mod (Master)
 
-  [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rikkahub/rikkahub)
-  [![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
+这是基于 RikkaHub 上游持续追更的深度魔改版本。  
+`master` 是本仓库唯一对外主线（默认展示、日常开发、发版都在这条分支）。
 
-A native Android LLM chat client that supports switching between different providers for
-conversations 🤖💬
+## 项目定位
 
-Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqxe5c4)
+- 仍然是原生 Android LLM 客户端（Jetpack Compose + Kotlin）
+- 保留上游 2.x 迭代能力
+- 在此基础上加入面向进阶用户的本地增强能力（容器、工作流、沙箱、自动化等）
 
-[简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
-</div>
+## 与上游版本的主要差异
 
-<div align="center">
-  <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
-  <img src="docs/img/models.png" alt="Models Picker" width="150" />
-  <img src="docs/img/providers.png" alt="Providers" width="150" />
-  <img src="docs/img/assistants.png" alt="Assistants" width="150" />
-</div>
+本分支不是“轻度换皮”，而是深度改造分支，核心差异如下：
 
-## 🚀 Download
+- 包名与配置策略已调整，便于与上游版本共存安装
+- Firebase 相关路径已禁用
+- 新增容器运行时能力（PRoot 方向）
+- 新增 Chaquopy 工具链能力
+- 新增沙箱文件管理能力（含聊天快捷入口）
+- 新增工作流能力（工具栏开关、侧边栏入口、阶段切换）
+- 新增模型提供商 API Key 轮询能力
+- 增强搜索能力（含本地/内置搜索方向整合）
 
-🔗 [Download from Website](https://rikka-ai.com/download)
+## 当前版本特性（Master）
 
-🔗 [Download from Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+- 多模型/多提供商聊天
+- MCP 工具接入
+- 多模态输入（图片/文档等）
+- 消息分支、上下文压缩、清空上下文
+- 工作流（PLAN / EXECUTE / REVIEW）
+- 容器与沙箱协同
+- 本地工具体系（时间、剪贴板、文件、Chaquopy、容器、TODO、SubAgent）
+- Web 服务与移动端本地化增强
 
-## 💖 Sponsors
+## 构建与运行
 
-<div align="center">
-  <img src="app/src/main/assets/icons/aihubmix-color.svg" alt="Aihubmix" width="50" />
-  <p style="font-size: 16px; font-weight: bold;">Aihubmix</p>
-  <p style="font-size: 14px;">Thanks to <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> for their financial support. We recommend using aihubmix as a one-stop shop for mainstream models worldwide. (OpenAI, Claude, Google Gemini, DeepSeek, Qwen, and hundreds more).</p>
-</div>
-<div align="center">
-  <img src="app/src/main/assets/icons/siliconflow.svg" alt="SiliconFlow" width="50" />
-  <p style="font-size: 16px; font-weight: bold;">SiliconFlow</p>
-  <p style="font-size: 14px;">Thanks to <a href="https://siliconflow.cn/">siliconflow.cn</a> providing free models in cooperation with us.</p>
-</div>
+### 环境建议
 
+- Android Studio（最新版稳定版）
+- JDK 17
+- Android SDK / NDK（按 `app/build.gradle.kts` 要求）
 
-## ✨ Features
+### 常用命令
 
-- 🎨 Material You Design and 🌙 Dark mode
-- 🔄 Multiple AI Provider Support: custom API / URL / models (all OpenAI, Google, Anthropic compatible api)
-- 🖼️ Multimodal input support (Image, Text Documentation, PDF, Docx)
-- 🛠️ MCP support
-- 📝 Markdown Rendering (with code highlighting, Latex formulas, tables, Mermaid)
-- 🪾 Message Branching
-- 🔍 Search capabilities (Exa, Tavily, Zhipu, LinkUp, Brave, Perplexity, etc.)
-- 🧩 Prompt variables (model name, time, etc.)
-- 🤳 QR code export and import for providers
-- 🤖 Agent customization
-- 🧠 ChatGPT-like memory feature
-- 📝 AI Translation
-- 🌐 Custom HTTP request headers and request bodies
-- 💌 Silly Tavern character card import
+```bash
+# Debug 构建（跳过测试）
+./gradlew :app:assembleDebug -x test
 
-## ✨ Contributing
+# Release 构建
+./gradlew :app:assembleRelease
+```
 
-This project is developed using [Android Studio](https://developer.android.com/studio). PRs are
-welcome!
+生成产物通常位于：
 
-Technology stack documentation:
+- `app/build/outputs/apk/debug/`
+- `app/build/outputs/apk/release/`
 
-- [Kotlin](https://kotlinlang.org/) (Development language)
-- [Koin](https://insert-koin.io/) (Dependency Injection)
-- [Jetpack Compose](https://developer.android.com/jetpack/compose) (UI framework)
-- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore) (Preference data
-  storage)
-- [Room](https://developer.android.com/training/data-storage/room) (Database)
-- [Coil](https://coil-kt.github.io/coil/) (Image loading)
-- [Material You](https://m3.material.io/) (UI design)
-- [Navigation Compose](https://developer.android.com/develop/ui/compose/navigation) (Navigation)
-- [Okhttp](https://square.github.io/okhttp/) (HTTP client)
-- [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (JSON serialization)
-- [compose-icons/lucide](https://composeicons.com/icon-libraries/lucide) (Icon library)
+## 分支约定（本仓库）
 
-> [!TIP]
-> You need a `google-services.json` file at `app` folder to build the app.
+- `master`：唯一对外主线（你现在看到的就是它）
+- `main`：上游干净镜像分支（只同步 upstream，不做魔改）
+- `mod-1.9`：历史冻结基线（仅回溯）
+- `port-*`：每次追更时的临时施工分支
 
-> [!IMPORTANT]  
-> The following PRs will be rejected: 
-> 1. Translation related changes, such as adding new languages or updating existing translations
-> 2. Adding new features, this project is opinionated and will not accept pull requests for new features
-> 3. Large-scale refactoring and changes generated by AI
+追更流程：`main` 同步上游 -> 新建 `port-*` -> 合入 `master`。
 
-## 💰 Donate
+## 说明
 
-* [Patreon](https://patreon.com/rikkahub)
-* [爱发电](https://afdian.com/a/reovo)
+- 本仓库为个人维护的改造线，不等同于上游官方发布。
+- 如需对比上游变更，请直接查看提交记录与分支差异。
 
-## ⭐ Star History
+## 致谢
 
-If you like this project, please give it a star ⭐
-
-[![Star History Chart](https://api.star-history.com/svg?repos=re-ovo/rikkahub&type=Date)](https://star-history.com/#re-ovo/rikkahub&Date)
-
-## 📄 License
-
-[License](LICENSE)
+- 感谢 RikkaHub 上游作者与社区持续迭代。
+- 本分支所有“深度魔改”能力均建立在上游优秀基础之上。
