@@ -279,7 +279,6 @@ private fun ChatListNormal(
                     ) {
                         ChatMessage(
                             node = node,
-                            conversation = conversation,
                             model = node.currentMessage.modelId?.let { settings.findModelById(it) },
                             assistant = settings.getAssistantById(conversation.assistantId),
                             loading = loading && index == conversation.messageNodes.lastIndex,
@@ -310,7 +309,8 @@ private fun ChatListNormal(
                             },
                             onTranslate = onTranslate,
                             onClearTranslation = onClearTranslation,
-                            onToolApproval = onToolApproval
+                            onToolApproval = onToolApproval,
+                            lastMessage = index == conversation.messageNodes.lastIndex,
                         )
                     }
                     if (index == conversation.truncateIndex - 1) {

@@ -30,15 +30,12 @@ import me.rerere.rikkahub.utils.toLocalString
 @Composable
 fun ChatMessageUserAvatar(
     message: UIMessage,
-    messages: List<UIMessage>,
-    messageIndex: Int,
     avatar: Avatar,
     nickname: String,
     modifier: Modifier = Modifier,
 ) {
     val settings = LocalSettings.current
-    val prevRole = if (messageIndex > 0) messages[messageIndex - 1].role else null
-    if (message.role == MessageRole.USER && prevRole != MessageRole.USER && !message.parts.isEmptyUIMessage() && settings.displaySetting.showUserAvatar) {
+    if (message.role == MessageRole.USER && !message.parts.isEmptyUIMessage() && settings.displaySetting.showUserAvatar) {
         Row(
             modifier = modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -74,8 +71,6 @@ fun ChatMessageUserAvatar(
 @Composable
 fun ChatMessageAssistantAvatar(
     message: UIMessage,
-    messages: List<UIMessage>,
-    messageIndex: Int,
     loading: Boolean,
     model: Model?,
     assistant: Assistant?,
@@ -83,8 +78,7 @@ fun ChatMessageAssistantAvatar(
 ) {
     val settings = LocalSettings.current
     val showIcon = settings.displaySetting.showModelIcon
-    val prevRole = if (messageIndex > 0) messages[messageIndex - 1].role else null
-    if (message.role == MessageRole.ASSISTANT && prevRole != message.role && model != null) {
+    if (message.role == MessageRole.ASSISTANT && model != null) {
         Row(
             modifier = modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

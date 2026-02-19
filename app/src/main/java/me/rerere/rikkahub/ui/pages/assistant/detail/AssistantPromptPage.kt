@@ -306,7 +306,7 @@ private fun AssistantPromptContent(
                             onShare = {},
                             onDelete = {},
                             onUpdate = {},
-                            conversation = Conversation.ofId(Uuid.random())
+                            lastMessage = false,
                         )
                     }
                 }

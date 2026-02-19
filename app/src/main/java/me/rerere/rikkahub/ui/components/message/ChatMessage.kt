@@ -99,11 +99,11 @@ import kotlin.time.Duration.Companion.milliseconds
 @Composable
 fun ChatMessage(
     node: MessageNode,
-    conversation: Conversation,
     modifier: Modifier = Modifier,
     loading: Boolean = false,
     model: Model? = null,
     assistant: Assistant? = null,
+    lastMessage: Boolean = false,
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
@@ -117,9 +117,6 @@ fun ChatMessage(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
-    val chatMessages = conversation.currentMessages
-    val messageIndex = chatMessages.indexOf(message)
-    val lastMessage = messageIndex == chatMessages.lastIndex
     val settings = LocalSettings.current.displaySetting
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
@@ -144,8 +141,6 @@ fun ChatMessage(
             ) {
                 ChatMessageAssistantAvatar(
                     message = message,
-                    messages = chatMessages,
-                    messageIndex = messageIndex,
                     model = model,
                     assistant = assistant,
                     loading = loading,
@@ -153,8 +148,6 @@ fun ChatMessage(
                 )
                 ChatMessageUserAvatar(
                     message = message,
-                    messages = chatMessages,
-                    messageIndex = messageIndex,
                     avatar = settings.userAvatar,
                     nickname = settings.userNickname,
                     modifier = Modifier.weight(1f)
@@ -167,8 +160,6 @@ fun ChatMessage(
                 role = message.role,
                 parts = message.parts,
                 annotations = message.annotations,
-                messages = chatMessages,
-                messageIndex = messageIndex,
                 loading = loading,
                 model = model,
                 onToolApproval = onToolApproval,
@@ -265,8 +256,6 @@ private fun MessagePartsBlock(
     model: Model?,
     parts: List<UIMessagePart>,
     annotations: List<UIMessageAnnotation>,
-    messages: List<UIMessage>,
-    messageIndex: Int,
     loading: Boolean,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
 ) {
@@ -274,20 +263,18 @@ private fun MessagePartsBlock(
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
 
     fun handleClickCitation(citationId: String) {
-        messages.forEach { message ->
-            message.parts.forEach { part ->
-                if (part is UIMessagePart.Tool && part.toolName == "search_web" && part.isExecuted) {
-                    val outputText = part.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-                    val items =
-                        runCatching { JsonInstant.parseToJsonElement(outputText).jsonObject["items"]?.jsonArray }.getOrNull()
-                            ?: return@forEach
-                    items.forEach { item ->
-                        val id = item.jsonObject["id"]?.jsonPrimitive?.content ?: return@forEach
-                        val url = item.jsonObject["url"]?.jsonPrimitive?.content ?: return@forEach
-                        if (citationId == id) {
-                            context.openUrl(url)
-                            return
-                        }
+        parts.forEach { part ->
+            if (part is UIMessagePart.Tool && part.toolName == "search_web" && part.isExecuted) {
+                val outputText = part.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+                val items =
+                    runCatching { JsonInstant.parseToJsonElement(outputText).jsonObject["items"]?.jsonArray }.getOrNull()
+                        ?: return@forEach
+                items.forEach { item ->
+                    val id = item.jsonObject["id"]?.jsonPrimitive?.content ?: return@forEach
+                    val url = item.jsonObject["url"]?.jsonPrimitive?.content ?: return@forEach
+                    if (citationId == id) {
+                        context.openUrl(url)
+                        return
                     }
                 }
             }
