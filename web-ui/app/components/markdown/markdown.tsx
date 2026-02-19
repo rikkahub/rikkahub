@@ -113,6 +113,7 @@ export default function Markdown({
         plugins={{ cjk: cjk }}
         animated={{ animation: "blurIn", sep: 'word', duration: 300 }}
         isAnimating={isAnimating}
+        controls={{code: false, mermaid: false}}
         components={{
           pre: ({ children }) => <>{children}</>,
           code: ({ className, children, ...props }) => {
