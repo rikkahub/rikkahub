@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -96,6 +97,27 @@ fun ColumnScope.ConversationList(
     onMoveToAssistant: (Conversation) -> Unit = {}
 ) {
     val navController = LocalNavController.current
+    val listState = rememberLazyListState()
+
+    // 当选中项 ID 改变时，触发滚动
+    LaunchedEffect(current.id, conversations.itemCount) {
+        if (conversations.itemCount > 0) {
+            // 1. 在当前已加载的快照中寻找对应对话的索引
+            val index = (0 until conversations.itemCount).find { i ->
+                val item = conversations.peek(i) // 使用 peek 不会触发 Paging 的预加载
+                item is ConversationListItem.Item && item.conversation.id == current.id
+            }
+
+            if (index != null) {
+                val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == index }
+
+                if (!isVisible) {
+                    // 滚动到该位置
+                    listState.scrollToItem(index = index, scrollOffset = -100)
+                }
+            }
+        }
+    }
 
     // fix: compose很奇怪，会自动聚焦到第一个文本框
     // 在这里放一个空的Box，防止自动聚焦到第一个文本框弹出IME
@@ -150,6 +172,7 @@ fun ColumnScope.ConversationList(
     }
 
     LazyColumn(
+        state = listState,
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
