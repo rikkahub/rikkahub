@@ -111,8 +111,7 @@ export default function Markdown({
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex, rehypeRaw]}
         plugins={{ cjk: cjk }}
-        animated={{ animation: "blurIn" }}
-        caret="circle"
+        animated={{ animation: "blurIn", sep: 'word', duration: 300 }}
         isAnimating={isAnimating}
         components={{
           pre: ({ children }) => <>{children}</>,
