@@ -516,7 +516,7 @@ function LanguageSwitcher() {
   );
 }
 
-export function ConversationSidebar({
+export const ConversationSidebar = React.memo(({
   conversations,
   activeId,
   loading,
@@ -537,7 +537,7 @@ export function ConversationSidebar({
   onDelete,
   onCreateConversation,
   webAuthEnabled = false,
-}: ConversationSidebarProps) {
+}: ConversationSidebarProps) => {
   const { t, i18n } = useTranslation();
   const { theme, setTheme, colorTheme, setColorTheme, customThemeCss, setCustomThemeCss } =
     useTheme();
@@ -980,4 +980,4 @@ export function ConversationSidebar({
       </SidebarFooter>
     </Sidebar>
   );
-}
+});

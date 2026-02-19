@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { useMutation } from "@tanstack/react-query";
 import { LoaderCircle, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -47,9 +48,6 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
   const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
 
-  const [updating, setUpdating] = React.useState(false);
-  const [updatingServerId, setUpdatingServerId] = React.useState<string | null>(null);
-
   const canUse = Boolean(settings && currentAssistant && !disabled);
   const { error, setError, popoverProps } = usePickerPopover(canUse);
 
@@ -84,37 +82,33 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
     }
   }, [canUse]);
 
-  const updateSelectedServers = React.useCallback(
-    async (nextServerIds: string[]) => {
+  const updateMcpMutation = useMutation({
+    mutationFn: ({
+      nextServerIds,
+      assistantId,
+    }: {
+      nextServerIds: string[];
+      assistantId: string;
+      serverId: string;
+    }) =>
+      api.post<{ status: string }>("settings/assistant/mcp", {
+        assistantId,
+        mcpServerIds: nextServerIds,
+      }),
+    onError: (updateError) => {
+      setError(extractErrorMessage(updateError, t("mcp.update_failed")));
+    },
+    onSuccess: () => {
+      setError(null);
+    },
+  });
+
+  const handleToggleServer = React.useCallback(
+    (serverId: string, enabled: boolean) => {
       if (!canUse || !currentAssistant) {
         return;
       }
 
-      setUpdating(true);
-      setError(null);
-
-      try {
-        await api.post<{ status: string }>("settings/assistant/mcp", {
-          assistantId: currentAssistant.id,
-          mcpServerIds: nextServerIds,
-        });
-      } catch (updateError) {
-        setError(extractErrorMessage(updateError, t("mcp.update_failed")));
-      } finally {
-        setUpdating(false);
-        setUpdatingServerId(null);
-      }
-    },
-    [canUse, currentAssistant, t],
-  );
-
-  const handleToggleServer = React.useCallback(
-    async (serverId: string, enabled: boolean) => {
-      if (!canUse) {
-        return;
-      }
-
-      setUpdatingServerId(serverId);
       const nextServerIds = new Set(
         selectedServerIds.filter((selectedServerId) => knownServerIdSet.has(selectedServerId)),
       );
@@ -125,9 +119,13 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
         nextServerIds.delete(serverId);
       }
 
-      await updateSelectedServers(Array.from(nextServerIds));
+      updateMcpMutation.mutate({
+        nextServerIds: Array.from(nextServerIds),
+        assistantId: currentAssistant.id,
+        serverId,
+      });
     },
-    [canUse, knownServerIdSet, selectedServerIds, updateSelectedServers],
+    [canUse, currentAssistant, knownServerIdSet, selectedServerIds, updateMcpMutation],
   );
 
   return (
@@ -137,14 +135,14 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
           type="button"
           variant="ghost"
           size="sm"
-          disabled={!canUse || updating}
+          disabled={!canUse || updateMcpMutation.isPending}
           className={cn(
             "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
             selectedEnabledCount > 0 && "text-primary hover:bg-primary/10",
             className,
           )}
         >
-          {updating ? (
+          {updateMcpMutation.isPending ? (
             <LoaderCircle className="size-3.5 animate-spin" />
           ) : (
             <Terminal className="size-3.5" />
@@ -173,7 +171,9 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
               <div className="space-y-1">
                 {enabledServers.map((server) => {
                   const selected = selectedServerIdSet.has(server.id);
-                  const switching = updatingServerId === server.id;
+                  const switching =
+                    updateMcpMutation.isPending &&
+                    updateMcpMutation.variables?.serverId === server.id;
                   const tools = getEnabledToolsCount(server.commonOptions?.tools);
 
                   return (
@@ -207,9 +207,9 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
                       <Switch
                         size="sm"
                         checked={selected}
-                        disabled={disabled || updating}
+                        disabled={disabled || updateMcpMutation.isPending}
                         onCheckedChange={(nextChecked) => {
-                          void handleToggleServer(server.id, nextChecked);
+                          handleToggleServer(server.id, nextChecked);
                         }}
                       />
                     </div>

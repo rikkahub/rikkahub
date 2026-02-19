@@ -251,10 +251,6 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     var previewMode by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(loadingJob) {
-        inputState.loading = loadingJob != null
-    }
-
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
     val assistant = setting.assistants.find { it.id == conversation.assistantId }
         ?: setting.getCurrentAssistant()
@@ -294,6 +290,7 @@ private fun ChatPageContent(
             bottomBar = {
                 ChatInput(
                     state = inputState,
+                    loading = loadingJob != null,
                     settings = setting,
                     conversation = conversation,
                     mcpManager = vm.mcpManager,

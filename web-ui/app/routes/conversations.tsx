@@ -26,7 +26,7 @@ import { useCurrentModel } from "~/hooks/use-current-model";
 import { getAssistantDisplayName, getModelDisplayName } from "~/lib/display";
 import { cn } from "~/lib/utils";
 import api, { sse } from "~/services/api";
-import { useChatInputStore } from "~/stores";
+import { useChatInputStore, useAppStore } from "~/stores";
 import { WorkbenchHost } from "~/components/workbench/workbench-host";
 import {
   useWorkbench,
@@ -357,6 +357,7 @@ function useConversationDetail(activeId: string | null, updateSummary: Conversat
           }
 
           if (event === "snapshot" && data.type === "snapshot") {
+            useAppStore.getState().setClockOffset(data.serverTime);
             setDetail(data.conversation);
             updateSummary(toConversationSummaryUpdate(data.conversation));
             setDetailError(null);
@@ -366,11 +367,14 @@ function useConversationDetail(activeId: string | null, updateSummary: Conversat
 
           if (event !== "node_update" || data.type !== "node_update") return;
 
+          useAppStore.getState().setClockOffset(data.serverTime);
           setDetail((prev) => {
             if (!prev) return prev;
             const next = applyNodeUpdate(prev, data);
             if (next === prev) return prev;
-            updateSummary(toConversationSummaryUpdate(next));
+            if (prev.isGenerating !== next.isGenerating) {
+              updateSummary(toConversationSummaryUpdate(next));
+            }
             return next;
           });
           setDetailError(null);
@@ -735,6 +739,10 @@ function ConversationsPageInner() {
   const isNewChat = isHomeRoute && !activeId;
   const showSuggestions =
     Boolean(activeId) && !detailLoading && !detailError && chatSuggestions.length > 0;
+  const displaySuggestions = React.useMemo(
+    () => (showSuggestions ? chatSuggestions : []),
+    [chatSuggestions, showSuggestions],
+  );
 
   const handleSelect = React.useCallback(
     (id: string) => {
@@ -1011,14 +1019,12 @@ function ConversationsPageInner() {
           disabled={detailLoading || Boolean(detailError)}
           onValueChange={handleInputTextChange}
           onAddParts={handleAddInputParts}
-          suggestions={showSuggestions ? chatSuggestions : []}
+          suggestions={displaySuggestions}
           onSuggestionClick={handleClickSuggestion}
           isEditing={Boolean(editingSession)}
           onCancelEdit={editingSession ? handleCancelEdit : undefined}
           shouldDeleteFileOnRemove={shouldDeleteAttachmentFileOnRemove}
-          onRemovePart={(index) => {
-            handleRemoveInputPart(index);
-          }}
+          onRemovePart={handleRemoveInputPart}
           onSend={handleSend}
           onStop={activeId ? handleStop : undefined}
         />

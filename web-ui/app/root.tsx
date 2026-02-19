@@ -7,6 +7,7 @@ import {
   ScrollRestoration,
 } from "react-router";
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Route } from "./+types/root";
 import { useSettingsSubscription } from "~/stores";
 import "./app.css";
@@ -14,6 +15,8 @@ import "./i18n";
 import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./components/theme-provider";
 import { WebAuthGate } from "./components/web-auth-gate";
+
+const queryClient = new QueryClient();
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
@@ -59,7 +62,11 @@ function AppContent() {
 }
 
 export default function App() {
-  return <AppContent />;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
+    </QueryClientProvider>
+  );
 }
 
 export function HydrateFallback() {

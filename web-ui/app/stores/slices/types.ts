@@ -20,4 +20,10 @@ export interface ChatInputSlice {
   getSubmitParts: (conversationId: string) => UIMessagePart[];
 }
 
-export type AppStoreState = SettingsSlice & ChatInputSlice;
+export interface ClockSlice {
+  clockOffset: number;
+  setClockOffset: (serverTime: number) => void;
+}
+
+export type AppStoreState = SettingsSlice & ChatInputSlice & ClockSlice;
+

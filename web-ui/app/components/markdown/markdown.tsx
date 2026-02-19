@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import ReactMarkdown from "react-markdown";
+import { Streamdown } from "streamdown";
+import { cjk } from "@streamdown/cjk";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -11,6 +12,7 @@ import { useOptionalWorkbench } from "~/components/workbench/workbench-context";
 import { CodeBlock } from "./code-block";
 import "katex/dist/katex.min.css";
 import "./markdown.css";
+import "streamdown/styles.css";
 
 // Regex patterns for preprocessing
 const INLINE_LATEX_REGEX = /\\\((.+?)\\\)/g;
@@ -69,6 +71,7 @@ type MarkdownProps = {
   className?: string;
   onClickCitation?: (id: string) => void;
   allowCodePreview?: boolean;
+  isAnimating?: boolean;
 };
 
 export default function Markdown({
@@ -76,6 +79,7 @@ export default function Markdown({
   className,
   onClickCitation,
   allowCodePreview = true,
+  isAnimating = false,
 }: MarkdownProps) {
   const { t } = useTranslation("markdown");
   const workbench = useOptionalWorkbench();
@@ -103,9 +107,13 @@ export default function Markdown({
 
   return (
     <div className={cn("markdown", className)}>
-      <ReactMarkdown
+      <Streamdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex, rehypeRaw]}
+        plugins={{ cjk: cjk }}
+        animated={{ animation: "blurIn", sep: 'word', duration: 300 }}
+        isAnimating={isAnimating}
+        controls={{code: false, mermaid: false}}
         components={{
           pre: ({ children }) => <>{children}</>,
           code: ({ className, children, ...props }) => {
@@ -166,7 +174,7 @@ export default function Markdown({
         }}
       >
         {processedContent}
-      </ReactMarkdown>
+      </Streamdown>
     </div>
   );
 }

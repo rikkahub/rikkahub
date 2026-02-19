@@ -208,7 +208,8 @@ data class ConversationUpdateEvent(
 data class ConversationSnapshotEvent(
     val type: String = "snapshot",
     val seq: Long,
-    val conversation: ConversationDto
+    val conversation: ConversationDto,
+    val serverTime: Long = System.currentTimeMillis()
 )
 
 @Serializable
@@ -220,7 +221,8 @@ data class ConversationNodeUpdateEvent(
     val nodeIndex: Int,
     val node: MessageNodeDto,
     val updateAt: Long,
-    val isGenerating: Boolean
+    val isGenerating: Boolean,
+    val serverTime: Long = System.currentTimeMillis()
 )
 
 @Serializable

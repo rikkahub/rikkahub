@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { useMutation } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { ChevronDown, Earth, LoaderCircle, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -92,10 +93,7 @@ function getServiceType(service: SearchServiceOption): string | null {
   return value.length > 0 ? value : null;
 }
 
-function getServiceLabel(
-  service: SearchServiceOption,
-  t: TFunction,
-): string {
+function getServiceLabel(service: SearchServiceOption, t: TFunction): string {
   const type = getServiceType(service);
   if (!type) {
     return t("search.default_service_label");
@@ -109,10 +107,6 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
   const { settings, currentAssistant } = useCurrentAssistant();
   const { currentModel } = useCurrentModel();
 
-  const [updatingSearchEnabled, setUpdatingSearchEnabled] = React.useState(false);
-  const [updatingBuiltInSearch, setUpdatingBuiltInSearch] = React.useState(false);
-  const [updatingServiceIndex, setUpdatingServiceIndex] = React.useState<number | null>(null);
-
   const canUse = Boolean(settings && currentAssistant && !disabled);
   const { error, setError, popoverProps } = usePickerPopover(canUse);
 
@@ -120,7 +114,6 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
   const searchEnabled = settings?.enableWebSearch ?? false;
   const currentService = settings?.searchServices?.[settings.searchServiceSelected] ?? null;
   const checked = searchEnabled || builtInSearchEnabled;
-  const loading = updatingSearchEnabled || updatingBuiltInSearch || updatingServiceIndex !== null;
 
   React.useEffect(() => {
     if (!canUse) {
@@ -128,73 +121,41 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
     }
   }, [canUse]);
 
-  const handleToggleSearchEnabled = React.useCallback(
-    async (enabled: boolean) => {
-      if (!canUse) {
-        return;
-      }
-
-      setUpdatingSearchEnabled(true);
-      setError(null);
-
-      try {
-        await api.post<{ status: string }>("settings/search/enabled", { enabled });
-      } catch (toggleError) {
-        setError(extractErrorMessage(toggleError, t("search.update_search_failed")));
-      } finally {
-        setUpdatingSearchEnabled(false);
-      }
+  const toggleSearchEnabledMutation = useMutation({
+    mutationFn: ({ enabled }: { enabled: boolean }) =>
+      api.post<{ status: string }>("settings/search/enabled", { enabled }),
+    onError: (toggleError) => {
+      setError(extractErrorMessage(toggleError, t("search.update_search_failed")));
     },
-    [canUse, t],
-  );
+    onSuccess: () => setError(null),
+  });
 
-  const handleSelectService = React.useCallback(
-    async (index: number) => {
-      if (!canUse || !settings) {
-        return;
-      }
-
-      if (index === settings.searchServiceSelected) {
-        return;
-      }
-
-      setUpdatingServiceIndex(index);
-      setError(null);
-
-      try {
-        await api.post<{ status: string }>("settings/search/service", { index });
-      } catch (serviceError) {
-        setError(extractErrorMessage(serviceError, t("search.switch_service_failed")));
-      } finally {
-        setUpdatingServiceIndex(null);
-      }
+  const selectServiceMutation = useMutation({
+    mutationFn: ({ index }: { index: number }) =>
+      api.post<{ status: string }>("settings/search/service", { index }),
+    onError: (serviceError) => {
+      setError(extractErrorMessage(serviceError, t("search.switch_service_failed")));
     },
-    [canUse, settings, t],
-  );
+    onSuccess: () => setError(null),
+  });
 
-  const handleToggleBuiltInSearch = React.useCallback(
-    async (enabled: boolean) => {
-      if (!canUse || !currentModel) {
-        return;
-      }
-
-      setUpdatingBuiltInSearch(true);
-      setError(null);
-
-      try {
-        await api.post<{ status: string }>("settings/model/built-in-tool", {
-          modelId: currentModel.id,
-          tool: SEARCH_TOOL_NAME,
-          enabled,
-        });
-      } catch (toolError) {
-        setError(extractErrorMessage(toolError, t("search.update_builtin_failed")));
-      } finally {
-        setUpdatingBuiltInSearch(false);
-      }
+  const toggleBuiltInSearchMutation = useMutation({
+    mutationFn: ({ modelId, enabled }: { modelId: string; enabled: boolean }) =>
+      api.post<{ status: string }>("settings/model/built-in-tool", {
+        modelId,
+        tool: SEARCH_TOOL_NAME,
+        enabled,
+      }),
+    onError: (toolError) => {
+      setError(extractErrorMessage(toolError, t("search.update_builtin_failed")));
     },
-    [canUse, currentModel, t],
-  );
+    onSuccess: () => setError(null),
+  });
+
+  const loading =
+    toggleSearchEnabledMutation.isPending ||
+    toggleBuiltInSearchMutation.isPending ||
+    selectServiceMutation.isPending;
 
   return (
     <Popover {...popoverProps}>
@@ -210,7 +171,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
             className,
           )}
         >
-          {updatingSearchEnabled || updatingBuiltInSearch ? (
+          {toggleSearchEnabledMutation.isPending || toggleBuiltInSearchMutation.isPending ? (
             <LoaderCircle className="size-4 animate-spin" />
           ) : searchEnabled && currentService ? (
             <AIIcon
@@ -250,14 +211,10 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
               </div>
               <Switch
                 checked={builtInSearchEnabled}
-                disabled={
-                  disabled ||
-                  updatingBuiltInSearch ||
-                  updatingSearchEnabled ||
-                  updatingServiceIndex !== null
-                }
+                disabled={disabled || loading}
                 onCheckedChange={(nextChecked) => {
-                  void handleToggleBuiltInSearch(nextChecked);
+                  if (!canUse || !currentModel) return;
+                  toggleBuiltInSearchMutation.mutate({ modelId: currentModel.id, enabled: nextChecked });
                 }}
               />
             </div>
@@ -277,14 +234,10 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                 </div>
                 <Switch
                   checked={searchEnabled}
-                  disabled={
-                    disabled ||
-                    updatingSearchEnabled ||
-                    updatingBuiltInSearch ||
-                    updatingServiceIndex !== null
-                  }
+                  disabled={disabled || loading}
                   onCheckedChange={(nextChecked) => {
-                    void handleToggleSearchEnabled(nextChecked);
+                    if (!canUse) return;
+                    toggleSearchEnabledMutation.mutate({ enabled: nextChecked });
                   }}
                 />
               </div>
@@ -294,7 +247,9 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {settings.searchServices.map((service, index) => {
                       const selected = index === settings.searchServiceSelected;
-                      const switching = updatingServiceIndex === index;
+                      const switching =
+                        selectServiceMutation.isPending &&
+                        selectServiceMutation.variables?.index === index;
 
                       return (
                         <button
@@ -304,14 +259,11 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                             "hover:bg-muted flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition",
                             selected && "border-primary bg-primary/5",
                           )}
-                          disabled={
-                            disabled ||
-                            updatingSearchEnabled ||
-                            updatingBuiltInSearch ||
-                            updatingServiceIndex !== null
-                          }
+                          disabled={disabled || loading}
                           onClick={() => {
-                            void handleSelectService(index);
+                            if (!canUse || !settings || index === settings.searchServiceSelected)
+                              return;
+                            selectServiceMutation.mutate({ index });
                           }}
                         >
                           <AIIcon
