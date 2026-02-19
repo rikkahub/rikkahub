@@ -217,10 +217,20 @@ class RouteActivity : ComponentActivity() {
                         ),
                         modifier = Modifier.fillMaxSize(),
                         onBack = { backStack.removeLastOrNull() },
-                        transitionSpec = { slideInHorizontally { it } togetherWith slideOutHorizontally { -it } },
+                        transitionSpec = {
+                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
+                            else {
+                                slideInHorizontally { it } togetherWith
+                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+                            }
+                        },
                         popTransitionSpec = {
-                            (slideInHorizontally { -it / 2 } + scaleIn(initialScale = 1.3f) + fadeIn()) togetherWith
-                                    (slideOutHorizontally { it } + scaleOut(targetScale = 0.75f) + fadeOut())
+                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
+                                slideOutHorizontally { it }
+                        },
+                        predictivePopTransitionSpec = {
+                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
+                                slideOutHorizontally { it }
                         },
                         entryProvider = entryProvider {
                             entry<Screen.Chat>(
