@@ -262,6 +262,9 @@ dependencies {
     // jmDNS (mDNS/Bonjour for .local hostname)
     implementation(libs.jmdns)
 
+    // sqlite-android (requery SQLite for Android)
+    implementation(libs.sqlite.android)
+
     // modules
     implementation(project(":ai"))
     implementation(project(":web"))
