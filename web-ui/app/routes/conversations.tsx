@@ -372,7 +372,9 @@ function useConversationDetail(activeId: string | null, updateSummary: Conversat
             if (!prev) return prev;
             const next = applyNodeUpdate(prev, data);
             if (next === prev) return prev;
-            updateSummary(toConversationSummaryUpdate(next));
+            if (prev.isGenerating !== next.isGenerating) {
+              updateSummary(toConversationSummaryUpdate(next));
+            }
             return next;
           });
           setDetailError(null);
@@ -737,6 +739,10 @@ function ConversationsPageInner() {
   const isNewChat = isHomeRoute && !activeId;
   const showSuggestions =
     Boolean(activeId) && !detailLoading && !detailError && chatSuggestions.length > 0;
+  const displaySuggestions = React.useMemo(
+    () => (showSuggestions ? chatSuggestions : []),
+    [chatSuggestions, showSuggestions],
+  );
 
   const handleSelect = React.useCallback(
     (id: string) => {
@@ -1013,14 +1019,12 @@ function ConversationsPageInner() {
           disabled={detailLoading || Boolean(detailError)}
           onValueChange={handleInputTextChange}
           onAddParts={handleAddInputParts}
-          suggestions={showSuggestions ? chatSuggestions : []}
+          suggestions={displaySuggestions}
           onSuggestionClick={handleClickSuggestion}
           isEditing={Boolean(editingSession)}
           onCancelEdit={editingSession ? handleCancelEdit : undefined}
           shouldDeleteFileOnRemove={shouldDeleteAttachmentFileOnRemove}
-          onRemovePart={(index) => {
-            handleRemoveInputPart(index);
-          }}
+          onRemovePart={handleRemoveInputPart}
           onSend={handleSend}
           onStop={activeId ? handleStop : undefined}
         />
