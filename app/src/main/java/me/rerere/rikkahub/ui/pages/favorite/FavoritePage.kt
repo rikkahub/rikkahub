@@ -96,7 +96,7 @@ fun FavoritePage(vm: FavoriteVM = koinViewModel()) {
             items(favorites, key = { it.id }) { item ->
                 SwipeableFavoriteCard(
                     item = item,
-                    onClick = { navigateToChatPage(navController, item.conversationId) },
+                    onClick = { navigateToChatPage(navController, item.conversationId, nodeId = item.nodeId) },
                     onDelete = {
                         scope.launch {
                             val entity = vm.getEntityByRefKey(item.refKey) ?: return@launch

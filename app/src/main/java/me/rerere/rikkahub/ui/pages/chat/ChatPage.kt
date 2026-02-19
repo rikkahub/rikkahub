@@ -78,7 +78,7 @@ import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
 
 @Composable
-fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
+fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val vm: ChatVM = koinViewModel(
         parameters = {
             parametersOf(id.toString())
@@ -148,8 +148,18 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>) {
 
     val chatListState = rememberLazyListState()
     LaunchedEffect(vm) {
-        if (!vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
+        if (nodeId == null && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
             chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
+            vm.chatListInitialized = true
+        }
+    }
+
+    LaunchedEffect(nodeId, conversation.messageNodes.size) {
+        if (nodeId != null && conversation.messageNodes.isNotEmpty() && !vm.chatListInitialized) {
+            val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
+            if (index >= 0) {
+                chatListState.scrollToItem(index)
+            }
             vm.chatListInitialized = true
         }
     }

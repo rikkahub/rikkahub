@@ -240,7 +240,8 @@ class RouteActivity : ComponentActivity() {
                                 ChatPage(
                                     id = Uuid.parse(key.id),
                                     text = key.text,
-                                    files = key.files.map { it.toUri() }
+                                    files = key.files.map { it.toUri() },
+                                    nodeId = key.nodeId?.let { Uuid.parse(it) }
                                 )
                             }
 
@@ -395,7 +396,12 @@ class RouteActivity : ComponentActivity() {
 
 sealed interface Screen : NavKey {
     @Serializable
-    data class Chat(val id: String, val text: String? = null, val files: List<String> = emptyList()) : Screen
+    data class Chat(
+        val id: String,
+        val text: String? = null,
+        val files: List<String> = emptyList(),
+        val nodeId: String? = null
+    ) : Screen
 
     @Serializable
     data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
