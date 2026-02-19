@@ -134,11 +134,6 @@ private fun preProcess(content: String): String {
         }
     }
 
-    // 替换思考
-    result = result.replace(THINKING_REGEX) { matchResult ->
-        matchResult.groupValues[1].lines().filter { it.isNotBlank() }.joinToString("\n") { ">$it" }
-    }
-
     return result
 }
 
