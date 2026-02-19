@@ -13,16 +13,15 @@ class ChatInputState {
     val textContent = TextFieldState()
     var messageContent by mutableStateOf(listOf<UIMessagePart>())
     var editingMessage by mutableStateOf<Uuid?>(null)
-    var loading by mutableStateOf(false)
     private var editingParts: List<UIMessagePart>? = null
-    private var editingTextIndex: Int? = null
+    private var editingAttachmentUrls: Set<String> = emptySet()
 
     fun clearInput() {
         textContent.setTextAndPlaceCursorAtEnd("")
         messageContent = emptyList()
         editingMessage = null
         editingParts = null
-        editingTextIndex = null
+        editingAttachmentUrls = emptySet()
     }
 
     fun isEditing() = editingMessage != null
@@ -45,18 +44,43 @@ class ChatInputState {
         textContent.setTextAndPlaceCursorAtEnd(text)
         messageContent = contents.filter { it !is UIMessagePart.Text }
         editingParts = contents
-        editingTextIndex = if (lastTextIndex >= 0) lastTextIndex else null
+        editingAttachmentUrls = contents.mapNotNull { it.attachmentUrlOrNull() }.toSet()
     }
 
     fun getContents(): List<UIMessagePart> {
-        val parts = editingParts
-        val textIndex = editingTextIndex
-        if (isEditing() && parts != null && textIndex != null) {
-            val newParts = parts.toMutableList()
-            newParts[textIndex] = UIMessagePart.Text(textContent.text.toString())
-            return newParts
+        val text = textContent.text.toString()
+        if (isEditing()) {
+            val originalParts = editingParts
+            if (originalParts != null) {
+                val editedTextIndex = originalParts.indexOfLast { it is UIMessagePart.Text }
+                val remainingAttachments = messageContent.toMutableList()
+                val merged = mutableListOf<UIMessagePart>()
+
+                originalParts.forEachIndexed { index, part ->
+                    when {
+                        index == editedTextIndex -> {
+                            merged.add(UIMessagePart.Text(text))
+                        }
+
+                        part is UIMessagePart.Text -> {
+                            merged.add(part)
+                        }
+
+                        else -> {
+                            val currentIndex = remainingAttachments.indexOf(part)
+                            if (currentIndex >= 0) {
+                                merged.add(remainingAttachments.removeAt(currentIndex))
+                            }
+                        }
+                    }
+                }
+                // Newly added attachments are appended in insertion order.
+                merged.addAll(remainingAttachments)
+                return merged
+            }
+            return if (text.isBlank()) messageContent else listOf(UIMessagePart.Text(text)) + messageContent
         }
-        return listOf(UIMessagePart.Text(textContent.text.toString())) + messageContent
+        return listOf(UIMessagePart.Text(text)) + messageContent
     }
 
     fun isEmpty(): Boolean {
@@ -93,5 +117,25 @@ class ChatInputState {
             newMessage.add(it)
         }
         messageContent = newMessage
+    }
+
+    /**
+     * 仅删除当前输入组件临时新增的本地文件。
+     * 编辑历史消息时，原有附件不在这里删除，由会话层统一做差异清理。
+     */
+    fun shouldDeleteFileOnRemove(part: UIMessagePart): Boolean {
+        val url = part.attachmentUrlOrNull() ?: return false
+        if (!url.startsWith("file:")) return false
+        return !isEditing() || url !in editingAttachmentUrls
+    }
+
+    private fun UIMessagePart.attachmentUrlOrNull(): String? {
+        return when (this) {
+            is UIMessagePart.Image -> this.url
+            is UIMessagePart.Video -> this.url
+            is UIMessagePart.Audio -> this.url
+            is UIMessagePart.Document -> this.url
+            else -> null
+        }
     }
 }

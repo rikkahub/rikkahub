@@ -153,6 +153,7 @@ enum class ExpandState {
 @Composable
 fun ChatInput(
     state: ChatInputState,
+    loading: Boolean,
     conversation: Conversation,
     settings: Settings,
     mcpManager: McpManager,
@@ -177,12 +178,12 @@ fun ChatInput(
 
     fun sendMessage() {
         keyboardController?.hide()
-        if (state.loading) onCancelClick() else onSendClick()
+        if (loading) onCancelClick() else onSendClick()
     }
 
     fun sendMessageWithoutAnswer() {
         keyboardController?.hide()
-        if (state.loading) onCancelClick() else onLongSendClick()
+        if (loading) onCancelClick() else onLongSendClick()
     }
 
     var expand by remember { mutableStateOf(ExpandState.Collapsed) }
@@ -321,7 +322,7 @@ fun ChatInput(
                         .size(40.dp)
                         .clip(CircleShape)
                         .combinedClickable(
-                            enabled = state.loading || !state.isEmpty(),
+                            enabled = loading || !state.isEmpty(),
                             onClick = {
                                 dismissExpand()
                                 sendMessage()
@@ -333,12 +334,12 @@ fun ChatInput(
                         )
                 ) {
                     val containerColor = when {
-                        state.loading -> MaterialTheme.colorScheme.errorContainer // 加载时，红色
+                        loading -> MaterialTheme.colorScheme.errorContainer // 加载时，红色
                         state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh // 禁用时(输入为空)，灰色
                         else -> MaterialTheme.colorScheme.primary // 启用时(输入非空)，绿色/主题色
                     }
                     val contentColor = when {
-                        state.loading -> MaterialTheme.colorScheme.onErrorContainer
+                        loading -> MaterialTheme.colorScheme.onErrorContainer
                         state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) // 禁用时，内容用带透明度的灰色
                         else -> MaterialTheme.colorScheme.onPrimary
                     }
@@ -348,7 +349,7 @@ fun ChatInput(
                         color = containerColor,
                         content = {}
                     )
-                    if (state.loading) {
+                    if (loading) {
                         KeepScreenOn()
                         Icon(Lucide.X, stringResource(R.string.stop), tint = contentColor)
                     } else {
@@ -587,6 +588,12 @@ private fun MediaFileInputRow(
     context: Context
 ) {
     val filesManager: FilesManager = koinInject()
+    fun removePart(part: UIMessagePart, url: String) {
+        state.messageContent = state.messageContent.filterNot { it == part }
+        if (state.shouldDeleteFileOnRemove(part)) {
+            filesManager.deleteChatFiles(listOf(url.toUri()))
+        }
+    }
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
@@ -614,11 +621,7 @@ private fun MediaFileInputRow(
                         .clip(CircleShape)
                         .size(20.dp)
                         .clickable {
-                            // Remove image
-                            state.messageContent =
-                                state.messageContent.filterNot { it == image }
-                            // Delete image
-                            filesManager.deleteChatFiles(listOf(image.url.toUri()))
+                            removePart(image, image.url)
                         }
                         .align(Alignment.TopEnd)
                         .background(MaterialTheme.colorScheme.secondary),
@@ -647,11 +650,7 @@ private fun MediaFileInputRow(
                         .clip(CircleShape)
                         .size(20.dp)
                         .clickable {
-                            // Remove image
-                            state.messageContent =
-                                state.messageContent.filterNot { it == video }
-                            // Delete image
-                            filesManager.deleteChatFiles(listOf(video.url.toUri()))
+                            removePart(video, video.url)
                         }
                         .align(Alignment.TopEnd)
                         .background(MaterialTheme.colorScheme.secondary),
@@ -680,11 +679,7 @@ private fun MediaFileInputRow(
                         .clip(CircleShape)
                         .size(20.dp)
                         .clickable {
-                            // Remove image
-                            state.messageContent =
-                                state.messageContent.filterNot { it == audio }
-                            // Delete image
-                            filesManager.deleteChatFiles(listOf(audio.url.toUri()))
+                            removePart(audio, audio.url)
                         }
                         .align(Alignment.TopEnd)
                         .background(MaterialTheme.colorScheme.secondary),
@@ -725,11 +720,7 @@ private fun MediaFileInputRow(
                             .clip(CircleShape)
                             .size(20.dp)
                             .clickable {
-                                // Remove image
-                                state.messageContent =
-                                    state.messageContent.filterNot { it == document }
-                                // Delete image
-                                filesManager.deleteChatFiles(listOf(document.url.toUri()))
+                                removePart(document, document.url)
                             }
                             .align(Alignment.TopEnd)
                             .background(MaterialTheme.colorScheme.secondary),
