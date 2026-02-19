@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -88,6 +89,7 @@ fun ColumnScope.ConversationList(
     conversationJobs: Collection<Uuid>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
+    listState: LazyListState,
     modifier: Modifier = Modifier,
     onClick: (Conversation) -> Unit = {},
     onDelete: (Conversation) -> Unit = {},
@@ -96,6 +98,18 @@ fun ColumnScope.ConversationList(
     onMoveToAssistant: (Conversation) -> Unit = {}
 ) {
     val navController = LocalNavController.current
+    var hasScrolledToCurrent by remember(current.id) { mutableStateOf(false) }
+
+    LaunchedEffect(current.id, conversations.itemCount, hasScrolledToCurrent) {
+        if (hasScrolledToCurrent) return@LaunchedEffect
+        val currentIndex = conversations.itemSnapshotList.items.indexOfFirst {
+            (it as? ConversationListItem.Item)?.conversation?.id == current.id
+        }
+        if (currentIndex >= 0) {
+            listState.scrollToItem(currentIndex)
+            hasScrolledToCurrent = true
+        }
+    }
 
     // fix: compose很奇怪，会自动聚焦到第一个文本框
     // 在这里放一个空的Box，防止自动聚焦到第一个文本框弹出IME
@@ -150,6 +164,7 @@ fun ColumnScope.ConversationList(
     }
 
     LazyColumn(
+        state = listState,
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
