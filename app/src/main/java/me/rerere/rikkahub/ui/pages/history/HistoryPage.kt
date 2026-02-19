@@ -52,11 +52,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pin
 import com.composables.icons.lucide.PinOff
+import com.composables.icons.lucide.ScanSearch
 import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -100,6 +102,13 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            navController.navigate(Screen.MessageSearch)
+                        }
+                    ) {
+                        Icon(Lucide.ScanSearch, contentDescription = "搜索消息内容")
+                    }
                     IconButton(
                         onClick = {
                             isSearchVisible = !isSearchVisible

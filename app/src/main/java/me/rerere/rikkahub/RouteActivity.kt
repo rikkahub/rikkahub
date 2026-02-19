@@ -76,6 +76,7 @@ import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.prompts.PromptPage
+import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
@@ -376,6 +377,10 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.Prompts> {
                                 PromptPage()
                             }
+
+                            entry<Screen.MessageSearch> {
+                                SearchPage()
+                            }
                         }
                     )
                     if (BuildConfig.DEBUG) {
@@ -498,4 +503,7 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Prompts : Screen
+
+    @Serializable
+    data object MessageSearch : Screen
 }
