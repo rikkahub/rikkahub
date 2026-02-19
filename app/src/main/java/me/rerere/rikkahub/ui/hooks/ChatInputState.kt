@@ -84,7 +84,7 @@ class ChatInputState {
     }
 
     fun isEmpty(): Boolean {
-        return textContent.text.isEmpty() && messageContent.isEmpty()
+        return textContent.text.isEmpty()
     }
 
     fun addImages(uris: List<Uri>) {
