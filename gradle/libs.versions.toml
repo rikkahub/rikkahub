@@ -58,6 +58,7 @@ profileinstaller = "1.4.1"
 ktor = "3.4.0"
 sqlite-vector = "0.9.85"
 jmdns = "3.6.3"
+sqlite-android = "3.49.0"
 
 [libraries]
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }
@@ -159,6 +160,7 @@ ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
 ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
 sqlite-vector = { module = "ai.sqlite:vector", version.ref = "sqlite-vector" }
 jmdns = { module = "org.jmdns:jmdns", version.ref = "jmdns" }
+sqlite-android = { module = "com.github.requery:sqlite-android", version.ref = "sqlite-android" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

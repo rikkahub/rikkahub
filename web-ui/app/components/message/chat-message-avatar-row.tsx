@@ -7,7 +7,6 @@ import type { AssistantProfile, MessageDto, ProviderModel } from "~/types";
 
 export interface ChatMessageAvatarRowProps {
   message: MessageDto;
-  previousRole?: string | null;
   hasMessageContent: boolean;
   loading: boolean;
   assistant?: AssistantProfile | null;
@@ -26,7 +25,6 @@ function formatMessageTimestamp(createdAt: string, locale?: string): string | nu
 
 export function ChatMessageAvatarRow({
   message,
-  previousRole,
   hasMessageContent,
   loading,
   assistant,
@@ -42,7 +40,7 @@ export function ChatMessageAvatarRow({
   const createdAtLabel = formatMessageTimestamp(message.createdAt, i18n.language);
 
   if (message.role === "USER") {
-    if (previousRole === "USER" || !displaySetting?.showUserAvatar) {
+    if (!displaySetting?.showUserAvatar) {
       return null;
     }
 
@@ -65,7 +63,7 @@ export function ChatMessageAvatarRow({
     );
   }
 
-  if (message.role !== "ASSISTANT" || previousRole === "ASSISTANT" || !model) {
+  if (message.role !== "ASSISTANT" || !model) {
     return null;
   }
 

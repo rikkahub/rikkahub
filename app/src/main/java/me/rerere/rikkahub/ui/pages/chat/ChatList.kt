@@ -279,7 +279,6 @@ private fun ChatListNormal(
                     ) {
                         ChatMessage(
                             node = node,
-                            conversation = conversation,
                             model = node.currentMessage.modelId?.let { settings.findModelById(it) },
                             assistant = settings.getAssistantById(conversation.assistantId),
                             loading = loading && index == conversation.messageNodes.lastIndex,
@@ -310,7 +309,8 @@ private fun ChatListNormal(
                             },
                             onTranslate = onTranslate,
                             onClearTranslation = onClearTranslation,
-                            onToolApproval = onToolApproval
+                            onToolApproval = onToolApproval,
+                            lastMessage = index == conversation.messageNodes.lastIndex,
                         )
                     }
                     if (index == conversation.truncateIndex - 1) {
@@ -539,14 +539,13 @@ private fun ChatListPreview(
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
-    // 过滤消息
+    // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找
     val filteredMessages = remember(conversation.messageNodes, searchQuery) {
         if (searchQuery.isBlank()) {
-            conversation.messageNodes
+            conversation.messageNodes.mapIndexed { index, node -> index to node }
         } else {
-            conversation.messageNodes.filterIndexed { index, node ->
-                node.currentMessage.toText().contains(searchQuery, ignoreCase = true)
-            }
+            conversation.messageNodes.mapIndexed { index, node -> index to node }
+                .filter { (_, node) -> node.currentMessage.toText().contains(searchQuery, ignoreCase = true) }
         }
     }
 
@@ -596,11 +595,10 @@ private fun ChatListPreview(
         ) {
             itemsIndexed(
                 items = filteredMessages,
-                key = { index, item -> item.id },
-            ) { _, node ->
+                key = { index, item -> item.second.id },
+            ) { _, (originalIndex, node) ->
                 val message = node.currentMessage
                 val isUser = message.role == me.rerere.ai.core.MessageRole.USER
-                val originalIndex = conversation.messageNodes.indexOf(node)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

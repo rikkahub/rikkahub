@@ -621,7 +621,6 @@ const ConversationTimeline = React.memo(({
                 <ChatMessage
                   node={node}
                   message={message}
-                  previousRole={index > 0 ? selectedNodeMessages[index - 1]?.message.role : null}
                   loading={isGenerating && index === selectedNodeMessages.length - 1}
                   isLastMessage={index === selectedNodeMessages.length - 1}
                   assistant={assistant}

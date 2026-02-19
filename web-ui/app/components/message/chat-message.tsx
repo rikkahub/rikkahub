@@ -42,7 +42,6 @@ import { MessageParts } from "./message-part";
 interface ChatMessageProps {
   node: MessageNodeDto;
   message: MessageDto;
-  previousRole?: string | null;
   loading?: boolean;
   isLastMessage?: boolean;
   assistant?: AssistantProfile | null;
@@ -443,7 +442,6 @@ const ChatMessageNerdLineRow = React.memo(({
 export const ChatMessage = React.memo(({
   node,
   message,
-  previousRole,
   loading = false,
   isLastMessage = false,
   assistant,
@@ -464,7 +462,6 @@ export const ChatMessage = React.memo(({
       <div className="flex w-full flex-col gap-2">
         <ChatMessageAvatarRow
           message={message}
-          previousRole={previousRole}
           hasMessageContent={hasMessageContent}
           loading={loading}
           assistant={assistant}

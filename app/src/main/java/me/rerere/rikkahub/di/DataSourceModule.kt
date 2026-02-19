@@ -5,6 +5,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.http.HttpHeaders
 import io.pebbletemplates.pebble.PebbleEngine
+import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.util.KeyCursorStore
@@ -45,6 +46,7 @@ val dataSourceModule = module {
     single {
         Room.databaseBuilder(get(), AppDatabase::class.java, "rikka_hub")
             .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16)
+            .openHelperFactory(RequerySQLiteOpenHelperFactory())
             .build()
     }
 

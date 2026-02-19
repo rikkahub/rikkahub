@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -93,6 +94,7 @@ fun ChatDrawerContent(
 
     val conversations = vm.conversations.collectAsLazyPagingItems()
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
+    val conversationListState = rememberLazyListState()
 
     val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
         initialValue = emptyMap(),
@@ -196,6 +198,7 @@ fun ChatDrawerContent(
                 conversationJobs = conversationJobs.keys,
                 searchQuery = searchQuery,
                 onSearchQueryChange = { vm.updateSearchQuery(it) },
+                listState = conversationListState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
