@@ -3,6 +3,8 @@ package me.rerere.rikkahub.data.ai
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.utils.toLocalDate
+import me.rerere.rikkahub.utils.toLocalDateTime
 
 internal fun buildMemoryPrompt(memories: List<AssistantMemory>) =
     buildString {
@@ -36,7 +38,8 @@ internal suspend fun buildRecentChatsPrompt(
             append("\n<recent_chats>\n")
             recentConversations.forEach { conversation ->
                 append("<conversation>\n")
-                append("  <title>${conversation.title}</title>")
+                append("  <title>${conversation.title}</title>\n")
+                append("  <last_chat>${conversation.updateAt.toLocalDate()}</last_chat>\n")
                 append("</conversation>\n")
             }
             append("</recent_chats>\n")
