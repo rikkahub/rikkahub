@@ -46,6 +46,10 @@ sealed class LocalToolOption {
     data object WorkflowTodo : LocalToolOption()
 
     @Serializable
+    @SerialName("workflow_control")
+    data object WorkflowControl : LocalToolOption()
+
+    @Serializable
     @SerialName("subagent")
     data object SubAgent : LocalToolOption()
 
@@ -982,6 +986,7 @@ class LocalTools(
                 LocalToolOption.TimeInfo -> "Time Info"
                 LocalToolOption.Clipboard -> "Clipboard Tool"
                 LocalToolOption.WorkflowTodo -> "Workflow TODO"
+                LocalToolOption.WorkflowControl -> "Workflow Control"
                 LocalToolOption.SubAgent -> "SubAgent"
                 LocalToolOption.SandboxFile -> "Sandbox File"
                 else -> null // 忽略已废弃的选项

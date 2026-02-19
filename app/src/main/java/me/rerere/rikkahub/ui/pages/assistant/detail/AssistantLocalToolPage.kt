@@ -81,6 +81,7 @@ import com.composables.icons.lucide.ListTodo
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Share2
+import com.composables.icons.lucide.Sparkles
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
@@ -301,6 +302,22 @@ private fun AssistantLocalToolContent(
         )
 
         // ✅ Workflow TODO 工具卡片
+        val isWorkflowControlEnabled = assistant.localTools.contains(LocalToolOption.WorkflowControl)
+        LocalToolCard(
+            title = "工作流控制",
+            description = "控制聊天页中的工作流开关与工作流侧边栏入口显示",
+            icon = Lucide.Sparkles,
+            isEnabled = isWorkflowControlEnabled,
+            onToggle = { enabled ->
+                val newLocalTools = if (enabled) {
+                    assistant.localTools + LocalToolOption.WorkflowControl
+                } else {
+                    assistant.localTools - LocalToolOption.WorkflowControl
+                }
+                onUpdate(assistant.copy(localTools = newLocalTools))
+            }
+        )
+
         val isWorkflowTodoEnabled = assistant.localTools.contains(LocalToolOption.WorkflowTodo)
         LocalToolCard(
             title = "Workflow TODO",

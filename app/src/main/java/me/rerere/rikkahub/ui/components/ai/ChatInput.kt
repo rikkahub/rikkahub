@@ -104,12 +104,12 @@ import com.composables.icons.lucide.FileArchive
 import com.composables.icons.lucide.FileAudio
 import com.composables.icons.lucide.Files
 import com.composables.icons.lucide.Fullscreen
-import com.composables.icons.lucide.GitBranch
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Music
 import com.composables.icons.lucide.Package2
 import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.Sparkles
 import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.X
 import com.composables.icons.lucide.Zap
@@ -135,6 +135,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ui.InjectionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.RandomGridLoading
+import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
@@ -168,6 +169,7 @@ fun ChatInput(
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
     onClearContext: () -> Unit,
+    onOpenSandboxFileManager: () -> Unit,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int, compressType: CompressType) -> Job,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
@@ -390,6 +392,7 @@ fun ChatInput(
                             state = state,
                             assistant = assistant,
                             onClearContext = onClearContext,
+                            onOpenSandboxFileManager = onOpenSandboxFileManager,
                             onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
                             showInjectionSheet = showInjectionSheet,
@@ -748,6 +751,7 @@ private fun FilesPicker(
     assistant: Assistant,
     state: ChatInputState,
     onClearContext: () -> Unit,
+    onOpenSandboxFileManager: () -> Unit,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int, compressType: CompressType) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     showInjectionSheet: Boolean,
@@ -884,6 +888,24 @@ private fun FilesPicker(
                         onClearContext()
                     }
                 ),
+        )
+
+        ListItem(
+            leadingContent = {
+                Icon(
+                    imageVector = Lucide.Files,
+                    contentDescription = "Sandbox File Manager",
+                )
+            },
+            headlineContent = {
+                Text("沙箱文件管理")
+            },
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.large)
+                .clickable {
+                    onOpenSandboxFileManager()
+                    onDismiss()
+                },
         )
     }
 
@@ -1353,16 +1375,25 @@ private fun WorkflowButton(
     active: Boolean,
     onToggle: () -> Unit,
 ) {
-    IconButton(onClick = onToggle) {
-        Icon(
-            imageVector = Lucide.GitBranch,
-            contentDescription = "Workflow",
-            tint = if (active) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                LocalContentColor.current.copy(alpha = 0.6f)
+    ToggleSurface(
+        checked = active,
+        onClick = onToggle,
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier.size(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Lucide.Sparkles,
+                    contentDescription = "Workflow",
+                )
             }
-        )
+        }
     }
 }
 
