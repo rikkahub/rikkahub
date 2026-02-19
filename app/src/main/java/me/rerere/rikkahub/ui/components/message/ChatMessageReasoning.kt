@@ -88,7 +88,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
         }
     }
 
-    var duration by remember(reasoning.finishedAt, reasoning.createdAt) {
+    var duration by remember(reasoning.finishedAt != null, reasoning.createdAt) {
         mutableStateOf(
             value = reasoning.finishedAt?.let { endTime ->
                 endTime - reasoning.createdAt
