@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { useMutation } from "@tanstack/react-query";
 import { ChevronDown, Lightbulb, LightbulbOff, LoaderCircle, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -82,7 +83,6 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   const { settings, currentAssistant } = useCurrentAssistant();
   const { currentModel } = useCurrentModel();
 
-  const [updatingBudget, setUpdatingBudget] = React.useState<number | null>(null);
   const [customValue, setCustomValue] = React.useState("");
   const [customExpanded, setCustomExpanded] = React.useState(false);
 
@@ -129,7 +129,6 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   const currentLevel = getReasoningLevel(currentBudget);
   const currentPreset =
     reasoningPresets.find((preset) => preset.key === currentLevel) ?? reasoningPresets[0];
-  const loading = updatingBudget !== null;
 
   React.useEffect(() => {
     if (!canUse || !canReasoning) {
@@ -144,28 +143,25 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
     }
   }, [currentBudget, open]);
 
-  const updateThinkingBudget = React.useCallback(
-    async (thinkingBudget: number) => {
-      if (!canUse || !currentAssistant) {
-        return;
-      }
-
-      setUpdatingBudget(thinkingBudget);
-      setError(null);
-
-      try {
-        await api.post<{ status: string }>("settings/assistant/thinking-budget", {
-          assistantId: currentAssistant.id,
-          thinkingBudget,
-        });
-      } catch (updateError) {
-        setError(extractErrorMessage(updateError, t("reasoning.update_failed")));
-      } finally {
-        setUpdatingBudget(null);
-      }
+  const updateThinkingBudgetMutation = useMutation({
+    mutationFn: ({
+      assistantId,
+      thinkingBudget,
+    }: {
+      assistantId: string;
+      thinkingBudget: number;
+    }) =>
+      api.post<{ status: string }>("settings/assistant/thinking-budget", {
+        assistantId,
+        thinkingBudget,
+      }),
+    onError: (updateError) => {
+      setError(extractErrorMessage(updateError, t("reasoning.update_failed")));
     },
-    [canUse, currentAssistant, t],
-  );
+    onSuccess: () => setError(null),
+  });
+
+  const loading = updateThinkingBudgetMutation.isPending;
 
   if (!canReasoning) {
     return null;
@@ -207,7 +203,9 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
           <div className="grid grid-cols-3 gap-2">
             {reasoningPresets.map((preset) => {
               const selected = preset.key === currentLevel;
-              const switching = updatingBudget === preset.budget;
+              const switching =
+                updateThinkingBudgetMutation.isPending &&
+                updateThinkingBudgetMutation.variables?.thinkingBudget === preset.budget;
 
               return (
                 <Button
@@ -221,7 +219,11 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
                   )}
                   disabled={disabled || loading}
                   onClick={() => {
-                    void updateThinkingBudget(preset.budget);
+                    if (!currentAssistant) return;
+                    updateThinkingBudgetMutation.mutate({
+                      assistantId: currentAssistant.id,
+                      thinkingBudget: preset.budget,
+                    });
                   }}
                 >
                   {preset.key === "OFF" ? (
@@ -281,16 +283,17 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
                         setError(t("reasoning.invalid_integer"));
                         return;
                       }
-
-                      void updateThinkingBudget(parsedValue);
+                      if (!currentAssistant) return;
+                      updateThinkingBudgetMutation.mutate({
+                        assistantId: currentAssistant.id,
+                        thinkingBudget: parsedValue,
+                      });
                     }}
                   >
                     {t("reasoning.apply")}
                   </Button>
                 </div>
-                <div className="text-muted-foreground text-xs">
-                  {t("reasoning.examples")}
-                </div>
+                <div className="text-muted-foreground text-xs">{t("reasoning.examples")}</div>
               </>
             ) : null}
           </div>

@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { useMutation } from "@tanstack/react-query";
 import { BookOpen, LoaderCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -55,8 +56,6 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
   const { settings, currentAssistant } = useCurrentAssistant();
 
   const [activeTab, setActiveTab] = React.useState<"mode" | "lorebook">("mode");
-  const [updating, setUpdating] = React.useState(false);
-  const [updatingKey, setUpdatingKey] = React.useState<string | null>(null);
 
   const canUse = Boolean(settings && currentAssistant && !disabled);
   const { error, setError, popoverProps } = usePickerPopover(canUse);
@@ -102,38 +101,32 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
     }
   }, [lorebooks.length, modeInjections.length]);
 
-  const updateSelections = React.useCallback(
-    async (nextModeInjectionIds: string[], nextLorebookIds: string[]) => {
-      if (!canUse || !currentAssistant) {
-        return;
-      }
-
-      setUpdating(true);
-      setError(null);
-
-      try {
-        await api.post<{ status: string }>("settings/assistant/injections", {
-          assistantId: currentAssistant.id,
-          modeInjectionIds: nextModeInjectionIds,
-          lorebookIds: nextLorebookIds,
-        });
-      } catch (updateError) {
-        setError(extractErrorMessage(updateError, t("injection.update_failed")));
-      } finally {
-        setUpdating(false);
-        setUpdatingKey(null);
-      }
+  const updateInjectionsMutation = useMutation({
+    mutationFn: ({
+      assistantId,
+      modeInjectionIds,
+      lorebookIds,
+    }: {
+      assistantId: string;
+      modeInjectionIds: string[];
+      lorebookIds: string[];
+      key: string;
+    }) =>
+      api.post<{ status: string }>("settings/assistant/injections", {
+        assistantId,
+        modeInjectionIds,
+        lorebookIds,
+      }),
+    onError: (updateError) => {
+      setError(extractErrorMessage(updateError, t("injection.update_failed")));
     },
-    [canUse, currentAssistant, t],
-  );
+    onSuccess: () => setError(null),
+  });
 
   const handleToggleModeInjection = React.useCallback(
-    async (id: string, checked: boolean) => {
-      if (!canUse) {
-        return;
-      }
+    (id: string, checked: boolean) => {
+      if (!canUse || !currentAssistant) return;
 
-      setUpdatingKey(`mode:${id}`);
       const nextModeIds = new Set(
         selectedModeInjectionIds.filter((item) => modeInjectionIdSet.has(item)),
       );
@@ -145,25 +138,28 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
         nextModeIds.delete(id);
       }
 
-      await updateSelections(Array.from(nextModeIds), nextLorebookIds);
+      updateInjectionsMutation.mutate({
+        assistantId: currentAssistant.id,
+        modeInjectionIds: Array.from(nextModeIds),
+        lorebookIds: nextLorebookIds,
+        key: `mode:${id}`,
+      });
     },
     [
       canUse,
+      currentAssistant,
       lorebookIdSet,
       modeInjectionIdSet,
       selectedLorebookIds,
       selectedModeInjectionIds,
-      updateSelections,
+      updateInjectionsMutation,
     ],
   );
 
   const handleToggleLorebook = React.useCallback(
-    async (id: string, checked: boolean) => {
-      if (!canUse) {
-        return;
-      }
+    (id: string, checked: boolean) => {
+      if (!canUse || !currentAssistant) return;
 
-      setUpdatingKey(`lorebook:${id}`);
       const nextModeIds = selectedModeInjectionIds.filter((item) => modeInjectionIdSet.has(item));
       const nextLorebookIds = new Set(
         selectedLorebookIds.filter((item) => lorebookIdSet.has(item)),
@@ -175,15 +171,21 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
         nextLorebookIds.delete(id);
       }
 
-      await updateSelections(nextModeIds, Array.from(nextLorebookIds));
+      updateInjectionsMutation.mutate({
+        assistantId: currentAssistant.id,
+        modeInjectionIds: nextModeIds,
+        lorebookIds: Array.from(nextLorebookIds),
+        key: `lorebook:${id}`,
+      });
     },
     [
       canUse,
+      currentAssistant,
       lorebookIdSet,
       modeInjectionIdSet,
       selectedLorebookIds,
       selectedModeInjectionIds,
-      updateSelections,
+      updateInjectionsMutation,
     ],
   );
 
@@ -198,14 +200,14 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
           type="button"
           variant="ghost"
           size="sm"
-          disabled={!canUse || updating}
+          disabled={!canUse || updateInjectionsMutation.isPending}
           className={cn(
             "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
             selectedCount > 0 && "text-primary hover:bg-primary/10",
             className,
           )}
         >
-          {updating ? (
+          {updateInjectionsMutation.isPending ? (
             <LoaderCircle className="size-4 animate-spin" />
           ) : (
             <BookOpen className="size-4" />
@@ -266,7 +268,9 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
                 <div className="space-y-2">
                   {modeInjections.map((item) => {
                     const checked = selectedModeInjectionIds.includes(item.id);
-                    const switching = updatingKey === `mode:${item.id}`;
+                    const switching =
+                      updateInjectionsMutation.isPending &&
+                      updateInjectionsMutation.variables?.key === `mode:${item.id}`;
 
                     return (
                       <label
@@ -281,9 +285,9 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
                         ) : (
                           <Checkbox
                             checked={checked}
-                            disabled={disabled || updating}
+                            disabled={disabled || updateInjectionsMutation.isPending}
                             onCheckedChange={(nextChecked) => {
-                              void handleToggleModeInjection(item.id, Boolean(nextChecked));
+                              handleToggleModeInjection(item.id, Boolean(nextChecked));
                             }}
                           />
                         )}
@@ -310,7 +314,9 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
               <div className="space-y-2">
                 {lorebooks.map((item) => {
                   const checked = selectedLorebookIds.includes(item.id);
-                  const switching = updatingKey === `lorebook:${item.id}`;
+                  const switching =
+                    updateInjectionsMutation.isPending &&
+                    updateInjectionsMutation.variables?.key === `lorebook:${item.id}`;
 
                   return (
                     <label
@@ -325,9 +331,9 @@ export function InjectionPickerButton({ disabled = false, className }: Injection
                       ) : (
                         <Checkbox
                           checked={checked}
-                          disabled={disabled || updating}
+                          disabled={disabled || updateInjectionsMutation.isPending}
                           onCheckedChange={(nextChecked) => {
-                            void handleToggleLorebook(item.id, Boolean(nextChecked));
+                            handleToggleLorebook(item.id, Boolean(nextChecked));
                           }}
                         />
                       )}
