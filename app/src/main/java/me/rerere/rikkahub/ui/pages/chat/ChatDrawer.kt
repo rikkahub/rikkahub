@@ -93,7 +93,6 @@ fun ChatDrawerContent(
     val repo = koinInject<ConversationRepository>()
 
     val conversations = vm.conversations.collectAsLazyPagingItems()
-    val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val conversationListState = rememberLazyListState()
 
     val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
@@ -196,8 +195,6 @@ fun ChatDrawerContent(
                 current = current,
                 conversations = conversations,
                 conversationJobs = conversationJobs.keys,
-                searchQuery = searchQuery,
-                onSearchQueryChange = { vm.updateSearchQuery(it) },
                 listState = conversationListState,
                 modifier = Modifier
                     .fillMaxWidth()
