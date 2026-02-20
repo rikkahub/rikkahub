@@ -828,5 +828,17 @@
   <string name="backup_page_reminder_last_time">마지막 백업: %1$s</string>
   <string name="backup_page_reminder_dismiss">무시</string>
   <string name="deep_thinking_seconds">%1$.1f 초 동안 생각했습니다</string>
+  <string name="chat_page_search_chats">채팅 검색</string>
+  <string name="history_page_search_messages">메시지 검색</string>
+  <string name="search_page_title">메시지 검색</string>
+  <string name="search_page_rebuild_index">메시지 색인 재구축</string>
+  <string name="search_page_rebuild_index_desc">기존 색인을 삭제하고 모든 채팅 기록을 다시 검색합니다. 메시지가 많을수록 시간이 오래 걸립니다. 계속하시겠습니까?</string>
+  <string name="search_page_rebuild_button">색인 다시 빌드</string>
+  <string name="search_page_placeholder">메시지 내용 검색...</string>
+  <string name="search_page_rebuilding_simple">색인 재구성 중...</string>
+  <string name="search_page_hint">키워드를 입력하고 검색을 눌러 메시지를 찾으세요</string>
+  <string name="search_page_no_results">결과 없음</string>
+  <string name="search_page_untitled">제목 없음</string>
+  <string name="search_page_rebuilding">색인 재구성 중 (%1$d / %2$d)...</string>
 </resources>
 

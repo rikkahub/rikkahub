@@ -828,5 +828,17 @@
   <string name="backup_page_reminder_last_time">最終バックアップ: %1$s</string>
   <string name="backup_page_reminder_dismiss">閉じる</string>
   <string name="deep_thinking_seconds">%1$.1f 秒間思考中</string>
+  <string name="chat_page_search_chats">チャットを検索</string>
+  <string name="history_page_search_messages">メッセージを検索</string>
+  <string name="search_page_title">メッセージを検索</string>
+  <string name="search_page_rebuild_index">メッセージインデックスを再構築</string>
+  <string name="search_page_rebuild_index_desc">既存のインデックスをクリアし、すべてのチャット履歴を再スキャンします。メッセージが多いほど時間がかかります。続行しますか？</string>
+  <string name="search_page_rebuild_button">インデックス再構築</string>
+  <string name="search_page_placeholder">メッセージ内容を検索…</string>
+  <string name="search_page_rebuilding_simple">インデックスを再構築中…</string>
+  <string name="search_page_hint">キーワードを入力して検索ボタンを押すとメッセージを検索できます</string>
+  <string name="search_page_no_results">検索結果なし</string>
+  <string name="search_page_untitled">無題</string>
+  <string name="search_page_rebuilding">インデックスを再構築中 (%1$d / %2$d)…</string>
 </resources>
 

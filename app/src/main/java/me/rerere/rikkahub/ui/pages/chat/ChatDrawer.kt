@@ -47,10 +47,12 @@ import me.rerere.rikkahub.ui.context.Navigator
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.composables.icons.lucide.Drama
 import com.composables.icons.lucide.Heart
+import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Languages
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
+import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Sparkles
 import com.composables.icons.lucide.Trophy
@@ -93,7 +95,6 @@ fun ChatDrawerContent(
     val repo = koinInject<ConversationRepository>()
 
     val conversations = vm.conversations.collectAsLazyPagingItems()
-    val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val conversationListState = rememberLazyListState()
 
     val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
@@ -192,12 +193,12 @@ fun ChatDrawerContent(
                 }
             }
 
+            DrawerActions(navController = navController)
+
             ConversationList(
                 current = current,
                 conversations = conversations,
                 conversationJobs = conversationJobs.keys,
-                searchQuery = searchQuery,
-                onSearchQueryChange = { vm.updateSearchQuery(it) },
                 listState = conversationListState,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -310,10 +311,10 @@ fun ChatDrawerContent(
 
                 DrawerAction(
                     icon = {
-                        Icon(Lucide.Heart, "Favorites")
+                        Icon(Lucide.Heart, stringResource(R.string.favorite_page_title))
                     },
                     label = {
-                        Text("Favorites")
+                        Text(stringResource(R.string.favorite_page_title))
                     },
                     onClick = {
                         navController.navigate(Screen.Favorite)
@@ -416,6 +417,71 @@ fun ChatDrawerContent(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawerActions(navController: Navigator) {
+    Column {
+        // 搜索入口
+        Surface(
+            onClick = { navController.navigate(Screen.MessageSearch) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Lucide.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.chat_page_search_chats),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+
+        // 历史记录入口
+        Surface(
+            onClick = { navController.navigate(Screen.History) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Lucide.History,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.chat_page_history),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
     }

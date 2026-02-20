@@ -32,15 +32,6 @@ class HistoryVM(
         Log.e(TAG, "Error: ${it.message}")
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    fun searchConversations(query: String): Flow<List<Conversation>> {
-        val currentAssistant = assistant.value
-        return if (currentAssistant != null) {
-            conversationRepo.searchConversationsOfAssistant(currentAssistant.id, query)
-        } else {
-            conversationRepo.searchConversations(query)
-        }
-    }
-
     fun deleteConversation(conversation: Conversation) {
         viewModelScope.launch {
             conversationRepo.deleteConversation(conversation)

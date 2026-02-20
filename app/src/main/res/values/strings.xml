@@ -828,5 +828,17 @@
   <string name="backup_page_reminder_last_time">Last backup: %1$s</string>
   <string name="backup_page_reminder_dismiss">Dismiss</string>
   <string name="deep_thinking_seconds">Thought for %1$.1f seconds</string>
+  <string name="chat_page_search_chats">Search Chats</string>
+  <string name="history_page_search_messages">Search Messages</string>
+  <string name="search_page_title">Search Messages</string>
+  <string name="search_page_rebuild_index">Rebuild Message Index</string>
+  <string name="search_page_rebuild_index_desc">This will clear the existing index and re-scan all chat history. The more messages, the longer it takes. Continue?</string>
+  <string name="search_page_rebuild_button">Rebuild Index</string>
+  <string name="search_page_placeholder">Search message content...</string>
+  <string name="search_page_rebuilding_simple">Rebuilding index...</string>
+  <string name="search_page_hint">Enter keywords and press Search to find messages</string>
+  <string name="search_page_no_results">No results</string>
+  <string name="search_page_untitled">Untitled</string>
+  <string name="search_page_rebuilding">Rebuilding index (%1$d / %2$d)...</string>
 </resources>
 

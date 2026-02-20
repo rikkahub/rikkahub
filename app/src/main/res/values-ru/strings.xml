@@ -821,5 +821,17 @@
   <string name="backup_page_reminder_last_time">Последнее резервное копирование: %1$s</string>
   <string name="backup_page_reminder_dismiss">Отклонить</string>
   <string name="deep_thinking_seconds">Думал %1$.1f секунд</string>
+  <string name="chat_page_search_chats">Поиск чатов</string>
+  <string name="history_page_search_messages">Поиск сообщений</string>
+  <string name="search_page_title">Поиск сообщений</string>
+  <string name="search_page_rebuild_index">Пересоздать индекс сообщений</string>
+  <string name="search_page_rebuild_index_desc">Это удалит существующий индекс и повторно просканирует всю историю чатов. Чем больше сообщений, тем дольше займет. Продолжить?</string>
+  <string name="search_page_rebuild_button">Пересоздать индекс</string>
+  <string name="search_page_placeholder">Искать в содержимом сообщений…</string>
+  <string name="search_page_rebuilding_simple">Пересоздание индекса…</string>
+  <string name="search_page_hint">Введите ключевые слова и нажмите «Поиск», чтобы найти сообщения</string>
+  <string name="search_page_no_results">Нет результатов</string>
+  <string name="search_page_untitled">Без названия</string>
+  <string name="search_page_rebuilding">Пересоздание индекса (%1$d / %2$d)…</string>
 </resources>
 

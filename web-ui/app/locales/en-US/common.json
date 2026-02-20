@@ -62,11 +62,11 @@
   },
   "conversation_search": {
     "search_conversations": "Search conversations",
-    "search_failed": "Failed to search conversations",
-    "input_placeholder": "Enter keywords from conversation titles",
+    "search_failed": "Search failed",
+    "input_placeholder": "Search message content...",
     "searching": "Searching...",
     "type_to_start": "Type keywords to start searching",
-    "no_results": "No matching conversations found",
+    "no_results": "No matching messages found",
     "unnamed_conversation": "Untitled conversation"
   },
   "quick_jump": {

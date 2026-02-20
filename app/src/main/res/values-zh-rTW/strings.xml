@@ -828,5 +828,17 @@
   <string name="backup_page_reminder_last_time">上次備份：%1$s</string>
   <string name="backup_page_reminder_dismiss">忽略</string>
   <string name="deep_thinking_seconds">思考了 %1$.1f 秒</string>
+  <string name="chat_page_search_chats">搜尋聊天</string>
+  <string name="history_page_search_messages">搜尋訊息</string>
+  <string name="search_page_title">搜尋訊息</string>
+  <string name="search_page_rebuild_index">重建訊息索引</string>
+  <string name="search_page_rebuild_index_desc">這將清除現有索引並重新掃描所有聊天記錄。訊息越多，所需時間越長。是否繼續？</string>
+  <string name="search_page_rebuild_button">重建索引</string>
+  <string name="search_page_placeholder">搜尋訊息內容…</string>
+  <string name="search_page_rebuilding_simple">正在重建索引…</string>
+  <string name="search_page_hint">輸入關鍵字並按下搜尋以尋找訊息</string>
+  <string name="search_page_no_results">沒有結果</string>
+  <string name="search_page_untitled">無標題</string>
+  <string name="search_page_rebuilding">正在重建索引 (%1$d / %2$d)…</string>
 </resources>
 

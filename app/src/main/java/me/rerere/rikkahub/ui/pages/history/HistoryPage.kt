@@ -1,8 +1,5 @@
 package me.rerere.rikkahub.ui.pages.history;
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,8 +7,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,7 +17,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -39,7 +33,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -52,11 +45,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pin
 import com.composables.icons.lucide.PinOff
-import com.composables.icons.lucide.Search
+import com.composables.icons.lucide.ScanSearch
 import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -70,25 +63,9 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
     val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    var isSearchVisible by remember { mutableStateOf(false) }
-    var searchText by remember { mutableStateOf("") }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
 
-    val allConversations by vm.conversations.collectAsStateWithLifecycle()
-    val searchConversations by produceState(emptyList(), searchText) {
-        runCatching {
-            vm.searchConversations(searchText).collect {
-                value = it
-            }
-        }.onFailure {
-            it.printStackTrace()
-        }
-    }
-    val showConversations = if (searchText.isEmpty()) {
-        allConversations
-    } else {
-        searchConversations
-    }
+    val conversations by vm.conversations.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -102,13 +79,13 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
                 actions = {
                     IconButton(
                         onClick = {
-                            isSearchVisible = !isSearchVisible
-                            if (!isSearchVisible) {
-                                searchText = ""
-                            }
+                            navController.navigate(Screen.MessageSearch)
                         }
                     ) {
-                        Icon(Lucide.Search, contentDescription = stringResource(R.string.history_page_search))
+                        Icon(
+                            Lucide.ScanSearch,
+                            contentDescription = stringResource(R.string.history_page_search_messages)
+                        )
                     }
                     IconButton(
                         onClick = {
@@ -120,18 +97,6 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
                 }
             )
         },
-        bottomBar = {
-            AnimatedVisibility(
-                visible = isSearchVisible,
-                enter = slideInVertically { it },
-                exit = slideOutVertically { it }
-            ) {
-                SearchInput(
-                    value = searchText,
-                    onValueChange = { searchText = it }
-                )
-            }
-        },
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState)
         }
@@ -142,7 +107,7 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(showConversations, key = { it.id }) { conversation ->
+            items(conversations, key = { it.id }) { conversation ->
                 SwipeableConversationItem(
                     conversation = conversation,
                     onClick = {
@@ -195,43 +160,6 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
                 }
             }
         )
-    }
-}
-
-@Composable
-private fun SearchInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-) {
-    Surface(
-        tonalElevation = 4.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .imePadding()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = {
-                    Text(stringResource(R.string.history_page_search_placeholder))
-                },
-                shape = RoundedCornerShape(50),
-                singleLine = true,
-                trailingIcon = {
-                    IconButton(
-                        onClick = { onValueChange("") },
-                        modifier = Modifier
-                    ) {
-                        Icon(Lucide.X, stringResource(R.string.history_page_clear))
-                    }
-                }
-            )
-        }
     }
 }
 

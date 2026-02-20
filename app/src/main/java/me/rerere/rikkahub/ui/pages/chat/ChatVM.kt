@@ -18,12 +18,9 @@ import androidx.paging.map
 import com.google.firebase.analytics.FirebaseAnalytics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -115,23 +112,11 @@ class ChatVM(
         it.enableWebSearch
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    // 搜索关键词
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery
-
     // 聊天列表 (使用 Paging 分页加载)
     val conversations: Flow<PagingData<ConversationListItem>> =
-        combine(
-            settings.map { it.assistantId }.distinctUntilChanged(),
-            _searchQuery
-        ) { assistantId, query -> assistantId to query }
-            .flatMapLatest { (assistantId, query) ->
-                // 根据搜索关键词决定使用哪个数据源
-                if (query.isBlank()) {
-                    conversationRepo.getConversationsOfAssistantPaging(assistantId)
-                } else {
-                    conversationRepo.searchConversationsOfAssistantPaging(assistantId, query)
-                }
+        settings.map { it.assistantId }.distinctUntilChanged()
+            .flatMapLatest { assistantId ->
+                conversationRepo.getConversationsOfAssistantPaging(assistantId)
             }
             .map { pagingData ->
                 pagingData
@@ -192,11 +177,6 @@ class ChatVM(
                     }
             }
             .cachedIn(viewModelScope)
-
-    // 更新搜索关键词
-    fun updateSearchQuery(query: String) {
-        _searchQuery.value = query
-    }
 
     // 当前模型
     val currentChatModel = settings.map { settings ->

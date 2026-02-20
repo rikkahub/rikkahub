@@ -1,25 +1,66 @@
 import * as React from "react";
 
-import { Pin, Search } from "lucide-react";
+import dayjs from "dayjs";
+import { Circle, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
-import { Input } from "~/components/ui/input";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import api from "~/services/api";
-import type { ConversationListDto, PagedResult } from "~/types";
-
-const SEARCH_PAGE_SIZE = 50;
+import type { MessageSearchResultDto } from "~/types";
 
 export interface ConversationSearchButtonProps {
   onSelect: (id: string) => void;
+}
+
+function SnippetText({ snippet }: { snippet: string }) {
+  const parts: React.ReactNode[] = [];
+  let index = 0;
+  let keyIdx = 0;
+  while (index < snippet.length) {
+    const start = snippet.indexOf("[", index);
+    if (start === -1) {
+      parts.push(snippet.substring(index));
+      break;
+    }
+    if (start > index) {
+      parts.push(snippet.substring(index, start));
+    }
+    const end = snippet.indexOf("]", start + 1);
+    if (end === -1) {
+      parts.push(snippet.substring(start));
+      break;
+    }
+    const matched = snippet.substring(start + 1, end);
+    parts.push(
+      <mark key={keyIdx++} className="bg-transparent font-semibold text-foreground not-italic">
+        {matched}
+      </mark>,
+    );
+    index = end + 1;
+  }
+  return <>{parts}</>;
+}
+
+function formatRelativeTime(updateAt: number, t: (key: string) => string): string {
+  const date = dayjs(updateAt);
+  const today = dayjs().startOf("day");
+  const yesterday = today.subtract(1, "day");
+  if (date.isSame(today, "day")) return t("conversation_sidebar.today");
+  if (date.isSame(yesterday, "day")) return t("conversation_sidebar.yesterday");
+  const sameYear = date.year() === today.year();
+  const native = date.toDate();
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  }).format(native);
 }
 
 export function ConversationSearchButton({ onSelect }: ConversationSearchButtonProps) {
@@ -28,7 +69,7 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
   const [query, setQuery] = React.useState("");
   const [searching, setSearching] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [results, setResults] = React.useState<ConversationListDto[]>([]);
+  const [results, setResults] = React.useState<MessageSearchResultDto[]>([]);
   const requestIdRef = React.useRef(0);
 
   React.useEffect(() => {
@@ -54,16 +95,12 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
       setError(null);
 
       api
-        .get<PagedResult<ConversationListDto>>("conversations/paged", {
-          searchParams: {
-            offset: 0,
-            limit: SEARCH_PAGE_SIZE,
-            query: keyword,
-          },
+        .get<MessageSearchResultDto[]>("conversations/search", {
+          searchParams: { query: keyword },
         })
         .then((data) => {
           if (requestId !== requestIdRef.current) return;
-          setResults(data.items);
+          setResults(data);
         })
         .catch((searchError) => {
           if (requestId !== requestIdRef.current) return;
@@ -93,12 +130,14 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[80svh] max-w-xl overflow-hidden p-0">
-        <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle>{t("conversation_search.search_conversations")}</DialogTitle>
-        </DialogHeader>
+        <DialogTitle className="sr-only">
+          {t("conversation_search.search_conversations")}
+        </DialogTitle>
 
-        <div className="space-y-3 px-6 py-4">
-          <Input
+        <div className="flex items-center gap-2 border-b px-4 py-3">
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -106,52 +145,61 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
             placeholder={t("conversation_search.input_placeholder")}
             autoFocus
           />
-
-          <ScrollArea className="h-[360px] rounded-md border">
-            <div className="space-y-1 p-2">
-              {searching ? (
-                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  {t("conversation_search.searching")}
-                </div>
-              ) : null}
-
-              {!searching && error ? (
-                <div className="px-2 py-6 text-center text-sm text-destructive">{error}</div>
-              ) : null}
-
-              {!searching && !error && query.trim().length === 0 ? (
-                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  {t("conversation_search.type_to_start")}
-                </div>
-              ) : null}
-
-              {!searching && !error && query.trim().length > 0 && results.length === 0 ? (
-                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  {t("conversation_search.no_results")}
-                </div>
-              ) : null}
-
-              {!searching &&
-                !error &&
-                results.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="flex w-full items-center rounded-md px-2 py-2 text-left text-sm transition hover:bg-muted"
-                    onClick={() => {
-                      onSelect(item.id);
-                      setOpen(false);
-                    }}
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {item.title || t("conversation_search.unnamed_conversation")}
-                    </span>
-                    {item.isPinned ? <Pin className="size-3 text-primary" /> : null}
-                  </button>
-                ))}
-            </div>
-          </ScrollArea>
         </div>
+
+        <ScrollArea className="h-[420px]">
+          <div className="p-2">
+            {searching ? (
+              <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                {t("conversation_search.searching")}
+              </div>
+            ) : null}
+
+            {!searching && error ? (
+              <div className="px-2 py-6 text-center text-sm text-destructive">{error}</div>
+            ) : null}
+
+            {!searching && !error && query.trim().length === 0 ? (
+              <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                {t("conversation_search.type_to_start")}
+              </div>
+            ) : null}
+
+            {!searching && !error && query.trim().length > 0 && results.length === 0 ? (
+              <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                {t("conversation_search.no_results")}
+              </div>
+            ) : null}
+
+            {!searching &&
+              !error &&
+              results.map((item) => (
+                <button
+                  key={`${item.conversationId}-${item.messageId}`}
+                  type="button"
+                  className="flex w-full items-start gap-3 rounded-md px-2 py-2 text-left transition hover:bg-muted"
+                  onClick={() => {
+                    onSelect(item.conversationId);
+                    setOpen(false);
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium">
+                        {item.title || t("conversation_search.unnamed_conversation")}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {formatRelativeTime(item.updateAt, t)}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                      <SnippetText snippet={item.snippet} />
+                    </p>
+                  </div>
+                </button>
+              ))}
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

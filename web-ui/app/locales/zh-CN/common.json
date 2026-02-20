@@ -62,11 +62,11 @@
   },
   "conversation_search": {
     "search_conversations": "搜索对话",
-    "search_failed": "搜索会话失败",
-    "input_placeholder": "输入会话标题关键词",
+    "search_failed": "搜索失败",
+    "input_placeholder": "搜索消息内容...",
     "searching": "搜索中...",
     "type_to_start": "输入关键词开始搜索",
-    "no_results": "没有找到匹配会话",
+    "no_results": "没有找到匹配的消息",
     "unnamed_conversation": "未命名会话"
   },
   "quick_jump": {

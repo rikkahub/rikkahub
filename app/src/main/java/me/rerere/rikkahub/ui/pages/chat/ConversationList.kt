@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,16 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,8 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -49,19 +42,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
-import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MoveRight
 import com.composables.icons.lucide.Pin
 import com.composables.icons.lucide.PinOff
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.X
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.ui.components.ui.Tooltip
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
@@ -87,8 +75,6 @@ fun ColumnScope.ConversationList(
     current: Conversation,
     conversations: LazyPagingItems<ConversationListItem>,
     conversationJobs: Collection<Uuid>,
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
     onClick: (Conversation) -> Unit = {},
@@ -97,7 +83,6 @@ fun ColumnScope.ConversationList(
     onPin: (Conversation) -> Unit = {},
     onMoveToAssistant: (Conversation) -> Unit = {}
 ) {
-    val navController = LocalNavController.current
     var hasScrolledToCurrent by remember(current.id) { mutableStateOf(false) }
 
     LaunchedEffect(current.id, conversations.itemCount, hasScrolledToCurrent) {
@@ -108,58 +93,6 @@ fun ColumnScope.ConversationList(
         if (currentIndex >= 0) {
             listState.scrollToItem(currentIndex)
             hasScrolledToCurrent = true
-        }
-    }
-
-    // fix: compose很奇怪，会自动聚焦到第一个文本框
-    // 在这里放一个空的Box，防止自动聚焦到第一个文本框弹出IME
-    Box(modifier = Modifier.focusable())
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        TextField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange,
-            modifier = Modifier
-                .weight(1f),
-            shape = RoundedCornerShape(50),
-            trailingIcon = {
-                AnimatedVisibility(searchQuery.isNotEmpty()) {
-                    IconButton(
-                        onClick = {
-                            onSearchQueryChange("")
-                        }
-                    ) {
-                        Icon(Lucide.X, null)
-                    }
-                }
-            },
-            colors = TextFieldDefaults.colors(
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                disabledIndicatorColor = Color.Transparent,
-            ),
-            placeholder = {
-                Text(stringResource(id = R.string.chat_page_search_placeholder))
-            }
-        )
-
-        Tooltip(
-            tooltip = { Text(stringResource(id = R.string.chat_page_search_placeholder)) },
-        ) {
-            IconButton(
-                onClick = { navController.navigate(Screen.History) }
-            ) {
-                Icon(
-                    imageVector = Lucide.History,
-                    contentDescription = stringResource(R.string.chat_page_history),
-                )
-            }
         }
     }
 

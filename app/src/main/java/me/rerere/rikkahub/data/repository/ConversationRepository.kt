@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.migrateToolNodes
 import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
@@ -31,6 +32,7 @@ class ConversationRepository(
     private val favoriteDAO: FavoriteDAO,
     private val database: AppDatabase,
     private val filesManager: FilesManager,
+    private val messageFtsManager: MessageFtsManager,
 ) {
     companion object {
         private const val PAGE_SIZE = 20
@@ -204,6 +206,7 @@ class ConversationRepository(
             )
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
+        messageFtsManager.indexConversation(conversation)
     }
 
     suspend fun updateConversation(conversation: Conversation) {
@@ -215,6 +218,7 @@ class ConversationRepository(
             messageNodeDAO.deleteByConversation(conversation.id.toString())
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
+        messageFtsManager.indexConversation(conversation)
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
@@ -224,6 +228,7 @@ class ConversationRepository(
         } else {
             conversation
         }
+        messageFtsManager.deleteConversation(conversation.id.toString())
         database.withTransaction {
             // message_node 会通过 CASCADE 自动删除
             conversationDAO.delete(
@@ -231,6 +236,21 @@ class ConversationRepository(
             )
         }
         filesManager.deleteChatFiles(fullConversation.files)
+    }
+
+    suspend fun searchMessages(keyword: String) = messageFtsManager.search(keyword)
+
+    suspend fun rebuildAllIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }) {
+        messageFtsManager.deleteAll()
+        val allIds = conversationDAO.getAllIds()
+        val total = allIds.size
+        allIds.forEachIndexed { index, id ->
+            val entity = conversationDAO.getConversationById(id) ?: return@forEachIndexed
+            val nodes = loadMessageNodes(entity.id)
+            val conversation = conversationEntityToConversation(entity, nodes)
+            messageFtsManager.indexConversation(conversation)
+            onProgress(index + 1, total)
+        }
     }
 
     suspend fun deleteConversationOfAssistant(assistantId: Uuid) {

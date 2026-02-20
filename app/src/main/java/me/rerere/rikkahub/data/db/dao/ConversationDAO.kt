@@ -42,6 +42,9 @@ interface ConversationDAO {
     @Query("SELECT * FROM conversationentity WHERE id = :id")
     fun getConversationFlowById(id: String): Flow<ConversationEntity?>
 
+    @Query("SELECT id FROM conversationentity")
+    suspend fun getAllIds(): List<String>
+
     @Query("SELECT * FROM conversationentity WHERE id = :id")
     suspend fun getConversationById(id: String): ConversationEntity?
 

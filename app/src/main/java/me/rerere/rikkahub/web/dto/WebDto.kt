@@ -183,6 +183,16 @@ data class ForkConversationResponse(
 )
 
 @Serializable
+data class MessageSearchResultDto(
+    val nodeId: String,
+    val messageId: String,
+    val conversationId: String,
+    val title: String,
+    val updateAt: Long,
+    val snippet: String,
+)
+
+@Serializable
 data class WebAuthTokenResponse(
     val token: String,
     val expiresAt: Long,

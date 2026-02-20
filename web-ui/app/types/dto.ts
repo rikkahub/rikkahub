@@ -94,3 +94,12 @@ export interface ConversationErrorEventDto {
   type: "error";
   message: string;
 }
+
+export interface MessageSearchResultDto {
+  nodeId: string;
+  messageId: string;
+  conversationId: string;
+  title: string;
+  updateAt: number;
+  snippet: string;
+}
