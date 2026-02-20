@@ -2,15 +2,12 @@ package me.rerere.rikkahub
 
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.ProviderProxy
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
 import me.rerere.rikkahub.ui.components.ui.encodeForShare
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.io.encoding.Base64
 import kotlin.uuid.Uuid
 
 class ShareSheetTest {
@@ -31,7 +28,6 @@ class ShareSheetTest {
             baseUrl = "https://api.openai.com/v1",
             chatCompletionsPath = "/chat/completions",
             useResponseApi = false,
-            proxy = ProviderProxy.None,
             balanceOption = BalanceOption(enabled = false)
         )
 
@@ -44,8 +40,9 @@ class ShareSheetTest {
         assertEquals("Test OpenAI", decodedOpenAI.name)
         assertEquals("sk-test-key", decodedOpenAI.apiKey)
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
-        assertEquals(1, decodedOpenAI.models.size)
-        assertEquals("gpt-4", decodedOpenAI.models[0].displayName)
+        assertEquals("/chat/completions", decodedOpenAI.chatCompletionsPath)
+        assertEquals(false, decodedOpenAI.useResponseApi)
+        assertTrue(decodedOpenAI.models.isEmpty())
     }
 
     @Test
@@ -96,31 +93,23 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `decode should handle provider with HTTP proxy`() {
+    fun `decode should handle OpenAI response api flags`() {
         val original = ProviderSetting.OpenAI(
             id = Uuid.random(),
             enabled = true,
-            name = "Test with Proxy",
+            name = "Test with Response API",
             models = emptyList(),
             apiKey = "test-key",
             baseUrl = "https://api.test.com",
-            proxy = ProviderProxy.Http(
-                address = "127.0.0.1",
-                port = 8080,
-                username = "user",
-                password = "pass"
-            )
+            useResponseApi = true,
+            chatCompletionsPath = "/responses"
         )
 
         val encoded = original.encodeForShare()
         val decoded = decodeProviderSetting(encoded) as ProviderSetting.OpenAI
 
-        assertTrue(decoded.proxy is ProviderProxy.Http)
-        val proxy = decoded.proxy as ProviderProxy.Http
-        assertEquals("127.0.0.1", proxy.address)
-        assertEquals(8080, proxy.port)
-        assertEquals("user", proxy.username)
-        assertEquals("pass", proxy.password)
+        assertTrue(decoded.useResponseApi)
+        assertEquals("/responses", decoded.chatCompletionsPath)
     }
 
     @Test

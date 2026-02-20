@@ -82,6 +82,7 @@ import com.composables.icons.lucide.Cable
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.RotateCw
 import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Share
 import com.composables.icons.lucide.Trash2
@@ -119,6 +120,8 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
+import me.rerere.rikkahub.ui.pages.setting.components.isUsingDefaultBaseUrl
+import me.rerere.rikkahub.ui.pages.setting.components.resetBaseUrlToDefault
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.plus
@@ -299,6 +302,18 @@ private fun SettingProviderConfigPage(
                 ) {
                     Icon(Lucide.Trash2, "Delete")
                 }
+            }
+
+            IconButton(
+                onClick = {
+                    internalProvider = internalProvider.resetBaseUrlToDefault()
+                },
+                enabled = !internalProvider.isUsingDefaultBaseUrl(),
+            ) {
+                Icon(
+                    imageVector = Lucide.RotateCw,
+                    contentDescription = stringResource(R.string.setting_model_page_reset_to_default)
+                )
             }
 
             Button(

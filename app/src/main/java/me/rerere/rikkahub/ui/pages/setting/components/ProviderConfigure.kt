@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -144,6 +145,41 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
 
         else -> error("Unsupported provider type: $type")
     }
+}
+
+internal fun ProviderSetting.defaultBaseUrlForReset(): String {
+    val defaultProvider = DEFAULT_PROVIDERS.find { it.id == id }
+    if (defaultProvider != null) {
+        when (this) {
+            is ProviderSetting.OpenAI -> if (defaultProvider is ProviderSetting.OpenAI) return defaultProvider.baseUrl
+            is ProviderSetting.Google -> if (defaultProvider is ProviderSetting.Google) return defaultProvider.baseUrl
+            is ProviderSetting.Claude -> if (defaultProvider is ProviderSetting.Claude) return defaultProvider.baseUrl
+        }
+    }
+
+    return when (this) {
+        is ProviderSetting.OpenAI -> ProviderSetting.OpenAI().baseUrl
+        is ProviderSetting.Google -> ProviderSetting.Google().baseUrl
+        is ProviderSetting.Claude -> ProviderSetting.Claude().baseUrl
+    }
+}
+
+internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
+    val defaultBaseUrl = defaultBaseUrlForReset()
+    return when (this) {
+        is ProviderSetting.OpenAI -> this.copy(baseUrl = defaultBaseUrl)
+        is ProviderSetting.Google -> this.copy(baseUrl = defaultBaseUrl)
+        is ProviderSetting.Claude -> this.copy(baseUrl = defaultBaseUrl)
+    }
+}
+
+internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
+    val baseUrl = when (this) {
+        is ProviderSetting.OpenAI -> this.baseUrl
+        is ProviderSetting.Google -> this.baseUrl
+        is ProviderSetting.Claude -> this.baseUrl
+    }
+    return baseUrl == defaultBaseUrlForReset()
 }
 
 private fun String.convertToTargetBaseUrl(targetDefaultBaseUrl: String): String {
