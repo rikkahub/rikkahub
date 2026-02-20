@@ -41,6 +41,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -64,8 +66,8 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
     if (showRebuildDialog) {
         AlertDialog(
             onDismissRequest = { showRebuildDialog = false },
-            title = { Text("重建消息索引") },
-            text = { Text("此操作将清空现有索引并重新扫描全部聊天记录，消息越多耗时越长，确认继续？") },
+            title = { Text(stringResource(R.string.search_page_rebuild_index)) },
+            text = { Text(stringResource(R.string.search_page_rebuild_index_desc)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -73,12 +75,12 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                         vm.rebuildIndex()
                     }
                 ) {
-                    Text("确认")
+                    Text(stringResource(R.string.confirm))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRebuildDialog = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -88,13 +90,13 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
         topBar = {
             TopAppBar(
                 navigationIcon = { BackButton() },
-                title = { Text("搜索消息") },
+                title = { Text(stringResource(R.string.search_page_title)) },
                 actions = {
                     IconButton(
                         onClick = { showRebuildDialog = true },
                         enabled = !vm.isRebuilding,
                     ) {
-                        Icon(Lucide.RefreshCw, contentDescription = "重建索引")
+                        Icon(Lucide.RefreshCw, contentDescription = stringResource(R.string.search_page_rebuild_button))
                     }
                 }
             )
@@ -112,7 +114,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .focusRequester(focusRequester),
-                placeholder = { Text("搜索消息内容...") },
+                placeholder = { Text(stringResource(R.string.search_page_placeholder)) },
                 shape = RoundedCornerShape(50),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -134,7 +136,11 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                         ) {
                             val (current, total) = vm.rebuildProgress
                             Text(
-                                text = if (total > 0) "正在重建索引 ($current / $total)..." else "正在重建索引...",
+                                text = if (total > 0) stringResource(
+                                    R.string.search_page_rebuilding,
+                                    current,
+                                    total
+                                ) else stringResource(R.string.search_page_rebuilding_simple),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -146,7 +152,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "输入关键词，按搜索键查找消息",
+                                text = stringResource(R.string.search_page_hint),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -159,7 +165,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No results",
+                                text = stringResource(R.string.search_page_no_results),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -198,6 +204,7 @@ private fun SearchResultItem(
     onClick: () -> Unit,
 ) {
     val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
+    val untitled = stringResource(R.string.search_page_untitled)
     val snippetText = buildAnnotatedString {
         val snippet = result.snippet
         var index = 0
@@ -240,7 +247,7 @@ private fun SearchResultItem(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = result.title.ifBlank { "无标题" },
+                text = result.title.ifBlank { untitled },
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )

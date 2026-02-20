@@ -82,7 +82,10 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
                             navController.navigate(Screen.MessageSearch)
                         }
                     ) {
-                        Icon(Lucide.ScanSearch, contentDescription = "搜索消息内容")
+                        Icon(
+                            Lucide.ScanSearch,
+                            contentDescription = stringResource(R.string.history_page_search_messages)
+                        )
                     }
                     IconButton(
                         onClick = {
