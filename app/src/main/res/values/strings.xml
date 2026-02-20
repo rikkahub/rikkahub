@@ -828,5 +828,6 @@
   <string name="backup_page_reminder_last_time">Last backup: %1$s</string>
   <string name="backup_page_reminder_dismiss">Dismiss</string>
   <string name="deep_thinking_seconds">Thought for %1$.1f seconds</string>
+  <string name="chat_page_search_chats">Search Chats</string>
 </resources>
 

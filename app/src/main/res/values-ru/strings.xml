@@ -821,5 +821,6 @@
   <string name="backup_page_reminder_last_time">Последнее резервное копирование: %1$s</string>
   <string name="backup_page_reminder_dismiss">Отклонить</string>
   <string name="deep_thinking_seconds">Думал %1$.1f секунд</string>
+  <string name="chat_page_search_chats">Поиск чатов</string>
 </resources>
 

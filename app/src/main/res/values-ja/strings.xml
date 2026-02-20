@@ -828,5 +828,6 @@
   <string name="backup_page_reminder_last_time">最終バックアップ: %1$s</string>
   <string name="backup_page_reminder_dismiss">閉じる</string>
   <string name="deep_thinking_seconds">%1$.1f 秒間思考中</string>
+  <string name="chat_page_search_chats">チャットを検索</string>
 </resources>
 

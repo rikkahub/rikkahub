@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,7 +42,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
-import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MoveRight
 import com.composables.icons.lucide.Pin
@@ -51,10 +49,7 @@ import com.composables.icons.lucide.PinOff
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Trash2
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.ui.components.ui.Tooltip
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
@@ -88,7 +83,6 @@ fun ColumnScope.ConversationList(
     onPin: (Conversation) -> Unit = {},
     onMoveToAssistant: (Conversation) -> Unit = {}
 ) {
-    val navController = LocalNavController.current
     var hasScrolledToCurrent by remember(current.id) { mutableStateOf(false) }
 
     LaunchedEffect(current.id, conversations.itemCount, hasScrolledToCurrent) {
@@ -99,27 +93,6 @@ fun ColumnScope.ConversationList(
         if (currentIndex >= 0) {
             listState.scrollToItem(currentIndex)
             hasScrolledToCurrent = true
-        }
-    }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.End,
-    ) {
-        Tooltip(
-            tooltip = { Text(stringResource(id = R.string.chat_page_history)) },
-        ) {
-            IconButton(
-                onClick = { navController.navigate(Screen.History) }
-            ) {
-                Icon(
-                    imageVector = Lucide.History,
-                    contentDescription = stringResource(R.string.chat_page_history),
-                )
-            }
         }
     }
 

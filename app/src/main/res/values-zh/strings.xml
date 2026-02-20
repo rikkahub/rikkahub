@@ -828,5 +828,6 @@
   <string name="backup_page_reminder_last_time">上次备份：%1$s</string>
   <string name="backup_page_reminder_dismiss">忽略</string>
   <string name="deep_thinking_seconds">思考了 %1$.1f 秒</string>
+  <string name="chat_page_search_chats">搜索聊天</string>
 </resources>
 
