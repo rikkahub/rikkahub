@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { Pin, Search } from "lucide-react";
+import dayjs from "dayjs";
+import { MessageCircle, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "~/components/ui/button";
@@ -14,12 +15,54 @@ import {
 import { Input } from "~/components/ui/input";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import api from "~/services/api";
-import type { ConversationListDto, PagedResult } from "~/types";
-
-const SEARCH_PAGE_SIZE = 50;
+import type { MessageSearchResultDto } from "~/types";
 
 export interface ConversationSearchButtonProps {
   onSelect: (id: string) => void;
+}
+
+function SnippetText({ snippet }: { snippet: string }) {
+  const parts: React.ReactNode[] = [];
+  let index = 0;
+  let keyIdx = 0;
+  while (index < snippet.length) {
+    const start = snippet.indexOf("[", index);
+    if (start === -1) {
+      parts.push(snippet.substring(index));
+      break;
+    }
+    if (start > index) {
+      parts.push(snippet.substring(index, start));
+    }
+    const end = snippet.indexOf("]", start + 1);
+    if (end === -1) {
+      parts.push(snippet.substring(start));
+      break;
+    }
+    const matched = snippet.substring(start + 1, end);
+    parts.push(
+      <mark key={keyIdx++} className="bg-transparent font-semibold text-foreground not-italic">
+        {matched}
+      </mark>,
+    );
+    index = end + 1;
+  }
+  return <>{parts}</>;
+}
+
+function formatRelativeTime(updateAt: number, t: (key: string) => string): string {
+  const date = dayjs(updateAt);
+  const today = dayjs().startOf("day");
+  const yesterday = today.subtract(1, "day");
+  if (date.isSame(today, "day")) return t("conversation_sidebar.today");
+  if (date.isSame(yesterday, "day")) return t("conversation_sidebar.yesterday");
+  const sameYear = date.year() === today.year();
+  const native = date.toDate();
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  }).format(native);
 }
 
 export function ConversationSearchButton({ onSelect }: ConversationSearchButtonProps) {
@@ -28,7 +71,7 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
   const [query, setQuery] = React.useState("");
   const [searching, setSearching] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [results, setResults] = React.useState<ConversationListDto[]>([]);
+  const [results, setResults] = React.useState<MessageSearchResultDto[]>([]);
   const requestIdRef = React.useRef(0);
 
   React.useEffect(() => {
@@ -54,16 +97,12 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
       setError(null);
 
       api
-        .get<PagedResult<ConversationListDto>>("conversations/paged", {
-          searchParams: {
-            offset: 0,
-            limit: SEARCH_PAGE_SIZE,
-            query: keyword,
-          },
+        .get<MessageSearchResultDto[]>("conversations/search", {
+          searchParams: { query: keyword },
         })
         .then((data) => {
           if (requestId !== requestIdRef.current) return;
-          setResults(data.items);
+          setResults(data);
         })
         .catch((searchError) => {
           if (requestId !== requestIdRef.current) return;
@@ -135,18 +174,30 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
                 !error &&
                 results.map((item) => (
                   <button
-                    key={item.id}
+                    key={`${item.conversationId}-${item.messageId}`}
                     type="button"
-                    className="flex w-full items-center rounded-md px-2 py-2 text-left text-sm transition hover:bg-muted"
+                    className="flex w-full items-start gap-3 rounded-md px-2 py-2 text-left transition hover:bg-muted"
                     onClick={() => {
-                      onSelect(item.id);
+                      onSelect(item.conversationId);
                       setOpen(false);
                     }}
                   >
-                    <span className="min-w-0 flex-1 truncate">
-                      {item.title || t("conversation_search.unnamed_conversation")}
-                    </span>
-                    {item.isPinned ? <Pin className="size-3 text-primary" /> : null}
+                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <MessageCircle className="size-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-medium">
+                          {item.title || t("conversation_search.unnamed_conversation")}
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {formatRelativeTime(item.updateAt, t)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                        <SnippetText snippet={item.snippet} />
+                      </p>
+                    </div>
                   </button>
                 ))}
             </div>
