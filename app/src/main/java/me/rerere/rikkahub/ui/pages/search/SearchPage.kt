@@ -48,6 +48,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
+import me.rerere.rikkahub.utils.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -230,9 +231,7 @@ private fun SearchResultItem(
         }
     }
     val formattedTime = remember(result.updateAt) {
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-            .withZone(ZoneId.systemDefault())
-            .format(result.updateAt)
+        result.updateAt.toLocalDateTime()
     }
 
     Surface(
