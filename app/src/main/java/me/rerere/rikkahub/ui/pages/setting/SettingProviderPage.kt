@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.Camera
+import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.GripHorizontal
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Import
@@ -92,12 +93,6 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val scope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
     val lazyListState = rememberLazyStaggeredGridState()
-    val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
-        val newProviders = settings.providers.toMutableList().apply {
-            add(to.index, removeAt(from.index))
-        }
-        vm.updateSettings(settings.copy(providers = newProviders))
-    }
 
     val filteredProviders = remember(settings.providers, searchQuery) {
         if (searchQuery.isBlank()) {
@@ -107,6 +102,21 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 provider.name.contains(searchQuery, ignoreCase = true)
             }
         }
+    }
+    val showRikkaRouterCard = remember(searchQuery) {
+        searchQuery.isBlank() || "rikkarouter".contains(searchQuery.trim(), ignoreCase = true)
+    }
+    val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
+        val cardOffset = if (showRikkaRouterCard) 1 else 0
+        val fromIndex = from.index - cardOffset
+        val toIndex = to.index - cardOffset
+        if (fromIndex !in settings.providers.indices || toIndex !in settings.providers.indices) {
+            return@rememberReorderableLazyStaggeredGridState
+        }
+        val newProviders = settings.providers.toMutableList().apply {
+            add(toIndex, removeAt(fromIndex))
+        }
+        vm.updateSettings(settings.copy(providers = newProviders))
     }
 
     Scaffold(
@@ -127,7 +137,8 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                 }
                                 if (aihubmixIndex != -1) {
                                     scope.launch {
-                                        lazyListState.animateScrollToItem(aihubmixIndex)
+                                        val targetIndex = aihubmixIndex + if (showRikkaRouterCard) 1 else 0
+                                        lazyListState.animateScrollToItem(targetIndex)
                                     }
                                 }
                             }
@@ -192,6 +203,17 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 state = lazyListState,
                 columns = StaggeredGridCells.Fixed(2)
             ) {
+                if (showRikkaRouterCard) {
+                    items(listOf("rikkarouter"), key = { it }) {
+                        RikkaRouterItem(
+                            modifier = Modifier.fillMaxWidth(),
+                            modelCount = settings.rikkaRouter.groups.size,
+                            onClick = {
+                                navController.navigate(Screen.SettingRikkaRouter)
+                            }
+                        )
+                    }
+                }
                 items(filteredProviders, key = { it.id }) { provider ->
                     ReorderableItem(
                         state = reorderableState,
@@ -226,6 +248,60 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                 navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
                             }
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RikkaRouterItem(
+    modelCount: Int,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+        ),
+        onClick = onClick
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Lucide.Boxes,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "rikkarouter",
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                    CompositionLocalProvider(LocalContentColor provides LocalContentColor.current.copy(alpha = 0.7f)) {
+                        Text("常用模型聚合与失败兜底切换")
+                    }
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Tag(type = TagType.INFO) {
+                        Text("模型 $modelCount")
                     }
                 }
             }

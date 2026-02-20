@@ -204,6 +204,7 @@ internal fun AssistantBasicContent(
                         modelId = assistant.chatModelId,
                         providers = providers,
                         type = ModelType.CHAT,
+                        includeRikkaRouter = true,
                         onSelect = {
                             onUpdate(
                                 assistant.copy(

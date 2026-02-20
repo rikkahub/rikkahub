@@ -252,6 +252,7 @@ fun ChatInput(
                     ModelSelector(
                         modelId = assistant.chatModelId ?: settings.chatModelId,
                         providers = settings.providers,
+                        includeRikkaRouter = true,
                         onSelect = {
                             onUpdateChatModel(it)
                             dismissExpand()

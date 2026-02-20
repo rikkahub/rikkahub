@@ -421,6 +421,7 @@ private fun DefaultChatModelSetting(
                 ModelSelector(
                     modelId = settings.chatModelId,
                     type = ModelType.CHAT,
+                    includeRikkaRouter = true,
                     onSelect = {
                         vm.updateSettings(
                             settings.copy(

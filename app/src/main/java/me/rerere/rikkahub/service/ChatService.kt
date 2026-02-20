@@ -28,14 +28,15 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
@@ -49,6 +50,7 @@ import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.data.ai.ConversationProviderKeyStore
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -67,6 +69,7 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.resolveRikkaRouterCandidatesByModelId
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.AssistantAffectScope
@@ -85,6 +88,8 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+private const val MAX_SAME_PROVIDER_KEY_RETRY = 3
+private val KEY_SPLIT_REGEX = Regex("[\\s,]+")
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -119,6 +124,7 @@ class ChatService(
     private val generationHandler: GenerationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
+    private val conversationProviderKeyStore: ConversationProviderKeyStore,
     private val localTools: LocalTools,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
@@ -427,16 +433,13 @@ class ChatService(
         messageRange: ClosedRange<Int>? = null
     ) {
         val settings = settingsStore.settingsFlow.first()
-        val model = settings.getCurrentChatModel() ?: return
+        val selectedModel = settings.getCurrentChatModel() ?: return
 
-        runCatching {
-            val conversation = getConversationFlow(conversationId).value
+        try {
+            val currentConversation = getConversationFlow(conversationId).value
+            updateConversation(conversationId, currentConversation.copy(chatSuggestions = emptyList()))
 
-            // reset suggestions
-            updateConversation(conversationId, conversation.copy(chatSuggestions = emptyList()))
-
-            // memory tool
-            if (!model.abilities.contains(ModelAbility.TOOL)) {
+            if (!selectedModel.abilities.contains(ModelAbility.TOOL)) {
                 if (settings.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
@@ -445,8 +448,21 @@ class ChatService(
                 }
             }
 
-            // check invalid messages
             checkInvalidMessages(conversationId)
+            val baseConversation = getConversationFlow(conversationId).value
+            val scopedMessages = baseConversation.currentMessages.let {
+                if (messageRange != null) {
+                    it.subList(messageRange.start, messageRange.endInclusive + 1)
+                } else {
+                    it
+                }
+            }
+            val assistant = settings.getCurrentAssistant()
+            val memories = if (assistant.useGlobalMemory) {
+                memoryRepository.getGlobalMemories()
+            } else {
+                memoryRepository.getMemoriesOfAssistant(settings.assistantId.toString())
+            }
             val availableMcpTools = mcpManager.getAllAvailableTools()
             val mcpWrappedTools = availableMcpTools.map { tool ->
                 Tool(
@@ -463,131 +479,252 @@ class ChatService(
                     },
                 )
             }
+            val tools = buildList {
+                if (settings.enableWebSearch) {
+                    addAll(createSearchTools(context, settings))
+                }
+                addAll(
+                    localTools.getTools(
+                        options = settings.getCurrentAssistant().localTools,
+                        sandboxId = conversationId,
+                        workflowStateProvider = {
+                            getConversationFlow(conversationId).value.workflowState
+                        },
+                        onWorkflowStateUpdate = { newWorkflowState ->
+                            val conversation = getConversationFlow(conversationId).value
+                            updateConversation(
+                                conversationId,
+                                conversation.copy(workflowState = newWorkflowState)
+                            )
+                        },
+                        todoStateProvider = {
+                            val conversation = getConversationFlow(conversationId).value
+                            conversation.todoState ?: if (
+                                settings.getCurrentAssistant().localTools.contains(
+                                    me.rerere.rikkahub.data.ai.tools.LocalToolOption.WorkflowTodo
+                                )
+                            ) {
+                                val newTodoState = me.rerere.rikkahub.data.model.TodoState(isEnabled = true)
+                                updateConversation(
+                                    conversationId,
+                                    conversation.copy(todoState = newTodoState)
+                                )
+                                newTodoState
+                            } else {
+                                null
+                            }
+                        },
+                        onTodoStateUpdate = { newTodoState ->
+                            val conversation = getConversationFlow(conversationId).value
+                            updateConversation(
+                                conversationId,
+                                conversation.copy(todoState = newTodoState)
+                            )
+                        },
+                        subAgents = me.rerere.rikkahub.data.model.SubAgentTemplates.All,
+                        settings = settings,
+                        parentModel = selectedModel,
+                        parentWorkflowPhase = baseConversation.workflowState?.phase,
+                        mcpTools = mcpWrappedTools,
+                    )
+                )
+                addAll(mcpWrappedTools)
+            }
 
-            // start generating
+            val targets = resolveGenerationTargets(settings, selectedModel)
+            var finalError: Throwable? = null
+            var completed = false
+
+            for ((targetIndex, target) in targets.withIndex()) {
+                val rawKeys = getProviderRawKeys(target.provider)
+                val keyCount = splitApiKeys(rawKeys).size
+                val maxAttempts = if (keyCount > 1) MAX_SAME_PROVIDER_KEY_RETRY else 1
+
+                for (attempt in 0 until maxAttempts) {
+                    val pinnedKey = when {
+                        keyCount <= 1 -> null
+                        attempt == 0 -> conversationProviderKeyStore.resolvePinnedKey(
+                            conversationId = conversationId,
+                            providerId = target.provider.id,
+                            rawKeys = rawKeys
+                        )
+                        else -> conversationProviderKeyStore.advancePinnedKey(
+                            conversationId = conversationId,
+                            providerId = target.provider.id,
+                            rawKeys = rawKeys
+                        )
+                    }
+                    val providerOverride = pinnedKey?.let { key ->
+                        withProviderApiKey(target.provider, key)
+                    } ?: target.provider
+
+                    updateConversation(conversationId, baseConversation)
+                    val result = runCatching {
+                        runGenerationAttempt(
+                            settings = settings,
+                            conversationId = conversationId,
+                            model = target.model,
+                            providerOverride = providerOverride,
+                            messages = scopedMessages,
+                            assistant = assistant,
+                            memories = memories,
+                            tools = tools,
+                            truncateIndex = baseConversation.truncateIndex,
+                        )
+                    }
+                    if (result.isSuccess) {
+                        completed = true
+                        break
+                    } else {
+                        finalError = result.exceptionOrNull()
+                    }
+                }
+
+                if (completed) break
+                if (targetIndex < targets.lastIndex) {
+                    val currentProvider = target.provider.name.ifBlank { target.provider.id.toString() }
+                    val nextProvider = targets[targetIndex + 1].provider.name.ifBlank {
+                        targets[targetIndex + 1].provider.id.toString()
+                    }
+                    addError(
+                        IllegalStateException("$currentProvider 失败，切换到 $nextProvider"),
+                        conversationId
+                    )
+                }
+            }
+
+            if (!completed) {
+                throw (finalError ?: IllegalStateException("所有候选供应商均失败"))
+            }
+
+            val finalConversation = getConversationFlow(conversationId).value
+            saveConversation(conversationId, finalConversation)
+            appScope.launch { generateTitle(conversationId, finalConversation) }
+            appScope.launch { generateSuggestion(conversationId, finalConversation) }
+        } catch (error: Throwable) {
+            cancelLiveUpdateNotification(conversationId)
+            error.printStackTrace()
+            addError(error, conversationId)
+            Logging.log(TAG, "handleMessageComplete: $error")
+            Logging.log(TAG, error.stackTraceToString())
+        }
+    }
+
+    private data class GenerationTarget(
+        val provider: ProviderSetting,
+        val model: Model,
+    )
+
+    private fun resolveGenerationTargets(
+        settings: me.rerere.rikkahub.data.datastore.Settings,
+        selectedModel: Model
+    ): List<GenerationTarget> {
+        val isRikkaRouterModel = settings.rikkaRouter.groups.any { it.id == selectedModel.id }
+        if (isRikkaRouterModel) {
+            val candidates = settings.resolveRikkaRouterCandidatesByModelId(selectedModel.id)
+            if (candidates.isEmpty()) {
+                error("rikkarouter 未配置可用模型")
+            }
+            return candidates.map { candidate ->
+                GenerationTarget(
+                    provider = candidate.provider,
+                    model = candidate.model
+                )
+            }
+        }
+
+        val provider = selectedModel.findProvider(settings.providers)
+            ?: error("Provider not found")
+        return listOf(
+            GenerationTarget(
+                provider = provider,
+                model = selectedModel
+            )
+        )
+    }
+
+    private fun getProviderRawKeys(provider: ProviderSetting): String {
+        return when (provider) {
+            is ProviderSetting.OpenAI -> provider.apiKey
+            is ProviderSetting.Claude -> provider.apiKey
+            is ProviderSetting.Google -> if (provider.vertexAI) "" else provider.apiKey
+        }
+    }
+
+    private fun splitApiKeys(rawKeys: String): List<String> {
+        return rawKeys
+            .split(KEY_SPLIT_REGEX)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    private fun withProviderApiKey(provider: ProviderSetting, apiKey: String): ProviderSetting {
+        return when (provider) {
+            is ProviderSetting.OpenAI -> provider.copy(apiKey = apiKey)
+            is ProviderSetting.Claude -> provider.copy(apiKey = apiKey)
+            is ProviderSetting.Google -> if (provider.vertexAI) provider else provider.copy(apiKey = apiKey)
+        }
+    }
+
+    private suspend fun runGenerationAttempt(
+        settings: me.rerere.rikkahub.data.datastore.Settings,
+        conversationId: Uuid,
+        model: Model,
+        providerOverride: ProviderSetting,
+        messages: List<UIMessage>,
+        assistant: me.rerere.rikkahub.data.model.Assistant,
+        memories: List<me.rerere.rikkahub.data.model.AssistantMemory>,
+        tools: List<Tool>,
+        truncateIndex: Int,
+    ) {
+        try {
             generationHandler.generateText(
                 settings = settings,
                 model = model,
-                messages = conversation.currentMessages.let {
-                    if (messageRange != null) {
-                        it.subList(messageRange.start, messageRange.endInclusive + 1)
-                    } else {
-                        it
-                    }
-                },
-                assistant = settings.getCurrentAssistant(),
-                memories = if (settings.getCurrentAssistant().useGlobalMemory) {
-                    memoryRepository.getGlobalMemories()
-                } else {
-                    memoryRepository.getMemoriesOfAssistant(settings.assistantId.toString())
-                },
+                providerOverride = providerOverride,
+                messages = messages,
+                assistant = assistant,
+                memories = memories,
                 inputTransformers = buildList {
                     addAll(inputTransformers)
                     add(templateTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = buildList {
-                    if (settings.enableWebSearch) {
-                        addAll(createSearchTools(context, settings))
-                    }
-                    addAll(
-                        localTools.getTools(
-                            options = settings.getCurrentAssistant().localTools,
-                            sandboxId = conversationId,
-                            workflowStateProvider = {
-                                getConversationFlow(conversationId).value.workflowState
-                            },
-                            onWorkflowStateUpdate = { newWorkflowState ->
-                                val currentConversation = getConversationFlow(conversationId).value
-                                updateConversation(
-                                    conversationId,
-                                    currentConversation.copy(workflowState = newWorkflowState)
-                                )
-                            },
-                            todoStateProvider = {
-                                val currentConversation = getConversationFlow(conversationId).value
-                                currentConversation.todoState ?: if (
-                                    settings.getCurrentAssistant().localTools.contains(
-                                        me.rerere.rikkahub.data.ai.tools.LocalToolOption.WorkflowTodo
-                                    )
-                                ) {
-                                    val newTodoState = me.rerere.rikkahub.data.model.TodoState(isEnabled = true)
-                                    updateConversation(
-                                        conversationId,
-                                        currentConversation.copy(todoState = newTodoState)
-                                    )
-                                    newTodoState
-                                } else {
-                                    null
-                                }
-                            },
-                            onTodoStateUpdate = { newTodoState ->
-                                val currentConversation = getConversationFlow(conversationId).value
-                                updateConversation(
-                                    conversationId,
-                                    currentConversation.copy(todoState = newTodoState)
-                                )
-                            },
-                            subAgents = me.rerere.rikkahub.data.model.SubAgentTemplates.All,
-                            settings = settings,
-                            parentModel = model,
-                            parentWorkflowPhase = conversation.workflowState?.phase,
-                            mcpTools = mcpWrappedTools,
-                        )
-                    )
-                    addAll(mcpWrappedTools)
-                },
-                truncateIndex = conversation.truncateIndex,
-            ).onCompletion {
-                // 取消 Live Update 通知
-                cancelLiveUpdateNotification(conversationId)
-
-                // 可能被取消了，或者意外结束，兜底更新
-                val updatedConversation = getConversationFlow(conversationId).value.copy(
-                    messageNodes = getConversationFlow(conversationId).value.messageNodes.map { node ->
-                        node.copy(messages = node.messages.map { it.finishReasoning() })
-                    },
-                    updateAt = Instant.now()
-                )
-                updateConversation(conversationId, updatedConversation)
-
-                // Show notification if app is not in foreground
-                if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
-                    sendGenerationDoneNotification(conversationId)
-                }
-            }.collect { chunk ->
+                tools = tools,
+                truncateIndex = truncateIndex,
+            ).collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunk.messages)
                         updateConversation(conversationId, updatedConversation)
 
-                        // 如果应用不在前台，发送 Live Update 通知
-                        if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
+                        if (!isForeground.value &&
+                            settings.displaySetting.enableNotificationOnMessageGeneration &&
+                            settings.displaySetting.enableLiveUpdateNotification
+                        ) {
                             sendLiveUpdateNotification(conversationId, chunk.messages)
                         }
                     }
                 }
             }
-        }.onFailure {
-            // 取消 Live Update 通知
+        } finally {
             cancelLiveUpdateNotification(conversationId)
+        }
 
-            it.printStackTrace()
-            addError(it, conversationId)
-            Logging.log(TAG, "handleMessageComplete: $it")
-            Logging.log(TAG, it.stackTraceToString())
-        }.onSuccess {
-            val finalConversation = getConversationFlow(conversationId).value
-            saveConversation(conversationId, finalConversation)
+        val updatedConversation = getConversationFlow(conversationId).value.copy(
+            messageNodes = getConversationFlow(conversationId).value.messageNodes.map { node ->
+                node.copy(messages = node.messages.map { it.finishReasoning() })
+            },
+            updateAt = Instant.now()
+        )
+        updateConversation(conversationId, updatedConversation)
 
-            appScope.launch { generateTitle(conversationId, finalConversation) }
-            appScope.launch { generateSuggestion(conversationId, finalConversation) }
+        if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
+            sendGenerationDoneNotification(conversationId)
         }
     }
-
-    // ---- 检查无效消息 ----
-
     private fun checkInvalidMessages(conversationId: Uuid) {
         val conversation = getConversationFlow(conversationId).value
         var messagesNodes = conversation.messageNodes

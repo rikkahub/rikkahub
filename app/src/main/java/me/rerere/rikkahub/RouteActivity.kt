@@ -88,6 +88,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
+import me.rerere.rikkahub.ui.pages.setting.SettingRikkaRouterPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
@@ -335,6 +336,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingProviderPage()
                             }
 
+                            entry<Screen.SettingRikkaRouter> {
+                                SettingRikkaRouterPage()
+                            }
+
                             entry<Screen.SettingProviderDetail> { key ->
                                 val id = Uuid.parse(key.providerId)
                                 SettingProviderDetailPage(id = id)
@@ -470,6 +475,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingProvider : Screen
+
+    @Serializable
+    data object SettingRikkaRouter : Screen
 
     @Serializable
     data class SettingProviderDetail(val providerId: String) : Screen

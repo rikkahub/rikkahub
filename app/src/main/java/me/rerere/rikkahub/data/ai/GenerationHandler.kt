@@ -67,6 +67,7 @@ class GenerationHandler(
     fun generateText(
         settings: Settings,
         model: Model,
+        providerOverride: ProviderSetting? = null,
         messages: List<UIMessage>,
         inputTransformers: List<InputMessageTransformer> = emptyList(),
         outputTransformers: List<OutputMessageTransformer> = emptyList(),
@@ -76,7 +77,7 @@ class GenerationHandler(
         truncateIndex: Int = -1,
         maxSteps: Int = 256,
     ): Flow<GenerationChunk> = flow {
-        val provider = model.findProvider(settings.providers) ?: error("Provider not found")
+        val provider = providerOverride ?: (model.findProvider(settings.providers) ?: error("Provider not found"))
         val providerImpl = providerManager.getProviderByType(provider)
 
         var messages: List<UIMessage> = messages
