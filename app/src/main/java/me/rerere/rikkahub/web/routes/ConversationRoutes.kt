@@ -35,6 +35,7 @@ import me.rerere.rikkahub.web.dto.RegenerateRequest
 import me.rerere.rikkahub.web.dto.SelectMessageNodeRequest
 import me.rerere.rikkahub.web.dto.SendMessageRequest
 import me.rerere.rikkahub.web.dto.ToolApprovalRequest
+import me.rerere.rikkahub.web.dto.MessageSearchResultDto
 import me.rerere.rikkahub.web.dto.UpdateConversationTitleRequest
 import me.rerere.rikkahub.web.dto.toDto
 import me.rerere.rikkahub.web.dto.toListDto
@@ -99,6 +100,26 @@ fun Route.conversationRoutes(
                     nextOffset = page.nextOffset
                 )
             )
+        }
+
+        // GET /api/conversations/search?query=foo - Full-text search messages
+        get("/search") {
+            val query = call.request.queryParameters["query"]?.trim().orEmpty()
+            if (query.isBlank()) {
+                call.respond(emptyList<MessageSearchResultDto>())
+                return@get
+            }
+            val results = conversationRepo.searchMessages(query)
+            call.respond(results.map { result ->
+                MessageSearchResultDto(
+                    nodeId = result.nodeId,
+                    messageId = result.messageId,
+                    conversationId = result.conversationId,
+                    title = result.title,
+                    updateAt = result.updateAt.toEpochMilli(),
+                    snippet = result.snippet,
+                )
+            })
         }
 
         // SSE /api/conversations/stream - Stream conversation list invalidation events
