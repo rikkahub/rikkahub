@@ -1,7 +1,10 @@
 package me.rerere.rikkahub.ui.pages.search
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -37,13 +41,13 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.User
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import kotlin.uuid.Uuid
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchPage(vm: SearchVM = koinViewModel()) {
     val navController = LocalNavController.current
@@ -57,80 +61,81 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
         topBar = {
             TopAppBar(
                 navigationIcon = { BackButton() },
-                title = {
-                    OutlinedTextField(
-                        value = vm.searchQuery,
-                        onValueChange = { vm.onQueryChange(it) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focusRequester),
-                        placeholder = { Text("搜索消息内容...") },
-                        shape = RoundedCornerShape(50),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(
-                            onSearch = { vm.search() }
-                        ),
-                    )
-                },
+                title = { Text("搜索消息") },
             )
         },
     ) { contentPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (vm.isLoading) {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = contentPadding.calculateTopPadding())
-                )
-            }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+        ) {
+            OutlinedTextField(
+                value = vm.searchQuery,
+                onValueChange = { vm.onQueryChange(it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .focusRequester(focusRequester),
+                placeholder = { Text("搜索消息内容...") },
+                shape = RoundedCornerShape(50),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = { vm.search() }
+                ),
+            )
 
-            when {
-                vm.searchQuery.isBlank() -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(contentPadding),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "输入关键词，按搜索键查找消息",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            Box(modifier = Modifier.weight(1f)) {
+                if (vm.isLoading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
 
-                vm.results.isEmpty() && !vm.isLoading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(contentPadding),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No results",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                else -> {
-                    LazyColumn(
-                        contentPadding = contentPadding + PaddingValues(vertical = 8.dp),
-                    ) {
-                        items(vm.results) { result ->
-                            SearchResultItem(
-                                result = result,
-                                onClick = {
-                                    navigateToChatPage(
-                                        navController,
-                                        chatId = Uuid.parse(result.conversationId),
-                                        nodeId = Uuid.parse(result.nodeId),
-                                    )
-                                }
+                when {
+                    vm.searchQuery.isBlank() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "输入关键词，按搜索键查找消息",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                    }
+
+                    vm.results.isEmpty() && !vm.isLoading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No results",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    else -> {
+                        LazyColumn(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            items(vm.results) { result ->
+                                SearchResultItem(
+                                    result = result,
+                                    onClick = {
+                                        navigateToChatPage(
+                                            navController,
+                                            chatId = Uuid.parse(result.conversationId),
+                                            nodeId = Uuid.parse(result.nodeId),
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -170,25 +175,22 @@ private fun SearchResultItem(
         }
     }
 
-    Surface(onClick = onClick) {
-        ListItem(
-            leadingContent = {
-                if (result.role.equals("USER", ignoreCase = true)) {
-                    Icon(Lucide.User, contentDescription = null)
-                } else {
-                    Icon(Lucide.Bot, contentDescription = null)
-                }
-            },
-            headlineContent = {
-                Text(snippetText, maxLines = 3)
-            },
-            supportingContent = {
-                Text(
-                    text = result.conversationId.take(8),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-        )
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = snippetText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }

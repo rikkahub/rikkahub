@@ -5,6 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -12,6 +15,8 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 class SearchVM(
     private val conversationRepo: ConversationRepository,
 ) : ViewModel() {
+    private val _searchQuery = MutableStateFlow("")
+
     var searchQuery by mutableStateOf("")
         private set
     var results by mutableStateOf<List<MessageSearchResult>>(emptyList())
@@ -19,22 +24,35 @@ class SearchVM(
     var isLoading by mutableStateOf(false)
         private set
 
+    init {
+        viewModelScope.launch {
+            _searchQuery
+                .debounce(300L)
+                .collectLatest { query -> performSearch(query) }
+        }
+    }
+
     fun onQueryChange(query: String) {
         searchQuery = query
+        _searchQuery.value = query
     }
 
     fun search() {
         viewModelScope.launch {
-            if (searchQuery.isBlank()) {
-                results = emptyList()
-                return@launch
-            }
-            isLoading = true
-            try {
-                results = conversationRepo.searchMessages(searchQuery)
-            } finally {
-                isLoading = false
-            }
+            performSearch(searchQuery)
+        }
+    }
+
+    private suspend fun performSearch(query: String) {
+        if (query.isBlank()) {
+            results = emptyList()
+            return
+        }
+        isLoading = true
+        try {
+            results = conversationRepo.searchMessages(query)
+        } finally {
+            isLoading = false
         }
     }
 }
