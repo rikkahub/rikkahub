@@ -73,7 +73,8 @@ val dataSourceModule = module {
                             node_id UNINDEXED,
                             message_id UNINDEXED,
                             conversation_id UNINDEXED,
-                            role UNINDEXED,
+                            title UNINDEXED,
+                            update_at UNINDEXED,
                             tokenize = 'simple'
                         )
                         """.trimIndent()

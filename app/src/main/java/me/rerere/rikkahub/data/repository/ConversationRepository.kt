@@ -206,7 +206,7 @@ class ConversationRepository(
             )
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
-        messageFtsManager.indexConversation(conversation.id.toString(), conversation.messageNodes)
+        messageFtsManager.indexConversation(conversation)
     }
 
     suspend fun updateConversation(conversation: Conversation) {
@@ -218,7 +218,7 @@ class ConversationRepository(
             messageNodeDAO.deleteByConversation(conversation.id.toString())
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
-        messageFtsManager.indexConversation(conversation.id.toString(), conversation.messageNodes)
+        messageFtsManager.indexConversation(conversation)
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
