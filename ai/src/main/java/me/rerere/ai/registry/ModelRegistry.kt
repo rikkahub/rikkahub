@@ -21,7 +21,7 @@ object ModelRegistry {
     }
 
     val OPENAI_O_MODELS = defineModel {
-        tokens(tokenRegex("^o$"), tokenRegex("^\\d+$"))
+        tokens(tokenRegex("^o\( "), tokenRegex("^\\d+ \)"))
         visionInput()
         toolReasoningAbility()
     }
@@ -100,6 +100,18 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    val GEMINI_3_1_PRO_PREVIEW = defineModel {
+        tokens("gemini", "3", "1", "pro", "preview")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    val GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = defineModel {
+        tokens("gemini", "3", "1", "pro", "preview", "customtools")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     val GEMINI_FLASH_LATEST = defineModel {
         exact("gemini-flash-latest")
         visionInput()
@@ -117,7 +129,7 @@ object ModelRegistry {
     }
 
     val GEMINI_3_SERIES = defineGroup {
-        add(GEMINI_3_PRO, GEMINI_3_FLASH)
+        add(GEMINI_3_PRO, GEMINI_3_FLASH, GEMINI_3_1_PRO_PREVIEW, GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS)
     }
 
     val GEMINI_SERIES = defineGroup {
@@ -303,6 +315,8 @@ object ModelRegistry {
         GEMINI_NANO_BANANA,
         GEMINI_3_PRO,
         GEMINI_3_FLASH,
+        GEMINI_3_1_PRO_PREVIEW,
+        GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS,
         GEMINI_FLASH_LATEST,
         GEMINI_PRO_LATEST,
         CLAUDE_SONNET_3_5,
