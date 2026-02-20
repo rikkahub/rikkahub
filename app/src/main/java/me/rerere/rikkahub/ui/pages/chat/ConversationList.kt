@@ -91,7 +91,10 @@ fun ColumnScope.ConversationList(
             (it as? ConversationListItem.Item)?.conversation?.id == current.id
         }
         if (currentIndex >= 0) {
-            listState.scrollToItem(currentIndex)
+            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == currentIndex }
+            if (!isVisible) {
+                listState.scrollToItem(currentIndex)
+            }
             hasScrolledToCurrent = true
         }
     }
