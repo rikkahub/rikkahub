@@ -52,6 +52,10 @@ class MessageFtsManager(private val database: AppDatabase) {
         db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
     }
 
+    suspend fun deleteAll() = withContext(Dispatchers.IO) {
+        db.execSQL("DELETE FROM message_fts")
+    }
+
     suspend fun search(keyword: String): List<MessageSearchResult> = withContext(Dispatchers.IO) {
         val results = mutableListOf<MessageSearchResult>()
         val cursor = db.query(

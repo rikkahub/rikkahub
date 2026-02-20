@@ -23,6 +23,10 @@ class SearchVM(
         private set
     var isLoading by mutableStateOf(false)
         private set
+    var isRebuilding by mutableStateOf(false)
+        private set
+    var rebuildProgress by mutableStateOf(0 to 0)
+        private set
 
     init {
         viewModelScope.launch {
@@ -40,6 +44,20 @@ class SearchVM(
     fun search() {
         viewModelScope.launch {
             performSearch(searchQuery)
+        }
+    }
+
+    fun rebuildIndex() {
+        viewModelScope.launch {
+            isRebuilding = true
+            rebuildProgress = 0 to 0
+            try {
+                conversationRepo.rebuildAllIndexes { current, total ->
+                    rebuildProgress = current to total
+                }
+            } finally {
+                isRebuilding = false
+            }
         }
     }
 

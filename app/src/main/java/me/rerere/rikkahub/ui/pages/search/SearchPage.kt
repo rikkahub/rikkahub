@@ -19,10 +19,19 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.RefreshCw
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -46,9 +55,33 @@ import kotlin.uuid.Uuid
 fun SearchPage(vm: SearchVM = koinViewModel()) {
     val navController = LocalNavController.current
     val focusRequester = remember { FocusRequester() }
+    var showRebuildDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
+    }
+
+    if (showRebuildDialog) {
+        AlertDialog(
+            onDismissRequest = { showRebuildDialog = false },
+            title = { Text("重建消息索引") },
+            text = { Text("此操作将清空现有索引并重新扫描全部聊天记录，消息越多耗时越长，确认继续？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRebuildDialog = false
+                        vm.rebuildIndex()
+                    }
+                ) {
+                    Text("确认")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRebuildDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -56,6 +89,14 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
             TopAppBar(
                 navigationIcon = { BackButton() },
                 title = { Text("搜索消息") },
+                actions = {
+                    IconButton(
+                        onClick = { showRebuildDialog = true },
+                        enabled = !vm.isRebuilding,
+                    ) {
+                        Icon(Lucide.RefreshCw, contentDescription = "重建索引")
+                    }
+                }
             )
         },
     ) { contentPadding ->
@@ -81,11 +122,24 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
             )
 
             Box(modifier = Modifier.weight(1f)) {
-                if (vm.isLoading) {
+                if (vm.isLoading || vm.isRebuilding) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
 
                 when {
+                    vm.isRebuilding -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val (current, total) = vm.rebuildProgress
+                            Text(
+                                text = if (total > 0) "正在重建索引 ($current / $total)..." else "正在重建索引...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     vm.searchQuery.isBlank() -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
