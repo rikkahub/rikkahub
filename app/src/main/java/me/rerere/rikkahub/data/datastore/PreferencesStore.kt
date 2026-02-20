@@ -31,9 +31,10 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
-import me.rerere.rikkahub.data.model.PromptInjection
-import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.RikkaRouterConfig
+import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.PresetThemes
 import me.rerere.rikkahub.utils.JsonInstant
@@ -88,6 +89,7 @@ class SettingsStore(
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
+        val RIKKA_ROUTER = stringPreferencesKey("rikka_router")
 
         // 助手
         val SELECT_ASSISTANT = stringPreferencesKey("select_assistant")
@@ -163,6 +165,9 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
+                rikkaRouter = preferences[RIKKA_ROUTER]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: RikkaRouterConfig(),
                 assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
@@ -233,10 +238,20 @@ class SettingsStore(
                     ttsProviders.add(defaultTTSProvider.copyProvider())
                 }
             }
+            val migratedSearchServices = it.searchServices.map { service ->
+                when (service) {
+                    is SearchServiceOptions.RikkaLocalOptions -> SearchServiceOptions.BingLocalOptions()
+                    else -> service
+                }
+            }.ifEmpty { listOf(SearchServiceOptions.DEFAULT) }
+            val migratedSearchServiceSelected =
+                it.searchServiceSelected.coerceIn(0, migratedSearchServices.size - 1)
             it.copy(
                 providers = providers,
                 assistants = assistants,
-                ttsProviders = ttsProviders
+                ttsProviders = ttsProviders,
+                searchServices = migratedSearchServices,
+                searchServiceSelected = migratedSearchServiceSelected,
             )
         }
         .map { settings ->
@@ -276,6 +291,15 @@ class SettingsStore(
                         }.toSet()
                     )
                 },
+                rikkaRouter = settings.rikkaRouter.copy(
+                    groups = settings.rikkaRouter.groups
+                        .distinctBy { it.id }
+                        .map { group ->
+                            group.copy(
+                                members = group.members.distinctBy { it.modelId }
+                            )
+                        }
+                ),
                 ttsProviders = settings.ttsProviders.distinctBy { it.id },
                 favoriteModels = settings.favoriteModels.filter { uuid ->
                     settings.providers.flatMap { it.models }.any { it.id == uuid }
@@ -320,6 +344,7 @@ class SettingsStore(
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
+            preferences[RIKKA_ROUTER] = JsonInstant.encodeToString(settings.rikkaRouter)
 
             preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
             preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
@@ -444,6 +469,7 @@ data class Settings(
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
+    val rikkaRouter: RikkaRouterConfig = RikkaRouterConfig(),
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
     val assistantTags: List<Tag> = emptyList(),
     val searchServices: List<SearchServiceOptions> = listOf(SearchServiceOptions.DEFAULT),
@@ -527,6 +553,7 @@ fun Settings.isNotConfigured() = providers.all { it.models.isEmpty() }
 
 fun Settings.findModelById(uuid: Uuid): Model? {
     return this.providers.findModelById(uuid)
+        ?: this.getRikkaRouterModels(includeDisabledGroups = true).firstOrNull { it.id == uuid }
 }
 
 fun List<ProviderSetting>.findModelById(uuid: Uuid): Model? {

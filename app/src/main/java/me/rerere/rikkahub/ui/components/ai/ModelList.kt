@@ -78,7 +78,9 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.RIKKA_ROUTER_PROVIDER_ID
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.buildRikkaRouterVirtualProvider
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
@@ -98,6 +100,7 @@ fun ModelSelector(
     modelId: Uuid?,
     providers: List<ProviderSetting>,
     type: ModelType,
+    includeRikkaRouter: Boolean = false,
     modifier: Modifier = Modifier,
     onlyIcon: Boolean = false,
     allowClear: Boolean = false,
@@ -105,7 +108,24 @@ fun ModelSelector(
 ) {
     var popup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val model = providers.findModelById(modelId ?: Uuid.random())
+    val settingsStore = koinInject<SettingsStore>()
+    val settings = settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val mergedProviders = remember(
+        providers,
+        includeRikkaRouter,
+        type,
+        settings.value.rikkaRouter,
+    ) {
+        if (includeRikkaRouter && type == ModelType.CHAT) {
+            providers.filterNot { it.id == RIKKA_ROUTER_PROVIDER_ID } + settings.value.buildRikkaRouterVirtualProvider(
+                includeDisabledGroups = false
+            )
+        } else {
+            providers
+        }
+    }
+    val model = settings.value.findModelById(modelId ?: Uuid.random())
+        ?: mergedProviders.findModelById(modelId ?: Uuid.random())
 
     if (!onlyIcon) {
         Row(
@@ -180,7 +200,7 @@ fun ModelSelector(
                     .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                val filteredProviderSettings = providers.fastFilter {
+                val filteredProviderSettings = mergedProviders.fastFilter {
                     it.enabled && it.models.fastAny { model -> model.type == type }
                 }
                 ModelList(
@@ -222,7 +242,7 @@ private fun ColumnScope.ModelList(
     val favoriteModels = settings.value.favoriteModels.mapNotNull { modelId ->
         val model = settings.value.providers.findModelById(modelId) ?: return@mapNotNull null
         if (model.type != modelType) return@mapNotNull null
-        val provider = model.findProvider(providers = settings.value.providers, checkOverwrite = false) ?: return@mapNotNull null
+        val provider = model.findProvider(providers = providers, checkOverwrite = false) ?: return@mapNotNull null
         model to provider
     }
 
@@ -455,11 +475,13 @@ private fun ColumnScope.ModelList(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    ProviderBalanceText(
-                        providerSetting = providerSetting,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    if (providerSetting.id != RIKKA_ROUTER_PROVIDER_ID) {
+                        ProviderBalanceText(
+                            providerSetting = providerSetting,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
 
@@ -473,6 +495,7 @@ private fun ColumnScope.ModelList(
                 key = { it.id }
             ) { model ->
                 val favorite = settings.value.favoriteModels.contains(model.id)
+                val canFavorite = providerSetting.id != RIKKA_ROUTER_PROVIDER_ID
                 ModelItem(
                     model = model,
                     onSelect = onSelect,
@@ -483,37 +506,39 @@ private fun ColumnScope.ModelList(
                         onDismiss()
                     },
                     tail = {
-                        IconButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    settingsStore.update { settings ->
-                                        if (favorite) {
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels.filter { it != model.id }
-                                            )
+                        if (canFavorite) {
+                            IconButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        settingsStore.update { settings ->
+                                            if (favorite) {
+                                                settings.copy(
+                                                    favoriteModels = settings.favoriteModels.filter { it != model.id }
+                                                )
 
-                                        } else {
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels + model.id
-                                            )
+                                            } else {
+                                                settings.copy(
+                                                    favoriteModels = settings.favoriteModels + model.id
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        ) {
-                            if (favorite) {
-                                Icon(
-                                    HeartIcon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            } else {
-                                Icon(
-                                    Lucide.Heart,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                            ) {
+                                if (favorite) {
+                                    Icon(
+                                        HeartIcon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                } else {
+                                    Icon(
+                                        Lucide.Heart,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -606,11 +631,15 @@ private fun ModelItem(
                         enabled = true,
                         onLongClick = {
                             onDismiss()
-                            navController.navigate(
-                                Screen.SettingProviderDetail(
-                                    providerSetting.id.toString()
+                            if (providerSetting.id == RIKKA_ROUTER_PROVIDER_ID) {
+                                navController.navigate(Screen.SettingRikkaRouter)
+                            } else {
+                                navController.navigate(
+                                    Screen.SettingProviderDetail(
+                                        providerSetting.id.toString()
+                                    )
                                 )
-                            )
+                            }
                         },
                         onClick = { onSelect(model) },
                         interactionSource = interactionSource,
