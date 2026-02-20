@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.User
-import me.rerere.rikkahub.data.db.MessageSearchResult
+import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.navigateToChatPage

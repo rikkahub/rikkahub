@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.migrateToolNodes
 import me.rerere.rikkahub.data.db.AppDatabase
-import me.rerere.rikkahub.data.db.MessageFtsManager
+import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
