@@ -21,7 +21,7 @@ object ModelRegistry {
     }
 
     val OPENAI_O_MODELS = defineModel {
-        tokens(tokenRegex("^o\( "), tokenRegex("^\\d+ \)"))
+        tokens(tokenRegex("^o$"), tokenRegex("^\\d+$"))
         visionInput()
         toolReasoningAbility()
     }
