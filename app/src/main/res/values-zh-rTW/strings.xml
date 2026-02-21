@@ -842,5 +842,9 @@
   <string name="search_page_rebuilding">正在重建索引 (%1$d / %2$d)…</string>
   <string name="assistant_page_time_reminder">時間提醒</string>
   <string name="assistant_page_time_reminder_desc">自動在時間間隔較大的訊息前插入時間提醒，幫助 AI 理解對話間隔</string>
+  <string name="setting_page_web_server_local_address">本機位址</string>
+  <string name="copied">已複製</string>
+  <string name="setting_page_web_server_address_note">位址備註</string>
+  <string name="setting_page_web_server_address_note_desc">LAN 位址：使用裝置 WiFi IP，可供同一網路上的其他裝置存取。行動數據無法使用。\n本機位址：使用 localhost，僅供本裝置存取。\nmDNS 位址：使用 .local 主機名稱，可供同一網路上的其他裝置透過名稱存取，無需知道 IP。</string>
 </resources>
 

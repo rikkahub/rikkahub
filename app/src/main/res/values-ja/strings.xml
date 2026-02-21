@@ -842,5 +842,11 @@
   <string name="search_page_rebuilding">インデックスを再構築中 (%1$d / %2$d)…</string>
   <string name="assistant_page_time_reminder">時間リマインダー</string>
   <string name="assistant_page_time_reminder_desc">会話の間隔が大きいメッセージの前に自動で時刻リマインダーを挿入し、AIが会話の間隔を理解しやすくします</string>
+  <string name="setting_page_web_server_local_address">ローカルアドレス</string>
+  <string name="copied">コピーしました</string>
+  <string name="setting_page_web_server_address_note">アドレスメモ</string>
+  <string name="setting_page_web_server_address_note_desc">LANアドレス: デバイスのWiFi IPを使用し、同じネットワーク上の他のデバイスからアクセス可能です。モバイルデータでは利用できません。
+ローカルアドレス: localhostを使用し、このデバイスのみでアクセス可能です。
+mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じネットワーク上の他のデバイスから名前でアクセス可能です。</string>
 </resources>
 

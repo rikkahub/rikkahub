@@ -842,5 +842,9 @@
   <string name="search_page_rebuilding">Rebuilding index (%1$d / %2$d)...</string>
   <string name="assistant_page_time_reminder">Time Reminder</string>
   <string name="assistant_page_time_reminder_desc">Automatically inject time reminders before messages with large time gaps to help AI understand conversation intervals</string>
+  <string name="setting_page_web_server_local_address">Local Address</string>
+  <string name="copied">Copied</string>
+  <string name="setting_page_web_server_address_note">Address Notes</string>
+  <string name="setting_page_web_server_address_note_desc">LAN Address: Uses device WiFi IP, accessible to other devices on the same network. Unavailable on mobile data.\nLocal Address: Uses localhost, accessible on this device only.\nmDNS Address: Uses .local hostname, accessible by name from other devices on the same network without knowing the IP.</string>
 </resources>
 

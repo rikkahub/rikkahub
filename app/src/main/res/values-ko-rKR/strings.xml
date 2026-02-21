@@ -842,5 +842,11 @@
   <string name="search_page_rebuilding">색인 재구성 중 (%1$d / %2$d)...</string>
   <string name="assistant_page_time_reminder">시간 알림</string>
   <string name="assistant_page_time_reminder_desc">시간 간격이 큰 메시지 앞에 자동으로 시간 알림을 삽입하여 AI가 대화 간격을 이해할 수 있도록 도와줍니다</string>
+  <string name="setting_page_web_server_local_address">로컬 주소</string>
+  <string name="copied">복사됨</string>
+  <string name="setting_page_web_server_address_note">주소 메모</string>
+  <string name="setting_page_web_server_address_note_desc">LAN 주소: 기기의 WiFi IP를 사용하며, 같은 네트워크에 연결된 다른 기기에서 접근할 수 있습니다. 모바일 데이터에서는 사용할 수 없습니다.
+로컬 주소: localhost를 사용하며, 이 기기에서만 접근할 수 있습니다.
+mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네트워크의 다른 기기에서 이름으로 접근할 수 있습니다.</string>
 </resources>
 

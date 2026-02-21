@@ -835,5 +835,11 @@
   <string name="search_page_rebuilding">Пересоздание индекса (%1$d / %2$d)…</string>
   <string name="assistant_page_time_reminder">Напоминание о времени</string>
   <string name="assistant_page_time_reminder_desc">Автоматически добавлять напоминания о времени перед сообщениями с большими интервалами, чтобы помочь ИИ понимать паузы в разговоре</string>
+  <string name="setting_page_web_server_local_address">Локальный адрес</string>
+  <string name="copied">Скопировано</string>
+  <string name="setting_page_web_server_address_note">Примечания к адресу</string>
+  <string name="setting_page_web_server_address_note_desc">LAN-адрес: использует IP-адрес устройства в Wi-Fi, доступен другим устройствам в той же сети. Недоступен при использовании мобильных данных.
+Локальный адрес: использует localhost, доступен только на этом устройстве.
+Адрес mDNS: использует имя хоста .local, доступен по имени с других устройств в той же сети без знания IP-адреса.</string>
 </resources>
 

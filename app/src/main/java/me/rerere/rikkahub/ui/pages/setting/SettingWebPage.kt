@@ -27,9 +27,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -46,6 +49,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.web.WebServerManager
 import org.koin.compose.koinInject
@@ -58,6 +62,9 @@ fun SettingWebPage() {
     val serverState by webServerManager.state.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
+    val toaster = LocalToaster.current
+    val copiedText = stringResource(R.string.copied)
     var portText by remember(settings.webServerPort) {
         mutableStateOf(settings.webServerPort.toString())
     }
@@ -228,10 +235,27 @@ fun SettingWebPage() {
 
             item {
                 AnimatedVisibility(visible = serverState.isRunning) {
+                    val url = "http://${serverState.address ?: "localhost"}:${serverState.port}"
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.setting_page_web_server_lan_address)) },
-                        supportingContent = {
-                            Text("http://${serverState.address ?: "localhost"}:${serverState.port}")
+                        supportingContent = { Text(url) },
+                        modifier = Modifier.clickable {
+                            clipboardManager.setText(AnnotatedString(url))
+                            toaster.show(copiedText)
+                        }
+                    )
+                }
+            }
+
+            item {
+                AnimatedVisibility(visible = serverState.isRunning) {
+                    val url = "http://localhost:${serverState.port}"
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_local_address)) },
+                        supportingContent = { Text(url) },
+                        modifier = Modifier.clickable {
+                            clipboardManager.setText(AnnotatedString(url))
+                            toaster.show(copiedText)
                         }
                     )
                 }
@@ -239,13 +263,35 @@ fun SettingWebPage() {
 
             item {
                 AnimatedVisibility(visible = serverState.isRunning && serverState.hostname != null) {
+                    val url = "http://${serverState.hostname}:${serverState.port}"
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.setting_page_web_server_mdns_address)) },
-                        supportingContent = {
-                            Text("http://${serverState.hostname}:${serverState.port}")
+                        supportingContent = { Text(url) },
+                        modifier = Modifier.clickable {
+                            clipboardManager.setText(AnnotatedString(url))
+                            toaster.show(copiedText)
                         }
                     )
                 }
+            }
+
+            item {
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            text = stringResource(R.string.setting_page_web_server_address_note),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    supportingContent = {
+                        Text(
+                            text = stringResource(R.string.setting_page_web_server_address_note_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                )
             }
 
             item {

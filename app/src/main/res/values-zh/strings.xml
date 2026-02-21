@@ -842,5 +842,11 @@
   <string name="search_page_rebuilding">正在重建索引 (%1$d / %2$d)…</string>
   <string name="assistant_page_time_reminder">时间提醒</string>
   <string name="assistant_page_time_reminder_desc">在间隔较大的消息前自动插入时间提醒，帮助 AI 理解对话间隔</string>
+  <string name="setting_page_web_server_local_address">本机地址</string>
+  <string name="copied">已复制</string>
+  <string name="setting_page_web_server_address_note">地址说明</string>
+  <string name="setting_page_web_server_address_note_desc">局域网地址：使用设备 WiFi IP，同一网络中的其他设备可访问。移动数据网络下不可用。
+本地地址：使用 localhost，仅限本设备访问。
+mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过名称访问，无需知道 IP。</string>
 </resources>
 
