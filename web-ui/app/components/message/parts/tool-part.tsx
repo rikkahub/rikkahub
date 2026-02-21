@@ -2,6 +2,7 @@ import * as React from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
+  AudioLines,
   BookHeart,
   BookX,
   Check,
@@ -11,6 +12,7 @@ import {
   Globe,
   Loader2,
   Search,
+  Video,
   Wrench,
   X,
 } from "lucide-react";
@@ -25,9 +27,16 @@ import {
   DrawerTitle,
 } from "~/components/ui/drawer";
 import { useIsMobile } from "~/hooks/use-mobile";
-import type { TextPart as UITextPart, ToolPart as UIToolPart } from "~/types";
+import { resolveFileUrl } from "~/lib/files";
+import type {
+  TextPart as UITextPart,
+  ToolPart as UIToolPart,
+} from "~/types";
 
 import { ControlledChainOfThoughtStep } from "../chain-of-thought";
+import { AudioPart as AudioPartRenderer } from "./audio-part";
+import { ImagePart as ImagePartRenderer } from "./image-part";
+import { VideoPart as VideoPartRenderer } from "./video-part";
 
 interface ToolPartProps {
   tool: UIToolPart;
@@ -248,6 +257,11 @@ export function ToolPart({
 
   const outputContent = React.useMemo(() => safeJsonParse(outputText), [outputText]);
 
+  const hasMediaOutput = React.useMemo(
+    () => tool.output.some((p) => p.type === "image" || p.type === "video" || p.type === "audio"),
+    [tool.output],
+  );
+
   const memoryAction = getStringField(args, "action");
   const title = getToolTitle(tool.toolName, args, t);
   const isPending = tool.approvalState.type === "pending";
@@ -264,7 +278,8 @@ export function ToolPart({
       (Boolean(getStringField(outputContent, "answer")) ||
         getArrayField(outputContent, "items").length > 0)) ||
     (tool.toolName === TOOL_NAMES.SCRAPE_WEB && Boolean(getStringField(args, "url"))) ||
-    isDenied;
+    isDenied ||
+    hasMediaOutput;
 
   const canOpenDrawer = isPending || isExecuted;
   const Icon = getToolIcon(tool.toolName, memoryAction);
@@ -349,6 +364,46 @@ export function ToolPart({
                   : t("tool_part.denied")}
               </div>
             )}
+
+            {hasMediaOutput && (
+              <div className="flex flex-wrap gap-1">
+                {tool.output.map((part, i) => {
+                  if (part.type === "image") {
+                    return (
+                      <img
+                        key={i}
+                        alt=""
+                        className="h-16 w-auto rounded border border-muted object-contain"
+                        src={resolveFileUrl(part.url)}
+                      />
+                    );
+                  }
+                  if (part.type === "video") {
+                    return (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1 rounded border border-muted bg-muted/30 px-2 py-1 text-muted-foreground text-xs"
+                      >
+                        <Video className="h-3 w-3" />
+                        video
+                      </span>
+                    );
+                  }
+                  if (part.type === "audio") {
+                    return (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1 rounded border border-muted bg-muted/30 px-2 py-1 text-muted-foreground text-xs"
+                      >
+                        <AudioLines className="h-3 w-3" />
+                        audio
+                      </span>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            )}
           </div>
         )}
       </ControlledChainOfThoughtStep>
@@ -380,11 +435,25 @@ export function ToolPart({
                   <JsonBlock value={args} />
                 </div>
                 {isExecuted && (
-                  <div>
+                  <div className="space-y-2">
                     <div className="mb-1 text-muted-foreground text-xs">
                       {t("tool_part.result")}
                     </div>
-                    <JsonBlock value={outputContent} />
+                    {tool.output.map((part, i) => {
+                      if (part.type === "text") {
+                        let parsed: unknown;
+                        try {
+                          parsed = JSON.parse(part.text);
+                        } catch {
+                          parsed = part.text;
+                        }
+                        return <JsonBlock key={i} value={parsed} />;
+                      }
+                      if (part.type === "image") return <ImagePartRenderer key={i} url={part.url} />;
+                      if (part.type === "video") return <VideoPartRenderer key={i} url={part.url} />;
+                      if (part.type === "audio") return <AudioPartRenderer key={i} url={part.url} />;
+                      return null;
+                    })}
                   </div>
                 )}
                 {!isExecuted && (
