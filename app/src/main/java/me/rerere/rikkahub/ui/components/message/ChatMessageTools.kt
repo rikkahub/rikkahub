@@ -119,6 +119,7 @@ private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
         ClipboardActions.WRITE -> Lucide.ClipboardPaste
         else -> Lucide.Clipboard
     }
+
     else -> Lucide.Wrench
 }
 
@@ -169,6 +170,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             ClipboardActions.WRITE -> stringResource(R.string.chat_message_tool_clipboard_write)
             else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
         }
+
         else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
     }
 
@@ -176,8 +178,10 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val hasExtraContent = when (tool.toolName) {
         ToolNames.MEMORY -> memoryAction in listOf(MemoryActions.CREATE, MemoryActions.EDIT) &&
             content.getStringContent("content") != null
+
         ToolNames.SEARCH_WEB -> content.getStringContent("answer") != null ||
             (content?.jsonObject?.get("items")?.jsonArray?.isNotEmpty() == true)
+
         ToolNames.SCRAPE_WEB -> arguments.getStringContent("url") != null
         else -> false
     } || isDenied || images.isNotEmpty()
@@ -345,7 +349,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             toolName = tool.toolName,
             arguments = arguments,
             content = content,
-            images = images,
+            output = tool.output,
             onDismissRequest = { showResult = false }
         )
     }
@@ -356,7 +360,7 @@ private fun ToolCallPreviewSheet(
     toolName: String,
     arguments: JsonElement,
     content: JsonElement?,
-    images: List<UIMessagePart.Image>,
+    output: List<UIMessagePart>,
     onDismissRequest: () -> Unit = {}
 ) {
     val navController = LocalNavController.current
@@ -372,40 +376,35 @@ private fun ToolCallPreviewSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         onDismissRequest = onDismissRequest,
         content = {
-            if (content == null) {
-                // 工具未执行,只显示参数
-                GenericToolPreview(
+            when {
+                content == null -> GenericToolPreview(
                     toolName = toolName,
                     arguments = arguments,
-                    content = null,
-                    images = images,
+                    output = emptyList(),
                     isMemoryOperation = false,
                     memoryId = null,
                     memoryRepo = memoryRepo,
                     scope = scope,
                     onDismissRequest = onDismissRequest
                 )
-            } else {
-                when (toolName) {
-                    ToolNames.SEARCH_WEB -> SearchWebPreview(
-                        arguments = arguments,
-                        content = content,
-                        navController = navController
-                    )
 
-                    ToolNames.SCRAPE_WEB -> ScrapeWebPreview(content = content)
-                    else -> GenericToolPreview(
-                        toolName = toolName,
-                        arguments = arguments,
-                        content = content,
-                        images = images,
-                        isMemoryOperation = isMemoryOperation,
-                        memoryId = memoryId,
-                        memoryRepo = memoryRepo,
-                        scope = scope,
-                        onDismissRequest = onDismissRequest
-                    )
-                }
+                toolName == ToolNames.SEARCH_WEB -> SearchWebPreview(
+                    arguments = arguments,
+                    content = content,
+                    navController = navController
+                )
+
+                toolName == ToolNames.SCRAPE_WEB -> ScrapeWebPreview(content = content)
+                else -> GenericToolPreview(
+                    toolName = toolName,
+                    arguments = arguments,
+                    output = output,
+                    isMemoryOperation = isMemoryOperation,
+                    memoryId = memoryId,
+                    memoryRepo = memoryRepo,
+                    scope = scope,
+                    onDismissRequest = onDismissRequest
+                )
             }
         },
     )
@@ -550,8 +549,7 @@ private fun ScrapeWebPreview(content: JsonElement) {
 private fun GenericToolPreview(
     toolName: String,
     arguments: JsonElement,
-    content: JsonElement?,
-    images: List<UIMessagePart.Image>,
+    output: List<UIMessagePart>,
     isMemoryOperation: Boolean,
     memoryId: Int?,
     memoryRepo: MemoryRepository,
@@ -603,32 +601,33 @@ private fun GenericToolPreview(
                 style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
             )
         }
-        if (content != null) {
-            FormItem(
-                label = {
-                    Text(stringResource(R.string.chat_message_tool_call_result))
-                }
-            ) {
-                HighlightCodeBlock(
-                    code = JsonInstantPretty.encodeToString(content),
-                    language = "json",
-                    style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
-                )
-            }
-        }
-        if (images.isNotEmpty()) {
+        if (output.isNotEmpty()) {
             FormItem(
                 label = {
                     Text(stringResource(R.string.chat_message_tool_call_result))
                 }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    images.forEach { image ->
-                        ZoomableAsyncImage(
-                            model = image.url,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                    output.forEach { part ->
+                        when (part) {
+                            is UIMessagePart.Text -> HighlightCodeBlock(
+                                code = runCatching {
+                                    JsonInstantPretty.encodeToString(
+                                        JsonInstant.parseToJsonElement(part.text)
+                                    )
+                                }.getOrElse { part.text },
+                                language = "json",
+                                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+                            )
+
+                            is UIMessagePart.Image -> ZoomableAsyncImage(
+                                model = part.url,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+
+                            else -> {}
+                        }
                     }
                 }
             }
