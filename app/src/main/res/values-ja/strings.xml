@@ -848,5 +848,17 @@
   <string name="setting_page_web_server_address_note_desc">LANアドレス: デバイスのWiFi IPを使用し、同じネットワーク上の他のデバイスからアクセス可能です。モバイルデータでは利用できません。
 ローカルアドレス: localhostを使用し、このデバイスのみでアクセス可能です。
 mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じネットワーク上の他のデバイスから名前でアクセス可能です。</string>
+  <string name="stats_page_title">統計</string>
+  <string name="stats_page_heatmap_title">チャットヒートマップ</string>
+  <string name="stats_page_heatmap_less">少ない</string>
+  <string name="stats_page_heatmap_more">もっと見る</string>
+  <string name="stats_page_dow_mon">月</string>
+  <string name="stats_page_dow_wed">水</string>
+  <string name="stats_page_dow_fri">金</string>
+  <string name="stats_page_total_conversations">総会話数</string>
+  <string name="stats_page_total_messages">メッセージ総数</string>
+  <string name="stats_page_input_tokens">入力トークン</string>
+  <string name="stats_page_output_tokens">出力トークン</string>
+  <string name="stats_page_cached_tokens">キャッシュされたトークン</string>
 </resources>
 

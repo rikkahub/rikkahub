@@ -56,6 +56,7 @@ import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Sparkles
 import com.composables.icons.lucide.Trophy
+import com.composables.icons.lucide.ChartNoAxesColumn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
@@ -318,6 +319,18 @@ fun ChatDrawerContent(
                     },
                     onClick = {
                         navController.navigate(Screen.Favorite)
+                    },
+                )
+
+                DrawerAction(
+                    icon = {
+                        Icon(Lucide.ChartNoAxesColumn, "统计数据")
+                    },
+                    label = {
+                        Text("统计数据")
+                    },
+                    onClick = {
+                        navController.navigate(Screen.Stats)
                     },
                 )
 

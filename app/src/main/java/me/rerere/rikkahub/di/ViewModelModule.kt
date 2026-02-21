@@ -9,6 +9,7 @@ import me.rerere.rikkahub.ui.pages.developer.DeveloperVM
 import me.rerere.rikkahub.ui.pages.favorite.FavoriteVM
 import me.rerere.rikkahub.ui.pages.search.SearchVM
 import me.rerere.rikkahub.ui.pages.history.HistoryVM
+import me.rerere.rikkahub.ui.pages.stats.StatsVM
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenVM
 import me.rerere.rikkahub.ui.pages.prompts.PromptVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
@@ -57,4 +58,5 @@ val viewModelModule = module {
     viewModelOf(::PromptVM)
     viewModelOf(::FavoriteVM)
     viewModelOf(::SearchVM)
+    viewModelOf(::StatsVM)
 }

@@ -71,4 +71,18 @@ interface ConversationDAO {
 
     @Query("UPDATE conversationentity SET is_pinned = :isPinned WHERE id = :id")
     suspend fun updatePinStatus(id: String, isPinned: Boolean)
+
+    @Query("SELECT COUNT(*) FROM conversationentity")
+    suspend fun countAll(): Int
+
+    @Query(
+        "SELECT strftime('%Y-%m-%d', create_at/1000, 'unixepoch', 'localtime') AS day, " +
+            "COUNT(*) AS count " +
+            "FROM conversationentity " +
+            "WHERE create_at >= :startMillis " +
+            "GROUP BY day"
+    )
+    suspend fun getConversationCountPerDay(startMillis: Long): List<ConversationDayCount>
 }
+
+data class ConversationDayCount(val day: String, val count: Int)
