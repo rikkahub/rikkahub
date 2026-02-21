@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.mcp
 
 import android.util.Log
+import androidx.core.net.toUri
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -12,7 +13,9 @@ import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.RequestOptions
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
+import io.modelcontextprotocol.kotlin.sdk.types.ImageContent
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -30,14 +33,20 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 import me.rerere.ai.core.InputSchema
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.mcp.transport.SseClientTransport
 import me.rerere.rikkahub.data.ai.mcp.transport.StreamableHttpClientTransport
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.checkDifferent
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
@@ -49,6 +58,7 @@ private const val MAX_RECONNECT_DELAY_MS = 30000L
 class McpManager(
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
+    private val filesManager: FilesManager,
 ) {
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -124,13 +134,13 @@ class McpManager(
         return mcpServers
     }
 
-    suspend fun callTool(toolName: String, args: JsonObject): JsonElement {
+    suspend fun callTool(toolName: String, args: JsonObject): List<UIMessagePart> {
         val tools = getAllAvailableTools()
         val tool = tools.find { it.name == toolName }
-            ?: return JsonPrimitive("Failed to execute tool, because no such tool")
+            ?: return listOf(UIMessagePart.Text("Failed to execute tool, because no such tool"))
         val client =
             clients.entries.find { it.key.commonOptions.tools.any { it.name == toolName } }?.value
-        if (client == null) return JsonPrimitive("Failed to execute tool, because no such mcp client for the tool")
+        if (client == null) return listOf(UIMessagePart.Text("Failed to execute tool, because no such mcp client for the tool"))
         val config = clients.entries.first { it.value == client }.key
         Log.i(TAG, "callTool: $toolName / $args")
 
@@ -144,7 +154,27 @@ class McpManager(
             ),
             options = RequestOptions(timeout = 120.seconds),
         )
-        return McpJson.encodeToJsonElement(result.content)
+        return result.content.map {
+            when(it) {
+                is TextContent -> UIMessagePart.Text(it.text)
+                is ImageContent -> convertImageContentToFilePart(it)
+                else -> UIMessagePart.Text(JsonInstant.encodeToString(it))
+            }
+        }
+    }
+
+    private suspend fun convertImageContentToFilePart(image: ImageContent): UIMessagePart.Image {
+        val bytes = Base64.decode(image.data)
+        val ext = android.webkit.MimeTypeMap.getSingleton()
+            .getExtensionFromMimeType(image.mimeType) ?: "bin"
+        val entity = filesManager.saveUploadFromBytes(
+            bytes = bytes,
+            displayName = "mcp_image.$ext",
+            mimeType = image.mimeType,
+        )
+        val uri = filesManager.getFile(entity).toUri()
+        Log.i(TAG, "convertImageContentToFilePart: saved mcp image to $uri")
+        return UIMessagePart.Image(url = uri.toString())
     }
 
     private fun getTransport(config: McpServerConfig): AbstractTransport = when (config) {

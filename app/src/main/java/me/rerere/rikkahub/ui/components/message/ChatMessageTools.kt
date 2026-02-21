@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -68,6 +71,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.components.ui.DotLoading
 import me.rerere.rikkahub.ui.components.ui.Favicon
@@ -143,6 +147,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     } else {
         null
     }
+    val images = tool.output.filterIsInstance<UIMessagePart.Image>()
 
     val title = when (tool.toolName) {
         ToolNames.MEMORY -> when (memoryAction) {
@@ -175,7 +180,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             (content?.jsonObject?.get("items")?.jsonArray?.isNotEmpty() == true)
         ToolNames.SCRAPE_WEB -> arguments.getStringContent("url") != null
         else -> false
-    } || isDenied
+    } || isDenied || images.isNotEmpty()
 
     ControlledChainOfThoughtStep(
         expanded = expanded,
@@ -234,7 +239,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         } else {
             null
         },
-        onClick = if (content != null || isPending) {
+        onClick = if (content != null || isPending || images.isNotEmpty()) {
             { showResult = true }
         } else {
             null
@@ -293,6 +298,22 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                         )
                     }
+                    if (images.isNotEmpty()) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.wrapContentWidth(),
+                        ) {
+                            items(images) { image ->
+                                ZoomableAsyncImage(
+                                    model = image.url,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .height(64.dp)
+                                        .wrapContentWidth(),
+                                )
+                            }
+                        }
+                    }
                     if (isDenied) {
                         val reason = (tool.approvalState as ToolApprovalState.Denied).reason
                         Text(
@@ -324,6 +345,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             toolName = tool.toolName,
             arguments = arguments,
             content = content,
+            images = images,
             onDismissRequest = { showResult = false }
         )
     }
@@ -334,6 +356,7 @@ private fun ToolCallPreviewSheet(
     toolName: String,
     arguments: JsonElement,
     content: JsonElement?,
+    images: List<UIMessagePart.Image>,
     onDismissRequest: () -> Unit = {}
 ) {
     val navController = LocalNavController.current
@@ -355,6 +378,7 @@ private fun ToolCallPreviewSheet(
                     toolName = toolName,
                     arguments = arguments,
                     content = null,
+                    images = images,
                     isMemoryOperation = false,
                     memoryId = null,
                     memoryRepo = memoryRepo,
@@ -374,6 +398,7 @@ private fun ToolCallPreviewSheet(
                         toolName = toolName,
                         arguments = arguments,
                         content = content,
+                        images = images,
                         isMemoryOperation = isMemoryOperation,
                         memoryId = memoryId,
                         memoryRepo = memoryRepo,
@@ -526,6 +551,7 @@ private fun GenericToolPreview(
     toolName: String,
     arguments: JsonElement,
     content: JsonElement?,
+    images: List<UIMessagePart.Image>,
     isMemoryOperation: Boolean,
     memoryId: Int?,
     memoryRepo: MemoryRepository,
@@ -588,6 +614,23 @@ private fun GenericToolPreview(
                     language = "json",
                     style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
                 )
+            }
+        }
+        if (images.isNotEmpty()) {
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.chat_message_tool_call_result))
+                }
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    images.forEach { image ->
+                        ZoomableAsyncImage(
+                            model = image.url,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
         }
     }
