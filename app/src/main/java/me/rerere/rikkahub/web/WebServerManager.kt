@@ -17,6 +17,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.startWebServer
+import java.net.ServerSocket
 
 private const val TAG = "WebServerManager"
 
@@ -57,6 +58,16 @@ class WebServerManager(
             try {
                 _state.value = _state.value.copy(isLoading = true)
                 Log.i(TAG, "Starting web server on port $port")
+                if (!isPortAvailable(port)) {
+                    Log.w(TAG, "Port $port is already in use")
+                    _state.value = WebServerState(
+                        isRunning = false,
+                        port = port,
+                        serviceName = serviceName,
+                        error = "Port $port is already in use"
+                    )
+                    return@launch
+                }
                 server = startWebServer(port = port) {
                     configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
                 }.start(wait = false)
@@ -122,5 +133,13 @@ class WebServerManager(
     ) {
         stop()
         start(port, serviceName)
+    }
+
+    private fun isPortAvailable(port: Int): Boolean {
+        return try {
+            ServerSocket(port).use { true }
+        } catch (e: Exception) {
+            false
+        }
     }
 }
