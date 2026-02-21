@@ -833,5 +833,7 @@
   <string name="search_page_no_results">Нет результатов</string>
   <string name="search_page_untitled">Без названия</string>
   <string name="search_page_rebuilding">Пересоздание индекса (%1$d / %2$d)…</string>
+  <string name="assistant_page_time_reminder">Напоминание о времени</string>
+  <string name="assistant_page_time_reminder_desc">Автоматически добавлять напоминания о времени перед сообщениями с большими интервалами, чтобы помочь ИИ понимать паузы в разговоре</string>
 </resources>
 

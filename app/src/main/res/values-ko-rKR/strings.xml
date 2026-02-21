@@ -840,5 +840,7 @@
   <string name="search_page_no_results">결과 없음</string>
   <string name="search_page_untitled">제목 없음</string>
   <string name="search_page_rebuilding">색인 재구성 중 (%1$d / %2$d)...</string>
+  <string name="assistant_page_time_reminder">시간 알림</string>
+  <string name="assistant_page_time_reminder_desc">시간 간격이 큰 메시지 앞에 자동으로 시간 알림을 삽입하여 AI가 대화 간격을 이해할 수 있도록 도와줍니다</string>
 </resources>
 

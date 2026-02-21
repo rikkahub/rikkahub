@@ -240,6 +240,36 @@ private fun AssistantMemoryContent(
             )
         }
 
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+        ) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_time_reminder))
+                },
+                description = {
+                    Text(
+                        text = stringResource(R.string.assistant_page_time_reminder_desc),
+                    )
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.enableTimeReminder,
+                        onCheckedChange = {
+                            onUpdateAssistant(
+                                assistant.copy(
+                                    enableTimeReminder = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
+        }
+
         Box(
             modifier = Modifier.fillMaxWidth()
         ) {

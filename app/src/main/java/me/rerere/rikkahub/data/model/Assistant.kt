@@ -38,6 +38,7 @@ data class Assistant(
     val background: String? = null,
     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
+    val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
 )
 
 @Serializable

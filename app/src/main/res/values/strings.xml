@@ -840,5 +840,7 @@
   <string name="search_page_no_results">No results</string>
   <string name="search_page_untitled">Untitled</string>
   <string name="search_page_rebuilding">Rebuilding index (%1$d / %2$d)...</string>
+  <string name="assistant_page_time_reminder">Time Reminder</string>
+  <string name="assistant_page_time_reminder_desc">Automatically inject time reminders before messages with large time gaps to help AI understand conversation intervals</string>
 </resources>
 

@@ -840,5 +840,7 @@
   <string name="search_page_no_results">沒有結果</string>
   <string name="search_page_untitled">無標題</string>
   <string name="search_page_rebuilding">正在重建索引 (%1$d / %2$d)…</string>
+  <string name="assistant_page_time_reminder">時間提醒</string>
+  <string name="assistant_page_time_reminder_desc">自動在時間間隔較大的訊息前插入時間提醒，幫助 AI 理解對話間隔</string>
 </resources>
 
