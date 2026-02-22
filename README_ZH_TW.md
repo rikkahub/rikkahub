@@ -10,7 +10,7 @@
 
 </div>
 
-<div style="display: flex;">
+<div style="display: flex; justify-content: center;">
   <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
   <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
@@ -37,6 +37,7 @@
 
 - 🎨 現代化安卓APP設計（Material You / 預測性返回）
 - 🌙 暗色模式
+- 🖥️ Web多端訪問支持
 - 🛠️ MCP 支持
 - 🔄 多種類型的供應商支持，自定義 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
 - 🖼️ 多模態輸入支持

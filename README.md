@@ -13,7 +13,7 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
 
-<div style="display: flex;">
+<div style="display: flex; justify-content: center;">
   <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
   <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
@@ -43,6 +43,7 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 - 🎨 Material You Design and 🌙 Dark mode
 - 🔄 Multiple AI Provider Support: custom API / URL / models (all OpenAI, Google, Anthropic compatible api)
 - 🖼️ Multimodal input support (Image, Text Documentation, PDF, Docx)
+- 🖥️ Web access for multi-platform use
 - 🛠️ MCP support
 - 📝 Markdown Rendering (with code highlighting, Latex formulas, tables, Mermaid)
 - 🪾 Message Branching

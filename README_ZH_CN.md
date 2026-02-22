@@ -10,10 +10,11 @@
 
 </div>
 
-<div style="display: flex;">
+<div style="display: flex; justify-content: center;">
   <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
   <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
+
 ## 🚀 下载
 
 🔗 [前往官网下载](https://rikka-ai.com/download)
@@ -37,6 +38,7 @@
 
 - 🎨 现代化安卓APP设计（Material You / 预测性返回）
 - 🌙 暗色模式
+- 🖥️ Web多端访问支持
 - 🛠️ MCP 支持
 - 🔄 多种类型的供应商支持，自定义 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
 - 🖼️ 多模态输入支持
