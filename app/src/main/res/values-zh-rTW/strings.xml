@@ -864,5 +864,6 @@
   <string name="setting_page_sponsor_alert_desc">您已啟動應用程式超過 100 次！如果您喜歡使用它，請考慮支持開發者。</string>
   <string name="setting_page_sponsor_alert_confirm">捐款</string>
   <string name="setting_page_sponsor_alert_dismiss">稍後再說</string>
+  <string name="db_migrating">正在移轉資料庫...</string>
 </resources>
 

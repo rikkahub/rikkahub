@@ -6,12 +6,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.migrateToolNodes
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 
 private const val TAG = "Migration_15_16"
 
 val Migration_15_16 = object : Migration(15, 16) {
     override fun migrate(db: SupportSQLiteDatabase) {
         Log.i(TAG, "migrate: start migrate from 15 to 16 (eager tool message migration)")
+        DatabaseMigrationTracker.onMigrationStart(15, 16)
         db.beginTransaction()
         try {
             data class NodeRow(val id: String, val messages: List<UIMessage>, val selectIndex: Int)
@@ -77,6 +79,7 @@ val Migration_15_16 = object : Migration(15, 16) {
             Log.i(TAG, "migrate: migrate from 15 to 16 success ($updatedConversations conversations updated)")
         } finally {
             db.endTransaction()
+            DatabaseMigrationTracker.onMigrationEnd()
         }
     }
 }

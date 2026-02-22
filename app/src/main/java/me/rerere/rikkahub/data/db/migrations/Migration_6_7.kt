@@ -5,6 +5,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 import me.rerere.rikkahub.utils.JsonInstant
 
 private const val TAG = "Migration_6_7"
@@ -12,6 +13,7 @@ private const val TAG = "Migration_6_7"
 val Migration_6_7 = object : Migration(6, 7) {
     override fun migrate(db: SupportSQLiteDatabase) {
         Log.i(TAG, "migrate: start migrate from 6 to 7")
+        DatabaseMigrationTracker.onMigrationStart(6, 7)
         db.beginTransaction()
         try {
             // 创建新表结构（不包含messages列）
@@ -94,6 +96,7 @@ val Migration_6_7 = object : Migration(6, 7) {
             Log.i(TAG, "migrate: migrate from 6 to 7 success (${updates.size} conversations updated)")
         } finally {
             db.endTransaction()
+            DatabaseMigrationTracker.onMigrationEnd()
         }
     }
 }

@@ -864,5 +864,6 @@
   <string name="setting_page_sponsor_alert_desc">You have launched the app over 100 times! If you enjoy using it, please consider supporting the developer.</string>
   <string name="setting_page_sponsor_alert_confirm">Donate</string>
   <string name="setting_page_sponsor_alert_dismiss">Not Now</string>
+  <string name="db_migrating">Migrating database...</string>
 </resources>
 

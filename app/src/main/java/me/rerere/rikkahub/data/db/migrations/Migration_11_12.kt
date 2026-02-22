@@ -4,6 +4,7 @@ import android.database.sqlite.SQLiteBlobTooBigException
 import android.util.Log
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.uuid.Uuid
@@ -13,6 +14,7 @@ private const val TAG = "Migration_11_12"
 val Migration_11_12 = object : Migration(11, 12) {
     override fun migrate(db: SupportSQLiteDatabase) {
         Log.i(TAG, "migrate: start migrate from 11 to 12 (extracting message nodes to separate table)")
+        DatabaseMigrationTracker.onMigrationStart(11, 12)
         db.beginTransaction()
         try {
             // 1. 创建 message_node 表
@@ -82,6 +84,7 @@ val Migration_11_12 = object : Migration(11, 12) {
             )
         } finally {
             db.endTransaction()
+            DatabaseMigrationTracker.onMigrationEnd()
         }
     }
 }

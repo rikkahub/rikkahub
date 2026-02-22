@@ -866,5 +866,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_page_sponsor_alert_desc">앱을 100번 이상 실행하셨네요! 만족스럽게 사용하고 계시다면 개발자를 후원해 주세요.</string>
   <string name="setting_page_sponsor_alert_confirm">기부하기</string>
   <string name="setting_page_sponsor_alert_dismiss">나중에</string>
+  <string name="db_migrating">데이터베이스 마이그레이션 중...</string>
 </resources>
 

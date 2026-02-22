@@ -859,5 +859,6 @@
   <string name="setting_page_sponsor_alert_desc">Вы запустили приложение более 100 раз! Если вам нравится им пользоваться, пожалуйста, поддержите разработчика.</string>
   <string name="setting_page_sponsor_alert_confirm">Пожертвовать</string>
   <string name="setting_page_sponsor_alert_dismiss">Не сейчас</string>
+  <string name="db_migrating">Перенос базы данных…</string>
 </resources>
 

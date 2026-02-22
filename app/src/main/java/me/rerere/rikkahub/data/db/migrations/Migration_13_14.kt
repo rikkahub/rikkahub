@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.contentOrNull
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
+import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 
 private const val TAG = "Migration_13_14"
 
@@ -104,6 +105,7 @@ private fun migratePartsArray(partsElement: JsonArray): JsonArray {
 val Migration_13_14 = object : Migration(13, 14) {
     override fun migrate(db: SupportSQLiteDatabase) {
         Log.i(TAG, "migrate: start migrate from 13 to 14 (UIMessagePart type -> @SerialName)")
+        DatabaseMigrationTracker.onMigrationStart(13, 14)
         db.beginTransaction()
         try {
             val cursor = db.query("SELECT id, messages FROM message_node")
@@ -125,6 +127,7 @@ val Migration_13_14 = object : Migration(13, 14) {
             Log.i(TAG, "migrate: migrate from 13 to 14 success ($updatedCount nodes updated)")
         } finally {
             db.endTransaction()
+            DatabaseMigrationTracker.onMigrationEnd()
         }
     }
 }
