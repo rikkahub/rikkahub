@@ -860,5 +860,9 @@
   <string name="stats_page_cached_tokens">已快取的權杖</string>
   <string name="injection_selector_go_to_prompts">管理提示</string>
   <string name="stats_page_launch_count">應用程式啟動次數</string>
+  <string name="setting_page_sponsor_alert_title">支援開發者</string>
+  <string name="setting_page_sponsor_alert_desc">您已啟動應用程式超過 100 次！如果您喜歡使用它，請考慮支持開發者。</string>
+  <string name="setting_page_sponsor_alert_confirm">捐款</string>
+  <string name="setting_page_sponsor_alert_dismiss">稍後再說</string>
 </resources>
 

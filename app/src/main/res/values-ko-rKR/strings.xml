@@ -862,5 +862,9 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="stats_page_cached_tokens">캐시된 토큰</string>
   <string name="injection_selector_go_to_prompts">프롬프트 관리</string>
   <string name="stats_page_launch_count">앱 실행 횟수</string>
+  <string name="setting_page_sponsor_alert_title">개발자 지원하기</string>
+  <string name="setting_page_sponsor_alert_desc">앱을 100번 이상 실행하셨네요! 만족스럽게 사용하고 계시다면 개발자를 후원해 주세요.</string>
+  <string name="setting_page_sponsor_alert_confirm">기부하기</string>
+  <string name="setting_page_sponsor_alert_dismiss">나중에</string>
 </resources>
 

@@ -3,6 +3,8 @@ package me.rerere.rikkahub.ui.pages.setting
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -84,6 +86,33 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val filesManager: FilesManager = koinInject()
+
+    if (settings.launchCount > 100 && (settings.launchCount - settings.sponsorAlertDismissedAt) >= 50) {
+        AlertDialog(
+            onDismissRequest = {
+                vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
+            },
+            icon = { Icon(Lucide.Heart, null) },
+            title = { Text(stringResource(R.string.setting_page_sponsor_alert_title)) },
+            text = { Text(stringResource(R.string.setting_page_sponsor_alert_desc)) },
+            confirmButton = {
+                Button(onClick = {
+                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
+                    navController.navigate(Screen.SettingDonate)
+                }) {
+                    Text(stringResource(R.string.setting_page_sponsor_alert_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
+                }) {
+                    Text(stringResource(R.string.setting_page_sponsor_alert_dismiss))
+                }
+            },
+        )
+    }
+
     Scaffold(
         topBar = {
             LargeTopAppBar(
