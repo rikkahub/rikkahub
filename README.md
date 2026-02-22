@@ -13,7 +13,7 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
 
-<div style="display: flex; justify-content: center;">
+<div align="center">
   <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
   <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
