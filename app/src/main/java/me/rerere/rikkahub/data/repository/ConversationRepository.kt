@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.ui.migrateToolNodes
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
@@ -353,11 +352,7 @@ class ConversationRepository(
                 }
                 offset += page.size
             }
-            // Migrate legacy TOOL nodes by merging them into previous ASSISTANT nodes
-            nodes.migrateToolNodes(
-                getMessages = { it.messages },
-                setMessages = { node, msgs -> node.copy(messages = msgs) }
-            )
+            nodes
         }
     }
 
