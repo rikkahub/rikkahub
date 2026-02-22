@@ -146,7 +146,7 @@ private fun Afdian() {
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = "afdian",
+                    text = "爱发电",
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
