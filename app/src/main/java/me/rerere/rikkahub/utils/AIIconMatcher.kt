@@ -59,6 +59,7 @@ fun computeAIIconByName(name: String): String? {
         PATTERN_SEARCH_METASO.containsMatchIn(lowerName) -> "metaso.svg"
         PATTERN_SEARCH_FIRECRAWL.containsMatchIn(lowerName) -> "firecrawl.svg"
         PATTERN_SEARCH_JINA.containsMatchIn(lowerName) -> "jina.svg"
+        PATTERN_SEARCH_SEARXNG.containsMatchIn(lowerName) -> "searxng.svg"
         else -> null
     }
 
@@ -118,3 +119,4 @@ private val PATTERN_SEARCH_BRAVE = Regex("brave")
 private val PATTERN_SEARCH_METASO = Regex("metaso|秘塔")
 private val PATTERN_SEARCH_FIRECRAWL = Regex("firecrawl")
 private val PATTERN_SEARCH_JINA = Regex("jina")
+private val PATTERN_SEARCH_SEARXNG = Regex("searxng")
