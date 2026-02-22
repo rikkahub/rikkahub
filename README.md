@@ -13,11 +13,9 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
 
-<div align="center">
+<div style="display: flex;">
   <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
-  <img src="docs/img/models.png" alt="Models Picker" width="150" />
-  <img src="docs/img/providers.png" alt="Providers" width="150" />
-  <img src="docs/img/assistants.png" alt="Assistants" width="150" />
+  <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
 
 ## 🚀 Download

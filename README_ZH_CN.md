@@ -10,13 +10,10 @@
 
 </div>
 
-<div align="center">
+<div style="display: flex;">
   <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
-  <img src="docs/img/models.png" alt="Models Picker" width="150" />
-  <img src="docs/img/providers.png" alt="Providers" width="150" />
-  <img src="docs/img/assistants.png" alt="Assistants" width="150" />
+  <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
 </div>
-
 ## 🚀 下载
 
 🔗 [前往官网下载](https://rikka-ai.com/download)

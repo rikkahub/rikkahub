@@ -19,7 +19,7 @@ import { WebAuthGate } from "./components/web-auth-gate";
 const queryClient = new QueryClient();
 
 export const links: Route.LinksFunction = () => [
-  { rel: "icon", href: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
+  { rel: "icon", href: "/favicon.ico", type: "image/x-icon", sizes: "any" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
