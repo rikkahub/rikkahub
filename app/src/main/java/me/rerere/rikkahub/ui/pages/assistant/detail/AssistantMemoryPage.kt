@@ -25,6 +25,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -40,6 +43,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
@@ -97,6 +101,7 @@ private fun AssistantMemoryContent(
             onUpdateMemory(it)
         }
     }
+    var pendingDeleteMemory by remember { mutableStateOf<AssistantMemory?>(null) }
 
     // 记忆对话框
     memoryDialogState.EditStateContent { memory, update ->
@@ -301,11 +306,32 @@ private fun AssistantMemoryContent(
                     onEditMemory = {
                         memoryDialogState.open(it)
                     },
-                    onDeleteMemory = onDeleteMemory
+                    onDeleteMemory = {
+                        pendingDeleteMemory = it
+                    }
                 )
             }
         }
     }
+
+    RikkaConfirmDialog(
+        show = pendingDeleteMemory != null,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.confirm),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            pendingDeleteMemory?.let(onDeleteMemory)
+            pendingDeleteMemory = null
+        },
+        onDismiss = { pendingDeleteMemory = null },
+        text = {
+            Text(
+                text = pendingDeleteMemory?.content.orEmpty(),
+                maxLines = 8,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    )
 }
 
 @Composable
