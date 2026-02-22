@@ -29,11 +29,6 @@
   <p style="font-size: 16px; font-weight: bold;">Aihubmix</p>
   <p style="font-size: 14px;">感谢 <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> 的资金支持。我们推荐使用 aihubmix 作为全球主流模型的一站式服务平台。（OpenAI、Claude、Google Gemini、DeepSeek、Qwen 以及数百种其他模型）。</p>
 </div>
-<div align="center">
-  <img src="app/src/main/assets/icons/siliconflow.svg" alt="SiliconFlow" width="50" />
-  <p style="font-size: 16px; font-weight: bold;">SiliconFlow</p>
-  <p style="font-size: 14px;">感谢 <a href="https://siliconflow.cn/">siliconflow.cn</a> 与我们合作提供免费模型。</p>
-</div>
 
 ## ✨ 功能特色
 

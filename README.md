@@ -31,12 +31,6 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
   <p style="font-size: 16px; font-weight: bold;">Aihubmix</p>
   <p style="font-size: 14px;">Thanks to <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> for their financial support. We recommend using aihubmix as a one-stop shop for mainstream models worldwide. (OpenAI, Claude, Google Gemini, DeepSeek, Qwen, and hundreds more).</p>
 </div>
-<div align="center">
-  <img src="app/src/main/assets/icons/siliconflow.svg" alt="SiliconFlow" width="50" />
-  <p style="font-size: 16px; font-weight: bold;">SiliconFlow</p>
-  <p style="font-size: 14px;">Thanks to <a href="https://siliconflow.cn/">siliconflow.cn</a> providing free models in cooperation with us.</p>
-</div>
-
 
 ## ✨ Features
 
