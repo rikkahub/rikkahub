@@ -381,7 +381,11 @@ private fun ChatPageContent(
                     }
                 },
                 onDelete = {
-                    vm.deleteMessage(it)
+                    if (loadingJob != null) {
+                        vm.showDeleteBlockedWhileGeneratingError()
+                    } else {
+                        vm.deleteMessage(it)
+                    }
                 },
                 onUpdateMessage = { newNode ->
                     vm.updateConversation(
