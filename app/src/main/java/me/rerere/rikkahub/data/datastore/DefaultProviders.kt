@@ -300,7 +300,8 @@ val DEFAULT_PROVIDERS = listOf(
         baseUrl = "https://api.x.ai/v1",
         apiKey = "",
         enabled = false,
-        builtIn = true
+        builtIn = true,
+        useResponseApi = true,
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("53027b08-1b58-43d5-90ed-29173203e3d8"),
