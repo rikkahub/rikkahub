@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.message
 
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -67,7 +68,6 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.highlight.HighlightText
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -78,11 +78,11 @@ import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.components.ui.FaviconRow
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.GridLoading
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
+import me.rerere.rikkahub.utils.openUrl
 import org.koin.compose.koinInject
 
 private object ToolNames {
@@ -363,7 +363,6 @@ private fun ToolCallPreviewSheet(
     output: List<UIMessagePart>,
     onDismissRequest: () -> Unit = {}
 ) {
-    val navController = LocalNavController.current
     val memoryRepo: MemoryRepository = koinInject()
     val scope = rememberCoroutineScope()
 
@@ -391,7 +390,6 @@ private fun ToolCallPreviewSheet(
                 toolName == ToolNames.SEARCH_WEB -> SearchWebPreview(
                     arguments = arguments,
                     content = content,
-                    navController = navController
                 )
 
                 toolName == ToolNames.SCRAPE_WEB -> ScrapeWebPreview(content = content)
@@ -414,8 +412,8 @@ private fun ToolCallPreviewSheet(
 private fun SearchWebPreview(
     arguments: JsonElement,
     content: JsonElement,
-    navController: me.rerere.rikkahub.ui.context.Navigator
 ) {
+    val context = LocalContext.current
     val items = content.jsonObject["items"]?.jsonArray ?: emptyList()
     val answer = content.getStringContent("answer")
     val query = arguments.getStringContent("query") ?: ""
@@ -455,7 +453,7 @@ private fun SearchWebPreview(
                 val text = item.getStringContent("text") ?: return@items
 
                 Card(
-                    onClick = { navController.navigate(Screen.WebView(url = url)) },
+                    onClick = { context.openUrl(url) },
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     )
