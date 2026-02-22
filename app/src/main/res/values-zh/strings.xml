@@ -861,5 +861,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="stats_page_output_tokens">输出 Token</string>
   <string name="stats_page_cached_tokens">缓存节省 Token</string>
   <string name="injection_selector_go_to_prompts">管理提示</string>
+  <string name="stats_page_launch_count">应用启动次数</string>
 </resources>
 

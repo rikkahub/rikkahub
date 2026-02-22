@@ -859,5 +859,6 @@
   <string name="stats_page_output_tokens">Output Tokens</string>
   <string name="stats_page_cached_tokens">Cached Tokens</string>
   <string name="injection_selector_go_to_prompts">Manage Prompts</string>
+  <string name="stats_page_launch_count">App Launch Count</string>
 </resources>
 

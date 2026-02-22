@@ -126,6 +126,9 @@ class SettingsStore(
 
         // 备份提醒
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
+
+        // 统计
+        val LAUNCH_COUNT = intPreferencesKey("launch_count")
     }
 
     private val dataStore = context.settingsStore
@@ -204,6 +207,7 @@ class SettingsStore(
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: BackupReminderConfig(),
+                launchCount = preferences[LAUNCH_COUNT] ?: 0,
             )
         }
         .map {
@@ -345,6 +349,7 @@ class SettingsStore(
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
             preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
+            preferences[LAUNCH_COUNT] = settings.launchCount
         }
     }
 
@@ -463,6 +468,7 @@ data class Settings(
     val webServerJwtEnabled: Boolean = false,
     val webServerAccessPassword: String = "",
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
+    val launchCount: Int = 0,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

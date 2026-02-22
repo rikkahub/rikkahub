@@ -40,6 +40,7 @@ import com.composables.icons.lucide.ChartNoAxesColumn
 import com.composables.icons.lucide.Cpu
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircle
+import com.composables.icons.lucide.Rocket
 import com.composables.icons.lucide.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -306,6 +307,12 @@ private fun StatsGrid(stats: AppStats) {
                 value = formatTokens(stats.totalCachedTokens),
             )
         }
+        StatCard(
+            modifier = Modifier.fillMaxWidth(),
+            icon = Lucide.Rocket,
+            label = stringResource(R.string.stats_page_launch_count),
+            value = formatCount(stats.launchCount.toLong()),
+        )
     }
 }
 

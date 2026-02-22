@@ -859,5 +859,6 @@
   <string name="stats_page_output_tokens">輸出詞元</string>
   <string name="stats_page_cached_tokens">已快取的權杖</string>
   <string name="injection_selector_go_to_prompts">管理提示</string>
+  <string name="stats_page_launch_count">應用程式啟動次數</string>
 </resources>
 
