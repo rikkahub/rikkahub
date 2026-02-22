@@ -381,7 +381,11 @@ private fun ChatPageContent(
                     }
                 },
                 onDelete = {
-                    vm.deleteMessage(it)
+                    if (loadingJob != null) {
+                        toaster.show("请先停止生成再删除消息", type = ToastType.Warning)
+                    } else {
+                        vm.deleteMessage(it)
+                    }
                 },
                 onUpdateMessage = { newNode ->
                     vm.updateConversation(
