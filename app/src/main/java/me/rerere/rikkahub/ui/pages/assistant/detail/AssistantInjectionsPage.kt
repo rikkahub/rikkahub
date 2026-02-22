@@ -15,8 +15,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.InjectionSelector
+import me.rerere.rikkahub.ui.context.LocalNavController
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -29,6 +31,7 @@ fun AssistantInjectionsPage(id: String) {
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val navController = LocalNavController.current
 
     Scaffold(
         topBar = {
@@ -50,6 +53,7 @@ fun AssistantInjectionsPage(id: String) {
             assistant = assistant,
             settings = settings,
             onUpdate = { vm.update(it) },
+            onNavigateToPrompts = { navController.navigate(Screen.Prompts) },
         )
     }
 }

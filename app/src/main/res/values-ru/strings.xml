@@ -853,5 +853,6 @@
   <string name="stats_page_input_tokens">Входные токены</string>
   <string name="stats_page_output_tokens">Выходные токены</string>
   <string name="stats_page_cached_tokens">Кэшированные токены</string>
+  <string name="injection_selector_go_to_prompts">Управление подсказками</string>
 </resources>
 

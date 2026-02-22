@@ -860,5 +860,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="stats_page_input_tokens">입력 토큰</string>
   <string name="stats_page_output_tokens">출력 토큰</string>
   <string name="stats_page_cached_tokens">캐시된 토큰</string>
+  <string name="injection_selector_go_to_prompts">프롬프트 관리</string>
 </resources>
 

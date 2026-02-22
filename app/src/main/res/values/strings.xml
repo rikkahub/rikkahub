@@ -858,5 +858,6 @@
   <string name="stats_page_input_tokens">Input Tokens</string>
   <string name="stats_page_output_tokens">Output Tokens</string>
   <string name="stats_page_cached_tokens">Cached Tokens</string>
+  <string name="injection_selector_go_to_prompts">Manage Prompts</string>
 </resources>
 

@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,6 +11,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +20,7 @@ import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -25,6 +29,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
+import com.composables.icons.lucide.ExternalLink
+import com.composables.icons.lucide.Lucide
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -39,11 +45,13 @@ fun InjectionSelector(
     assistant: Assistant,
     settings: Settings,
     onUpdate: (Assistant) -> Unit,
+    onNavigateToPrompts: () -> Unit = {},
 ) {
     // Empty state
     if (settings.modeInjections.isEmpty() && settings.lorebooks.isEmpty()) {
         InjectionEmptyState(
             modifier = modifier,
+            onNavigateToPrompts = onNavigateToPrompts,
         )
         return
     }
@@ -54,32 +62,41 @@ fun InjectionSelector(
     Column(
         modifier = modifier
     ) {
-        SecondaryTabRow(
-            selectedTabIndex = pagerState.currentPage,
-            containerColor = Color.Transparent,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Tab(
-                selected = pagerState.currentPage == 0,
-                onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(0)
+            SecondaryTabRow(
+                selectedTabIndex = pagerState.currentPage,
+                containerColor = Color.Transparent,
+                modifier = Modifier.weight(1f),
+            ) {
+                Tab(
+                    selected = pagerState.currentPage == 0,
+                    onClick = {
+                        scope.launch {
+                            pagerState.animateScrollToPage(0)
+                        }
+                    },
+                    text = {
+                        Text(stringResource(R.string.injection_selector_mode_injections))
                     }
-                },
-                text = {
-                    Text(stringResource(R.string.injection_selector_mode_injections))
-                }
-            )
-            Tab(
-                selected = pagerState.currentPage == 1,
-                onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(1)
+                )
+                Tab(
+                    selected = pagerState.currentPage == 1,
+                    onClick = {
+                        scope.launch {
+                            pagerState.animateScrollToPage(1)
+                        }
+                    },
+                    text = {
+                        Text(stringResource(R.string.injection_selector_lorebooks))
                     }
-                },
-                text = {
-                    Text(stringResource(R.string.injection_selector_lorebooks))
-                }
-            )
+                )
+            }
+            IconButton(onClick = onNavigateToPrompts) {
+                Icon(Lucide.ExternalLink, contentDescription = null)
+            }
         }
 
         HorizontalPager(
@@ -205,7 +222,8 @@ private fun LorebooksSection(
 
 @Composable
 private fun InjectionEmptyState(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToPrompts: () -> Unit = {},
 ) {
     val content: @Composable () -> Unit = {
         Column(
@@ -225,6 +243,10 @@ private fun InjectionEmptyState(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
             )
+            TextButton(onClick = onNavigateToPrompts) {
+                Icon(Lucide.ExternalLink, contentDescription = null)
+                Text(stringResource(R.string.injection_selector_go_to_prompts))
+            }
         }
     }
 
