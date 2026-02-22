@@ -5,6 +5,9 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.utils.toLocalDateTime
+import java.time.ZoneId
+import java.time.format.TextStyle
+import java.util.Locale
 import kotlin.time.toJavaInstant
 
 /**
@@ -43,9 +46,12 @@ object TimeReminderTransformer : InputMessageTransformer {
     }
 
     private fun buildTimeReminderMessage(gapSeconds: Long, instant: Instant): UIMessage {
-        val timeStr = instant.toJavaInstant().toLocalDateTime()
+        val javaInstant = instant.toJavaInstant()
+        val dayOfWeek = javaInstant.atZone(ZoneId.systemDefault()).dayOfWeek
+            .getDisplayName(TextStyle.FULL, Locale.getDefault())
+        val timeStr = javaInstant.toLocalDateTime()
         val gapText = formatGap(gapSeconds)
-        val content = "<time_reminder>Current time: $timeStr ($gapText since last message)</time_reminder>"
+        val content = "<time_reminder>Current time: $dayOfWeek, $timeStr ($gapText since last message)</time_reminder>"
         return UIMessage.user(content)
     }
 
