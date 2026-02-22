@@ -62,9 +62,7 @@ fun Application.configureWebApi(
     settingsStore: SettingsStore,
     filesManager: FilesManager
 ) {
-    val settingsSnapshot = settingsStore.settingsFlow.value
-    val jwtEnabled = settingsSnapshot.webServerJwtEnabled
-    val accessPassword = settingsSnapshot.webServerAccessPassword
+    val jwtEnabled = settingsStore.settingsFlow.value.webServerJwtEnabled
 
     install(ContentNegotiation) {
         json(JsonInstant)
@@ -86,16 +84,19 @@ fun Application.configureWebApi(
     }
 
     if (jwtEnabled) {
-        val verifierSecret = accessPassword.ifBlank {
-            // Keep protected routes closed when jwt is enabled but password is missing.
-            "__missing_password_${UUID.randomUUID()}__"
-        }
-        val verifier = buildWebJwtVerifier(verifierSecret)
-
         install(Authentication) {
             jwt("auth-jwt") {
                 realm = WEB_AUTH_REALM
-                verifier(verifier)
+                verifier { _ ->
+                    // Dynamically read the current password on each request so that
+                    // tokens signed after a password change are validated correctly.
+                    val currentPassword = settingsStore.settingsFlow.value.webServerAccessPassword
+                    val secret = currentPassword.ifBlank {
+                        // Keep protected routes closed when jwt is enabled but password is missing.
+                        "__missing_password_${UUID.randomUUID()}__"
+                    }
+                    buildWebJwtVerifier(secret)
+                }
                 authHeader { call ->
                     extractAccessToken(
                         authorizationHeader = call.request.headers[HttpHeaders.Authorization],
@@ -105,7 +106,8 @@ fun Application.configureWebApi(
                     }
                 }
                 validate { credential ->
-                    if (accessPassword.isBlank()) {
+                    val currentPassword = settingsStore.settingsFlow.value.webServerAccessPassword
+                    if (currentPassword.isBlank()) {
                         null
                     } else {
                         credential.payload.subject?.takeIf { it == WEB_JWT_SUBJECT }?.let {
@@ -114,7 +116,8 @@ fun Application.configureWebApi(
                     }
                 }
                 challenge { _, _ ->
-                    if (accessPassword.isBlank()) {
+                    val currentPassword = settingsStore.settingsFlow.value.webServerAccessPassword
+                    if (currentPassword.isBlank()) {
                         call.respond(
                             HttpStatusCode.Forbidden,
                             ErrorResponse("Access password is not configured", HttpStatusCode.Forbidden.value)
