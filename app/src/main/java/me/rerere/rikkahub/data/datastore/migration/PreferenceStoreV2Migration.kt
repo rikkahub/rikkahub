@@ -63,7 +63,7 @@ private val partTypeMapping = mapOf(
     "me.rerere.ai.ui.UIMessagePart.Tool" to "tool",
 )
 
-private fun migrateAssistantsJson(assistantsJson: String): String {
+internal fun migrateAssistantsJson(assistantsJson: String): String {
     return runCatching {
         val element = JsonInstant.parseToJsonElement(assistantsJson)
         val root = element as? JsonArray ?: return@runCatching assistantsJson
