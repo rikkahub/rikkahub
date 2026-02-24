@@ -87,6 +87,7 @@ fun ColumnScope.ConversationList(
 
     LaunchedEffect(current.id, conversations.itemCount, hasScrolledToCurrent) {
         if (hasScrolledToCurrent) return@LaunchedEffect
+        if (conversations.itemCount == 0) return@LaunchedEffect
         val currentIndex = conversations.itemSnapshotList.items.indexOfFirst {
             (it as? ConversationListItem.Item)?.conversation?.id == current.id
         }
@@ -96,6 +97,8 @@ fun ColumnScope.ConversationList(
                 listState.scrollToItem(currentIndex)
             }
             hasScrolledToCurrent = true
+        } else {
+            conversations[conversations.itemCount - 1]
         }
     }
 
