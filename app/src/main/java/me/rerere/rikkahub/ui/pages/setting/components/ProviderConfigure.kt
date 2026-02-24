@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -21,7 +22,9 @@ import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
+import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.components.ui.ProviderAvatarIcon
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlin.reflect.KClass
@@ -90,11 +93,7 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.Claude -> this.apiKey
     }
 
-    val sourceBaseUrl = when (this) {
-        is ProviderSetting.OpenAI -> this.baseUrl
-        is ProviderSetting.Google -> this.baseUrl
-        is ProviderSetting.Claude -> this.baseUrl
-    }
+    val sourceBaseUrl = baseUrlOrNull() ?: return this
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
         ProviderSetting.Google::class -> ProviderSetting.Google().baseUrl
@@ -102,12 +101,14 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         else -> error("Unsupported provider type: $type")
     }
     val convertedBaseUrl = sourceBaseUrl.convertToTargetBaseUrl(targetDefaultBaseUrl)
+    val convertedAvatar = resolveAvatarOnBaseUrlChanged(this.avatar, convertedBaseUrl)
 
     return when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI(
             id = this.id,
             enabled = this.enabled,
             name = this.name,
+            avatar = convertedAvatar,
             models = this.models,
             balanceOption = this.balanceOption,
             builtIn = this.builtIn,
@@ -121,6 +122,7 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id,
             enabled = this.enabled,
             name = this.name,
+            avatar = convertedAvatar,
             models = this.models,
             balanceOption = this.balanceOption,
             builtIn = this.builtIn,
@@ -134,6 +136,7 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id,
             enabled = this.enabled,
             name = this.name,
+            avatar = convertedAvatar,
             models = this.models,
             balanceOption = this.balanceOption,
             builtIn = this.builtIn,
@@ -145,6 +148,18 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
 
         else -> error("Unsupported provider type: $type")
     }
+}
+
+internal fun ProviderSetting.baseUrlOrNull(): String? = when (this) {
+    is ProviderSetting.OpenAI -> this.baseUrl
+    is ProviderSetting.Google -> this.baseUrl
+    is ProviderSetting.Claude -> this.baseUrl
+}
+
+internal fun ProviderSetting.copyWithBaseUrlAndAvatar(baseUrl: String, avatar: Avatar): ProviderSetting = when (this) {
+    is ProviderSetting.OpenAI -> this.copy(baseUrl = baseUrl, avatar = avatar)
+    is ProviderSetting.Google -> this.copy(baseUrl = baseUrl, avatar = avatar)
+    is ProviderSetting.Claude -> this.copy(baseUrl = baseUrl, avatar = avatar)
 }
 
 internal fun ProviderSetting.defaultBaseUrlForReset(): String {
@@ -166,20 +181,46 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
 
 internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
     val defaultBaseUrl = defaultBaseUrlForReset()
-    return when (this) {
-        is ProviderSetting.OpenAI -> this.copy(baseUrl = defaultBaseUrl)
-        is ProviderSetting.Google -> this.copy(baseUrl = defaultBaseUrl)
-        is ProviderSetting.Claude -> this.copy(baseUrl = defaultBaseUrl)
-    }
+    val nextAvatar = resolveAvatarOnBaseUrlChanged(this.avatar, defaultBaseUrl)
+    return copyWithBaseUrlAndAvatar(defaultBaseUrl, nextAvatar)
 }
 
 internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
-    val baseUrl = when (this) {
-        is ProviderSetting.OpenAI -> this.baseUrl
-        is ProviderSetting.Google -> this.baseUrl
-        is ProviderSetting.Claude -> this.baseUrl
-    }
+    val baseUrl = baseUrlOrNull() ?: return false
     return baseUrl == defaultBaseUrlForReset()
+}
+
+internal fun buildAutoFaviconUrl(baseUrl: String): String? {
+    val host = baseUrl.toHttpUrlOrNull()?.host ?: return null
+    return "https://$AUTO_FAVICON_HOST/$host?$AUTO_FAVICON_MARKER_KEY=$AUTO_FAVICON_MARKER_VALUE"
+}
+
+internal fun isAutoFaviconUrl(url: String): Boolean {
+    val parsed = url.toHttpUrlOrNull() ?: return false
+    return parsed.host.equals(AUTO_FAVICON_HOST, ignoreCase = true) &&
+        parsed.queryParameter(AUTO_FAVICON_MARKER_KEY) == AUTO_FAVICON_MARKER_VALUE
+}
+
+internal fun resolveAvatarOnBaseUrlChanged(current: Avatar, newBaseUrl: String): Avatar {
+    val autoUrl = buildAutoFaviconUrl(newBaseUrl)
+    return when (current) {
+        is Avatar.Dummy -> autoUrl?.let { Avatar.Image(it) } ?: Avatar.Dummy
+        is Avatar.Emoji -> current
+        is Avatar.Image -> {
+            if (isAutoFaviconUrl(current.url) && autoUrl != null) {
+                Avatar.Image(autoUrl)
+            } else {
+                current
+            }
+        }
+    }
+}
+
+internal fun resolveAvatarOnAvatarPicked(picked: Avatar, currentBaseUrl: String): Avatar {
+    if (picked !is Avatar.Dummy) {
+        return picked
+    }
+    return buildAutoFaviconUrl(currentBaseUrl)?.let { Avatar.Image(it) } ?: Avatar.Dummy
 }
 
 private fun String.convertToTargetBaseUrl(targetDefaultBaseUrl: String): String {
@@ -225,6 +266,9 @@ private const val GOOGLE_OFFICIAL_HOST = "generativelanguage.googleapis.com"
 private const val CLAUDE_OFFICIAL_HOST = "api.anthropic.com"
 private const val V1_SUFFIX = "/v1"
 private const val V1_BETA_SUFFIX = "/v1beta"
+private const val AUTO_FAVICON_HOST = "favicone.com"
+internal const val AUTO_FAVICON_MARKER_KEY = "rh_auto"
+internal const val AUTO_FAVICON_MARKER_VALUE = "1"
 private val OFFICIAL_PROVIDER_HOSTS = setOf(
     OPENAI_OFFICIAL_HOST,
     GOOGLE_OFFICIAL_HOST,
@@ -232,9 +276,33 @@ private val OFFICIAL_PROVIDER_HOSTS = setOf(
 )
 
 @Composable
+private fun ColumnScope.ProviderAvatarEditor(
+    provider: ProviderSetting,
+    onUpdateAvatar: (Avatar) -> Unit
+) {
+    if (provider.builtIn) return
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(id = R.string.avatar_change_avatar),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+        ProviderAvatarIcon(
+            provider = provider,
+            modifier = Modifier.size(48.dp),
+            onUpdateAvatar = onUpdateAvatar
+        )
+    }
+}
+
+@Composable
 private fun ColumnScope.ProviderConfigureOpenAI(
     provider: ProviderSetting.OpenAI,
-    onEdit: (provider: ProviderSetting.OpenAI) -> Unit
+    onEdit: (provider: ProviderSetting) -> Unit
 ) {
     val toaster = LocalToaster.current
 
@@ -251,6 +319,14 @@ private fun ColumnScope.ProviderConfigureOpenAI(
             }
         )
     }
+
+    ProviderAvatarEditor(
+        provider = provider,
+        onUpdateAvatar = { avatar ->
+            val nextAvatar = resolveAvatarOnAvatarPicked(avatar, provider.baseUrl)
+            onEdit(provider.copyProvider(avatar = nextAvatar))
+        }
+    )
 
     OutlinedTextField(
         value = provider.name,
@@ -278,7 +354,9 @@ private fun ColumnScope.ProviderConfigureOpenAI(
     OutlinedTextField(
         value = provider.baseUrl,
         onValueChange = {
-            onEdit(provider.copy(baseUrl = it.trim()))
+            val newBaseUrl = it.trim()
+            val nextAvatar = resolveAvatarOnBaseUrlChanged(provider.avatar, newBaseUrl)
+            onEdit(provider.copyWithBaseUrlAndAvatar(newBaseUrl, nextAvatar))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_api_base_url))
@@ -324,7 +402,7 @@ private fun ColumnScope.ProviderConfigureOpenAI(
 @Composable
 private fun ColumnScope.ProviderConfigureClaude(
     provider: ProviderSetting.Claude,
-    onEdit: (provider: ProviderSetting.Claude) -> Unit
+    onEdit: (provider: ProviderSetting) -> Unit
 ) {
     provider.description()
 
@@ -339,6 +417,14 @@ private fun ColumnScope.ProviderConfigureClaude(
             }
         )
     }
+
+    ProviderAvatarEditor(
+        provider = provider,
+        onUpdateAvatar = { avatar ->
+            val nextAvatar = resolveAvatarOnAvatarPicked(avatar, provider.baseUrl)
+            onEdit(provider.copyProvider(avatar = nextAvatar))
+        }
+    )
 
     OutlinedTextField(
         value = provider.name,
@@ -367,7 +453,9 @@ private fun ColumnScope.ProviderConfigureClaude(
     OutlinedTextField(
         value = provider.baseUrl,
         onValueChange = {
-            onEdit(provider.copy(baseUrl = it.trim()))
+            val newBaseUrl = it.trim()
+            val nextAvatar = resolveAvatarOnBaseUrlChanged(provider.avatar, newBaseUrl)
+            onEdit(provider.copyWithBaseUrlAndAvatar(newBaseUrl, nextAvatar))
         },
         label = {
             Text(stringResource(id = R.string.setting_provider_page_api_base_url))
@@ -394,7 +482,7 @@ private fun ColumnScope.ProviderConfigureClaude(
 @Composable
 private fun ColumnScope.ProviderConfigureGoogle(
     provider: ProviderSetting.Google,
-    onEdit: (provider: ProviderSetting.Google) -> Unit
+    onEdit: (provider: ProviderSetting) -> Unit
 ) {
     provider.description()
 
@@ -409,6 +497,14 @@ private fun ColumnScope.ProviderConfigureGoogle(
             }
         )
     }
+
+    ProviderAvatarEditor(
+        provider = provider,
+        onUpdateAvatar = { avatar ->
+            val nextAvatar = resolveAvatarOnAvatarPicked(avatar, provider.baseUrl)
+            onEdit(provider.copyProvider(avatar = nextAvatar))
+        }
+    )
 
     OutlinedTextField(
         value = provider.name,
@@ -449,7 +545,9 @@ private fun ColumnScope.ProviderConfigureGoogle(
         OutlinedTextField(
             value = provider.baseUrl,
             onValueChange = {
-                onEdit(provider.copy(baseUrl = it.trim()))
+                val newBaseUrl = it.trim()
+                val nextAvatar = resolveAvatarOnBaseUrlChanged(provider.avatar, newBaseUrl)
+                onEdit(provider.copyWithBaseUrlAndAvatar(newBaseUrl, nextAvatar))
             },
             label = {
                 Text(stringResource(id = R.string.setting_provider_page_api_base_url))

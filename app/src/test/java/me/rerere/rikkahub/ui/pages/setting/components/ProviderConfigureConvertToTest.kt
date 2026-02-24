@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.setting.components
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.rikkahub.data.model.Avatar
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -23,10 +24,12 @@ class ProviderConfigureConvertToTest {
             apiPath = "/custom/credits",
             resultPath = "data.balance"
         )
+        val avatar = Avatar.Emoji("🤖")
         val original = ProviderSetting.OpenAI(
             id = Uuid.random(),
             enabled = false,
             name = "My Provider",
+            avatar = avatar,
             models = listOf(model),
             balanceOption = balanceOption,
             apiKey = "sk-test",
@@ -40,6 +43,7 @@ class ProviderConfigureConvertToTest {
         assertEquals(original.id, google.id)
         assertEquals(original.enabled, google.enabled)
         assertEquals(original.name, google.name)
+        assertEquals(original.avatar, google.avatar)
         assertEquals(original.models, google.models)
         assertEquals(original.balanceOption, google.balanceOption)
         assertEquals(original.apiKey, google.apiKey)
@@ -107,5 +111,38 @@ class ProviderConfigureConvertToTest {
 
         val converted = original.convertTo(ProviderSetting.OpenAI::class) as ProviderSetting.OpenAI
         assertEquals("not-a-url", converted.baseUrl)
+    }
+
+    @Test
+    fun `convertTo should update auto favicon avatar when converted base url host changes`() {
+        val original = ProviderSetting.OpenAI(
+            name = "OpenAI Auto Avatar",
+            apiKey = "test-key",
+            baseUrl = "https://api.openai.com/v1",
+            avatar = Avatar.Image("https://favicone.com/api.openai.com?rh_auto=1")
+        )
+
+        val converted = original.convertTo(ProviderSetting.Google::class) as ProviderSetting.Google
+
+        assertEquals("https://generativelanguage.googleapis.com/v1beta", converted.baseUrl)
+        assertEquals(
+            Avatar.Image("https://favicone.com/generativelanguage.googleapis.com?rh_auto=1"),
+            converted.avatar
+        )
+    }
+
+    @Test
+    fun `convertTo should keep manual favicone avatar without marker unchanged`() {
+        val original = ProviderSetting.OpenAI(
+            name = "Manual Favicone Avatar",
+            apiKey = "test-key",
+            baseUrl = "https://api.openai.com/v1",
+            avatar = Avatar.Image("https://favicone.com/custom.example.com")
+        )
+
+        val converted = original.convertTo(ProviderSetting.Google::class) as ProviderSetting.Google
+
+        assertEquals("https://generativelanguage.googleapis.com/v1beta", converted.baseUrl)
+        assertEquals(Avatar.Image("https://favicone.com/custom.example.com"), converted.avatar)
     }
 }
