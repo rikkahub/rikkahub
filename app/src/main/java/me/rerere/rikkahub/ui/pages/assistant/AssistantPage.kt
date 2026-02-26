@@ -61,6 +61,7 @@ import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -82,8 +83,11 @@ import androidx.compose.foundation.lazy.items as lazyItems
 @Composable
 fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val createState = useEditState<Assistant> {
-        vm.addAssistant(it)
+    var pendingImportedLorebooks by remember { mutableStateOf(emptyList<Lorebook>()) }
+    val createState = useEditState<Assistant> { assistant ->
+        val lorebooks = pendingImportedLorebooks
+        pendingImportedLorebooks = emptyList()
+        vm.addAssistant(assistant, lorebooksToAdd = lorebooks)
     }
     val navController = LocalNavController.current
 
@@ -114,6 +118,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
             }, actions = {
                 IconButton(
                     onClick = {
+                        pendingImportedLorebooks = emptyList()
                         createState.open(Assistant())
                     }) {
                     Icon(Lucide.Plus, stringResource(R.string.assistant_page_add))
@@ -222,7 +227,11 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
         }
     }
 
-    AssistantCreationSheet(createState)
+    AssistantCreationSheet(
+        state = createState,
+        onUpdatePendingLorebooks = { pendingImportedLorebooks = it },
+        onClearPendingLorebooks = { pendingImportedLorebooks = emptyList() },
+    )
 
     // 操作菜单 Bottom Sheet
     actionSheetAssistant?.let { assistant ->
@@ -307,10 +316,13 @@ private fun AssistantTagsFilterRow(
 @Composable
 private fun AssistantCreationSheet(
     state: EditState<Assistant>,
+    onUpdatePendingLorebooks: (List<Lorebook>) -> Unit,
+    onClearPendingLorebooks: () -> Unit,
 ) {
     state.EditStateContent { assistant, update ->
         ModalBottomSheet(
             onDismissRequest = {
+                onClearPendingLorebooks()
                 state.dismiss()
             },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -345,8 +357,9 @@ private fun AssistantCreationSheet(
                     }
 
                     AssistantImporter(
-                        onUpdate = {
-                            update(it)
+                        onUpdate = { importedAssistant, importedLorebooks ->
+                            onUpdatePendingLorebooks(importedLorebooks)
+                            update(importedAssistant)
                             state.confirm()
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -358,6 +371,7 @@ private fun AssistantCreationSheet(
                 ) {
                     TextButton(
                         onClick = {
+                            onClearPendingLorebooks()
                             state.dismiss()
                         }) {
                         Text(stringResource(R.string.assistant_page_cancel))

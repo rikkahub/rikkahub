@@ -31,12 +31,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -44,11 +51,12 @@ import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.R
 import org.koin.compose.koinInject
+import kotlin.uuid.Uuid
 
 @Composable
 fun AssistantImporter(
     modifier: Modifier = Modifier,
-    onUpdate: (Assistant) -> Unit,
+    onUpdate: (Assistant, List<Lorebook>) -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -61,7 +69,7 @@ fun AssistantImporter(
 
 @Composable
 private fun SillyTavernImporter(
-    onImport: (Assistant) -> Unit
+    onImport: (Assistant, List<Lorebook>) -> Unit
 ) {
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
@@ -246,12 +254,179 @@ private fun parseAssistantFromJson(
     return parser.parse(context = context, json = json, background = background)
 }
 
+internal fun parseLorebooksFromTavernCard(
+    json: JsonObject,
+    assistantName: String,
+): List<Lorebook> {
+    return runCatching {
+        val data = json["data"]?.jsonObject ?: return emptyList()
+        val candidates = buildLorebookCandidates(data)
+        val firstValidLorebook = candidates.firstNotNullOfOrNull { candidate ->
+            parseLorebookFromBookElement(candidate, assistantName)
+        }
+        firstValidLorebook?.let { listOf(it) } ?: emptyList()
+    }.getOrDefault(emptyList())
+}
+
+private fun buildLorebookCandidates(data: JsonObject): List<kotlinx.serialization.json.JsonElement> {
+    val keys = listOf("character_book", "characterBook", "worldbook", "lorebook")
+    val candidates = buildList {
+        keys.forEach { key ->
+            data[key]?.let { add(it) }
+        }
+
+        val extensions = data["extensions"]?.jsonObject
+        if (extensions != null) {
+            keys.forEach { key ->
+                extensions.values.forEach { ext ->
+                    val obj = ext as? JsonObject ?: return@forEach
+                    obj[key]?.let { add(it) }
+                }
+            }
+        }
+    }
+    return candidates
+}
+
+private fun parseLorebookFromBookElement(
+    bookElement: kotlinx.serialization.json.JsonElement,
+    assistantName: String,
+): Lorebook? {
+    val bookObj = bookElement as? JsonObject ?: return null
+    val entriesElement = bookObj["entries"] ?: return null
+    val entries = parseLorebookEntries(entriesElement)
+    if (entries.isEmpty()) return null
+
+    val name = bookObj["name"]?.jsonPrimitiveOrNull?.contentOrNull
+        ?.takeIf { it.isNotBlank() }
+        ?: "$assistantName Lorebook"
+
+    return Lorebook(
+        id = Uuid.random(),
+        name = name,
+        description = "",
+        enabled = true,
+        entries = entries,
+    )
+}
+
+private fun parseLorebookEntries(entriesElement: kotlinx.serialization.json.JsonElement): List<PromptInjection.RegexInjection> {
+    val entryObjects = when (entriesElement) {
+        is JsonObject -> entriesElement.values.mapNotNull { it as? JsonObject }
+        is JsonArray -> entriesElement.mapNotNull { it as? JsonObject }
+        else -> emptyList()
+    }
+
+    return entryObjects.mapNotNull { entry ->
+        runCatching { parseLorebookEntry(entry) }.getOrNull()
+    }
+}
+
+private fun parseLorebookEntry(entry: JsonObject): PromptInjection.RegexInjection {
+    val keywords = parseLorebookEntryKeywords(entry)
+    val extensions = entry["extensions"] as? JsonObject
+
+    val comment = entry["comment"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
+    val name = comment.ifEmpty { keywords.firstOrNull().orEmpty() }
+
+    val disabledByDisable = entry["disable"]?.jsonPrimitiveOrNull?.booleanOrNull == true
+    val enabledField = entry["enabled"]?.jsonPrimitiveOrNull?.booleanOrNull
+    val enabled = when {
+        disabledByDisable -> false
+        enabledField == false -> false
+        else -> true
+    }
+
+    val priority = entry["order"]?.jsonPrimitiveOrNull?.intOrNull
+        ?: entry["priority"]?.jsonPrimitiveOrNull?.intOrNull
+        ?: entry["insertion_order"]?.jsonPrimitiveOrNull?.intOrNull
+        ?: entry["insertion_order"]?.jsonPrimitiveOrNull?.contentOrNull?.toIntOrNull()
+        ?: 100
+
+    val positionInt = entry["position"]?.jsonPrimitiveOrNull?.intOrNull
+        ?: extensions?.get("position")?.jsonPrimitiveOrNull?.intOrNull
+        ?: entry["position"]?.jsonPrimitiveOrNull?.contentOrNull?.toIntOrNull()
+    val positionStr = entry["position"]?.jsonPrimitiveOrNull?.contentOrNull
+    val position = when {
+        positionInt != null -> mapSillyTavernPosition(positionInt)
+        !positionStr.isNullOrBlank() -> mapSillyTavernPositionString(positionStr) ?: InjectionPosition.AFTER_SYSTEM_PROMPT
+        else -> InjectionPosition.AFTER_SYSTEM_PROMPT
+    }
+
+    val injectDepth = entry["depth"]?.jsonPrimitiveOrNull?.intOrNull
+        ?: extensions?.get("depth")?.jsonPrimitiveOrNull?.intOrNull
+        ?: entry["depth"]?.jsonPrimitiveOrNull?.contentOrNull?.toIntOrNull()
+        ?: 4
+
+    val scanDepth = entry["scanDepth"]?.jsonPrimitiveOrNull?.intOrNull
+        ?: entry["scan_depth"]?.jsonPrimitiveOrNull?.intOrNull
+        ?: extensions?.get("scan_depth")?.jsonPrimitiveOrNull?.intOrNull
+        ?: 4
+
+    val caseSensitive = entry["caseSensitive"]?.jsonPrimitiveOrNull?.booleanOrNull
+        ?: entry["case_sensitive"]?.jsonPrimitiveOrNull?.booleanOrNull
+        ?: extensions?.get("case_sensitive")?.jsonPrimitiveOrNull?.booleanOrNull
+        ?: false
+
+    val constantActive = entry["constant"]?.jsonPrimitiveOrNull?.booleanOrNull ?: false
+
+    val content = entry["content"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
+
+    return PromptInjection.RegexInjection(
+        id = Uuid.random(),
+        name = name,
+        enabled = enabled,
+        priority = priority,
+        position = position,
+        injectDepth = injectDepth,
+        content = content,
+        keywords = keywords,
+        useRegex = false,
+        caseSensitive = caseSensitive,
+        scanDepth = scanDepth,
+        constantActive = constantActive,
+    )
+}
+
+private fun parseLorebookEntryKeywords(entry: JsonObject): List<String> {
+    val element = entry["key"] ?: entry["keys"] ?: return emptyList()
+    return when (element) {
+        is JsonArray -> element.mapNotNull { it.jsonPrimitiveOrNull?.contentOrNull?.takeIf(String::isNotBlank) }
+        is JsonPrimitive -> element.contentOrNull?.takeIf(String::isNotBlank)?.let { listOf(it) } ?: emptyList()
+        else -> emptyList()
+    }
+}
+
+private fun mapSillyTavernPosition(position: Int): InjectionPosition {
+    return when (position) {
+        0 -> InjectionPosition.BEFORE_SYSTEM_PROMPT
+        1 -> InjectionPosition.AFTER_SYSTEM_PROMPT
+        2 -> InjectionPosition.TOP_OF_CHAT
+        3 -> InjectionPosition.TOP_OF_CHAT // After Examples -> 聊天历史开头
+        4 -> InjectionPosition.AT_DEPTH    // @Depth 模式
+        else -> InjectionPosition.AFTER_SYSTEM_PROMPT
+    }
+}
+
+private fun mapSillyTavernPositionString(position: String): InjectionPosition? {
+    return when (position.trim().lowercase()) {
+        "before_char" -> InjectionPosition.BEFORE_SYSTEM_PROMPT
+        "after_char" -> InjectionPosition.AFTER_SYSTEM_PROMPT
+        "before_system_prompt" -> InjectionPosition.BEFORE_SYSTEM_PROMPT
+        "after_system_prompt" -> InjectionPosition.AFTER_SYSTEM_PROMPT
+        "top_of_chat" -> InjectionPosition.TOP_OF_CHAT
+        "bottom_of_chat" -> InjectionPosition.BOTTOM_OF_CHAT
+        "at_depth" -> InjectionPosition.AT_DEPTH
+        else -> null
+    }
+}
+
 // endregion
 
 private suspend fun importAssistantFromUri(
     context: Context,
     uri: Uri,
-    onImport: (Assistant) -> Unit,
+    onImport: (Assistant, List<Lorebook>) -> Unit,
     toaster: ToasterState,
     filesManager: FilesManager,
 ) {
@@ -280,7 +455,13 @@ private suspend fun importAssistantFromUri(
         }
         val json = Json.parseToJsonElement(jsonString).jsonObject
         val assistant = parseAssistantFromJson(context = context, json = json, background = backgroundStr)
-        onImport(assistant)
+        val importedLorebooks = parseLorebooksFromTavernCard(json = json, assistantName = assistant.name)
+        val updatedAssistant = if (importedLorebooks.isNotEmpty()) {
+            assistant.copy(lorebookIds = assistant.lorebookIds + importedLorebooks.map { it.id })
+        } else {
+            assistant
+        }
+        onImport(updatedAssistant, importedLorebooks)
     } catch (exception: Exception) {
         exception.printStackTrace()
         toaster.show(
