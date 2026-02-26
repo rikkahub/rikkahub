@@ -374,6 +374,21 @@ private fun ColumnScope.ProviderConfigureClaude(
         },
         modifier = Modifier.fillMaxWidth()
     )
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            stringResource(id = R.string.setting_provider_page_claude_prompt_caching),
+            modifier = Modifier.weight(1f)
+        )
+        Checkbox(
+            checked = provider.promptCaching,
+            onCheckedChange = {
+                onEdit(provider.copy(promptCaching = it))
+            }
+        )
+    }
 }
 
 @Composable

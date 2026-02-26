@@ -100,7 +100,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk = withContext(Dispatchers.IO) {
-        val requestBody = buildMessageRequest(messages, params)
+        val requestBody = buildMessageRequest(providerSetting, messages, params)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
@@ -147,7 +147,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
-        val requestBody = buildMessageRequest(messages, params, stream = true)
+        val requestBody = buildMessageRequest(providerSetting, messages, params, stream = true)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
@@ -253,10 +253,13 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
     }
 
     private fun buildMessageRequest(
+        providerSetting: ProviderSetting.Claude,
         messages: List<UIMessage>,
         params: TextGenerationParams,
         stream: Boolean = false
     ): JsonObject {
+        fun cacheControlEphemeral() = buildJsonObject { put("type", "ephemeral") }
+
         return buildJsonObject {
             put("model", params.model.modelId)
             put("messages", buildMessages(messages))
@@ -269,16 +272,22 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             if (params.topP != null) put("top_p", params.topP)
 
             put("stream", stream)
-            put("cache_control", buildJsonObject { put("type", "ephemeral") })
+
+            var promptCacheApplied = false
 
             // system prompt
             val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
-            if (systemMessage != null) {
+            val systemTextParts = systemMessage?.parts?.filterIsInstance<UIMessagePart.Text>().orEmpty()
+            if (systemTextParts.isNotEmpty()) {
                 put("system", buildJsonArray {
-                    systemMessage.parts.filterIsInstance<UIMessagePart.Text>().forEach { part ->
+                    systemTextParts.forEachIndexed { index, part ->
                         add(buildJsonObject {
                             put("type", "text")
                             put("text", part.text)
+                            if (providerSetting.promptCaching && index == systemTextParts.lastIndex) {
+                                put("cache_control", cacheControlEphemeral())
+                                promptCacheApplied = true
+                            }
                         })
                     }
                 })
@@ -300,11 +309,18 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             // 处理工具
             if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
                 putJsonArray("tools") {
-                    params.tools.forEach { tool ->
+                    params.tools.forEachIndexed { index, tool ->
                         add(buildJsonObject {
                             put("name", tool.name)
                             put("description", tool.description)
                             put("input_schema", json.encodeToJsonElement(tool.parameters()))
+                            if (
+                                providerSetting.promptCaching &&
+                                !promptCacheApplied &&
+                                index == params.tools.lastIndex
+                            ) {
+                                put("cache_control", cacheControlEphemeral())
+                            }
                         })
                     }
                 }
