@@ -125,7 +125,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: ""
         val content = bodyJson["content"]?.jsonArray ?: JsonArray(emptyList())
         val stopReason = bodyJson["stop_reason"]?.jsonPrimitive?.contentOrNull ?: "unknown"
-        val usage = parseTokenUsage(bodyJson["usage"] as? JsonObject)
+        val usage = parseTokenUsage(bodyJson)
 
         MessageChunk(
             id = id,
@@ -172,6 +172,9 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 data: String
             ) {
                 Log.d(TAG, "onEvent: type=$type, data=$data")
+                if (data == "[DONE]") {
+                    return
+                }
 
                 val dataJson = json.parseToJsonElement(data).jsonObject
                 val deltaMessage = parseMessage(buildJsonArray {
@@ -184,9 +187,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                         add(deltaObj)
                     }
                 })
-                val tokenUsage = parseTokenUsage(
-                    dataJson["usage"]?.jsonObject ?: dataJson["message"]?.jsonObject?.get("usage")?.jsonObject
-                )
+                val tokenUsage = parseTokenUsage(dataJson)
                 val messageChunk = MessageChunk(
                     id = id ?: "",
                     model = "",
@@ -244,7 +245,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         }
 
         val eventSource = EventSources.createFactory(client)
-                .newEventSource(request, listener)
+            .newEventSource(request, listener)
 
         awaitClose {
             Log.d(TAG, "Closing eventSource")
@@ -467,7 +468,8 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 }
 
                 "redacted_thinking" -> {
-                    error("redacted_thinking detected, not support yet!")
+                    val data = block["data"]?.jsonPrimitiveOrNull?.contentOrNull
+                    println(data)
                 }
 
                 "tool_use" -> {
@@ -504,11 +506,32 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         )
     }
 
-    private fun parseTokenUsage(jsonObject: JsonObject?): TokenUsage? {
-        if (jsonObject == null) return null
-        val inputTokens = jsonObject["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0
-        val cachedInputTokens = jsonObject["cache_read_input_tokens"]?.jsonPrimitiveOrNull?.intOrNull ?: 0
-        val completionTokens = jsonObject["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0
+    private fun parseTokenUsage(bodyJson: JsonObject?): TokenUsage? {
+        if (bodyJson == null) return null
+
+        // 优先解析 Amazon Bedrock invocation metrics
+        val bedrockMetrics = bodyJson["amazon-bedrock-invocationMetrics"]?.jsonObject
+        if (bedrockMetrics != null) {
+            val inputTokens = bedrockMetrics["inputTokenCount"]?.jsonPrimitive?.intOrNull ?: 0
+            val cachedTokens = bedrockMetrics["cacheReadInputTokenCount"]?.jsonPrimitive?.intOrNull ?: 0
+            val cachedWriteTokens = bedrockMetrics["cacheWriteInputTokenCount"]?.jsonPrimitive?.intOrNull ?: 0
+            val outputTokens = bedrockMetrics["outputTokenCount"]?.jsonPrimitive?.intOrNull ?: 0
+            val promptTokens = inputTokens + cachedTokens + cachedWriteTokens
+            return TokenUsage(
+                promptTokens = promptTokens,
+                completionTokens = outputTokens,
+                totalTokens = promptTokens + outputTokens,
+                cachedTokens = cachedTokens,
+            )
+        }
+
+        // 回退到标准 usage 字段
+        val usageJson = bodyJson["usage"]?.jsonObject
+            ?: bodyJson["message"]?.jsonObject?.get("usage")?.jsonObject
+            ?: return null
+        val inputTokens = usageJson["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0
+        val cachedInputTokens = usageJson["cache_read_input_tokens"]?.jsonPrimitiveOrNull?.intOrNull ?: 0
+        val completionTokens = usageJson["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0
         val promptTokens = inputTokens + cachedInputTokens
         return TokenUsage(
             promptTokens = promptTokens,
