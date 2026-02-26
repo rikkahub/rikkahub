@@ -274,8 +274,6 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
             put("stream", stream)
 
-            var promptCacheApplied = false
-
             // system prompt
             val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
             val systemTextParts = systemMessage?.parts?.filterIsInstance<UIMessagePart.Text>().orEmpty()
@@ -287,7 +285,6 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                             put("text", part.text)
                             if (providerSetting.promptCaching && index == systemTextParts.lastIndex) {
                                 put("cache_control", cacheControlEphemeral())
-                                promptCacheApplied = true
                             }
                         })
                     }
@@ -315,11 +312,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                             put("name", tool.name)
                             put("description", tool.description)
                             put("input_schema", json.encodeToJsonElement(tool.parameters()))
-                            if (
-                                providerSetting.promptCaching &&
-                                !promptCacheApplied &&
-                                index == params.tools.lastIndex
-                            ) {
+                            if (providerSetting.promptCaching && index == params.tools.lastIndex) {
                                 put("cache_control", cacheControlEphemeral())
                             }
                         })
