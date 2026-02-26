@@ -880,5 +880,6 @@
   <string name="error_title_translate_message">Ошибка перевода сообщения</string>
   <string name="error_title_compress_conversation">Сжатие переписки не удалось</string>
   <string name="error_title_operation">Операция не выполнена</string>
+  <string name="setting_provider_page_claude_prompt_caching">Кэширование промптов (cache_control)</string>
 </resources>
 

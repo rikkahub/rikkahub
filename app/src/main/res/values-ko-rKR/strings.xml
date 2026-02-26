@@ -887,5 +887,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="error_title_translate_message">메시지 번역 실패</string>
   <string name="error_title_compress_conversation">대화 압축 실패</string>
   <string name="error_title_operation">작업 실패</string>
+  <string name="setting_provider_page_claude_prompt_caching">프롬프트 캐싱 (cache_control)</string>
 </resources>
 

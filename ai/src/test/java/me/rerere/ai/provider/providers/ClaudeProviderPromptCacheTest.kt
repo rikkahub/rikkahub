@@ -67,21 +67,30 @@ class ClaudeProviderPromptCacheTest {
 
         val request = buildRequest(providerSetting, messages, params)
 
-        assertNull(request["cache_control"])
-
+        // system should not have cache_control
         val system = request["system"]?.jsonArray
         assertNotNull(system)
         assertTrue(system!!.isNotEmpty())
         assertNull(system.last().jsonObject["cache_control"])
 
+        // tools should not have cache_control
         val tools = request["tools"]?.jsonArray
         assertNotNull(tools)
         assertTrue(tools!!.isNotEmpty())
         assertNull(tools.last().jsonObject["cache_control"])
+
+        // messages should not have cache_control
+        val msgs = request["messages"]!!.jsonArray
+        msgs.forEach { msg ->
+            val content = msg.jsonObject["content"]?.jsonArray
+            content?.forEach { block ->
+                assertNull(block.jsonObject["cache_control"])
+            }
+        }
     }
 
     @Test
-    fun `promptCaching=true should add cache_control to last system block`() {
+    fun `promptCaching=true should add cache_control to last system block and last tool`() {
         val providerSetting = ProviderSetting.Claude(promptCaching = true)
         val messages = listOf(
             UIMessage.system("system prompt"),
@@ -94,15 +103,15 @@ class ClaudeProviderPromptCacheTest {
 
         val request = buildRequest(providerSetting, messages, params)
 
-        assertNull(request["cache_control"])
-
+        // system should have cache_control
         val system = request["system"]!!.jsonArray
-        val cacheControl = system.last().jsonObject["cache_control"]!!.jsonObject
-        assertEquals("ephemeral", cacheControl["type"]!!.jsonPrimitive.content)
+        val systemCacheControl = system.last().jsonObject["cache_control"]!!.jsonObject
+        assertEquals("ephemeral", systemCacheControl["type"]!!.jsonPrimitive.content)
 
-        // Only one cache break: prefer system over tools.
+        // tools should have cache_control
         val tools = request["tools"]!!.jsonArray
-        assertNull(tools.last().jsonObject["cache_control"])
+        val toolsCacheControl = tools.last().jsonObject["cache_control"]!!.jsonObject
+        assertEquals("ephemeral", toolsCacheControl["type"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -116,11 +125,85 @@ class ClaudeProviderPromptCacheTest {
 
         val request = buildRequest(providerSetting, messages, params)
 
-        assertNull(request["cache_control"])
         assertNull(request["system"])
 
         val tools = request["tools"]!!.jsonArray
         val cacheControl = tools.last().jsonObject["cache_control"]!!.jsonObject
         assertEquals("ephemeral", cacheControl["type"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `promptCaching=true should add cache_control to second-to-last real user message`() {
+        val providerSetting = ProviderSetting.Claude(promptCaching = true)
+        val messages = listOf(
+            UIMessage.system("system prompt"),
+            UIMessage.user("first question"),
+            UIMessage.assistant("first answer"),
+            UIMessage.user("second question"),
+            UIMessage.assistant("second answer"),
+            UIMessage.user("third question")
+        )
+        val params = TextGenerationParams(
+            model = Model(modelId = "claude-test", abilities = emptyList()),
+            tools = emptyList()
+        )
+
+        val request = buildRequest(providerSetting, messages, params)
+        val msgs = request["messages"]!!.jsonArray
+
+        // Find all real user messages (not tool_result)
+        val userMsgIndices = msgs.mapIndexedNotNull { index, msg ->
+            val obj = msg.jsonObject
+            if (obj["role"]?.jsonPrimitive?.content == "user") {
+                val content = obj["content"]?.jsonArray
+                val isToolResult = content?.any {
+                    it.jsonObject["type"]?.jsonPrimitive?.content == "tool_result"
+                } == true
+                if (!isToolResult) index else null
+            } else null
+        }
+
+        // Should have 3 real user messages
+        assertEquals(3, userMsgIndices.size)
+
+        // Second-to-last (index 1 in userMsgIndices) should have cache_control
+        val targetMsg = msgs[userMsgIndices[1]].jsonObject
+        val content = targetMsg["content"]!!.jsonArray
+        val cacheControl = content.last().jsonObject["cache_control"]!!.jsonObject
+        assertEquals("ephemeral", cacheControl["type"]!!.jsonPrimitive.content)
+
+        // Last user message should NOT have cache_control
+        val lastMsg = msgs[userMsgIndices[2]].jsonObject
+        val lastContent = lastMsg["content"]!!.jsonArray
+        assertNull(lastContent.last().jsonObject["cache_control"])
+
+        // First user message should NOT have cache_control
+        val firstMsg = msgs[userMsgIndices[0]].jsonObject
+        val firstContent = firstMsg["content"]!!.jsonArray
+        assertNull(firstContent.last().jsonObject["cache_control"])
+    }
+
+    @Test
+    fun `promptCaching=true with only one user message should not add cache_control to messages`() {
+        val providerSetting = ProviderSetting.Claude(promptCaching = true)
+        val messages = listOf(
+            UIMessage.system("system prompt"),
+            UIMessage.user("only question")
+        )
+        val params = TextGenerationParams(
+            model = Model(modelId = "claude-test", abilities = emptyList()),
+            tools = emptyList()
+        )
+
+        val request = buildRequest(providerSetting, messages, params)
+        val msgs = request["messages"]!!.jsonArray
+
+        // Only one user message, so no cache_control on messages
+        msgs.forEach { msg ->
+            val content = msg.jsonObject["content"]?.jsonArray
+            content?.forEach { block ->
+                assertNull(block.jsonObject["cache_control"])
+            }
+        }
     }
 }

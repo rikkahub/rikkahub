@@ -885,5 +885,6 @@
   <string name="error_title_translate_message">訊息翻譯失敗</string>
   <string name="error_title_compress_conversation">對話壓縮失敗</string>
   <string name="error_title_operation">操作失敗</string>
+  <string name="setting_provider_page_claude_prompt_caching">提示快取 (cache_control)</string>
 </resources>
 
