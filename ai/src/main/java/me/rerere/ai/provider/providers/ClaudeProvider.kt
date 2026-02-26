@@ -263,7 +263,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
         return buildJsonObject {
             put("model", params.model.modelId)
-            put("messages", buildMessages(messages))
+            put("messages", buildMessages(messages, providerSetting.promptCaching))
             put("max_tokens", params.maxTokens ?: 64_000)
 
             if (params.temperature != null && (params.thinkingBudget ?: 0) == 0) put(
@@ -322,7 +322,7 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         }.mergeCustomBody(params.customBody)
     }
 
-    private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+    private fun buildMessages(messages: List<UIMessage>, promptCaching: Boolean) = buildJsonArray {
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
@@ -332,6 +332,50 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     addUserMessage(message)
                 }
             }
+    }.let { messagesArray ->
+        if (!promptCaching) return@let messagesArray
+        insertMessagesCacheControl(messagesArray)
+    }
+
+    /**
+     * 在倒数第二条非 tool_result 的 user message 的最后一个 content block 上插入 cache_control
+     */
+    private fun insertMessagesCacheControl(messages: JsonArray): JsonArray {
+        // 找出所有非 tool_result 的 user message 的索引
+        val realUserIndices = messages.mapIndexedNotNull { index, msg ->
+            val obj = msg.jsonObject
+            if (obj["role"]?.jsonPrimitive?.contentOrNull == "user") {
+                val content = obj["content"]?.jsonArray
+                val isToolResult = content?.any {
+                    it.jsonObject["type"]?.jsonPrimitive?.contentOrNull == "tool_result"
+                } == true
+                if (!isToolResult) index else null
+            } else null
+        }
+
+        // 取倒数第二条
+        val targetIndex = if (realUserIndices.size >= 2) {
+            realUserIndices[realUserIndices.size - 2]
+        } else return messages
+
+        // 在目标 message 的最后一个 content block 上添加 cache_control
+        return JsonArray(messages.mapIndexed { index, msg ->
+            if (index == targetIndex) {
+                val obj = msg.jsonObject
+                val content = obj["content"]?.jsonArray ?: return@mapIndexed msg
+                val newContent = JsonArray(content.mapIndexed { contentIndex, block ->
+                    if (contentIndex == content.lastIndex) {
+                        JsonObject(block.jsonObject + mapOf("cache_control" to buildJsonObject {
+                            put(
+                                "type",
+                                "ephemeral"
+                            )
+                        }))
+                    } else block
+                })
+                JsonObject(obj + mapOf("content" to newContent))
+            } else msg
+        })
     }
 
     private fun JsonArrayBuilder.addAssistantMessage(message: UIMessage) {
@@ -502,30 +546,15 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
     private fun parseTokenUsage(bodyJson: JsonObject?): TokenUsage? {
         if (bodyJson == null) return null
 
-        // 优先解析 Amazon Bedrock invocation metrics
-        val bedrockMetrics = bodyJson["amazon-bedrock-invocationMetrics"]?.jsonObject
-        if (bedrockMetrics != null) {
-            val inputTokens = bedrockMetrics["inputTokenCount"]?.jsonPrimitive?.intOrNull ?: 0
-            val cachedTokens = bedrockMetrics["cacheReadInputTokenCount"]?.jsonPrimitive?.intOrNull ?: 0
-            val cachedWriteTokens = bedrockMetrics["cacheWriteInputTokenCount"]?.jsonPrimitive?.intOrNull ?: 0
-            val outputTokens = bedrockMetrics["outputTokenCount"]?.jsonPrimitive?.intOrNull ?: 0
-            val promptTokens = inputTokens + cachedTokens + cachedWriteTokens
-            return TokenUsage(
-                promptTokens = promptTokens,
-                completionTokens = outputTokens,
-                totalTokens = promptTokens + outputTokens,
-                cachedTokens = cachedTokens,
-            )
-        }
-
         // 回退到标准 usage 字段
         val usageJson = bodyJson["usage"]?.jsonObject
             ?: bodyJson["message"]?.jsonObject?.get("usage")?.jsonObject
             ?: return null
         val inputTokens = usageJson["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0
         val cachedInputTokens = usageJson["cache_read_input_tokens"]?.jsonPrimitiveOrNull?.intOrNull ?: 0
+        val cachedCreationTokens = usageJson["cache_creation_input_tokens"]?.jsonPrimitiveOrNull?.intOrNull ?: 0
         val completionTokens = usageJson["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0
-        val promptTokens = inputTokens + cachedInputTokens
+        val promptTokens = inputTokens + cachedInputTokens + cachedCreationTokens
         return TokenUsage(
             promptTokens = promptTokens,
             completionTokens = completionTokens,
