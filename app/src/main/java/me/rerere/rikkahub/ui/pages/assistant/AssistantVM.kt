@@ -34,7 +34,9 @@ class AssistantVM(
     fun addAssistant(assistant: Assistant, lorebooksToAdd: List<Lorebook> = emptyList()) {
         viewModelScope.launch {
             settingsStore.update { settings ->
+                // 同一次更新写入 assistant 和 lorebooks，保证导入绑定不丢
                 val lorebookIds = lorebooksToAdd.map { it.id }.toSet()
+                // 补齐 lorebookIds，并避免重复追加
                 val assistantWithLorebooks = if (lorebookIds.isNotEmpty() && !assistant.lorebookIds.containsAll(lorebookIds)) {
                     assistant.copy(lorebookIds = assistant.lorebookIds + lorebookIds)
                 } else {

@@ -8,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+// 覆盖酒馆世界书的常见格式与兼容字段解析
 class TavernLorebookParseTest {
 
     private fun parseLorebooks(jsonString: String, assistantName: String = "Test"): List<me.rerere.rikkahub.data.model.Lorebook> {

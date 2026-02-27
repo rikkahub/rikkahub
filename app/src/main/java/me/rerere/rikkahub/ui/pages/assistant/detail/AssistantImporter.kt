@@ -258,6 +258,7 @@ internal fun parseLorebooksFromTavernCard(
     json: JsonObject,
     assistantName: String,
 ): List<Lorebook> {
+    // 尝试从酒馆角色卡解析世界书，解析失败直接忽略
     return runCatching {
         val data = json["data"]?.jsonObject ?: return emptyList()
         val candidates = buildLorebookCandidates(data)
@@ -269,6 +270,7 @@ internal fun parseLorebooksFromTavernCard(
 }
 
 private fun buildLorebookCandidates(data: JsonObject): List<kotlinx.serialization.json.JsonElement> {
+    // 兼容不同字段名，也兼容 extensions 里的嵌套结构
     val keys = listOf("character_book", "characterBook", "worldbook", "lorebook")
     val candidates = buildList {
         keys.forEach { key ->
@@ -311,6 +313,7 @@ private fun parseLorebookFromBookElement(
 }
 
 private fun parseLorebookEntries(entriesElement: kotlinx.serialization.json.JsonElement): List<PromptInjection.RegexInjection> {
+    // entries 可能是对象映射，也可能是数组
     val entryObjects = when (entriesElement) {
         is JsonObject -> entriesElement.values.mapNotNull { it as? JsonObject }
         is JsonArray -> entriesElement.mapNotNull { it as? JsonObject }
@@ -398,6 +401,7 @@ private fun parseLorebookEntryKeywords(entry: JsonObject): List<String> {
 }
 
 private fun mapSillyTavernPosition(position: Int): InjectionPosition {
+    // 酒馆 position 映射为注入位置
     return when (position) {
         0 -> InjectionPosition.BEFORE_SYSTEM_PROMPT
         1 -> InjectionPosition.AFTER_SYSTEM_PROMPT
@@ -456,6 +460,7 @@ private suspend fun importAssistantFromUri(
         val json = Json.parseToJsonElement(jsonString).jsonObject
         val assistant = parseAssistantFromJson(context = context, json = json, background = backgroundStr)
         val importedLorebooks = parseLorebooksFromTavernCard(json = json, assistantName = assistant.name)
+        // 如果解析到世界书，同时把 id 绑定到 assistant 并回传给上层写入
         val updatedAssistant = if (importedLorebooks.isNotEmpty()) {
             assistant.copy(lorebookIds = assistant.lorebookIds + importedLorebooks.map { it.id })
         } else {

@@ -83,6 +83,7 @@ import androidx.compose.foundation.lazy.items as lazyItems
 @Composable
 fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
+    // 角色卡导入可能带世界书，先暂存，确认保存时一起写入设置
     var pendingImportedLorebooks by remember { mutableStateOf(emptyList<Lorebook>()) }
     val createState = useEditState<Assistant> { assistant ->
         val lorebooks = pendingImportedLorebooks
@@ -118,6 +119,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
             }, actions = {
                 IconButton(
                     onClick = {
+                        // 避免上一次导入的世界书残留到新建流程
                         pendingImportedLorebooks = emptyList()
                         createState.open(Assistant())
                     }) {
@@ -322,6 +324,7 @@ private fun AssistantCreationSheet(
     state.EditStateContent { assistant, update ->
         ModalBottomSheet(
             onDismissRequest = {
+                // 关闭创建弹窗时清空暂存，避免下次误绑定
                 onClearPendingLorebooks()
                 state.dismiss()
             },
