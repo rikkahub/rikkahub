@@ -1,7 +1,9 @@
 package me.rerere.ai.util
 
+import android.media.ExifInterface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.util.Base64
 import android.util.Base64OutputStream
 import androidx.core.net.toUri
@@ -20,6 +22,32 @@ data class EncodedImage(
     val base64: String,
     val mimeType: String
 )
+
+internal enum class ExifTransformType {
+    NONE,
+    FLIP_HORIZONTAL,
+    ROTATE_180,
+    FLIP_VERTICAL,
+    TRANSPOSE,
+    ROTATE_90,
+    TRANSVERSE,
+    ROTATE_270,
+}
+
+internal fun mapExifOrientationToTransform(orientation: Int): ExifTransformType = when (orientation) {
+    ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> ExifTransformType.FLIP_HORIZONTAL
+    ExifInterface.ORIENTATION_ROTATE_180 -> ExifTransformType.ROTATE_180
+    ExifInterface.ORIENTATION_FLIP_VERTICAL -> ExifTransformType.FLIP_VERTICAL
+    ExifInterface.ORIENTATION_TRANSPOSE -> ExifTransformType.TRANSPOSE
+    ExifInterface.ORIENTATION_ROTATE_90 -> ExifTransformType.ROTATE_90
+    ExifInterface.ORIENTATION_TRANSVERSE -> ExifTransformType.TRANSVERSE
+    ExifInterface.ORIENTATION_ROTATE_270 -> ExifTransformType.ROTATE_270
+    ExifInterface.ORIENTATION_NORMAL,
+    ExifInterface.ORIENTATION_UNDEFINED
+    -> ExifTransformType.NONE
+
+    else -> ExifTransformType.NONE
+}
 
 fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<EncodedImage> = runCatching {
     when {
@@ -108,17 +136,58 @@ private fun File.compressAndEncode(
 
     val bitmap = BitmapFactory.decodeFile(absolutePath, options)
         ?: throw IllegalArgumentException("Failed to decode image: $absolutePath")
+    val normalizedBitmap = normalizeByExif(bitmap)
 
     return try {
         val byteArrayOutputStream = ByteArrayOutputStream()
         // 强制使用 JPEG 格式，因为很多提供商不支持 webp
         Base64OutputStream(byteArrayOutputStream, Base64.NO_WRAP).use { base64Stream ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, base64Stream)
+            normalizedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, base64Stream)
         }
         Pair(byteArrayOutputStream.toString(Charsets.ISO_8859_1.name()), "image/jpeg")
     } finally {
+        if (normalizedBitmap !== bitmap) {
+            normalizedBitmap.recycle()
+        }
         bitmap.recycle()
     }
+}
+
+private fun File.normalizeByExif(bitmap: Bitmap): Bitmap {
+    val orientation = runCatching {
+        ExifInterface(absolutePath).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+    val transform = mapExifOrientationToTransform(orientation)
+    return applyExifTransform(bitmap, transform)
+}
+
+private fun applyExifTransform(bitmap: Bitmap, transform: ExifTransformType): Bitmap {
+    if (transform == ExifTransformType.NONE) return bitmap
+
+    val matrix = Matrix()
+    when (transform) {
+        ExifTransformType.NONE -> return bitmap
+        ExifTransformType.FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
+        ExifTransformType.ROTATE_180 -> matrix.setRotate(180f)
+        ExifTransformType.FLIP_VERTICAL -> matrix.setScale(1f, -1f)
+        ExifTransformType.TRANSPOSE -> {
+            matrix.setRotate(90f)
+            matrix.postScale(-1f, 1f)
+        }
+        ExifTransformType.ROTATE_90 -> matrix.setRotate(90f)
+        ExifTransformType.TRANSVERSE -> {
+            matrix.setRotate(270f)
+            matrix.postScale(-1f, 1f)
+        }
+        ExifTransformType.ROTATE_270 -> matrix.setRotate(270f)
+    }
+
+    return runCatching {
+        Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }.getOrElse { bitmap }
 }
 
 private fun File.encodeToBase64Streaming(): String {

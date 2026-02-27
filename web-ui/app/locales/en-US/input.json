@@ -96,6 +96,6 @@
     "placeholder_ready": "Type a message...",
     "placeholder_not_ready": "Please select a conversation first",
     "send_hint_enter": "Press Enter to send, Shift + Enter for newline",
-    "send_hint_newline": "Press Enter for newline"
+    "send_hint_newline": "Press Shift + Enter to send, Enter for newline"
   }
 }

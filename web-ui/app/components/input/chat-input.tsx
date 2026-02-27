@@ -332,8 +332,14 @@ function ChatInputInner({
   const handleKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (event.key !== "Enter") return;
-      if (!sendOnEnter || isGenerating) return;
-      if (event.shiftKey || event.nativeEvent.isComposing) return;
+      if (isGenerating) return;
+      if (event.nativeEvent.isComposing) return;
+
+      // 镜像逻辑：
+      // sendOnEnter = true: Enter 发送，Shift+Enter 换行
+      // sendOnEnter = false: Shift+Enter 发送，Enter 换行
+      const shouldSend = sendOnEnter ? !event.shiftKey : event.shiftKey;
+      if (!shouldSend) return;
 
       event.preventDefault();
       void handlePrimaryAction();

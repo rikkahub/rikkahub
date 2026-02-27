@@ -96,6 +96,6 @@
     "placeholder_ready": "输入消息...",
     "placeholder_not_ready": "请先选择会话",
     "send_hint_enter": "按 Enter 发送，Shift + Enter 换行",
-    "send_hint_newline": "按 Enter 换行"
+    "send_hint_newline": "按 Shift + Enter 发送，Enter 换行"
   }
 }

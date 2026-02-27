@@ -9,6 +9,7 @@ import rehypeRaw from "rehype-raw";
 import { cn } from "~/lib/utils";
 import { getCodePreviewLanguage } from "~/components/workbench/code-preview-language";
 import { useOptionalWorkbench } from "~/components/workbench/workbench-context";
+import { useSettingsStore } from "~/stores";
 import { CodeBlock } from "./code-block";
 import "katex/dist/katex.min.css";
 import "./markdown.css";
@@ -83,6 +84,7 @@ export default function Markdown({
 }: MarkdownProps) {
   const { t } = useTranslation("markdown");
   const workbench = useOptionalWorkbench();
+  const displaySetting = useSettingsStore((state) => state.settings?.displaySetting);
   const processedContent = React.useMemo(() => preProcess(content), [content]);
   const handlePreviewCode = React.useCallback(
     (language: string, code: string) => {
@@ -127,6 +129,8 @@ export default function Markdown({
                 <CodeBlock
                   language={language}
                   code={code}
+                  showLineNumbers={displaySetting?.showLineNumbers ?? false}
+                  wrapLines={displaySetting?.codeBlockAutoWrap ?? false}
                   onPreview={
                     allowCodePreview && workbench
                       ? () => {
