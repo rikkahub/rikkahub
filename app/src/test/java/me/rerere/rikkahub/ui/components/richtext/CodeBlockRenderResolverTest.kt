@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.components.richtext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CodeBlockRenderResolverTest {
@@ -61,17 +62,20 @@ class CodeBlockRenderResolverTest {
     }
 
     @Test
-    fun build_html_for_html_code_returns_original() {
+    fun build_html_for_html_code_is_wrapped_and_keeps_payload() {
         val target = CodeBlockRenderTarget(
             normalizedLanguage = "html",
             renderType = CodeBlockRenderType.HTML
         )
         val code = "<span>hello</span>"
-        assertEquals(code, CodeBlockRenderResolver.buildHtmlForWebView(target, code))
+        val html = CodeBlockRenderResolver.buildHtmlForWebView(target, code)
+        assertTrue(html.contains("<!DOCTYPE html>", ignoreCase = true))
+        assertTrue(html.contains("<meta name=\"viewport\""))
+        assertTrue(html.contains(code))
     }
 
     @Test
-    fun build_html_for_svg_code_returns_original() {
+    fun build_html_for_svg_code_is_wrapped_and_keeps_payload() {
         val target = CodeBlockRenderTarget(
             normalizedLanguage = "svg",
             renderType = CodeBlockRenderType.SVG
@@ -82,6 +86,8 @@ class CodeBlockRenderResolverTest {
         """.trimIndent()
         val html = CodeBlockRenderResolver.buildHtmlForWebView(target, code)
 
-        assertEquals(code, html)
+        assertTrue(html.contains("<!DOCTYPE html>", ignoreCase = true))
+        assertTrue(html.contains("<body>"))
+        assertTrue(html.contains(code))
     }
 }

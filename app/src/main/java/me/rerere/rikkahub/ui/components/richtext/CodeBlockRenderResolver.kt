@@ -39,7 +39,7 @@ internal object CodeBlockRenderResolver {
     ): String {
         return when (target.renderType) {
             CodeBlockRenderType.HTML,
-            CodeBlockRenderType.SVG -> code
+            CodeBlockRenderType.SVG -> createRenderShell(code)
         }
     }
 
@@ -59,5 +59,31 @@ internal object CodeBlockRenderResolver {
 
     private fun containsSvgMarkup(code: String): Boolean {
         return SVG_TAG_REGEX.containsMatchIn(code)
+    }
+
+    /**
+     * Borrowed style direction from JS-Slash-Runner's render iframe shell:
+     * - full html document
+     * - viewport meta
+     * - base reset styles
+     * Keep code payload untouched and inject directly into body.
+     */
+    private fun createRenderShell(content: String): String {
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+            *,*::before,*::after{box-sizing:border-box;}
+            html,body{margin:0!important;padding:0;overflow:hidden!important;max-width:100%!important;}
+            </style>
+            </head>
+            <body>
+            $content
+            </body>
+            </html>
+        """.trimIndent()
     }
 }
