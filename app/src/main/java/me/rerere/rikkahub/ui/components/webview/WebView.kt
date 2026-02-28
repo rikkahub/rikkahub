@@ -85,6 +85,8 @@ fun WebView(
                         LayoutParams.MATCH_PARENT,
                         LayoutParams.MATCH_PARENT
                     )
+                    // Keep WebView composable-friendly and avoid default white flash/background.
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
 
                     state.webView = this // Assign the WebView instance to the state
 

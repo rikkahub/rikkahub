@@ -295,7 +295,6 @@ private fun buildMermaidHtml(
                     justify-content: center;
                     align-items: center;
                     height: auto;
-                    background-color: ${background};
                 }
                 .mermaid {
                     width: 100%;
