@@ -187,7 +187,7 @@ class SseClientTransport(
     private suspend fun closeResources() {
         if (!initialized.compareAndSet(expectedValue = true, newValue = false)) return
 
-        job?.cancelAndJoin()
+        job?.cancel()
         try {
             if (::session.isInitialized) session.cancel()
             if (::scope.isInitialized) scope.cancel()

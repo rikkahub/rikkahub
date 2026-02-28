@@ -86,7 +86,7 @@ class WebServerService : Service() {
                 this,
                 NOTIFICATION_ID,
                 buildStartingNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             )
         } else {
             startForeground(NOTIFICATION_ID, buildStartingNotification())
@@ -120,10 +120,18 @@ class WebServerService : Service() {
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
+    private fun buildLaunchPendingIntent() = PendingIntent.getActivity(
+        this,
+        0,
+        packageManager.getLaunchIntentForPackage(packageName),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
+
     private fun buildStartingNotification() = NotificationCompat.Builder(this, WEB_SERVER_NOTIFICATION_CHANNEL_ID)
         .setSmallIcon(R.drawable.small_icon)
         .setContentTitle(getString(R.string.notification_channel_web_server))
         .setContentText(getString(R.string.notification_web_server_starting))
+        .setContentIntent(buildLaunchPendingIntent())
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .build()
@@ -142,6 +150,7 @@ class WebServerService : Service() {
             .setSmallIcon(R.drawable.small_icon)
             .setContentTitle(getString(R.string.notification_web_server_running))
             .setContentText(url)
+            .setContentIntent(buildLaunchPendingIntent())
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

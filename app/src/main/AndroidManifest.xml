@@ -19,6 +19,7 @@
   <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
   <uses-feature
     android:name="android.hardware.camera"
@@ -87,7 +88,11 @@
     <service
       android:name=".service.WebServerService"
       android:exported="false"
-      android:foregroundServiceType="dataSync" />
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="local web server for LLM chat UI" />
+    </service>
 
     <service
       android:name=".service.ScheduledTaskKeepAliveService"
