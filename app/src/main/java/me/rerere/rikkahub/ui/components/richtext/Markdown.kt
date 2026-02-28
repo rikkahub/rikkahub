@@ -543,15 +543,33 @@ private fun MarkdownNode(
             val language =
                 node.findChildOfTypeRecursive(MarkdownTokenTypes.FENCE_LANG)?.getTextInNode(content) ?: "plaintext"
             val hasEnd = node.findChildOfTypeRecursive(MarkdownTokenTypes.CODE_FENCE_END) != null
+            val displaySetting = LocalSettings.current.displaySetting
+            val renderTarget = remember(language, code, hasEnd, displaySetting.enableCodeBlockRichRender) {
+                if (hasEnd && displaySetting.enableCodeBlockRichRender) {
+                    CodeBlockRenderResolver.resolve(language = language, code = code)
+                } else {
+                    null
+                }
+            }
 
-            HighlightCodeBlock(
-                code = code,
-                language = language,
-                modifier = Modifier
-                    .padding(bottom = 4.dp)
-                    .fillMaxWidth(),
-                completeCodeBlock = hasEnd
-            )
+            if (renderTarget != null) {
+                WebRenderedCodeBlock(
+                    target = renderTarget,
+                    code = code,
+                    modifier = Modifier
+                        .padding(bottom = 4.dp)
+                        .fillMaxWidth()
+                )
+            } else {
+                HighlightCodeBlock(
+                    code = code,
+                    language = language,
+                    modifier = Modifier
+                        .padding(bottom = 4.dp)
+                        .fillMaxWidth(),
+                    completeCodeBlock = hasEnd
+                )
+            }
         }
 
         MarkdownTokenTypes.TEXT -> {

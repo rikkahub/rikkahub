@@ -24,6 +24,22 @@ import androidx.compose.ui.viewinterop.AndroidView
 
 private const val TAG = "WebView"
 
+private fun WebContent.Url.signature(): Int {
+    var result = url.hashCode()
+    result = 31 * result + additionalHttpHeaders.hashCode()
+    result = 31 * result + clearHistory.hashCode()
+    return result
+}
+
+private fun WebContent.Data.signature(): Int {
+    var result = data.hashCode()
+    result = 31 * result + (baseUrl?.hashCode() ?: 0)
+    result = 31 * result + encoding.hashCode()
+    result = 31 * result + (mimeType?.hashCode() ?: 0)
+    result = 31 * result + (historyUrl?.hashCode() ?: 0)
+    return result
+}
+
 internal class MyWebChromeClient(private val state: WebViewState) : WebChromeClient() {
     override fun onProgressChanged(view: WebView?, newProgress: Int) {
         state.loadingProgress = newProgress / 100f
@@ -111,6 +127,7 @@ fun WebView(
                 state.interfaces.forEach { (name, _) ->
                     it.removeJavascriptInterface(name)
                 }
+                state.clearLoadSignatures()
                 Log.d(TAG, "AndroidView: Resetting WebView")
             },
             update = { webView ->
@@ -129,28 +146,36 @@ fun WebView(
                 when (val content = state.content) {
                     is WebContent.Url -> {
                         val url = content.url
-                        // Only load new URL if it's different from the current one or if the state forces reload
-                        // Also check if the webView's url is null or blank, which might happen initially
                         val currentWebViewUrl = webView.url
-                        if (url.isNotEmpty() && (currentWebViewUrl.isNullOrBlank() || url != currentWebViewUrl || state.forceReload)) {
+                        val signature = content.signature()
+                        val shouldLoad = url.isNotEmpty() && (
+                            state.forceReload ||
+                                currentWebViewUrl.isNullOrBlank() ||
+                                state.lastLoadedUrlSignature != signature
+                            )
+                        if (shouldLoad) {
                             webView.loadUrl(content.url, content.additionalHttpHeaders)
-                            state.forceReload = false // Reset force reload flag
+                            state.lastLoadedUrlSignature = signature
+                            state.lastLoadedDataSignature = null
+                            state.forceReload = false
                         }
                     }
 
                     is WebContent.Data -> {
-                        // Check if the data needs to be reloaded (e.g., if different from last loaded data)
-                        // For simplicity, we might just reload it every time the update block runs with Data content.
-                        // A more complex check could involve comparing `content.data` with a previously stored value.
-                        webView.loadDataWithBaseURL(
-                            content.baseUrl,
-                            content.data,
-                            content.mimeType,
-                            content.encoding,
-                            content.historyUrl
-                        )
-                        // Assuming data loading is fast, but let's reflect the state more accurately
-                        // state.isLoading = false // This might be too soon, let WebViewClient handle it
+                        val signature = content.signature()
+                        val shouldLoad = state.forceReload || state.lastLoadedDataSignature != signature
+                        if (shouldLoad) {
+                            webView.loadDataWithBaseURL(
+                                content.baseUrl,
+                                content.data,
+                                content.mimeType,
+                                content.encoding,
+                                content.historyUrl
+                            )
+                            state.lastLoadedDataSignature = signature
+                            state.lastLoadedUrlSignature = null
+                            state.forceReload = false
+                        }
                     }
 
                     WebContent.NavigatorOnly -> {
@@ -199,6 +224,8 @@ class WebViewState(
     // --- Content State ---
     var content: WebContent by mutableStateOf(initialContent)
     internal var forceReload: Boolean by mutableStateOf(false) // Internal state to force URL reload if needed
+    internal var lastLoadedUrlSignature: Int? = null
+    internal var lastLoadedDataSignature: Int? = null
 
     // --- Loading State ---
     var isLoading: Boolean by mutableStateOf(false)
@@ -288,6 +315,11 @@ class WebViewState(
         if (consoleMessages.size > 64) { // Limit to 64 messages
             consoleMessages = consoleMessages.takeLast(64)
         }
+    }
+
+    internal fun clearLoadSignatures() {
+        lastLoadedUrlSignature = null
+        lastLoadedDataSignature = null
     }
 }
 

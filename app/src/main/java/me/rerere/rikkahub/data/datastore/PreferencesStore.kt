@@ -588,6 +588,7 @@ data class DisplaySetting(
     val codeBlockAutoWrap: Boolean = false,
     val codeBlockAutoCollapse: Boolean = false,
     val showLineNumbers: Boolean = false,
+    val enableCodeBlockRichRender: Boolean = true,
     val ttsOnlyReadQuoted: Boolean = false,
     val autoPlayTTSAfterGeneration: Boolean = false,
     val pasteLongTextAsFile: Boolean = false,

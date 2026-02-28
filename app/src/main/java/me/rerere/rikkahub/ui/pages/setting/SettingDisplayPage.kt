@@ -567,6 +567,26 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 )
             }
 
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_rich_render_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_code_block_rich_render_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.enableCodeBlockRichRender,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(enableCodeBlockRichRender = it))
+                            }
+                        )
+                    },
+                )
+            }
+
             stickyHeader {
                 Text(
                     text = stringResource(R.string.setting_page_interaction_notification_settings),

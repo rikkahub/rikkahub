@@ -332,6 +332,9 @@ private fun HighlightCodeActions(
     createDocumentLauncher: ManagedActivityResultLauncher<String, Uri?>,
     navController: Navigator,
 ) {
+    val previewTarget = remember(language, code) {
+        CodeBlockRenderResolver.resolve(language = language, code = code)
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -402,7 +405,7 @@ private fun HighlightCodeActions(
                 }
             )
 
-            if (language == "html") {
+            if (previewTarget != null) {
                 Text(
                     text = stringResource(id = R.string.code_block_preview),
                     fontSize = 12.sp,
@@ -410,7 +413,11 @@ private fun HighlightCodeActions(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier
                         .clickable {
-                            navController.navigate(Screen.WebView(content = code.base64Encode()))
+                            val previewHtml = CodeBlockRenderResolver.buildHtmlForWebView(
+                                target = previewTarget,
+                                code = code
+                            )
+                            navController.navigate(Screen.WebView(content = previewHtml.base64Encode()))
                         }
                 )
             }

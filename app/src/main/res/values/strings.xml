@@ -418,6 +418,8 @@
   <string name="setting_display_page_code_block_auto_collapse_title">Code Block Auto Collapse</string>
   <string name="setting_display_page_code_block_auto_wrap_desc">Automatically wrap long lines in code blocks</string>
   <string name="setting_display_page_code_block_auto_wrap_title">Code Block Auto Wrap</string>
+  <string name="setting_display_page_code_block_rich_render_title">Render HTML/SVG Code Blocks</string>
+  <string name="setting_display_page_code_block_rich_render_desc">Render html/svg/xml-with-svg code blocks directly instead of showing raw code</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">Create a new conversation when the app starts</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">New chat on launch</string>
   <string name="setting_display_page_developer_mode">Developer Mode</string>
@@ -1027,4 +1029,3 @@
   <string name="error_title_compress_conversation">Conversation compression failed</string>
   <string name="error_title_operation">Operation failed</string>
 </resources>
-
