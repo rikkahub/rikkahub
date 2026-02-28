@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -71,6 +72,8 @@ class CodeBlockRenderResolverTest {
         val html = CodeBlockRenderResolver.buildHtmlForWebView(target, code)
         assertTrue(html.contains("<!DOCTYPE html>", ignoreCase = true))
         assertTrue(html.contains("<meta name=\"viewport\""))
+        assertTrue(html.contains(CODE_BLOCK_HEIGHT_BRIDGE_NAME))
+        assertTrue(html.contains("--TH-viewport-height"))
         assertTrue(html.contains(code))
     }
 
@@ -89,5 +92,74 @@ class CodeBlockRenderResolverTest {
         assertTrue(html.contains("<!DOCTYPE html>", ignoreCase = true))
         assertTrue(html.contains("<body>"))
         assertTrue(html.contains(code))
+    }
+
+    @Test
+    fun build_html_converts_css_min_height_vh_to_viewport_variable() {
+        val target = CodeBlockRenderTarget(
+            normalizedLanguage = "html",
+            renderType = CodeBlockRenderType.HTML
+        )
+        val code = """
+            <style>
+              .box { min-height: 100vh; }
+              .half { min-height: 50vh; }
+            </style>
+            <div class="box half"></div>
+        """.trimIndent()
+
+        val html = CodeBlockRenderResolver.buildHtmlForWebView(target, code)
+
+        assertTrue(html.contains("min-height: var(--TH-viewport-height)"))
+        assertTrue(html.contains("min-height: calc(var(--TH-viewport-height) * 0.5)"))
+    }
+
+    @Test
+    fun build_html_converts_inline_style_min_height_vh() {
+        val target = CodeBlockRenderTarget(
+            normalizedLanguage = "html",
+            renderType = CodeBlockRenderType.HTML
+        )
+        val code = "<div style=\"padding: 4px; min-height: 75vh;\">inline</div>"
+
+        val html = CodeBlockRenderResolver.buildHtmlForWebView(target, code)
+
+        assertTrue(html.contains("min-height: calc(var(--TH-viewport-height) * 0.75)"))
+    }
+
+    @Test
+    fun build_html_converts_javascript_min_height_vh() {
+        val target = CodeBlockRenderTarget(
+            normalizedLanguage = "html",
+            renderType = CodeBlockRenderType.HTML
+        )
+        val code = """
+            <script>
+              el.style.minHeight = "80vh";
+              el.style.setProperty('min-height', '25vh');
+            </script>
+        """.trimIndent()
+
+        val html = CodeBlockRenderResolver.buildHtmlForWebView(target, code)
+
+        assertTrue(html.contains("""el.style.minHeight = "calc(var(--TH-viewport-height) * 0.8)""""))
+        assertTrue(html.contains("""setProperty('min-height', 'calc(var(--TH-viewport-height) * 0.25)')"""))
+    }
+
+    @Test
+    fun build_html_does_not_convert_non_min_height_vh() {
+        val target = CodeBlockRenderTarget(
+            normalizedLanguage = "html",
+            renderType = CodeBlockRenderType.HTML
+        )
+        val code = """
+            <style>.box{height:100vh;}</style>
+            <div class="box"></div>
+        """.trimIndent()
+
+        val html = CodeBlockRenderResolver.buildHtmlForWebView(target, code)
+
+        assertTrue(html.contains("height:100vh"))
+        assertFalse(html.contains("height:var(--TH-viewport-height)"))
     }
 }
