@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularWavyProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +43,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -61,11 +61,13 @@ import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
+import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.fileSizeToString
 import me.rerere.rikkahub.utils.onError
 import me.rerere.rikkahub.utils.onLoading
 import me.rerere.rikkahub.utils.onSuccess
 import me.rerere.rikkahub.utils.toLocalDateTime
+import java.time.Instant
 
 @Composable
 fun WebDavTab(
@@ -74,6 +76,7 @@ fun WebDavTab(
 ) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val webDavConfig = settings.webDavConfig
+    val backupItemsState by vm.webDavBackupItems.collectAsStateWithLifecycle()
     val toaster = LocalToaster.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -85,122 +88,152 @@ fun WebDavTab(
         vm.updateSettings(settings.copy(webDavConfig = newConfig))
     }
 
+    val lastBackupText = if (settings.backupReminderConfig.lastBackupTime == 0L) {
+        stringResource(R.string.backup_page_reminder_no_record)
+    } else {
+        stringResource(
+            R.string.backup_page_reminder_last_time,
+            Instant.ofEpochMilli(settings.backupReminderConfig.lastBackupTime).toLocalDateTime()
+        )
+    }
+    val backupFileSummary = when (val state = backupItemsState) {
+        is UiState.Success -> "${stringResource(R.string.backup_page_files)}: ${state.data.size}"
+        UiState.Loading -> "${stringResource(R.string.backup_page_files)}: ..."
+        UiState.Idle -> "${stringResource(R.string.backup_page_files)}: -"
+        is UiState.Error -> "${stringResource(R.string.backup_page_files)}: -"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-            .imePadding(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .imePadding()
     ) {
-        OutlinedCard {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FormItem(
-                    label = { Text(stringResource(R.string.backup_page_webdav_server_address)) }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            BackupStatusCard(
+                title = stringResource(R.string.backup_page_webdav_backup),
+                lastBackupText = lastBackupText,
+                fileSummaryText = backupFileSummary
+            )
+
+            OutlinedCard {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = webDavConfig.url,
-                        onValueChange = { updateWebDavConfig(webDavConfig.copy(url = it.trim())) },
-                        placeholder = { Text("https://example.com/dav") },
-                        singleLine = true
-                    )
-                }
-                FormItem(
-                    label = { Text(stringResource(R.string.backup_page_username)) }
-                ) {
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = webDavConfig.username,
-                        onValueChange = {
-                            updateWebDavConfig(
-                                webDavConfig.copy(
-                                    username = it.trim()
+                    FormItem(
+                        label = { Text(stringResource(R.string.backup_page_webdav_server_address)) }
+                    ) {
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = webDavConfig.url,
+                            onValueChange = { updateWebDavConfig(webDavConfig.copy(url = it.trim())) },
+                            placeholder = { Text("https://example.com/dav") },
+                            singleLine = true
+                        )
+                    }
+                    FormItem(
+                        label = { Text(stringResource(R.string.backup_page_username)) }
+                    ) {
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = webDavConfig.username,
+                            onValueChange = {
+                                updateWebDavConfig(
+                                    webDavConfig.copy(
+                                        username = it.trim()
+                                    )
                                 )
-                            )
-                        },
-                        singleLine = true
-                    )
-                }
-                FormItem(
-                    label = { Text(stringResource(R.string.backup_page_password)) }
-                ) {
-                    var passwordVisible by remember { mutableStateOf(false) }
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = webDavConfig.password,
-                        onValueChange = { updateWebDavConfig(webDavConfig.copy(password = it)) },
-                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            val image = if (passwordVisible)
-                                Lucide.EyeOff
-                            else
-                                Lucide.Eye
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(imageVector = image, null)
-                            }
-                        },
-                        singleLine = true
-                    )
-                }
-                FormItem(
-                    label = { Text(stringResource(R.string.backup_page_path)) }
-                ) {
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = webDavConfig.path,
-                        onValueChange = { updateWebDavConfig(webDavConfig.copy(path = it.trim())) },
-                        singleLine = true
-                    )
+                            },
+                            singleLine = true
+                        )
+                    }
+                    FormItem(
+                        label = { Text(stringResource(R.string.backup_page_password)) }
+                    ) {
+                        var passwordVisible by remember { mutableStateOf(false) }
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = webDavConfig.password,
+                            onValueChange = { updateWebDavConfig(webDavConfig.copy(password = it)) },
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                val image = if (passwordVisible) {
+                                    Lucide.EyeOff
+                                } else {
+                                    Lucide.Eye
+                                }
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(imageVector = image, contentDescription = null)
+                                }
+                            },
+                            singleLine = true
+                        )
+                    }
+                    FormItem(
+                        label = { Text(stringResource(R.string.backup_page_path)) }
+                    ) {
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = webDavConfig.path,
+                            onValueChange = { updateWebDavConfig(webDavConfig.copy(path = it.trim())) },
+                            singleLine = true
+                        )
+                    }
                 }
             }
-        }
 
-        OutlinedCard {
-            FormItem(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.backup_page_backup_items))
-                }
-            ) {
-                MultiChoiceSegmentedButtonRow(
-                    modifier = Modifier.fillMaxWidth(),
+            OutlinedCard {
+                FormItem(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    label = {
+                        Text(stringResource(R.string.backup_page_backup_items))
+                    }
                 ) {
-                    WebDavConfig.BackupItem.entries.forEachIndexed { index, item ->
-                        SegmentedButton(
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = WebDavConfig.BackupItem.entries.size
-                            ),
-                            onCheckedChange = {
-                                val newItems = if (it) {
-                                    webDavConfig.items + item
-                                } else {
-                                    webDavConfig.items - item
-                                }
-                                updateWebDavConfig(webDavConfig.copy(items = newItems))
-                            },
-                            checked = item in webDavConfig.items
-                        ) {
-                            Text(
-                                when (item) {
-                                    WebDavConfig.BackupItem.DATABASE -> stringResource(R.string.backup_page_chat_records)
-                                    WebDavConfig.BackupItem.FILES -> stringResource(R.string.backup_page_files)
-                                }
-                            )
+                    MultiChoiceSegmentedButtonRow(
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        WebDavConfig.BackupItem.entries.forEachIndexed { index, item ->
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = WebDavConfig.BackupItem.entries.size
+                                ),
+                                onCheckedChange = { checked ->
+                                    val newItems = if (checked) {
+                                        webDavConfig.items + item
+                                    } else {
+                                        webDavConfig.items - item
+                                    }
+                                    updateWebDavConfig(webDavConfig.copy(items = newItems))
+                                },
+                                checked = item in webDavConfig.items
+                            ) {
+                                Text(
+                                    when (item) {
+                                        WebDavConfig.BackupItem.DATABASE -> stringResource(R.string.backup_page_chat_records)
+                                        WebDavConfig.BackupItem.FILES -> stringResource(R.string.backup_page_files)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
+        HorizontalDivider()
         FlowRow(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
         ) {
             OutlinedButton(
@@ -218,7 +251,8 @@ fun WebDavTab(
                                 context.getString(
                                     R.string.backup_page_connection_failed,
                                     e.message ?: ""
-                                ), type = ToastType.Error
+                                ),
+                                type = ToastType.Error
                             )
                         }
                     }
@@ -228,12 +262,12 @@ fun WebDavTab(
             }
             OutlinedButton(
                 onClick = {
+                    vm.loadBackupFileItems()
                     showBackupFiles = true
                 }
             ) {
                 Text(stringResource(R.string.backup_page_restore))
             }
-
             Button(
                 onClick = {
                     scope.launch {
@@ -262,10 +296,16 @@ fun WebDavTab(
                         modifier = Modifier.size(18.dp)
                     )
                 } else {
-                    Icon(Lucide.Upload, null, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.width(8.dp))
-                Text(if (isBackingUp) stringResource(R.string.backup_page_backing_up) else stringResource(R.string.backup_page_backup_now))
+                Text(
+                    if (isBackingUp) {
+                        stringResource(R.string.backup_page_backing_up)
+                    } else {
+                        stringResource(R.string.backup_page_backup_now)
+                    }
+                )
             }
         }
     }
@@ -291,8 +331,7 @@ fun WebDavTab(
                     stringResource(R.string.backup_page_webdav_backup_files),
                     modifier = Modifier.fillMaxWidth()
                 )
-                val backupItems by vm.webDavBackupItems.collectAsStateWithLifecycle()
-                backupItems.onSuccess {
+                backupItemsState.onSuccess {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 16.dp),
@@ -323,11 +362,11 @@ fun WebDavTab(
                                         }
                                     }
                                 },
-                                onRestore = { item ->
+                                onRestore = { restoreItem ->
                                     scope.launch {
-                                        restoringItemId = item.displayName
+                                        restoringItemId = restoreItem.displayName
                                         runCatching {
-                                            vm.restore(item = item)
+                                            vm.restore(item = restoreItem)
                                             toaster.show(
                                                 context.getString(R.string.backup_page_restore_success),
                                                 type = ToastType.Success
@@ -357,7 +396,7 @@ fun WebDavTab(
                     ) {
                         Text(
                             text = stringResource(R.string.backup_page_loading_failed, it.message ?: ""),
-                            color = Color.Red
+                            color = MaterialTheme.colorScheme.error
                         )
                     }
                 }.onLoading {
@@ -369,6 +408,37 @@ fun WebDavTab(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BackupStatusCard(
+    title: String,
+    lastBackupText: String,
+    fileSummaryText: String,
+) {
+    Card {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = lastBackupText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = fileSummaryText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -433,7 +503,13 @@ private fun WebDavBackupItemCard(
                     )
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(if (isRestoring) stringResource(R.string.backup_page_restoring) else stringResource(R.string.backup_page_restore_now))
+                Text(
+                    if (isRestoring) {
+                        stringResource(R.string.backup_page_restoring)
+                    } else {
+                        stringResource(R.string.backup_page_restore_now)
+                    }
+                )
             }
         }
     }
