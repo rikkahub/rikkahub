@@ -18,7 +18,6 @@
     android:maxSdkVersion="29" />
   <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
   <uses-feature
@@ -61,25 +60,28 @@
         <category android:name="android.intent.category.DEFAULT" />
         <data android:mimeType="text/plain" />
       </intent-filter>
+
       <meta-data
-          android:name="android.app.shortcuts"
-          android:resource="@xml/shortcuts" />
+        android:name="android.app.shortcuts"
+        android:resource="@xml/shortcuts" />
     </activity>
 
     <activity
-        android:name=".ui.activity.ShortcutHandlerActivity"
-        android:exported="true"
-        android:theme="@android:style/Theme.Translucent.NoTitleBar">
-        <intent-filter>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.DEFAULT" />
-            <data android:scheme="rikkahub" android:host="shortcut" />
-        </intent-filter>
+      android:name=".ui.activity.ShortcutHandlerActivity"
+      android:exported="true"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data
+          android:host="shortcut"
+          android:scheme="rikkahub" />
+      </intent-filter>
     </activity>
 
     <activity
       android:name="com.yalantis.ucrop.UCropActivity"
-      android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+      android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
     <service
       android:name=".data.ai.tools.termux.TermuxResultService"
