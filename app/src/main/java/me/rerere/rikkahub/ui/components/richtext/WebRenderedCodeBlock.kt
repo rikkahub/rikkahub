@@ -5,15 +5,9 @@ import android.os.Looper
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -22,7 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
@@ -106,51 +99,33 @@ internal fun WebRenderedCodeBlock(
         }
     )
 
-    Column(
+    WebView(
+        state = webViewState,
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = target.normalizedLanguage,
-                fontSize = 12.sp,
-                lineHeight = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            )
-        }
-        WebView(
-            state = webViewState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(contentHeightDp.coerceAtLeast(MIN_PREVIEW_HEIGHT_DP).dp),
-            onCreated = { webView ->
-                webView.setTag(R.id.tag_code_block_render_signature, renderSignature)
-                webView.setOnTouchListener { view, event ->
-                    when (event?.actionMasked) {
-                        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                            view.parent?.requestDisallowInterceptTouchEvent(true)
-                        }
-
-                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                            view.parent?.requestDisallowInterceptTouchEvent(false)
-                        }
+            .fillMaxWidth()
+            .height(contentHeightDp.coerceAtLeast(MIN_PREVIEW_HEIGHT_DP).dp),
+        onCreated = { webView ->
+            webView.setTag(R.id.tag_code_block_render_signature, renderSignature)
+            webView.setOnTouchListener { view, event ->
+                when (event?.actionMasked) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
                     }
-                    false
+
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                    }
                 }
-            },
-            onUpdated = { webView ->
-                val currentSignature = webView.getTag(R.id.tag_code_block_render_signature) as? String
-                if (currentSignature != renderSignature) {
-                    webView.setTag(R.id.tag_code_block_render_signature, renderSignature)
-                }
-                removeDuplicateSiblingWebViews(webView, renderSignature)
+                false
             }
-        )
-    }
+        },
+        onUpdated = { webView ->
+            val currentSignature = webView.getTag(R.id.tag_code_block_render_signature) as? String
+            if (currentSignature != renderSignature) {
+                webView.setTag(R.id.tag_code_block_render_signature, renderSignature)
+            }
+            removeDuplicateSiblingWebViews(webView, renderSignature)
+        }
+    )
 }
