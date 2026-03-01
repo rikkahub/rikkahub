@@ -6,6 +6,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 
@@ -17,14 +18,16 @@ fun ToggleSurface(
     onClick: () -> Unit = {},
     content: @Composable () -> Unit
 ) {
-    val colors =
-        if (checked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+    val contentColor =
+        if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Surface(
         onClick = onClick,
-        color = colors,
+        color = Color.Transparent,
+        contentColor = contentColor,
         modifier = modifier,
         shape = shape,
-        tonalElevation = if (checked) 8.dp else 0.dp
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         ProvideTextStyle(MaterialTheme.typography.labelLarge) {
             content()

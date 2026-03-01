@@ -60,13 +60,16 @@ interface SearchService<T : SearchServiceOptions> {
             } as SearchService<T>
         }
 
-        internal val httpClient by lazy {
-            OkHttpClient.Builder()
-                .retryOnConnectionFailure(true)
-                .followRedirects(true)
-                .followSslRedirects(true)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .build()
+        @Volatile
+        internal var httpClient: OkHttpClient = OkHttpClient.Builder()
+            .retryOnConnectionFailure(true)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+
+        fun init(client: OkHttpClient) {
+            httpClient = client
         }
 
         internal val json by lazy {

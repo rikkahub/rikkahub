@@ -67,18 +67,26 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.CircleAlert
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
+import com.composables.icons.lucide.Import
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquareOff
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Trash2
+import com.composables.icons.lucide.Upload
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import me.rerere.ai.core.InputSchema
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
 import me.rerere.rikkahub.data.ai.mcp.McpStatus
 import me.rerere.rikkahub.data.ai.mcp.McpTool
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -115,6 +123,7 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                 }
             ))
     }
+    var showImportDialog by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -125,6 +134,13 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            showImportDialog = true
+                        }
+                    ) {
+                        Icon(Lucide.Import, null)
+                    }
                     IconButton(
                         onClick = {
                             creationState.open(McpServerConfig.StreamableHTTPServer())
@@ -192,6 +208,17 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
     }
     McpServerConfigModal(creationState)
     McpServerConfigModal(editState)
+    if (showImportDialog) {
+        McpImportModal(
+            onDismiss = { showImportDialog = false },
+            onImport = { newConfigs ->
+                val existingIds = mcpConfigs.map { it.commonOptions.name }.toSet()
+                val toAdd = newConfigs.filter { it.commonOptions.name !in existingIds }
+                vm.updateSettings(settings.copy(mcpServers = mcpConfigs + toAdd))
+                showImportDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -855,6 +882,93 @@ private fun McpToolCard(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+private fun parseMcpServersFromJson(json: String): List<McpServerConfig> {
+    val root = Json.parseToJsonElement(json).jsonObject
+    val mcpServers = root["mcpServers"]?.jsonObject ?: return emptyList()
+    return mcpServers.entries.mapNotNull { (name, element) ->
+        val obj = element.jsonObject
+        val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: "streamable_http"
+        val url = obj["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+        val headers = obj["headers"]?.jsonObject?.entries?.map { (k, v) ->
+            k to (v.jsonPrimitive.contentOrNull ?: "")
+        } ?: emptyList()
+        val commonOptions = McpCommonOptions(name = name, headers = headers)
+        when (type) {
+            "sse" -> McpServerConfig.SseTransportServer(commonOptions = commonOptions, url = url)
+            else -> McpServerConfig.StreamableHTTPServer(commonOptions = commonOptions, url = url)
+        }
+    }
+}
+
+@Composable
+private fun McpImportModal(
+    onDismiss: () -> Unit,
+    onImport: (List<McpServerConfig>) -> Unit,
+) {
+    var jsonText by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val noValidConfigMsg = stringResource(R.string.setting_mcp_page_import_no_valid_config)
+    val parseErrorMsg = stringResource(R.string.setting_mcp_page_import_parse_error)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.7f)
+                .padding(16.dp)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(stringResource(R.string.setting_mcp_page_import_title), style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(R.string.setting_mcp_page_import_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedTextField(
+                value = jsonText,
+                onValueChange = {
+                    jsonText = it
+                    errorMessage = null
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                placeholder = { Text("{ \"mcpServers\": { ... } }") },
+                isError = errorMessage != null,
+                supportingText = errorMessage?.let { msg -> { Text(msg, color = MaterialTheme.colorScheme.error) } }
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Button(
+                    onClick = {
+                        try {
+                            val configs = parseMcpServersFromJson(jsonText.trim())
+                            if (configs.isEmpty()) {
+                                errorMessage = noValidConfigMsg
+                            } else {
+                                onImport(configs)
+                            }
+                        } catch (e: Exception) {
+                            errorMessage = parseErrorMsg.format(e.message ?: "")
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.setting_mcp_page_import_confirm))
                 }
             }
         }

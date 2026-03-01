@@ -112,6 +112,13 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    val GEMINI_3_1_FLASH_IMAGE = defineModel {
+        tokens("gemini", "3", "1", "flash", "image", "preview")
+        visionInput()
+        imageOutput()
+        reasoningAbility()
+    }
+
     val GEMINI_FLASH_LATEST = defineModel {
         exact("gemini-flash-latest")
         visionInput()
@@ -317,6 +324,7 @@ object ModelRegistry {
         GEMINI_3_FLASH,
         GEMINI_3_1_PRO_PREVIEW,
         GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS,
+        GEMINI_3_1_FLASH_IMAGE,
         GEMINI_FLASH_LATEST,
         GEMINI_PRO_LATEST,
         CLAUDE_SONNET_3_5,
@@ -409,6 +417,10 @@ object ModelRegistry {
 
     private fun ModelDefinitionBuilder.toolAbility() {
         ability(ModelAbility.TOOL)
+    }
+
+    private fun ModelDefinitionBuilder.reasoningAbility() {
+        ability(ModelAbility.REASONING)
     }
 
     private fun ModelDefinitionBuilder.toolReasoningAbility() {

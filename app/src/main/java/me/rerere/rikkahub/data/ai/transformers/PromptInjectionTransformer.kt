@@ -192,7 +192,7 @@ internal fun applyInjections(
             val injections = byDepth[depth] ?: return@forEach
             // 计算插入位置：result.size - depth，但要确保在有效范围内
             // depth=1 表示在最后一条消息之前，depth=2 表示在倒数第二条之前...
-            var insertIndex = (result.size - depth).coerceIn(0, result.size)
+            var insertIndex = (result.size - depth.coerceAtLeast(1)).coerceIn(0, result.size)
             insertIndex = findSafeInsertIndex(result, insertIndex)
             createMergedInjectionMessages(injections).forEach { message ->
                 result.add(insertIndex, message)

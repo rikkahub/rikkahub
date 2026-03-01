@@ -49,6 +49,7 @@ import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonArrayOrNull
 import me.rerere.common.http.jsonObjectOrNull
+import me.rerere.common.http.jsonPrimitiveOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -569,10 +570,17 @@ class ChatCompletionsAPI(
             jsonObject["role"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: "ASSISTANT"
         )
 
-        // 也许支持其他模态的输出content? 暂时只支持文本吧
-        val content = jsonObject["content"]?.jsonPrimitive?.contentOrNull ?: ""
-        val reasoning = jsonObject["reasoning_content"]?.jsonPrimitive?.contentOrNull
-            ?: jsonObject["reasoning"]?.jsonPrimitive?.contentOrNull
+        // 也许支持其他模态的输出content?
+        val content = jsonObject["content"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val reasoning = jsonObject["reasoning_content"]?.jsonPrimitiveOrNull?.contentOrNull
+            ?: jsonObject["reasoning"]?.jsonPrimitiveOrNull?.contentOrNull
+            ?: jsonObject["content"]?.takeIf { it is JsonArray }?.let { arr ->
+                // Mistral接口
+                // {"id":"","object":"chat.completion.chunk","created":1772351733,"model":"magistral-medium-2509","choices":[{"index":0,"delta":{"content":[{"type":"thinking","thinking":[{"type":"text","text":"好的"}]}]},"finish_reason":null}]}
+                arr.jsonArrayOrNull?.getOrNull(0)?.jsonObject?.get("thinking")?.jsonArrayOrNull?.getOrNull(0)?.jsonObjectOrNull?.get(
+                    "text"
+                )?.jsonPrimitiveOrNull?.contentOrNull
+            }
         val toolCalls = jsonObject["tool_calls"] as? JsonArray ?: JsonArray(emptyList())
         val images = jsonObject["images"] as? JsonArray ?: JsonArray(emptyList())
 

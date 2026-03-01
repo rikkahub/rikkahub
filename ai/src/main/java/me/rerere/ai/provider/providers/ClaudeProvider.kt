@@ -295,11 +295,19 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
                 val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget ?: 0)
                 put("thinking", buildJsonObject {
-                    if (level == ReasoningLevel.OFF) {
-                        put("type", "disabled")
-                    } else {
-                        put("type", "enabled")
-                        if (level != ReasoningLevel.AUTO) put("budget_tokens", params.thinkingBudget ?: 0)
+                    when (level) {
+                        ReasoningLevel.OFF -> {
+                            put("type", "disabled")
+                        }
+
+                        ReasoningLevel.AUTO -> {
+                            put("type", "adaptive")
+                        }
+
+                        else -> {
+                            put("type", "enabled")
+                            put("budget_tokens", params.thinkingBudget ?: 1024)
+                        }
                     }
                 })
             }

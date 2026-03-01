@@ -331,6 +331,7 @@ private fun DefaultTitleModelSetting(
                         )
                     },
                     providers = settings.providers,
+                    allowClear = true,
                     modifier = Modifier.wrapContentWidth()
                 )
             }

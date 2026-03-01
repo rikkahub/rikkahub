@@ -881,9 +881,7 @@ class ChatService(
 
         runCatching {
             val settings = settingsStore.settingsFlow.first()
-            val model =
-                settings.findModelById(settings.titleModelId) ?: settings.getCurrentChatModel()
-                ?: return
+            val model = settings.findModelById(settings.titleModelId) ?: return
             val provider = model.findProvider(settings.providers) ?: return
 
             val providerHandler = providerManager.getProviderByType(provider)
