@@ -888,5 +888,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="error_title_compress_conversation">会話の圧縮に失敗しました</string>
   <string name="error_title_operation">操作に失敗しました</string>
   <string name="setting_provider_page_claude_prompt_caching">プロンプトキャッシュ（cache_control）</string>
+  <string name="setting_mcp_page_import_title">MCPサーバーをインポート</string>
+  <string name="setting_mcp_page_import_desc">MCPサーバーJSON設定を貼り付けます。標準のmcpServers形式に対応</string>
+  <string name="setting_mcp_page_import_no_valid_config">有効なMCPサーバー設定が見つかりません</string>
+  <string name="setting_mcp_page_import_parse_error">JSON解析に失敗しました: %1$s</string>
+  <string name="setting_mcp_page_import_confirm">インポート</string>
 </resources>
 

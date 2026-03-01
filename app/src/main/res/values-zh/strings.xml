@@ -888,5 +888,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="error_title_compress_conversation">对话压缩失败</string>
   <string name="error_title_operation">操作失败</string>
   <string name="setting_provider_page_claude_prompt_caching">提示缓存 (cache_control)</string>
+  <string name="setting_mcp_page_import_title">导入MCP服务器</string>
+  <string name="setting_mcp_page_import_desc">粘贴 MCP 服务器 JSON 配置，支持标准 mcpServers 格式</string>
+  <string name="setting_mcp_page_import_no_valid_config">未找到有效的 MCP Server 配置</string>
+  <string name="setting_mcp_page_import_parse_error">JSON 解析失败：%1$s</string>
+  <string name="setting_mcp_page_import_confirm">导入</string>
 </resources>
 

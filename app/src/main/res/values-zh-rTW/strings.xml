@@ -886,5 +886,10 @@
   <string name="error_title_compress_conversation">對話壓縮失敗</string>
   <string name="error_title_operation">操作失敗</string>
   <string name="setting_provider_page_claude_prompt_caching">提示快取 (cache_control)</string>
+  <string name="setting_mcp_page_import_title">匯入 MCP Server</string>
+  <string name="setting_mcp_page_import_desc">貼上 MCP Server JSON 設定，支援標準 mcpServers 格式</string>
+  <string name="setting_mcp_page_import_no_valid_config">未找到有效的 MCP Server 配置</string>
+  <string name="setting_mcp_page_import_parse_error">JSON 解析失敗：%1$s</string>
+  <string name="setting_mcp_page_import_confirm">匯入</string>
 </resources>
 

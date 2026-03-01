@@ -886,5 +886,10 @@
   <string name="error_title_translate_message">Message translation failed</string>
   <string name="error_title_compress_conversation">Conversation compression failed</string>
   <string name="error_title_operation">Operation failed</string>
+  <string name="setting_mcp_page_import_title">Import MCP Server</string>
+  <string name="setting_mcp_page_import_desc">Paste MCP Server JSON config, supports standard mcpServers format</string>
+  <string name="setting_mcp_page_import_no_valid_config">No valid MCP Server configuration found</string>
+  <string name="setting_mcp_page_import_parse_error">JSON parse failed: %1$s</string>
+  <string name="setting_mcp_page_import_confirm">Import</string>
 </resources>
 

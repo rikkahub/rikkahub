@@ -881,5 +881,10 @@
   <string name="error_title_compress_conversation">Сжатие переписки не удалось</string>
   <string name="error_title_operation">Операция не выполнена</string>
   <string name="setting_provider_page_claude_prompt_caching">Кэширование промптов (cache_control)</string>
+  <string name="setting_mcp_page_import_title">Импортировать сервер MCP</string>
+  <string name="setting_mcp_page_import_desc">Вставьте JSON-конфигурацию MCP-сервера, поддерживается стандартный формат mcpServers</string>
+  <string name="setting_mcp_page_import_no_valid_config">Не найдена допустимая конфигурация сервера MCP</string>
+  <string name="setting_mcp_page_import_parse_error">Ошибка разбора JSON: %1$s</string>
+  <string name="setting_mcp_page_import_confirm">Импорт</string>
 </resources>
 
