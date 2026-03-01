@@ -274,6 +274,23 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
             }
         }
 
+        if (log.responseHeaders.isNotEmpty()) {
+            item {
+                HorizontalDivider()
+                Text(
+                    text = "Response Headers",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+            log.responseHeaders.forEach { (key, value) ->
+                item {
+                    HeaderItem(key, value)
+                }
+            }
+        }
+
         log.responseBody?.let { body ->
             item {
                 HorizontalDivider()
@@ -298,23 +315,6 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
                         fontFamily = JetbrainsMono,
                         modifier = Modifier.padding(top = 4.dp)
                     )
-                }
-            }
-        }
-
-        if (log.responseHeaders.isNotEmpty()) {
-            item {
-                HorizontalDivider()
-                Text(
-                    text = "Response Headers",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-            log.responseHeaders.forEach { (key, value) ->
-                item {
-                    HeaderItem(key, value)
                 }
             }
         }
