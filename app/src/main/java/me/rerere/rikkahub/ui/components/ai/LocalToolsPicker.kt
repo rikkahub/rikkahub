@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.components.ai
 
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,48 +33,9 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Wrench
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.LocalToolCatalog
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
-
-private data class LocalToolMeta(
-    val option: LocalToolOption,
-    @StringRes val titleRes: Int,
-    @StringRes val descRes: Int,
-)
-
-private val LocalToolsMeta = listOf(
-    LocalToolMeta(
-        option = LocalToolOption.JavascriptEngine,
-        titleRes = R.string.assistant_page_local_tools_javascript_engine_title,
-        descRes = R.string.assistant_page_local_tools_javascript_engine_desc,
-    ),
-    LocalToolMeta(
-        option = LocalToolOption.TimeInfo,
-        titleRes = R.string.assistant_page_local_tools_time_info_title,
-        descRes = R.string.assistant_page_local_tools_time_info_desc,
-    ),
-    LocalToolMeta(
-        option = LocalToolOption.Clipboard,
-        titleRes = R.string.assistant_page_local_tools_clipboard_title,
-        descRes = R.string.assistant_page_local_tools_clipboard_desc,
-    ),
-    LocalToolMeta(
-        option = LocalToolOption.TermuxExec,
-        titleRes = R.string.assistant_page_local_tools_termux_exec_title,
-        descRes = R.string.assistant_page_local_tools_termux_exec_desc,
-    ),
-    LocalToolMeta(
-        option = LocalToolOption.TermuxPython,
-        titleRes = R.string.assistant_page_local_tools_termux_python_title,
-        descRes = R.string.assistant_page_local_tools_termux_python_desc,
-    ),
-    LocalToolMeta(
-        option = LocalToolOption.Tts,
-        titleRes = R.string.assistant_page_local_tools_tts_title,
-        descRes = R.string.assistant_page_local_tools_tts_desc,
-    ),
-)
 
 @Composable
 fun LocalToolsPickerButton(
@@ -159,7 +119,7 @@ private fun LocalToolsPicker(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        items(LocalToolsMeta) { item ->
+        items(LocalToolCatalog.all) { item ->
             val enabled = assistant.localTools.contains(item.option)
             Card {
                 Row(

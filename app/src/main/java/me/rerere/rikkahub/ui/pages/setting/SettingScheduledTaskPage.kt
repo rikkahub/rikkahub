@@ -70,7 +70,7 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.LocalToolCatalog
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -642,7 +642,7 @@ private fun TaskEditorSheet(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    localToolOptions().forEach { option ->
+                    LocalToolCatalog.options.forEach { option ->
                         FilterChip(
                             selected = localToolsOverride.contains(option),
                             onClick = {
@@ -652,7 +652,7 @@ private fun TaskEditorSheet(
                                     (localToolsOverride + option).distinct()
                                 }
                             },
-                            label = { Text(localToolTitle(option)) }
+                            label = { Text(stringResource(LocalToolCatalog.get(option).titleRes)) }
                         )
                     }
                 }
@@ -862,18 +862,6 @@ private fun formatTime(timeMinutesOfDay: Int): String {
 }
 
 @Composable
-private fun localToolTitle(option: LocalToolOption): String {
-    return when (option) {
-        LocalToolOption.JavascriptEngine -> stringResource(R.string.assistant_page_local_tools_javascript_engine_title)
-        LocalToolOption.TimeInfo -> stringResource(R.string.assistant_page_local_tools_time_info_title)
-        LocalToolOption.Clipboard -> stringResource(R.string.assistant_page_local_tools_clipboard_title)
-        LocalToolOption.TermuxExec -> stringResource(R.string.assistant_page_local_tools_termux_exec_title)
-        LocalToolOption.TermuxPython -> stringResource(R.string.assistant_page_local_tools_termux_python_title)
-        LocalToolOption.Tts -> stringResource(R.string.setting_page_tts_service)
-    }
-}
-
-@Composable
 private fun boolOverrideTitle(option: NullableBooleanOption): String {
     return when (option) {
         NullableBooleanOption.FOLLOW -> stringResource(R.string.setting_scheduled_tasks_follow_global)
@@ -887,17 +875,6 @@ private fun searchServiceName(service: SearchServiceOptions): String {
     return SearchServiceOptions.TYPES[service::class]
         ?: service::class.simpleName
         ?: stringResource(R.string.setting_scheduled_tasks_search_fallback)
-}
-
-private fun localToolOptions(): List<LocalToolOption> {
-    return listOf(
-        LocalToolOption.JavascriptEngine,
-        LocalToolOption.TimeInfo,
-        LocalToolOption.Clipboard,
-        LocalToolOption.TermuxExec,
-        LocalToolOption.TermuxPython,
-        LocalToolOption.Tts,
-    )
 }
 
 private fun Context.canScheduleExactAlarmsCompat(): Boolean {

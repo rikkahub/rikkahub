@@ -21,7 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.LocalToolCatalog
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -71,95 +71,21 @@ private fun AssistantLocalToolContent(
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // JavaScript 引擎工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_javascript_engine_title),
-            description = stringResource(R.string.assistant_page_local_tools_javascript_engine_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.JavascriptEngine),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.JavascriptEngine
-                } else {
-                    assistant.localTools - LocalToolOption.JavascriptEngine
+        LocalToolCatalog.all.forEach { tool ->
+            LocalToolCard(
+                title = stringResource(tool.titleRes),
+                description = stringResource(tool.descRes),
+                isEnabled = assistant.localTools.contains(tool.option),
+                onToggle = { enabled ->
+                    val newLocalTools = if (enabled) {
+                        (assistant.localTools + tool.option).distinct()
+                    } else {
+                        assistant.localTools - tool.option
+                    }
+                    onUpdate(assistant.copy(localTools = newLocalTools))
                 }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
-
-        // 时间信息工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_time_info_title),
-            description = stringResource(R.string.assistant_page_local_tools_time_info_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.TimeInfo),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.TimeInfo
-                } else {
-                    assistant.localTools - LocalToolOption.TimeInfo
-                }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
-
-        // 剪贴板工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_clipboard_title),
-            description = stringResource(R.string.assistant_page_local_tools_clipboard_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.Clipboard),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.Clipboard
-                } else {
-                    assistant.localTools - LocalToolOption.Clipboard
-                }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
-
-        // Termux 命令工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_termux_exec_title),
-            description = stringResource(R.string.assistant_page_local_tools_termux_exec_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.TermuxExec),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.TermuxExec
-                } else {
-                    assistant.localTools - LocalToolOption.TermuxExec
-                }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
-
-        // Termux Python 工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_termux_python_title),
-            description = stringResource(R.string.assistant_page_local_tools_termux_python_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.TermuxPython),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.TermuxPython
-                } else {
-                    assistant.localTools - LocalToolOption.TermuxPython
-                }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
-
-        // TTS工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_tts_title),
-            description = stringResource(R.string.assistant_page_local_tools_tts_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.Tts),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.Tts
-                } else {
-                    assistant.localTools - LocalToolOption.Tts
-                }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
+            )
+        }
     }
 }
 
