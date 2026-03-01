@@ -169,12 +169,19 @@ internal object CodeBlockRenderResolver {
               function reportHeight() {
                 var body = document.body;
                 var doc = document.documentElement;
-                var height = Math.max(
-                  body ? body.scrollHeight : 0,
-                  body ? body.offsetHeight : 0,
-                  doc ? doc.scrollHeight : 0,
-                  doc ? doc.offsetHeight : 0
-                );
+                var height = body ? body.scrollHeight : 0;
+
+                // Avoid using offsetHeight/doc offsets as primary signal, because they can
+                // reflect current viewport height and keep short content artificially tall.
+                if (!Number.isFinite(height) || height <= 0) {
+                  height = body ? body.getBoundingClientRect().height : 0;
+                }
+                if (!Number.isFinite(height) || height <= 0) {
+                  height = doc ? doc.scrollHeight : 0;
+                }
+                if (!Number.isFinite(height) || height <= 0) {
+                  height = doc ? doc.getBoundingClientRect().height : 0;
+                }
                 if (!Number.isFinite(height) || height <= 0) return;
                 var nextHeight = Math.ceil(height);
                 if (window.__RH_LAST_REPORTED_HEIGHT__ === nextHeight) return;

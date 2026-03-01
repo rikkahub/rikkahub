@@ -20,7 +20,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 
-private const val MIN_PREVIEW_HEIGHT_DP = 72
+private const val MIN_PREVIEW_HEIGHT_DP = 10
 
 private const val INITIAL_PREVIEW_HEIGHT_DP = 180
 
