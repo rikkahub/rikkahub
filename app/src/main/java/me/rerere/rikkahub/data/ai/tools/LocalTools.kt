@@ -441,38 +441,32 @@ class LocalTools(
         overrideTermuxNeedsApproval: Boolean? = null,
     ): List<Tool> {
         val termuxNeedsApproval = overrideTermuxNeedsApproval ?: settingsStore.settingsFlow.value.termuxNeedsApproval
-        val tools = mutableListOf<Tool>()
-        if (options.contains(LocalToolOption.JavascriptEngine)) {
-            tools.add(javascriptTool)
+        val enabled = options.toSet()
+        return LocalToolCatalog.options.mapNotNull { option ->
+            if (!enabled.contains(option)) return@mapNotNull null
+            when (option) {
+                LocalToolOption.JavascriptEngine -> javascriptTool
+                LocalToolOption.TimeInfo -> timeTool
+                LocalToolOption.Clipboard -> clipboardTool
+                LocalToolOption.TermuxExec -> {
+                    termuxExecTool(
+                        needsApproval = termuxNeedsApproval,
+                        settingsStore = settingsStore,
+                        termuxCommandManager = termuxCommandManager,
+                    )
+                }
+
+                LocalToolOption.TermuxPython -> {
+                    termuxPythonTool(
+                        needsApproval = termuxNeedsApproval,
+                        settingsStore = settingsStore,
+                        termuxCommandManager = termuxCommandManager,
+                    )
+                }
+
+                LocalToolOption.Tts -> ttsTool
+            }
         }
-        if (options.contains(LocalToolOption.TimeInfo)) {
-            tools.add(timeTool)
-        }
-        if (options.contains(LocalToolOption.Clipboard)) {
-            tools.add(clipboardTool)
-        }
-        if (options.contains(LocalToolOption.TermuxExec)) {
-            tools.add(
-                termuxExecTool(
-                    needsApproval = termuxNeedsApproval,
-                    settingsStore = settingsStore,
-                    termuxCommandManager = termuxCommandManager,
-                )
-            )
-        }
-        if (options.contains(LocalToolOption.TermuxPython)) {
-            tools.add(
-                termuxPythonTool(
-                    needsApproval = termuxNeedsApproval,
-                    settingsStore = settingsStore,
-                    termuxCommandManager = termuxCommandManager,
-                )
-            )
-        }
-        if (options.contains(LocalToolOption.Tts)) {
-            tools.add(ttsTool)
-        }
-        return tools
     }
 
     companion object {
