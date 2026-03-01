@@ -70,6 +70,11 @@ private val LocalToolsMeta = listOf(
         titleRes = R.string.assistant_page_local_tools_termux_python_title,
         descRes = R.string.assistant_page_local_tools_termux_python_desc,
     ),
+    LocalToolMeta(
+        option = LocalToolOption.Tts,
+        titleRes = R.string.assistant_page_local_tools_tts_title,
+        descRes = R.string.assistant_page_local_tools_tts_desc,
+    ),
 )
 
 @Composable
