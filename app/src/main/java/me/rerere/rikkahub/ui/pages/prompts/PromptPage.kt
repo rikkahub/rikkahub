@@ -74,6 +74,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Share2
+import com.composables.icons.lucide.Syringe
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Wand
 import com.composables.icons.lucide.X
@@ -104,7 +105,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 @Composable
 fun PromptPage(vm: PromptVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val pagerState = rememberPagerState { 2 }
+    val pagerState = rememberPagerState { 3 }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -126,10 +127,18 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 )
                 NavigationBarItem(
                     selected = pagerState.currentPage == 1,
+                    label = { Text(stringResource(R.string.prompt_page_mode_injection_tab)) },
+                    icon = { Icon(Lucide.Syringe, null) },
+                    onClick = {
+                        scope.launch { pagerState.animateScrollToPage(1) }
+                    }
+                )
+                NavigationBarItem(
+                    selected = pagerState.currentPage == 2,
                     label = { Text(stringResource(R.string.prompt_page_lorebook_tab)) },
                     icon = { Icon(Lucide.Book, null) },
                     onClick = {
-                        scope.launch { pagerState.animateScrollToPage(1) }
+                        scope.launch { pagerState.animateScrollToPage(2) }
                     }
                 )
             }
@@ -162,7 +171,12 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                     )
                 }
 
-                1 -> LorebookTab(
+                1 -> ModeInjectionTab(
+                    modeInjections = settings.modeInjections,
+                    onUpdate = { vm.updateSettings(settings.copy(modeInjections = it)) }
+                )
+
+                2 -> LorebookTab(
                     lorebooks = settings.lorebooks,
                     onUpdate = { vm.updateSettings(settings.copy(lorebooks = it)) }
                 )
