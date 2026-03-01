@@ -80,6 +80,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -118,6 +119,7 @@ fun ChatMessage(
     onTranslate: ((UIMessage, Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    messageDepthFromEnd: Int? = null,
 ) {
     val message = node.messages[node.selectIndex]
     val settings = LocalSettings.current.displaySetting
@@ -166,6 +168,7 @@ fun ChatMessage(
                 loading = loading,
                 model = model,
                 onToolApproval = onToolApproval,
+                messageDepthFromEnd = messageDepthFromEnd,
             )
 
             message.translation?.let { translation ->
@@ -261,6 +264,7 @@ private fun MessagePartsBlock(
     annotations: List<UIMessageAnnotation>,
     loading: Boolean,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    messageDepthFromEnd: Int? = null,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -315,6 +319,7 @@ private fun MessagePartsBlock(
                                         reasoning = step.reasoning,
                                         model = model,
                                         assistant = assistant,
+                                        messageDepthFromEnd = messageDepthFromEnd,
                                     )
                                 }
                             }
@@ -353,7 +358,8 @@ private fun MessagePartsBlock(
                                             content = part.text.replaceRegexes(
                                                 assistant = assistant,
                                                 scope = AssistantAffectScope.USER,
-                                                visual = true,
+                                                phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+                                                messageDepthFromEnd = messageDepthFromEnd,
                                             ),
                                             onClickCitation = { id -> handleClickCitation(id) }
                                         )
@@ -374,7 +380,8 @@ private fun MessagePartsBlock(
                                             content = part.text.replaceRegexes(
                                                 assistant = assistant,
                                                 scope = AssistantAffectScope.ASSISTANT,
-                                                visual = true,
+                                                phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+                                                messageDepthFromEnd = messageDepthFromEnd,
                                             ),
                                             onClickCitation = { id -> handleClickCitation(id) },
                                         )
@@ -385,7 +392,8 @@ private fun MessagePartsBlock(
                                     content = part.text.replaceRegexes(
                                         assistant = assistant,
                                         scope = AssistantAffectScope.ASSISTANT,
-                                        visual = true,
+                                        phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+                                        messageDepthFromEnd = messageDepthFromEnd,
                                     ),
                                     onClickCitation = { id -> handleClickCitation(id) },
                                     modifier = Modifier

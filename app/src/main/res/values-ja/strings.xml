@@ -93,6 +93,10 @@
   <string name="assistant_page_regex_replace_string">文字列を置換</string>
   <string name="assistant_page_regex_title">メッセージ正規表現</string>
   <string name="assistant_page_regex_visual_only">表示のみ（実際のメッセージには影響しません）</string>
+  <string name="assistant_page_regex_prompt_only">プロンプトのみ（LLM に送信する内容のみ変更）</string>
+  <string name="assistant_page_regex_min_depth">最小深度</string>
+  <string name="assistant_page_regex_max_depth">最大深度</string>
+  <string name="assistant_page_regex_depth_desc">最小深度は末尾から N 番目とそれ以前に適用。最大深度は最新 N 件に適用。</string>
   <string name="assistant_page_remove">削除</string>
   <string name="assistant_page_remove_background">背景を削除</string>
   <string name="assistant_page_save">保存</string>

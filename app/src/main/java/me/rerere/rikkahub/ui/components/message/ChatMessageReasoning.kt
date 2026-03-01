@@ -45,6 +45,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
@@ -67,6 +68,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
     model: Model?,
     assistant: Assistant?,
     fadeHeight: Float = 64f,
+    messageDepthFromEnd: Int? = null,
 ) {
     var expandState by remember { mutableStateOf(ReasoningCardState.Collapsed) }
     val scrollState = rememberScrollState()
@@ -188,7 +190,8 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
                         content = reasoning.reasoning.replaceRegexes(
                             assistant = assistant,
                             scope = AssistantAffectScope.ASSISTANT,
-                            visual = true,
+                            phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+                            messageDepthFromEnd = messageDepthFromEnd,
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxSize(),

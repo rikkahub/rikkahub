@@ -69,6 +69,7 @@ import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
+import me.rerere.rikkahub.data.ai.transformers.RegexPromptOnlyTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
@@ -83,6 +84,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.ScheduledPromptTask
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -318,7 +320,7 @@ class ChatService(
         val processedContent = if (directCommand.isDirect) {
             listOf(UIMessagePart.Text(TermuxDirectCommandParser.toSlashCommandText(directCommand.command)))
         } else {
-            preprocessUserInputParts(content)
+            preprocessUserInputParts(content, messageDepthFromEnd = 1)
         }
 
         val job = appScope.launch {
@@ -444,12 +446,23 @@ class ChatService(
         return "命令执行完成，但没有输出。"
     }
 
-    private fun preprocessUserInputParts(parts: List<UIMessagePart>): List<UIMessagePart> {
+    private fun preprocessUserInputParts(
+        parts: List<UIMessagePart>,
+        messageDepthFromEnd: Int = 1,
+    ): List<UIMessagePart> {
         val assistant = settingsStore.settingsFlow.value.getCurrentAssistant()
-        return preprocessUserInputParts(parts = parts, assistant = assistant)
+        return preprocessUserInputParts(
+            parts = parts,
+            assistant = assistant,
+            messageDepthFromEnd = messageDepthFromEnd
+        )
     }
 
-    private fun preprocessUserInputParts(parts: List<UIMessagePart>, assistant: Assistant): List<UIMessagePart> {
+    private fun preprocessUserInputParts(
+        parts: List<UIMessagePart>,
+        assistant: Assistant,
+        messageDepthFromEnd: Int = 1,
+    ): List<UIMessagePart> {
         return parts.map { part ->
             when (part) {
                 is UIMessagePart.Text -> {
@@ -457,7 +470,8 @@ class ChatService(
                         text = part.text.replaceRegexes(
                             assistant = assistant,
                             scope = AssistantAffectScope.USER,
-                            visual = false
+                            phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+                            messageDepthFromEnd = messageDepthFromEnd
                         )
                     )
                 }
@@ -526,6 +540,7 @@ class ChatService(
             inputTransformers = buildList {
                 addAll(inputTransformers)
                 add(templateTransformer)
+                add(RegexPromptOnlyTransformer)
             },
             outputTransformers = outputTransformers,
             tools = buildList {
@@ -737,6 +752,7 @@ class ChatService(
                 inputTransformers = buildList {
                     addAll(inputTransformers)
                     add(templateTransformer)
+                    add(RegexPromptOnlyTransformer)
                 },
                 outputTransformers = outputTransformers,
                 tools = buildList {
@@ -1279,9 +1295,17 @@ class ChatService(
         parts: List<UIMessagePart>
     ) {
         if (parts.isEmptyInputMessage()) return
-        val processedParts = preprocessUserInputParts(parts)
-
         val currentConversation = getConversationFlow(conversationId).value
+        val targetNodeIndex = currentConversation.messageNodes.indexOfFirst { node ->
+            node.messages.any { it.id == messageId }
+        }
+        if (targetNodeIndex == -1) return
+
+        val processedParts = preprocessUserInputParts(
+            parts = parts,
+            messageDepthFromEnd = currentConversation.messageNodes.size - targetNodeIndex
+        )
+
         var edited = false
 
         val updatedNodes = currentConversation.messageNodes.map { node ->
@@ -1298,7 +1322,6 @@ class ChatService(
                 selectIndex = node.messages.size
             )
         }
-
         if (!edited) return
 
         saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))

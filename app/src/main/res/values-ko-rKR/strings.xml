@@ -93,6 +93,10 @@
   <string name="assistant_page_regex_replace_string">문자열 바꾸기</string>
   <string name="assistant_page_regex_title">메시지 정규식</string>
   <string name="assistant_page_regex_visual_only">시각적 표시만 (실제 메시지에는 영향을 주지 않고 표시만 변경)</string>
+  <string name="assistant_page_regex_prompt_only">프롬프트만 (LLM 전송 내용만 변경)</string>
+  <string name="assistant_page_regex_min_depth">최소 깊이</string>
+  <string name="assistant_page_regex_max_depth">최대 깊이</string>
+  <string name="assistant_page_regex_depth_desc">최소 깊이는 뒤에서 N번째 및 그 이전 메시지에 적용, 최대 깊이는 최근 N개 메시지에 적용됩니다.</string>
   <string name="assistant_page_remove">제거</string>
   <string name="assistant_page_remove_background">배경 제거</string>
   <string name="assistant_page_save">저장</string>

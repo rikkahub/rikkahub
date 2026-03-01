@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
@@ -731,7 +733,10 @@ private fun AssistantRegexCard(
                                 assistant.copy(
                                     regexes = assistant.regexes.mapIndexed { i, reg ->
                                         if (i == index) {
-                                            reg.copy(visualOnly = visualOnly)
+                                            reg.copy(
+                                                visualOnly = visualOnly,
+                                                promptOnly = if (visualOnly) false else reg.promptOnly
+                                            )
                                         } else {
                                             reg
                                         }
@@ -745,6 +750,91 @@ private fun AssistantRegexCard(
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(
+                        checked = regex.promptOnly,
+                        onCheckedChange = { promptOnly ->
+                            onUpdate(
+                                assistant.copy(
+                                    regexes = assistant.regexes.mapIndexed { i, reg ->
+                                        if (i == index) {
+                                            reg.copy(
+                                                promptOnly = promptOnly,
+                                                visualOnly = if (promptOnly) false else reg.visualOnly
+                                            )
+                                        } else {
+                                            reg
+                                        }
+                                    }
+                                )
+                            )
+                        }
+                    )
+                    Text(
+                        text = stringResource(R.string.assistant_page_regex_prompt_only),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = regex.minDepth?.toString().orEmpty(),
+                        onValueChange = { value ->
+                            if (value.isNotEmpty() && value.any { !it.isDigit() }) return@OutlinedTextField
+                            val minDepth = value.toIntOrNull()?.takeIf { it > 0 }
+                            onUpdate(
+                                assistant.copy(
+                                    regexes = assistant.regexes.mapIndexed { i, reg ->
+                                        if (i == index) {
+                                            reg.copy(minDepth = minDepth)
+                                        } else {
+                                            reg
+                                        }
+                                    }
+                                )
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        label = { Text(stringResource(R.string.assistant_page_regex_min_depth)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                    )
+
+                    OutlinedTextField(
+                        value = regex.maxDepth?.toString().orEmpty(),
+                        onValueChange = { value ->
+                            if (value.isNotEmpty() && value.any { !it.isDigit() }) return@OutlinedTextField
+                            val maxDepth = value.toIntOrNull()?.takeIf { it > 0 }
+                            onUpdate(
+                                assistant.copy(
+                                    regexes = assistant.regexes.mapIndexed { i, reg ->
+                                        if (i == index) {
+                                            reg.copy(maxDepth = maxDepth)
+                                        } else {
+                                            reg
+                                        }
+                                    }
+                                )
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        label = { Text(stringResource(R.string.assistant_page_regex_max_depth)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                    )
+                }
+
+                Text(
+                    text = stringResource(R.string.assistant_page_regex_depth_desc),
+                    style = MaterialTheme.typography.labelSmall,
+                )
 
                 TextButton(
                     onClick = {

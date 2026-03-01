@@ -104,6 +104,10 @@
   <string name="assistant_page_regex_replace_string">Replace String</string>
   <string name="assistant_page_regex_title">Message Regexes</string>
   <string name="assistant_page_regex_visual_only">Visual Only (affects display only, not actual message)</string>
+  <string name="assistant_page_regex_prompt_only">Prompt Only (affects LLM input only, not display)</string>
+  <string name="assistant_page_regex_min_depth">Min Depth</string>
+  <string name="assistant_page_regex_max_depth">Max Depth</string>
+  <string name="assistant_page_regex_depth_desc">Min depth applies to the Nth message from the end and older. Max depth applies to the latest N messages.</string>
   <string name="assistant_page_remove">Remove</string>
   <string name="assistant_page_remove_background">Remove Background</string>
   <string name="assistant_page_save">Save</string>

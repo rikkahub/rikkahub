@@ -113,17 +113,41 @@ data class AssistantRegex(
     val replaceString: String = "", // 替换字符串
     val affectingScope: Set<AssistantAffectScope> = setOf(),
     val visualOnly: Boolean = false, // 是否仅在视觉上影响
+    val promptOnly: Boolean = false, // 是否仅影响发送给 LLM 的提示词
+    val minDepth: Int? = null, // 最小深度：仅在倒数第 x 条及更早消息生效（包含 x）
+    val maxDepth: Int? = null, // 最大深度：仅在倒数第 x 条消息内生效（包含 x）
 )
+
+enum class AssistantRegexApplyPhase {
+    ACTUAL_MESSAGE, // 实际消息（会影响保存与后续上下文）
+    VISUAL_ONLY, // 仅视觉渲染
+    PROMPT_ONLY, // 仅发送给 LLM 的提示词
+}
+
+fun List<UIMessage>.chatMessageDepthFromEndMap(): Map<Int, Int> {
+    val chatIndices = mapIndexedNotNull { index, message ->
+        if (message.role == MessageRole.USER || message.role == MessageRole.ASSISTANT) index else null
+    }
+    return chatIndices.mapIndexed { chatIndex, messageIndex ->
+        messageIndex to (chatIndices.size - chatIndex)
+    }.toMap()
+}
 
 fun String.replaceRegexes(
     assistant: Assistant?,
     scope: AssistantAffectScope,
-    visual: Boolean = false
+    phase: AssistantRegexApplyPhase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+    messageDepthFromEnd: Int? = null,
 ): String {
     if (assistant == null) return this
     if (assistant.regexes.isEmpty()) return this
     return assistant.regexes.fold(this) { acc, regex ->
-        if (regex.enabled && regex.visualOnly == visual && regex.affectingScope.contains(scope)) {
+        if (
+            regex.enabled &&
+            regex.matchesPhase(phase) &&
+            regex.affectingScope.contains(scope) &&
+            regex.matchesDepth(messageDepthFromEnd)
+        ) {
             try {
                 val result = acc.replace(
                     regex = Regex(regex.findRegex),
@@ -140,6 +164,24 @@ fun String.replaceRegexes(
             acc
         }
     }
+}
+
+private fun AssistantRegex.matchesPhase(phase: AssistantRegexApplyPhase): Boolean {
+    if (visualOnly && promptOnly) return false
+    return when (phase) {
+        AssistantRegexApplyPhase.ACTUAL_MESSAGE -> !visualOnly && !promptOnly
+        AssistantRegexApplyPhase.VISUAL_ONLY -> visualOnly
+        AssistantRegexApplyPhase.PROMPT_ONLY -> promptOnly
+    }
+}
+
+private fun AssistantRegex.matchesDepth(messageDepthFromEnd: Int?): Boolean {
+    val depth = messageDepthFromEnd ?: return true
+    val effectiveMinDepth = minDepth?.takeIf { it > 0 }
+    val effectiveMaxDepth = maxDepth?.takeIf { it > 0 }
+    if (effectiveMinDepth != null && depth < effectiveMinDepth) return false
+    if (effectiveMaxDepth != null && depth > effectiveMaxDepth) return false
+    return true
 }
 
 /**

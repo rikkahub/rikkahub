@@ -321,6 +321,7 @@ private fun ChatListNormal(
                             onClearTranslation = onClearTranslation,
                             onToolApproval = onToolApproval,
                             lastMessage = index == conversation.messageNodes.lastIndex,
+                            messageDepthFromEnd = conversation.messageNodes.size - index,
                         )
                     }
                     if (index == conversation.truncateIndex - 1) {

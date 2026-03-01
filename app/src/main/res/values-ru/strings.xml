@@ -93,6 +93,10 @@
   <string name="assistant_page_regex_replace_string">Заменить строку</string>
   <string name="assistant_page_regex_title">Регулярные выражения для сообщений</string>
   <string name="assistant_page_regex_visual_only">Только визуально (влияет только на отображение, не на само сообщение)</string>
+  <string name="assistant_page_regex_prompt_only">Только промпт (влияет только на отправку в LLM)</string>
+  <string name="assistant_page_regex_min_depth">Мин. глубина</string>
+  <string name="assistant_page_regex_max_depth">Макс. глубина</string>
+  <string name="assistant_page_regex_depth_desc">Мин. глубина применяется к N-му сообщению с конца и более старым. Макс. глубина применяется к последним N сообщениям.</string>
   <string name="assistant_page_remove">Удалить</string>
   <string name="assistant_page_remove_background">Убрать фон</string>
   <string name="assistant_page_save">Сохранить</string>
