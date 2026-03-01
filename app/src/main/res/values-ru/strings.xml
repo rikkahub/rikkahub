@@ -1003,14 +1003,5 @@
   <string name="scheduled_task_run_result_snapshot">Снимок результата</string>
   <string name="scheduled_task_run_error_snapshot">Снимок ошибки</string>
   <string name="scheduled_task_run_empty">(пусто)</string>
-  <string name="error_title_send_message">Не удалось отправить сообщение</string>
-  <string name="error_title_regenerate_message">Не удалось повторно сгенерировать сообщение</string>
-  <string name="error_title_tool_approval">Сбой обработки вызова инструмента</string>
-  <string name="error_title_tool_unavailable">Инструмент недоступен</string>
-  <string name="error_title_generation">Ошибка генерации сообщения</string>
-  <string name="error_title_generate_title">Не удалось автоматически сгенерировать заголовок</string>
-  <string name="error_title_translate_message">Ошибка перевода сообщения</string>
-  <string name="error_title_compress_conversation">Сжатие переписки не удалось</string>
-  <string name="error_title_operation">Операция не выполнена</string>
   <string name="setting_provider_page_claude_prompt_caching">Кэширование промптов (cache_control)</string>
 </resources>

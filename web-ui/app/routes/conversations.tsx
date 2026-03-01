@@ -46,6 +46,7 @@ import {
 } from "~/types";
 import { MessageSquare } from "lucide-react";
 import Logo from "~/components/logo";
+import { AnimatePresence, motion } from "motion/react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -65,8 +66,6 @@ type ConversationSummaryUpdater = (update: ReturnType<typeof toConversationSumma
 
 const EDIT_DRAFT_ATTACHMENT_MARK = "__from_message_attachment";
 const EDIT_DRAFT_SOURCE_INDEX = "__from_message_source_index";
-const EMPTY_INPUT_ATTACHMENTS: UIMessagePart[] = [];
-const EMPTY_SUGGESTIONS: string[] = [];
 
 interface EditDraft {
   text: string;
@@ -440,7 +439,7 @@ function useDraftInputController({
   const clearDraft = useChatInputStore((state) => state.clearDraft);
 
   const inputText = draft?.text ?? "";
-  const inputAttachments = draft?.parts ?? EMPTY_INPUT_ATTACHMENTS;
+  const inputAttachments = draft?.parts ?? [];
 
   const handleInputTextChange = React.useCallback(
     (text: string) => {
@@ -728,7 +727,7 @@ function ConversationsPageInner() {
   });
 
   const activeConversation = conversations.find((item) => item.id === activeId);
-  const chatSuggestions = detail?.chatSuggestions ?? EMPTY_SUGGESTIONS;
+  const chatSuggestions = detail?.chatSuggestions ?? [];
 
   React.useEffect(() => {
     const base = t("conversations.meta.title");
@@ -740,7 +739,10 @@ function ConversationsPageInner() {
   const isNewChat = isHomeRoute && !activeId;
   const showSuggestions =
     Boolean(activeId) && !detailLoading && !detailError && chatSuggestions.length > 0;
-  const displaySuggestions = showSuggestions ? chatSuggestions : EMPTY_SUGGESTIONS;
+  const displaySuggestions = React.useMemo(
+    () => (showSuggestions ? chatSuggestions : []),
+    [chatSuggestions, showSuggestions],
+  );
 
   const handleSelect = React.useCallback(
     (id: string) => {
@@ -994,17 +996,26 @@ function ConversationsPageInner() {
         </div>
       )}
 
-      <div>
-        {isNewChat && (
-          <div className="mb-4 text-center">
-            <div className="mb-3 flex justify-center">
-              <div className="[&>svg]:size-16">
-                <Logo className="size-16 text-primary"/>
+      <motion.div layout="position" transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}>
+        <AnimatePresence>
+          {isNewChat && (
+            <motion.div
+              key="welcome"
+              className="mb-4 text-center"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="mb-3 flex justify-center">
+                <div className="[&>svg]:size-16">
+                  <Logo className="size-16 text-primary" />
+                </div>
               </div>
-            </div>
-            <p className="text-lg text-muted-foreground">{t("conversations.welcome_prompt")}</p>
-          </div>
-        )}
+              <p className="text-lg text-muted-foreground">{t("conversations.welcome_prompt")}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <ChatInput
           value={inputText}
           attachments={inputAttachments}
@@ -1022,7 +1033,7 @@ function ConversationsPageInner() {
           onSend={handleSend}
           onStop={activeId ? handleStop : undefined}
         />
-      </div>
+      </motion.div>
     </div>
   );
 

@@ -18,6 +18,7 @@ import "streamdown/styles.css";
 // Regex patterns for preprocessing
 const INLINE_LATEX_REGEX = /\\\((.+?)\\\)/g;
 const BLOCK_LATEX_REGEX = /\\\[(.+?)\\\]/gs;
+const THINKING_REGEX = /<think>([\s\S]*?)(?:<\/think>|$)/g;
 const CODE_BLOCK_REGEX = /```[\s\S]*?```|`[^`\n]*`/g;
 
 // Preprocess markdown content
@@ -52,6 +53,15 @@ function preProcess(content: string): string {
       return match;
     }
     return `$$${group1}$$`;
+  });
+
+  // Replace thinking tags with blockquote format
+  result = result.replace(THINKING_REGEX, (_, thinkContent) => {
+    return thinkContent
+      .split("\n")
+      .filter((line: string) => line.trim() !== "")
+      .map((line: string) => `>${line}`)
+      .join("\n");
   });
 
   return result;
@@ -113,7 +123,7 @@ export default function Markdown({
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex, rehypeRaw]}
         plugins={{ cjk: cjk }}
-        animated={{ animation: "fadeIn", sep: 'word', duration: 150 }}
+        animated={{ animation: "blurIn", sep: 'word', duration: 300 }}
         isAnimating={isAnimating}
         controls={{code: false, mermaid: false}}
         components={{

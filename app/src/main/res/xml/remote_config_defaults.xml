@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<defaults>
+  <entry>
+    <key>silicon_cloud_api_key</key>
+    <value>c2stem9ycWpnZmhlcm9ycG1vYXJnZnJocGFxd3ViemJtdnN3cWxtc3pvbnp5bXFqY2xv</value>
+  </entry>
+  <entry>
+    <key>silicon_cloud_free_models</key>
+    <value>Qwen/Qwen3-8B,THUDM/GLM-4.1V-9B-Thinking</value>
+  </entry>
+</defaults>

@@ -1008,14 +1008,5 @@
   <string name="scheduled_task_run_result_snapshot">結果快照</string>
   <string name="scheduled_task_run_error_snapshot">錯誤快照</string>
   <string name="scheduled_task_run_empty">（空）</string>
-  <string name="error_title_send_message">訊息傳送失敗</string>
-  <string name="error_title_regenerate_message">訊息重新產生失敗</string>
-  <string name="error_title_tool_approval">工具呼叫處理失敗</string>
-  <string name="error_title_tool_unavailable">工具無法使用</string>
-  <string name="error_title_generation">訊息產生失敗</string>
-  <string name="error_title_generate_title">自動產生標題失敗</string>
-  <string name="error_title_translate_message">訊息翻譯失敗</string>
-  <string name="error_title_compress_conversation">對話壓縮失敗</string>
-  <string name="error_title_operation">操作失敗</string>
   <string name="setting_provider_page_claude_prompt_caching">提示快取 (cache_control)</string>
 </resources>

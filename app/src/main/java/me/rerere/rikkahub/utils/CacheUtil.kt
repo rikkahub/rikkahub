@@ -8,8 +8,7 @@ import java.util.concurrent.TimeUnit
  * This is a lightweight alternative to Guava Cache to avoid concurrency issues.
  */
 class SimpleCache<K, V>(
-    private val expireAfterWriteMillis: Long,
-    private val maximumSize: Int?
+    private val expireAfterWriteMillis: Long
 ) {
     private data class CacheEntry<V>(
         val value: V,
@@ -21,7 +20,6 @@ class SimpleCache<K, V>(
     }
 
     private val cache = ConcurrentHashMap<K, CacheEntry<V>>()
-    private val sizeLimitLock = Any()
 
     fun getIfPresent(key: K): V? {
         val entry = cache[key] ?: return null
@@ -35,7 +33,6 @@ class SimpleCache<K, V>(
 
     fun put(key: K, value: V) {
         cache[key] = CacheEntry(value)
-        enforceMaximumSizeIfNeeded()
     }
 
     fun invalidate(key: K) {
@@ -52,39 +49,20 @@ class SimpleCache<K, V>(
 
     fun size(): Int = cache.size
 
-    private fun enforceMaximumSizeIfNeeded() {
-        val maxSize = maximumSize ?: return
-        if (cache.size <= maxSize) return
-        synchronized(sizeLimitLock) {
-            cache.entries.removeIf { it.value.isExpired(expireAfterWriteMillis) }
-            while (cache.size > maxSize) {
-                val oldest = cache.entries.minByOrNull { it.value.timestamp } ?: break
-                cache.remove(oldest.key)
-            }
-        }
-    }
-
     companion object {
         fun <K, V> builder() = Builder<K, V>()
     }
 
     class Builder<K, V> {
         private var expireAfterWriteMillis: Long = Long.MAX_VALUE
-        private var maximumSize: Int? = null
 
         fun expireAfterWrite(duration: Long, unit: TimeUnit): Builder<K, V> {
             expireAfterWriteMillis = unit.toMillis(duration)
             return this
         }
 
-        fun maximumSize(size: Int): Builder<K, V> {
-            require(size > 0) { "maximumSize must be greater than 0" }
-            maximumSize = size
-            return this
-        }
-
         fun build(): SimpleCache<K, V> {
-            return SimpleCache(expireAfterWriteMillis, maximumSize)
+            return SimpleCache(expireAfterWriteMillis)
         }
     }
 }

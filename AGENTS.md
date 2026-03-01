@@ -13,7 +13,7 @@
 ./gradlew lint                   # 运行 Android Lint
 ```
 
-构建应用不再依赖 `google-services.json`。
+构建应用需要在 `app/` 下提供 `google-services.json`（用于 Firebase）。
 
 ## Coding Style & Naming Conventions
 

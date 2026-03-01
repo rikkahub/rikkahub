@@ -206,16 +206,7 @@ function ChainOfThoughtStepContent({
           </div>
         )}
 
-        {hasContent && (
-          <div
-            className="grid transition-all duration-200 ease-out"
-            style={{ gridTemplateRows: contentVisible ? "1fr" : "0fr" }}
-          >
-            <div className="overflow-hidden">
-              <div className="px-1 pb-2 pt-1">{children}</div>
-            </div>
-          </div>
-        )}
+        {contentVisible && hasContent && <div className="px-1 pb-2 pt-1">{children}</div>}
       </div>
     </div>
   );

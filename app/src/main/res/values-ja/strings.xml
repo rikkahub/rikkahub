@@ -1010,14 +1010,5 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="scheduled_task_run_result_snapshot">結果スナップショット</string>
   <string name="scheduled_task_run_error_snapshot">エラースナップショット</string>
   <string name="scheduled_task_run_empty">（空）</string>
-  <string name="error_title_send_message">メッセージ送信失敗</string>
-  <string name="error_title_regenerate_message">メッセージの再生成に失敗しました</string>
-  <string name="error_title_tool_approval">ツール呼び出し処理に失敗しました</string>
-  <string name="error_title_tool_unavailable">ツールが利用できません</string>
-  <string name="error_title_generation">メッセージ生成に失敗しました</string>
-  <string name="error_title_generate_title">自動タイトル生成に失敗しました</string>
-  <string name="error_title_translate_message">メッセージの翻訳に失敗しました</string>
-  <string name="error_title_compress_conversation">会話の圧縮に失敗しました</string>
-  <string name="error_title_operation">操作に失敗しました</string>
   <string name="setting_provider_page_claude_prompt_caching">プロンプトキャッシュ（cache_control）</string>
 </resources>

@@ -125,19 +125,10 @@ fun ErrorCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (error.title != null) {
-                    Text(
-                        text = error.title,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
                 Text(
                     text = error.error.message ?: "Unknown error",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

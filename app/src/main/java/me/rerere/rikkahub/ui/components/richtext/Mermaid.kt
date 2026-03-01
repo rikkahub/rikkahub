@@ -37,21 +37,19 @@ import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
+import com.google.common.cache.CacheBuilder
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
-import me.rerere.rikkahub.utils.SimpleCache
 import me.rerere.rikkahub.utils.escapeHtml
 import me.rerere.rikkahub.utils.exportImage
 import me.rerere.rikkahub.utils.toCssHex
-import java.util.concurrent.TimeUnit
 
-private val mermaidHeightCache = SimpleCache.builder<String, Int>()
-    .expireAfterWrite(1, TimeUnit.DAYS)
+private val mermaidHeightCache = CacheBuilder.newBuilder()
     .maximumSize(100)
-    .build()
+    .build<String, Int>()
 
 /**
  * A component that renders Mermaid diagrams.

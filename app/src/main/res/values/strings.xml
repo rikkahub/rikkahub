@@ -1019,13 +1019,4 @@
   <string name="scheduled_task_run_result_snapshot">Result Snapshot</string>
   <string name="scheduled_task_run_error_snapshot">Error Snapshot</string>
   <string name="scheduled_task_run_empty">(empty)</string>
-  <string name="error_title_send_message">Message send failed</string>
-  <string name="error_title_regenerate_message">Message regeneration failed</string>
-  <string name="error_title_tool_approval">Tool call processing failed</string>
-  <string name="error_title_tool_unavailable">Tool unavailable</string>
-  <string name="error_title_generation">Message generation failed</string>
-  <string name="error_title_generate_title">Auto title generation failed</string>
-  <string name="error_title_translate_message">Message translation failed</string>
-  <string name="error_title_compress_conversation">Conversation compression failed</string>
-  <string name="error_title_operation">Operation failed</string>
 </resources>

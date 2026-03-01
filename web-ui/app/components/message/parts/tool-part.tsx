@@ -421,7 +421,7 @@ export function ToolPart({
             </DrawerDescription>
           </DrawerHeader>
 
-          <div className="flex-1 min-h-0 space-y-4 overflow-y-auto px-4 pb-6">
+          <div className="max-h-[72vh] space-y-4 overflow-y-auto px-4 pb-6">
             {tool.toolName === TOOL_NAMES.SEARCH_WEB && isExecuted ? (
               <SearchWebPreview args={args} content={outputContent} />
             ) : tool.toolName === TOOL_NAMES.SCRAPE_WEB && isExecuted ? (
