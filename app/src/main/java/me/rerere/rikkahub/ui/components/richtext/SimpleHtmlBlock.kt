@@ -91,6 +91,9 @@ private fun RenderNode(
         }
 
         is Element -> {
+            // Skip elements with display:none
+            if (hasDisplayNone(node.attr("style"))) return
+
             when (node.tagName().lowercase()) {
                 "p" -> {
                     val annotatedString = buildAnnotatedStringFromElement(node, onLinkClick)
@@ -401,11 +404,14 @@ private fun processElementNodes(
                     }
 
                     "span" -> {
+                        // Skip spans with display:none
+                        val style = node.attr("style")
+                        if (hasDisplayNone(style)) return@forEach
+
                         val start = builder.length
                         processElementNodes(node, builder, onLinkClick)
 
                         // Handle inline styles
-                        val style = node.attr("style")
                         if (style.isNotEmpty()) {
                             val spanStyle = parseInlineStyle(style)
                             if (spanStyle != null) {
@@ -442,6 +448,16 @@ private fun processElementNodes(
                 }
             }
         }
+    }
+}
+
+private fun hasDisplayNone(style: String): Boolean {
+    if (style.isEmpty()) return false
+    return style.split(";").any { prop ->
+        val parts = prop.split(":")
+        parts.size == 2 &&
+                parts[0].trim().equals("display", ignoreCase = true) &&
+                parts[1].trim().equals("none", ignoreCase = true)
     }
 }
 
