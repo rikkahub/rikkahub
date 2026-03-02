@@ -1038,3 +1038,4 @@
   <string name="setting_mcp_page_import_parse_error">JSON parse failed: %1$s</string>
   <string name="setting_mcp_page_import_confirm">Import</string>
 </resources>
+

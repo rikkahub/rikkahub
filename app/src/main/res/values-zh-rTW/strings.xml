@@ -1018,4 +1018,7 @@
   <string name="setting_mcp_page_import_no_valid_config">未找到有效的 MCP Server 配置</string>
   <string name="setting_mcp_page_import_parse_error">JSON 解析失敗：%1$s</string>
   <string name="setting_mcp_page_import_confirm">匯入</string>
+  <string name="setting_display_page_code_block_rich_render_title">渲染 HTML/SVG 程式碼區塊</string>
+  <string name="setting_display_page_code_block_rich_render_desc">直接渲染 html/svg/xml-with-svg 程式碼區塊，而非顯示原始程式碼</string>
 </resources>
+
