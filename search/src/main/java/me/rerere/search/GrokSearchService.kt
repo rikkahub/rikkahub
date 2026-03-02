@@ -87,6 +87,9 @@ object GrokSearchService : SearchService<SearchServiceOptions.GrokOptions> {
                     add(buildJsonObject {
                         put("type", JsonPrimitive("web_search"))
                     })
+                    add(buildJsonObject {
+                        put("type", JsonPrimitive("x_search"))
+                    })
                 })
                 put("store", JsonPrimitive(false))
             }
