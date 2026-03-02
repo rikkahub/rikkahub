@@ -1020,5 +1020,11 @@
   <string name="setting_mcp_page_import_confirm">匯入</string>
   <string name="setting_display_page_code_block_rich_render_title">渲染 HTML/SVG 程式碼區塊</string>
   <string name="setting_display_page_code_block_rich_render_desc">直接渲染 html/svg/xml-with-svg 程式碼區塊，而非顯示原始程式碼</string>
+  <string name="webview_page_open_in_browser">在瀏覽器中開啟</string>
+  <string name="webview_page_console_logs">主控台記錄</string>
+  <string name="webview_page_no_console_messages">沒有主控台訊息</string>
+  <string name="webview_page_refresh">重新整理</string>
+  <string name="webview_page_forward">前進</string>
+  <string name="webview_page_more_options">更多選項</string>
 </resources>
 

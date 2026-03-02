@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ArrowRight
@@ -34,6 +35,7 @@ import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.EllipsisVertical
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.RefreshCw
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
@@ -86,28 +88,28 @@ fun WebViewPage(url: String, content: String) {
                 },
                 actions = {
                     IconButton(onClick = { state.reload() }) {
-                        Icon(Lucide.RefreshCw, contentDescription = "Refresh")
+                        Icon(Lucide.RefreshCw, contentDescription = stringResource(R.string.webview_page_refresh))
                     }
 
                     IconButton(
                         onClick = { state.goForward() },
                         enabled = state.canGoForward
                     ) {
-                        Icon(Lucide.ArrowRight, contentDescription = "Forward")
+                        Icon(Lucide.ArrowRight, contentDescription = stringResource(R.string.webview_page_forward))
                     }
 
                     val urlHandler = LocalUriHandler.current
                     IconButton(
                         onClick = { showDropdown = true }
                     ) {
-                        Icon(Lucide.EllipsisVertical, contentDescription = "More options")
+                        Icon(Lucide.EllipsisVertical, contentDescription = stringResource(R.string.webview_page_more_options))
 
                         DropdownMenu(
                             expanded = showDropdown,
                             onDismissRequest = { showDropdown = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Open in Browser") },
+                                text = { Text(stringResource(R.string.webview_page_open_in_browser)) },
                                 leadingIcon = { Icon(Lucide.Earth, contentDescription = null) },
                                 onClick = {
                                     showDropdown = false
@@ -119,7 +121,7 @@ fun WebViewPage(url: String, content: String) {
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Console Logs") },
+                                text = { Text(stringResource(R.string.webview_page_console_logs)) },
                                 leadingIcon = { Icon(Lucide.Bug, contentDescription = null) },
                                 onClick = {
                                     showDropdown = false
@@ -151,7 +153,7 @@ fun WebViewPage(url: String, content: String) {
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "Console Logs",
+                    text = stringResource(R.string.webview_page_console_logs),
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
@@ -179,7 +181,7 @@ fun WebViewPage(url: String, content: String) {
 
                 if (state.consoleMessages.isEmpty()) {
                     Text(
-                        text = "No console messages",
+                        text = stringResource(R.string.webview_page_no_console_messages),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(16.dp)

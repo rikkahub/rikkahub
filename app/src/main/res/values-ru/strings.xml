@@ -1015,5 +1015,11 @@
   <string name="setting_mcp_page_import_confirm">Импорт</string>
   <string name="setting_display_page_code_block_rich_render_title">Рендерить HTML/SVG блоки кода</string>
   <string name="setting_display_page_code_block_rich_render_desc">Рендерить блоки кода html/svg/xml-with-svg напрямую вместо отображения исходного кода</string>
+  <string name="webview_page_open_in_browser">Открыть в браузере</string>
+  <string name="webview_page_console_logs">Логи консоли</string>
+  <string name="webview_page_no_console_messages">Нет сообщений консоли</string>
+  <string name="webview_page_refresh">Обновить</string>
+  <string name="webview_page_forward">Вперёд</string>
+  <string name="webview_page_more_options">Дополнительно</string>
 </resources>
 

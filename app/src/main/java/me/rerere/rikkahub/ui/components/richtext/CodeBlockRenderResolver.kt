@@ -53,10 +53,16 @@ internal object CodeBlockRenderResolver {
     fun buildHtmlForWebView(
         target: CodeBlockRenderTarget,
         code: String,
+        backgroundColor: String = "#ffffff",
+        textColor: String = "#000000",
     ): String {
         return when (target.renderType) {
             CodeBlockRenderType.HTML,
-            CodeBlockRenderType.SVG -> createRenderShell(replaceVhInContent(code))
+            CodeBlockRenderType.SVG -> createRenderShell(
+                replaceVhInContent(code),
+                backgroundColor = backgroundColor,
+                textColor = textColor,
+            )
         }
     }
 
@@ -148,7 +154,11 @@ internal object CodeBlockRenderResolver {
      * - base reset styles
      * Keep code payload untouched and inject directly into body.
      */
-    private fun createRenderShell(content: String): String {
+    private fun createRenderShell(
+        content: String,
+        backgroundColor: String = "#ffffff",
+        textColor: String = "#000000",
+    ): String {
         return """
             <!DOCTYPE html>
             <html>
@@ -158,7 +168,7 @@ internal object CodeBlockRenderResolver {
             <style>
             :root{--TH-viewport-height:100vh;}
             *,*::before,*::after{box-sizing:border-box;}
-            html,body{margin:0!important;padding:0;overflow:hidden!important;max-width:100%!important;}
+            html,body{margin:0!important;padding:0;overflow:hidden!important;max-width:100%!important;background-color:$backgroundColor;color:$textColor;}
             </style>
             <script>
             (function() {

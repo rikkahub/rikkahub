@@ -28,11 +28,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
 import me.rerere.rikkahub.ui.components.table.DataTable
@@ -364,23 +367,19 @@ private fun processElementNodes(
 
                     "a" -> {
                         val href = node.attr("href")
-                        val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
                         if (href.isNotEmpty()) {
-                            builder.addStyle(
-                                SpanStyle(
-                                    color = Color.Blue,
-                                    textDecoration = TextDecoration.Underline
-                                ),
-                                start,
-                                builder.length
-                            )
-                            builder.addStringAnnotation(
-                                tag = "URL",
-                                annotation = href,
-                                start = start,
-                                end = builder.length
-                            )
+                            builder.withLink(LinkAnnotation.Url(href)) {
+                                withStyle(
+                                    SpanStyle(
+                                        color = Color.Blue,
+                                        textDecoration = TextDecoration.Underline
+                                    )
+                                ) {
+                                    processElementNodes(node, this, onLinkClick)
+                                }
+                            }
+                        } else {
+                            processElementNodes(node, builder, onLinkClick)
                         }
                     }
 

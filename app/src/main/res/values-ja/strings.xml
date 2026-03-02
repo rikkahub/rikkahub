@@ -1022,5 +1022,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_mcp_page_import_confirm">インポート</string>
   <string name="setting_display_page_code_block_rich_render_title">HTML/SVGコードブロックをレンダリング</string>
   <string name="setting_display_page_code_block_rich_render_desc">生コードを表示する代わりに、html/svg/xml-with-svg のコードブロックを直接レンダリングします</string>
+  <string name="webview_page_open_in_browser">ブラウザで開く</string>
+  <string name="webview_page_console_logs">コンソールログ</string>
+  <string name="webview_page_no_console_messages">コンソールメッセージはありません</string>
+  <string name="webview_page_refresh">再読み込み</string>
+  <string name="webview_page_forward">進む</string>
+  <string name="webview_page_more_options">その他のオプション</string>
 </resources>
 

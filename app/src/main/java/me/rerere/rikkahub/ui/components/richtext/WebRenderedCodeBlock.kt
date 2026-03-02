@@ -5,9 +5,12 @@ import android.os.Looper
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -19,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
+import me.rerere.rikkahub.utils.toCssHex
 
 private const val MIN_PREVIEW_HEIGHT_DP = 10
 
@@ -71,8 +75,14 @@ internal fun WebRenderedCodeBlock(
     val renderSignature = remember(target, code) {
         "${target.normalizedLanguage}:${target.renderType}:${code.hashCode()}"
     }
-    val html = remember(target, code) {
-        CodeBlockRenderResolver.buildHtmlForWebView(target, code)
+    val backgroundColor = MaterialTheme.colorScheme.surface.toCssHex()
+    val textColor = MaterialTheme.colorScheme.onSurface.toCssHex()
+    val html = remember(target, code, backgroundColor, textColor) {
+        CodeBlockRenderResolver.buildHtmlForWebView(
+            target, code,
+            backgroundColor = backgroundColor,
+            textColor = textColor,
+        )
     }
     var contentHeightDp by remember(renderSignature) { mutableIntStateOf(INITIAL_PREVIEW_HEIGHT_DP) }
     val renderBridge = remember(renderSignature) {
@@ -82,6 +92,12 @@ internal fun WebRenderedCodeBlock(
             }
         }
     }
+
+    val animatedHeight by animateDpAsState(
+        targetValue = contentHeightDp.coerceAtLeast(MIN_PREVIEW_HEIGHT_DP).dp,
+        animationSpec = tween(durationMillis = 300),
+        label = "codeBlockHeight",
+    )
 
     val webViewState = rememberWebViewState(
         data = html,
@@ -104,7 +120,7 @@ internal fun WebRenderedCodeBlock(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .fillMaxWidth()
-            .height(contentHeightDp.coerceAtLeast(MIN_PREVIEW_HEIGHT_DP).dp),
+            .height(animatedHeight),
         onCreated = { webView ->
             webView.setTag(R.id.tag_code_block_render_signature, renderSignature)
             webView.setOnTouchListener { view, event ->
