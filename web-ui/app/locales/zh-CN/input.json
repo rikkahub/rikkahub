@@ -93,6 +93,7 @@
     "delete_attachment_failed": "删除附件失败",
     "upload_image": "上传图片",
     "upload_document": "上传文档",
+    "unsupported_file_skipped": "{{count}} 个文件因格式不支持已被跳过",
     "placeholder_ready": "输入消息...",
     "placeholder_not_ready": "请先选择会话",
     "send_hint_enter": "按 Enter 发送，Shift + Enter 换行",

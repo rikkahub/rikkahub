@@ -14,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { ModelList } from "~/components/input/model-list";
@@ -55,6 +56,7 @@ export interface ChatInputProps {
 }
 
 const DOCUMENT_UPLOAD_ACCEPT_EXTENSIONS = [
+  // Documents
   ".pdf",
   ".doc",
   ".docx",
@@ -64,6 +66,52 @@ const DOCUMENT_UPLOAD_ACCEPT_EXTENSIONS = [
   ".md",
   ".csv",
   ".json",
+  // Config files
+  ".yml",
+  ".yaml",
+  ".ini",
+  ".toml",
+  ".env",
+  ".conf",
+  ".config",
+  // Code files
+  ".go",
+  ".py",
+  ".js",
+  ".ts",
+  ".tsx",
+  ".jsx",
+  ".vue",
+  ".rs",
+  ".java",
+  ".kt",
+  ".c",
+  ".cpp",
+  ".h",
+  ".cs",
+  ".rb",
+  ".php",
+  ".swift",
+  ".dart",
+  ".scala",
+  ".sh",
+  ".bash",
+  ".zsh",
+  // Web
+  ".html",
+  ".htm",
+  ".css",
+  ".scss",
+  ".less",
+  ".xml",
+  // Data
+  ".sql",
+  ".graphql",
+  ".proto",
+  // Other text
+  ".log",
+  ".diff",
+  ".patch",
 ] as const;
 
 const IMAGE_UPLOAD_ACCEPT = "image/*";
@@ -75,6 +123,10 @@ function isAllowedUploadFile(file: globalThis.File): boolean {
   }
 
   if (file.type.length === 0 && IMAGE_FILE_NAME_PATTERN.test(file.name)) {
+    return true;
+  }
+
+  if (file.type.startsWith("text/")) {
     return true;
   }
 
@@ -236,7 +288,14 @@ function ChatInputInner({
         return;
       }
 
-      const uploadableFiles = Array.from(fileList).filter(isAllowedUploadFile);
+      const allFiles = Array.from(fileList);
+      const uploadableFiles = allFiles.filter(isAllowedUploadFile);
+      const skippedFiles = allFiles.filter((f) => !isAllowedUploadFile(f));
+
+      if (skippedFiles.length > 0) {
+        toast.warning(t("chat.unsupported_file_skipped", { count: skippedFiles.length }));
+      }
+
       if (uploadableFiles.length === 0) {
         return;
       }
