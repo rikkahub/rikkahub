@@ -113,7 +113,7 @@ object ModelRegistry {
     }
 
     val GEMINI_3_1_FLASH_IMAGE = defineModel {
-        tokens("gemini", "3", "1", "flash", "image", "preview")
+        tokens("gemini", "3", "1", "flash", "image")
         visionInput()
         imageOutput()
         reasoningAbility()
