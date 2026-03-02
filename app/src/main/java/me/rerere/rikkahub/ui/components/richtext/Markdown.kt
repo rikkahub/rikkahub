@@ -102,6 +102,16 @@ private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MAT
 val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
+private val PARAGRAPH_MARKDOWN_INLINE_TYPES = setOf(
+    MarkdownElementTypes.INLINE_LINK,
+    MarkdownElementTypes.AUTOLINK,
+    MarkdownElementTypes.CODE_SPAN,
+    MarkdownElementTypes.EMPH,
+    MarkdownElementTypes.STRONG,
+    MarkdownElementTypes.IMAGE,
+    GFMElementTypes.STRIKETHROUGH,
+    GFMElementTypes.INLINE_MATH,
+)
 
 // 预处理markdown内容
 private fun preProcess(content: String): String {
@@ -734,6 +744,19 @@ private fun Paragraph(
         return
     }
 
+    val paragraphModifier = modifier.then(
+        if (node.nextSibling() != null) Modifier.padding(bottom = 16.dp)
+        else Modifier
+    )
+
+    if (remember(node) { shouldRenderParagraphWithSimpleHtml(node) }) {
+        SimpleHtmlBlock(
+            html = node.getTextInNode(content),
+            modifier = paragraphModifier
+        )
+        return
+    }
+
     val colorScheme = MaterialTheme.colorScheme
     val inlineContents = remember {
         mutableStateMapOf<String, InlineTextContent>()
@@ -746,10 +769,7 @@ private fun Paragraph(
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
     FlowRow(
-        modifier = modifier.then(
-            if (node.nextSibling() != null) Modifier.padding(bottom = 16.dp)
-            else Modifier
-        )
+        modifier = paragraphModifier
     ) {
         val annotatedString = remember(content, enableLatexRendering) {
             buildAnnotatedString {
@@ -779,6 +799,22 @@ private fun Paragraph(
             )
         )
     }
+}
+
+internal fun shouldRenderParagraphWithSimpleHtml(node: ASTNode): Boolean {
+    var hasHtmlTag = false
+    var hasMarkdownInlineSyntax = false
+
+    node.traverseChildren { child ->
+        if (!hasHtmlTag && child.type == MarkdownTokenTypes.HTML_TAG) {
+            hasHtmlTag = true
+        }
+        if (!hasMarkdownInlineSyntax && child.type in PARAGRAPH_MARKDOWN_INLINE_TYPES) {
+            hasMarkdownInlineSyntax = true
+        }
+    }
+
+    return hasHtmlTag && !hasMarkdownInlineSyntax
 }
 
 @Composable
