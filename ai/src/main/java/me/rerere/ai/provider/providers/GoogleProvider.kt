@@ -442,13 +442,13 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                     when (builtInTool) {
                         BuiltInTools.Search -> {
                             add(buildJsonObject {
-                                put("google_search", buildJsonObject {})
+                                put("googleSearch", buildJsonObject {})
                             })
                         }
 
                         BuiltInTools.UrlContext -> {
                             add(buildJsonObject {
-                                put("url_context", buildJsonObject {})
+                                put("urlContext", buildJsonObject {})
                             })
                         }
                     }
