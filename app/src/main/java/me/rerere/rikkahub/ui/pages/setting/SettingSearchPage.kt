@@ -371,6 +371,13 @@ private fun SearchProviderCard(
                                 onUpdateService(options)
                             }
                         }
+
+                        is SearchServiceOptions.GrokOptions -> {
+                            GrokOptions(options as SearchServiceOptions.GrokOptions) {
+                                options = it
+                                onUpdateService(options)
+                            }
+                        }
                     }
 
                     ProvideTextStyle(MaterialTheme.typography.labelMedium) {
@@ -995,5 +1002,47 @@ private fun RikkaHubOptions(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GrokOptions(
+    options: SearchServiceOptions.GrokOptions,
+    onUpdateOptions: (SearchServiceOptions.GrokOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text("Model")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.model,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        model = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
