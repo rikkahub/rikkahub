@@ -93,6 +93,7 @@
     "delete_attachment_failed": "Failed to delete attachment",
     "upload_image": "Upload Image",
     "upload_document": "Upload Document",
+    "unsupported_file_skipped": "{{count}} file(s) skipped due to unsupported format",
     "placeholder_ready": "Type a message...",
     "placeholder_not_ready": "Please select a conversation first",
     "send_hint_enter": "Press Enter to send, Shift + Enter for newline",
