@@ -334,9 +334,10 @@ private fun MessagePartsBlock(
                 is UIMessagePart.Text -> {
                     SelectionContainer {
                         if (role == MessageRole.USER) {
-                            Card(
+                            Surface(
                                 modifier = Modifier.animateContentSize(),
                                 shape = MaterialTheme.shapes.medium,
+                                tonalElevation = 2.dp,
                             ) {
                                 Column(modifier = Modifier.padding(8.dp)) {
                                     MarkdownBlock(
@@ -351,12 +352,10 @@ private fun MessagePartsBlock(
                             }
                         } else {
                             if (settings.displaySetting.showAssistantBubble) {
-                                Card(
+                                Surface(
                                     modifier = Modifier.animateContentSize(),
                                     shape = MaterialTheme.shapes.medium,
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                                    )
+                                    tonalElevation = 2.dp,
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         MarkdownBlock(
