@@ -150,6 +150,11 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
 
             item("generalSettings") {
                 var colorMode by rememberColorMode()
+                val selectedColorModeText = when (colorMode) {
+                    ColorMode.SYSTEM -> stringResource(R.string.setting_page_color_mode_system)
+                    ColorMode.LIGHT -> stringResource(R.string.setting_page_color_mode_light)
+                    ColorMode.DARK -> stringResource(R.string.setting_page_color_mode_dark)
+                }
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_general_settings)) },
@@ -179,6 +184,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                             )
                         },
                         headlineContent = { Text(stringResource(R.string.setting_page_color_mode)) },
+                        supportingContent = { Text(selectedColorModeText) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingDisplay) },

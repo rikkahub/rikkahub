@@ -17,10 +17,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
@@ -29,16 +30,18 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -50,6 +53,7 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.SquarePen
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
+import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -59,6 +63,7 @@ import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchService
@@ -71,23 +76,48 @@ import kotlin.reflect.full.primaryConstructor
 @Composable
 fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val lazyListState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(stringResource(R.string.setting_page_search_title))
                 },
                 navigationIcon = {
                     BackButton()
-                }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            vm.updateSettings(
+                                settings.copy(
+                                    searchServices = listOf(SearchServiceOptions.BingLocalOptions()) + settings.searchServices
+                                )
+                            )
+                            scope.launch {
+                                lazyListState.animateScrollToItem(0)
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Lucide.Plus,
+                            contentDescription = stringResource(R.string.setting_page_search_add_provider)
+                        )
+                    }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors
             )
-        }
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor
     ) {
-        val lazyListState = rememberLazyListState()
         val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-            // 需要考虑标题和按钮以及通用选项可能占用的位置
-            val offset = 1 // 第一个item是标题和按钮
+            // providers_header 已移除，搜索服务从索引 0 开始
+            val offset = 0
             val fromIndex = from.index - offset
             val toIndex = to.index - offset
 
@@ -112,36 +142,6 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
             state = lazyListState
         ) {
-            // 搜索提供商标题和添加按钮
-            item("providers_header") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.setting_page_search_providers),
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    searchServices =  listOf(SearchServiceOptions.BingLocalOptions()) + settings.searchServices
-                                )
-                            )
-                        }
-                    ) {
-                        Icon(
-                            Lucide.Plus,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(stringResource(R.string.setting_page_search_add_provider))
-                    }
-                }
-            }
-
             // 搜索提供商列表
             items(settings.searchServices, key = { it.id }) { service ->
                 val index = settings.searchServices.indexOf(service)
@@ -225,7 +225,10 @@ private fun SearchProviderCard(
     }
     var expand by remember { mutableStateOf(false) }
     Card(
-        modifier = modifier
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor
+        )
     ) {
         Column(
             modifier = Modifier
@@ -547,7 +550,11 @@ private fun CommonOptions(
     var commonOptions by remember(settings.searchCommonOptions) {
         mutableStateOf(settings.searchCommonOptions)
     }
-    Card {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor
+        )
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
