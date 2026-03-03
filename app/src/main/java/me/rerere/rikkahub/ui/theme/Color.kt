@@ -1,5 +1,13 @@
 package me.rerere.rikkahub.ui.theme
 
+import androidx.compose.material3.CardColors
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ListItemColors
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme.colorScheme
+import androidx.compose.material3.TopAppBarColors
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 data class ExtendColors(
@@ -160,3 +168,21 @@ fun darkExtendColors(): ExtendColors = ExtendColors(
     gray9 = Color(223, 223, 223),
     gray10 = Color(246, 246, 246),
 )
+
+object CustomColors {
+    var black = false
+
+    val topBarColors: TopAppBarColors
+        @Composable get() {
+            return if (!LocalDarkMode.current) TopAppBarDefaults.topAppBarColors(
+                containerColor = colorScheme.surfaceContainer,
+                scrolledContainerColor = colorScheme.surfaceContainer
+            ) else TopAppBarDefaults.topAppBarColors()
+        }
+
+    val cardColors: CardColors
+        @Composable get() = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainer)
+
+    val listItemColors: ListItemColors
+        @Composable get() = ListItemDefaults.colors(containerColor = colorScheme.surfaceBright)
+}
