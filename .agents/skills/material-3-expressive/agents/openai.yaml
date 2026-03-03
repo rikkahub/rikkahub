@@ -1,0 +1,4 @@
+interface:
+  display_name: "Material 3 Expressive"
+  short_description: "Android Material 3 Expressive UI guidance and token references"
+  default_prompt: "Use $material-3-expressive for Android UI/UX design or review with Material 3 Expressive (M3 Expressive / Material You Expressive). Prioritize expressive component tokens, hierarchy, motion, color, shape, and typography. Output should include intensity level, hero moments, window size class, and token group references."
