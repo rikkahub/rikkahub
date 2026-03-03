@@ -64,7 +64,7 @@ class MessageFtsManager(private val database: AppDatabase) {
                    simple_snippet(message_fts, 0, '[', ']', '...', 30) AS snippet
             FROM message_fts
             WHERE text MATCH jieba_query(?)
-            ORDER BY rank
+            ORDER BY rank, update_at DESC
             LIMIT 50
             """.trimIndent(),
             arrayOf(keyword)
