@@ -108,6 +108,8 @@ import com.dokar.sonner.ToastType
 import com.yalantis.ucrop.UCrop
 import com.yalantis.ucrop.UCropActivity
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
@@ -166,6 +168,7 @@ fun ChatInput(
     val filesManager: FilesManager = koinInject()
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
+    val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -194,156 +197,181 @@ fun ChatInput(
         Column(
             modifier = modifier
                 .imePadding()
-                .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .navigationBarsPadding()
+                .padding(horizontal = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Medias
-            MediaFileInputRow(state = state, context = context)
-
-            // Text Input Row
-            TextInputRow(
-                state = state,
-                context = context,
-                termuxCommandModeEnabled = termuxCommandModeEnabled,
-                onSendMessage = { sendMessage() }
-            )
-
-            // Actions Row
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // Model Picker
-                    ModelSelector(
-                        modelId = assistant.chatModelId ?: settings.chatModelId,
-                        providers = settings.providers,
-                        onSelect = {
-                            onUpdateChatModel(it)
-                            dismissFilesPicker()
-                        },
-                        type = ModelType.CHAT,
-                        onlyIcon = true,
-                        modifier = Modifier,
-                    )
-
-                    // Search
-                    val enableSearchMsg = stringResource(R.string.web_search_enabled)
-                    val disableSearchMsg = stringResource(R.string.web_search_disabled)
-                    val chatModel = settings.getCurrentChatModel()
-                    SearchPickerButton(
-                        enableSearch = enableSearch,
-                        settings = settings,
-                        onToggleSearch = { enabled ->
-                            onToggleSearch(enabled)
-                            toaster.show(
-                                message = if (enabled) enableSearchMsg else disableSearchMsg,
-                                duration = 1.seconds,
-                                type = if (enabled) {
-                                    ToastType.Success
-                                } else {
-                                    ToastType.Normal
-                                }
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .then(
+                        if (settings.displaySetting.enableBlurEffect) {
+                            Modifier.hazeEffect(
+                                state = hazeState,
+                                style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
                             )
-                        },
-                        onUpdateSearchService = onUpdateSearchService,
-                        model = chatModel,
-                    )
-
-                    // Reasoning
-                    val model = settings.getCurrentChatModel()
-                    if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
-                        ReasoningButton(
-                            reasoningTokens = assistant.thinkingBudget ?: 0,
-                            onUpdateReasoningTokens = {
-                                onUpdateAssistant(assistant.copy(thinkingBudget = it))
-                            },
-                            onlyIcon = true,
-                        )
-                    }
-
-                    // Local Tools
-                    LocalToolsPickerButton(
-                        assistant = assistant,
-                        onUpdateAssistant = {
-                            onUpdateAssistant(it)
-                        },
-                    )
-
-                    // MCP
-                    if (settings.mcpServers.isNotEmpty()) {
-                        McpPickerButton(
-                            assistant = assistant,
-                            servers = settings.mcpServers,
-                            mcpManager = mcpManager,
-                            onUpdateAssistant = {
-                                onUpdateAssistant(it)
-                            },
-                        )
-                    }
-                }
-
-                // Insert files
-                IconButton(
-                    onClick = {
-                        if (showFilesPicker) {
-                            dismissFilesPicker()
                         } else {
-                            showFilesPicker = true
+                            Modifier
                         }
-                    }
+                    ),
+                shape = RoundedCornerShape(24.dp),
+                tonalElevation = 0.dp,
+                color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
+            ) {
+                Column(
+                    modifier = Modifier.padding(vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(
-                        if (showFilesPicker) Lucide.X else Lucide.Plus,
-                        stringResource(R.string.more_options)
-                    )
-                }
+                    // Medias
+                    MediaFileInputRow(state = state, context = context)
 
-                // Send Button
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .combinedClickable(
-                            enabled = loading || !state.isEmpty(),
-                            onClick = {
-                                dismissFilesPicker()
-                                sendMessage()
-                            },
-                            onLongClick = {
-                                dismissFilesPicker()
-                                sendMessageWithoutAnswer()
-                            }
-                        )
-                ) {
-                    val containerColor = when {
-                        loading -> MaterialTheme.colorScheme.errorContainer // 加载时，红色
-                        state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh // 禁用时(输入为空)，灰色
-                        else -> MaterialTheme.colorScheme.primary // 启用时(输入非空)，绿色/主题色
-                    }
-                    val contentColor = when {
-                        loading -> MaterialTheme.colorScheme.onErrorContainer
-                        state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) // 禁用时，内容用带透明度的灰色
-                        else -> MaterialTheme.colorScheme.onPrimary
-                    }
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        shape = CircleShape,
-                        color = containerColor,
-                        content = {}
+                    // Text Input Row
+                    TextInputRow(
+                        state = state,
+                        context = context,
+                        termuxCommandModeEnabled = termuxCommandModeEnabled,
+                        onSendMessage = { sendMessage() }
                     )
-                    if (loading) {
-                        KeepScreenOn()
-                        Icon(Lucide.X, stringResource(R.string.stop), tint = contentColor)
-                    } else {
-                        Icon(Lucide.ArrowUp, stringResource(R.string.send), tint = contentColor)
+
+                    // Actions Row
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            // Model Picker
+                            ModelSelector(
+                                modelId = assistant.chatModelId ?: settings.chatModelId,
+                                providers = settings.providers,
+                                onSelect = {
+                                    onUpdateChatModel(it)
+                                    dismissFilesPicker()
+                                },
+                                type = ModelType.CHAT,
+                                onlyIcon = true,
+                                modifier = Modifier,
+                            )
+
+                            // Search
+                            val enableSearchMsg = stringResource(R.string.web_search_enabled)
+                            val disableSearchMsg = stringResource(R.string.web_search_disabled)
+                            val chatModel = settings.getCurrentChatModel()
+                            SearchPickerButton(
+                                enableSearch = enableSearch,
+                                settings = settings,
+                                onToggleSearch = { enabled ->
+                                    onToggleSearch(enabled)
+                                    toaster.show(
+                                        message = if (enabled) enableSearchMsg else disableSearchMsg,
+                                        duration = 1.seconds,
+                                        type = if (enabled) {
+                                            ToastType.Success
+                                        } else {
+                                            ToastType.Normal
+                                        }
+                                    )
+                                },
+                                onUpdateSearchService = onUpdateSearchService,
+                                model = chatModel,
+                            )
+
+                            // Reasoning
+                            val model = settings.getCurrentChatModel()
+                            if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
+                                ReasoningButton(
+                                    reasoningTokens = assistant.thinkingBudget ?: 0,
+                                    onUpdateReasoningTokens = {
+                                        onUpdateAssistant(assistant.copy(thinkingBudget = it))
+                                    },
+                                    onlyIcon = true,
+                                )
+                            }
+
+                            // Local Tools
+                            LocalToolsPickerButton(
+                                assistant = assistant,
+                                onUpdateAssistant = {
+                                    onUpdateAssistant(it)
+                                },
+                            )
+
+                            // MCP
+                            if (settings.mcpServers.isNotEmpty()) {
+                                McpPickerButton(
+                                    assistant = assistant,
+                                    servers = settings.mcpServers,
+                                    mcpManager = mcpManager,
+                                    onUpdateAssistant = {
+                                        onUpdateAssistant(it)
+                                    },
+                                )
+                            }
+                        }
+
+                        // Insert files
+                        IconButton(
+                            onClick = {
+                                if (showFilesPicker) {
+                                    dismissFilesPicker()
+                                } else {
+                                    showFilesPicker = true
+                                }
+                            }
+                        ) {
+                            Icon(
+                                if (showFilesPicker) Lucide.X else Lucide.Plus,
+                                stringResource(R.string.more_options)
+                            )
+                        }
+
+                        // Send Button
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .combinedClickable(
+                                    enabled = loading || !state.isEmpty(),
+                                    onClick = {
+                                        dismissFilesPicker()
+                                        sendMessage()
+                                    },
+                                    onLongClick = {
+                                        dismissFilesPicker()
+                                        sendMessageWithoutAnswer()
+                                    }
+                                )
+                        ) {
+                            val containerColor = when {
+                                loading -> MaterialTheme.colorScheme.errorContainer // 加载时，红色
+                                state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh // 禁用时(输入为空)，灰色
+                                else -> MaterialTheme.colorScheme.primary // 启用时(输入非空)，绿色/主题色
+                            }
+                            val contentColor = when {
+                                loading -> MaterialTheme.colorScheme.onErrorContainer
+                                state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) // 禁用时，内容用带透明度的灰色
+                                else -> MaterialTheme.colorScheme.onPrimary
+                            }
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                shape = CircleShape,
+                                color = containerColor,
+                                content = {}
+                            )
+                            if (loading) {
+                                KeepScreenOn()
+                                Icon(Lucide.X, stringResource(R.string.stop), tint = contentColor)
+                            } else {
+                                Icon(Lucide.ArrowUp, stringResource(R.string.send), tint = contentColor)
+                            }
+                        }
                     }
                 }
             }
