@@ -260,19 +260,6 @@ class ChatVM(
         }
     }
 
-    fun handleMessageTruncate() {
-        viewModelScope.launch {
-            val lastTruncateIndex = conversation.value.messageNodes.lastIndex + 1
-            // 如果截断在最后一个索引，则取消截断，否则更新 truncateIndex 到最后一个截断位置
-            val newConversation = conversation.value.copy(
-                truncateIndex = if (conversation.value.truncateIndex == lastTruncateIndex) -1 else lastTruncateIndex,
-                title = "",
-                chatSuggestions = emptyList(), // 清空建议
-            )
-            chatService.saveConversation(conversationId = _conversationId, conversation = newConversation)
-        }
-    }
-
     fun handleCompressContext(additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int): Job {
         return viewModelScope.launch {
             chatService.compressConversation(

@@ -18,8 +18,6 @@ data class ConversationEntity(
     val createAt: Long,
     @ColumnInfo("update_at")
     val updateAt: Long,
-    @ColumnInfo("truncate_index", defaultValue = "-1")
-    val truncateIndex: Int,
     @ColumnInfo("suggestions", defaultValue = "[]")
     val chatSuggestions: String,
     @ColumnInfo("is_pinned", defaultValue = "0")

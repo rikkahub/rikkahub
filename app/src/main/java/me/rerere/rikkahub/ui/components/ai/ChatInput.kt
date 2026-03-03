@@ -95,7 +95,6 @@ import coil3.compose.AsyncImage
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Camera
-import com.composables.icons.lucide.Eraser
 import com.composables.icons.lucide.FileAudio
 import com.composables.icons.lucide.Files
 import com.composables.icons.lucide.Fullscreen
@@ -164,7 +163,6 @@ fun ChatInput(
     onUpdateChatModel: (Model) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
-    onClearContext: () -> Unit,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
@@ -403,7 +401,6 @@ fun ChatInput(
                             conversation = conversation,
                             state = state,
                             assistant = assistant,
-                            onClearContext = onClearContext,
                             onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
                             showInjectionSheet = showInjectionSheet,
@@ -803,7 +800,6 @@ private fun FilesPicker(
     conversation: Conversation,
     assistant: Assistant,
     state: ChatInputState,
-    onClearContext: () -> Unit,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     showInjectionSheet: Boolean,
@@ -903,39 +899,6 @@ private fun FilesPicker(
                 .clickable {
                     onShowCompressDialogChange(true)
                 },
-        )
-
-        ListItem(
-            leadingContent = {
-                Icon(
-                    imageVector = Lucide.Eraser,
-                    contentDescription = stringResource(R.string.chat_page_clear_context),
-                )
-            },
-            headlineContent = {
-                Text(stringResource(R.string.chat_page_clear_context))
-            },
-            trailingContent = {
-                // Context Size
-                val settings = LocalSettings.current
-                if (settings.displaySetting.showTokenUsage && conversation.messageNodes.isNotEmpty()) {
-                    val configuredContextSize = assistant.contextMessageSize
-                    val effectiveMessagesAfterTruncation =
-                        conversation.messageNodes.size - conversation.truncateIndex.coerceAtLeast(0)
-                    val actualContextMessageCount = minOf(effectiveMessagesAfterTruncation, configuredContextSize)
-                    Text(
-                        text = "$actualContextMessageCount/$configuredContextSize",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                    )
-                }
-            },
-            modifier = Modifier
-                .clip(MaterialTheme.shapes.large)
-                .clickable(
-                    onClick = {
-                        onClearContext()
-                    }),
         )
     }
 

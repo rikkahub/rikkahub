@@ -15,7 +15,6 @@ internal fun ConversationDto.singleNodeDiffOrNull(current: ConversationDto): Nod
 
     if (
         title != current.title ||
-        truncateIndex != current.truncateIndex ||
         chatSuggestions != current.chatSuggestions ||
         isPinned != current.isPinned
     ) {

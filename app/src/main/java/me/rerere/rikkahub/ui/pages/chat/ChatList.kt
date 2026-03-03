@@ -36,7 +36,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -319,22 +318,6 @@ private fun ChatListNormal(
                             onToolApproval = onToolApproval,
                             lastMessage = index == conversation.messageNodes.lastIndex,
                         )
-                    }
-                    if (index == conversation.truncateIndex - 1) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .padding(vertical = 8.dp)
-                                .fillMaxWidth()
-                        ) {
-                            HorizontalDivider(modifier = Modifier.weight(1f))
-                            Text(
-                                text = stringResource(R.string.chat_page_clear_context),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            HorizontalDivider(modifier = Modifier.weight(1f))
-                        }
                     }
                 }
             }
