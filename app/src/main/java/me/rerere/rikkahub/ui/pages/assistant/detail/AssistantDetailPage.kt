@@ -1,28 +1,24 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,9 +36,12 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.heroAnimation
+import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -55,10 +54,11 @@ fun AssistantDetailPage(id: String) {
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(
                         text = assistant.name.ifBlank {
@@ -70,80 +70,79 @@ fun AssistantDetailPage(id: String) {
                 navigationIcon = {
                     BackButton()
                 },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors
             )
         },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = innerPadding + PaddingValues(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // 头像和名字区域
-            AssistantHeader(
-                assistant = assistant,
-                modifier = Modifier.padding(24.dp)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 设置卡片列表
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SettingCard(
-                    icon = Lucide.Settings,
-                    title = stringResource(R.string.assistant_page_tab_basic),
-                    description = stringResource(R.string.assistant_detail_basic_desc),
-                    onClick = { navController.navigate(Screen.AssistantBasic(id)) }
+            item {
+                AssistantHeader(
+                    assistant = assistant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp)
                 )
+            }
 
-                SettingCard(
-                    icon = Lucide.MessageSquare,
-                    title = stringResource(R.string.assistant_page_tab_prompt),
-                    description = stringResource(R.string.assistant_detail_prompt_desc),
-                    onClick = { navController.navigate(Screen.AssistantPrompt(id)) }
-                )
-
-                SettingCard(
-                    icon = Lucide.Syringe,
-                    title = stringResource(R.string.assistant_page_tab_injections),
-                    description = stringResource(R.string.assistant_detail_injections_desc),
-                    onClick = { navController.navigate(Screen.AssistantInjections(id)) }
-                )
-
-                SettingCard(
-                    icon = Lucide.Brain,
-                    title = stringResource(R.string.assistant_page_tab_memory),
-                    description = stringResource(R.string.assistant_detail_memory_desc),
-                    onClick = { navController.navigate(Screen.AssistantMemory(id)) }
-                )
-
-                SettingCard(
-                    icon = Lucide.Code,
-                    title = stringResource(R.string.assistant_page_tab_request),
-                    description = stringResource(R.string.assistant_detail_request_desc),
-                    onClick = { navController.navigate(Screen.AssistantRequest(id)) }
-                )
-
-                SettingCard(
-                    icon = Lucide.Wrench,
-                    title = stringResource(R.string.assistant_page_tab_mcp),
-                    description = stringResource(R.string.assistant_detail_mcp_desc),
-                    onClick = { navController.navigate(Screen.AssistantMcp(id)) }
-                )
-
-                SettingCard(
-                    icon = Lucide.BookOpen,
-                    title = stringResource(R.string.assistant_page_tab_local_tools),
-                    description = stringResource(R.string.assistant_detail_local_tools_desc),
-                    onClick = { navController.navigate(Screen.AssistantLocalTool(id)) }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                ) {
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantBasic(id)) },
+                        leadingContent = { Icon(Lucide.Settings, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_basic_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_page_tab_basic)) },
+                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantPrompt(id)) },
+                        leadingContent = { Icon(Lucide.MessageSquare, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_prompt_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_page_tab_prompt)) },
+                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantInjections(id)) },
+                        leadingContent = { Icon(Lucide.Syringe, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_injections_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_page_tab_injections)) },
+                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantMemory(id)) },
+                        leadingContent = { Icon(Lucide.Brain, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_memory_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_page_tab_memory)) },
+                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantRequest(id)) },
+                        leadingContent = { Icon(Lucide.Code, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_request_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_page_tab_request)) },
+                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantMcp(id)) },
+                        leadingContent = { Icon(Lucide.Wrench, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_mcp_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_page_tab_mcp)) },
+                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantLocalTool(id)) },
+                        leadingContent = { Icon(Lucide.BookOpen, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_local_tools_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_page_tab_local_tools)) },
+                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                    )
+                }
             }
         }
     }
@@ -182,62 +181,6 @@ private fun AssistantHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun SettingCard(
-    icon: ImageVector,
-    title: String,
-    description: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Icon(
-                imageVector = Lucide.ChevronRight,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

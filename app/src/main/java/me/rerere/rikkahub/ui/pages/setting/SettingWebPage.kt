@@ -3,9 +3,11 @@ package me.rerere.rikkahub.ui.pages.setting
 import android.content.Intent
 import android.os.Build
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,8 +17,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -31,7 +32,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -54,11 +54,13 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.web.WebServerManager
 import org.koin.compose.koinInject
@@ -112,12 +114,18 @@ fun SettingWebPage() {
         }
     }
 
+    fun copyUrl(url: String) {
+        clipboardManager.setText(AnnotatedString(url))
+        toaster.show(copiedText)
+    }
+
     Scaffold(
         topBar = {
-            LargeTopAppBar(
+            LargeFlexibleTopAppBar(
                 title = { Text(stringResource(R.string.setting_page_web_server)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
             )
         },
         floatingActionButton = {
@@ -170,190 +178,167 @@ fun SettingWebPage() {
                 },
             )
         },
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = innerPadding + PaddingValues(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-
             item {
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.setting_page_web_server_port)) },
-                    supportingContent = { Text(stringResource(R.string.setting_page_web_server_port_desc)) },
-                    trailingContent = {
-                        TextField(
-                            value = portText,
-                            onValueChange = { value ->
-                                portText = value.filter { it.isDigit() }
-                                val port = portText.toIntOrNull()
-                                if (port != null && port in 1024..65535) {
-                                    scope.launch {
-                                        settingsStore.update { it.copy(webServerPort = port) }
+                CardGroup(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
+                ) {
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_port)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_web_server_port_desc)) },
+                        trailingContent = {
+                            TextField(
+                                value = portText,
+                                onValueChange = { value ->
+                                    portText = value.filter { it.isDigit() }
+                                    val port = portText.toIntOrNull()
+                                    if (port != null && port in 1024..65535) {
+                                        scope.launch {
+                                            settingsStore.update { it.copy(webServerPort = port) }
+                                        }
                                     }
-                                }
-                            },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            isError = portText.toIntOrNull()?.let { it !in 1024..65535 } ?: true,
-                            modifier = Modifier.width(100.dp),
-                            enabled = !serverState.isRunning,
-                            shape = CircleShape,
-                            colors = TextFieldDefaults.colors(
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                errorIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                isError = portText.toIntOrNull()?.let { it !in 1024..65535 } ?: true,
+                                modifier = Modifier.width(100.dp),
+                                enabled = !serverState.isRunning,
+                                shape = CircleShape,
+                                colors = TextFieldDefaults.colors(
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    errorIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent
+                                )
                             )
-                        )
-                    }
-                )
-            }
-
-            item {
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable)) },
-                    supportingContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable_desc)) },
-                    trailingContent = {
-                        Switch(
-                            checked = settings.webServerJwtEnabled,
-                            onCheckedChange = { checked ->
-                                scope.launch {
-                                    settingsStore.update {
-                                        it.copy(webServerJwtEnabled = checked)
+                        },
+                    )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.webServerJwtEnabled,
+                                onCheckedChange = { checked ->
+                                    scope.launch {
+                                        settingsStore.update {
+                                            it.copy(webServerJwtEnabled = checked)
+                                        }
                                     }
-                                }
-                            },
-                            enabled = settings.webServerJwtEnabled || accessPasswordText.isNotBlank(),
-                        )
-                    }
-                )
-            }
-
-            item {
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.setting_page_web_server_password)) },
-                    supportingContent = { Text(stringResource(R.string.setting_page_web_server_password_desc)) },
-                    trailingContent = {
-                        TextField(
-                            value = accessPasswordText,
-                            onValueChange = { value ->
-                                accessPasswordText = value
-                                scope.launch {
-                                    settingsStore.update {
-                                        it.copy(
-                                            webServerAccessPassword = value,
-                                            webServerJwtEnabled = it.webServerJwtEnabled && value.isNotBlank()
+                                },
+                                enabled = settings.webServerJwtEnabled || accessPasswordText.isNotBlank(),
+                            )
+                        },
+                    )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_password)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_web_server_password_desc)) },
+                        trailingContent = {
+                            TextField(
+                                value = accessPasswordText,
+                                onValueChange = { value ->
+                                    accessPasswordText = value
+                                    scope.launch {
+                                        settingsStore.update {
+                                            it.copy(
+                                                webServerAccessPassword = value,
+                                                webServerJwtEnabled = it.webServerJwtEnabled && value.isNotBlank()
+                                            )
+                                        }
+                                    }
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                visualTransformation = if (passwordVisible) {
+                                    VisualTransformation.None
+                                } else {
+                                    PasswordVisualTransformation()
+                                },
+                                trailingIcon = {
+                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                        Icon(
+                                            imageVector = if (passwordVisible) Lucide.EyeOff else Lucide.Eye,
+                                            contentDescription = null
                                         )
                                     }
-                                }
-                            },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            visualTransformation = if (passwordVisible) {
-                                VisualTransformation.None
-                            } else {
-                                PasswordVisualTransformation()
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                    Icon(
-                                        imageVector = if (passwordVisible) Lucide.EyeOff else Lucide.Eye,
-                                        contentDescription = null
-                                    )
-                                }
-                            },
-                            singleLine = true,
-                            isError = settings.webServerJwtEnabled && accessPasswordText.isBlank(),
-                            modifier = Modifier.width(180.dp),
-                            shape = CircleShape,
-                            colors = TextFieldDefaults.colors(
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                errorIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent
+                                },
+                                singleLine = true,
+                                isError = settings.webServerJwtEnabled && accessPasswordText.isBlank(),
+                                modifier = Modifier.width(180.dp),
+                                shape = CircleShape,
+                                colors = TextFieldDefaults.colors(
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    errorIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent
+                                )
                             )
+                        },
+                    )
+                    if (serverState.isRunning) {
+                        val lanUrl = "http://${serverState.address ?: "localhost"}:${serverState.port}"
+                        item(
+                            onClick = { copyUrl(lanUrl) },
+                            headlineContent = { Text(stringResource(R.string.setting_page_web_server_lan_address)) },
+                            supportingContent = { Text(lanUrl) },
                         )
+
+                        val localUrl = "http://localhost:${serverState.port}"
+                        item(
+                            onClick = { copyUrl(localUrl) },
+                            headlineContent = { Text(stringResource(R.string.setting_page_web_server_local_address)) },
+                            supportingContent = { Text(localUrl) },
+                        )
+
+                        if (serverState.hostname != null) {
+                            val mdnsUrl = "http://${serverState.hostname}:${serverState.port}"
+                            item(
+                                onClick = { copyUrl(mdnsUrl) },
+                                headlineContent = { Text(stringResource(R.string.setting_page_web_server_mdns_address)) },
+                                supportingContent = { Text(mdnsUrl) },
+                            )
+                        }
                     }
-                )
-            }
-
-            item {
-                AnimatedVisibility(visible = serverState.isRunning) {
-                    val url = "http://${serverState.address ?: "localhost"}:${serverState.port}"
-                    ListItem(
-                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_lan_address)) },
-                        supportingContent = { Text(url) },
-                        modifier = Modifier.clickable {
-                            clipboardManager.setText(AnnotatedString(url))
-                            toaster.show(copiedText)
-                        }
-                    )
-                }
-            }
-
-            item {
-                AnimatedVisibility(visible = serverState.isRunning) {
-                    val url = "http://localhost:${serverState.port}"
-                    ListItem(
-                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_local_address)) },
-                        supportingContent = { Text(url) },
-                        modifier = Modifier.clickable {
-                            clipboardManager.setText(AnnotatedString(url))
-                            toaster.show(copiedText)
-                        }
-                    )
-                }
-            }
-
-            item {
-                AnimatedVisibility(visible = serverState.isRunning && serverState.hostname != null) {
-                    val url = "http://${serverState.hostname}:${serverState.port}"
-                    ListItem(
-                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_mdns_address)) },
-                        supportingContent = { Text(url) },
-                        modifier = Modifier.clickable {
-                            clipboardManager.setText(AnnotatedString(url))
-                            toaster.show(copiedText)
-                        }
-                    )
-                }
-            }
-
-            item {
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            text = stringResource(R.string.setting_page_web_server_address_note),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    },
-                    supportingContent = {
-                        Text(
-                            text = stringResource(R.string.setting_page_web_server_address_note_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                )
-            }
-
-            item {
-                AnimatedVisibility(visible = serverState.error != null) {
-                    ListItem(
+                    item(
                         headlineContent = {
                             Text(
-                                text = stringResource(R.string.setting_page_web_server_error),
-                                color = MaterialTheme.colorScheme.error
+                                text = stringResource(R.string.setting_page_web_server_address_note),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         },
                         supportingContent = {
                             Text(
-                                text = serverState.error ?: "",
-                                color = MaterialTheme.colorScheme.error
+                                text = stringResource(R.string.setting_page_web_server_address_note_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                        }
+                        },
                     )
+                    if (serverState.error != null) {
+                        item(
+                            headlineContent = {
+                                Text(
+                                    text = stringResource(R.string.setting_page_web_server_error),
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            supportingContent = {
+                                Text(
+                                    text = serverState.error ?: "",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }

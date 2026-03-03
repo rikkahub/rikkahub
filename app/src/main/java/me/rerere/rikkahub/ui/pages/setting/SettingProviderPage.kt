@@ -27,6 +27,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -35,8 +36,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -48,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -77,6 +78,7 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.ImageUtils
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -90,6 +92,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var searchQuery by remember { mutableStateOf("") }
     val lazyListState = rememberLazyStaggeredGridState()
     val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
@@ -111,7 +114,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(text = stringResource(R.string.setting_provider_page_title))
                 },
@@ -149,9 +152,13 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                             )
                         )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors
             )
         },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -502,7 +509,7 @@ private fun ProviderItem(
         modifier = modifier,
         colors = CardDefaults.cardColors(
             containerColor = if (provider.enabled) {
-                MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+                CustomColors.listItemColors.containerColor
             } else MaterialTheme.colorScheme.errorContainer,
         ),
         onClick = {
