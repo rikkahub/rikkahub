@@ -110,6 +110,10 @@ import com.composables.icons.lucide.Zap
 import com.dokar.sonner.ToastType
 import com.yalantis.ucrop.UCrop
 import com.yalantis.ucrop.UCropActivity
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
@@ -153,6 +157,7 @@ fun ChatInput(
     conversation: Conversation,
     settings: Settings,
     mcpManager: McpManager,
+    hazeState: HazeState,
     enableSearch: Boolean,
     onToggleSearch: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -167,6 +172,7 @@ fun ChatInput(
 ) {
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
+    val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -216,10 +222,19 @@ fun ChatInput(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                tonalElevation = 2.dp,
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.largeIncreased)
+                    .then(
+                        if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
+                            state = hazeState,
+                            style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
+                        )
+                        else Modifier
+                    ),
+                shape = MaterialTheme.shapes.largeIncreased,
+                tonalElevation = 0.dp,
+                color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
@@ -370,10 +385,19 @@ fun ChatInput(
                 }
                 if (expand == ExpandState.Files) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(20.dp))
+                            .then(
+                                if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
+                                    state = hazeState,
+                                    style = HazeMaterials.ultraThin()
+                                )
+                                else Modifier
+                            ),
                         shape = RoundedCornerShape(20.dp),
-                        tonalElevation = 2.dp,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        tonalElevation = 0.dp,
+                        color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
                     ) {
                         FilesPicker(
                             conversation = conversation,
@@ -424,7 +448,8 @@ private fun TextInputRow(
     val assistant = settings.getCurrentAssistant()
 
     Column(
-        modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         if (state.isEditing()) {
             Surface(
@@ -493,7 +518,7 @@ private fun TextInputRow(
                 .onFocusChanged {
                     isFocused = it.isFocused
                 },
-            shape = RoundedCornerShape(20.dp),
+            shape = MaterialTheme.shapes.largeIncreased,
             placeholder = {
                 Text(stringResource(R.string.chat_input_placeholder))
             },
@@ -510,7 +535,7 @@ private fun TextInputRow(
                 unfocusedIndicatorColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer
             ),
             trailingIcon = {
                 if (isFocused) {

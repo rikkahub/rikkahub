@@ -891,5 +891,7 @@
   <string name="setting_mcp_page_import_no_valid_config">未找到有效的 MCP Server 配置</string>
   <string name="setting_mcp_page_import_parse_error">JSON 解析失敗：%1$s</string>
   <string name="setting_mcp_page_import_confirm">匯入</string>
+  <string name="setting_display_page_enable_blur_effect_title">啟用模糊效果</string>
+  <string name="setting_display_page_enable_blur_effect_desc">在聊天輸入列啟用模糊效果</string>
 </resources>
 

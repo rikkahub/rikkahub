@@ -886,5 +886,7 @@
   <string name="setting_mcp_page_import_no_valid_config">Не найдена допустимая конфигурация сервера MCP</string>
   <string name="setting_mcp_page_import_parse_error">Ошибка разбора JSON: %1$s</string>
   <string name="setting_mcp_page_import_confirm">Импорт</string>
+  <string name="setting_display_page_enable_blur_effect_title">Включить эффект размытия</string>
+  <string name="setting_display_page_enable_blur_effect_desc">Включить эффект размытия на панели ввода чата</string>
 </resources>
 

@@ -639,6 +639,26 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 ListItem(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_enable_blur_effect_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_enable_blur_effect_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.enableBlurEffect,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(enableBlurEffect = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
                         Text(stringResource(R.string.setting_display_page_enable_message_generation_haptic_effect_title))
                     },
                     supportingContent = {

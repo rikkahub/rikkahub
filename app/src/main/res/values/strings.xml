@@ -891,5 +891,7 @@
   <string name="setting_mcp_page_import_no_valid_config">No valid MCP Server configuration found</string>
   <string name="setting_mcp_page_import_parse_error">JSON parse failed: %1$s</string>
   <string name="setting_mcp_page_import_confirm">Import</string>
+  <string name="setting_display_page_enable_blur_effect_title">Enable Blur Effect</string>
+  <string name="setting_display_page_enable_blur_effect_desc">Enable blur effect on chat input bar</string>
 </resources>
 

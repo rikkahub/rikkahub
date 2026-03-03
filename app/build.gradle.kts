@@ -188,6 +188,10 @@ dependencies {
     // https://github.com/drewnoakes/metadata-extractor
     implementation(libs.metadata.extractor)
 
+    // Haze (background blur)
+    implementation(libs.haze)
+    implementation(libs.haze.materials)
+
     // koin
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.android)
