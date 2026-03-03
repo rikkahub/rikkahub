@@ -163,6 +163,7 @@ fun ChatMessage(
                 loading = loading,
                 model = model,
                 onToolApproval = onToolApproval,
+                onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
             )
 
             message.translation?.let { translation ->
@@ -258,6 +259,7 @@ private fun MessagePartsBlock(
     annotations: List<UIMessageAnnotation>,
     loading: Boolean,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onUserMessageClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -338,6 +340,7 @@ private fun MessagePartsBlock(
                                 modifier = Modifier.animateContentSize(),
                                 shape = MaterialTheme.shapes.medium,
                                 tonalElevation = 2.dp,
+                                onClick = { onUserMessageClick?.invoke() },
                             ) {
                                 Column(modifier = Modifier.padding(8.dp)) {
                                     MarkdownBlock(
