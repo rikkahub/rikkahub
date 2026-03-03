@@ -1065,11 +1065,17 @@ private fun ImagePickButton(onAddImages: (List<Uri>) -> Unit = {}) {
     val context = LocalContext.current
     val settings = LocalSettings.current
     val filesManager: FilesManager = koinInject()
+    var preCropTempFile by remember { mutableStateOf<File?>(null) }
 
     val (_, launchCrop) = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
             onAddImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
-        })
+        },
+        onCleanup = {
+            preCropTempFile?.delete()
+            preCropTempFile = null
+        }
+    )
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
@@ -1083,8 +1089,18 @@ private fun ImagePickButton(onAddImages: (List<Uri>) -> Unit = {}) {
             } else {
                 // Show crop interface
                 if (selectedUris.size == 1) {
-                    // Single image - offer crop
-                    launchCrop(selectedUris.first())
+                    // Single image - copy to app temp storage first, then crop
+                    val tempFile = File(context.appTempFolder, "pick_temp_${System.currentTimeMillis()}.jpg")
+                    runCatching {
+                        context.contentResolver.openInputStream(selectedUris.first())?.use { input ->
+                            tempFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        preCropTempFile = tempFile
+                        launchCrop(tempFile.toUri())
+                    }.onFailure {
+                        Log.e("ImagePickButton", "Failed to copy image to temp, falling back", it)
+                        launchCrop(selectedUris.first())
+                    }
                 } else {
                     // Multiple images - no crop
                     onAddImages(filesManager.createChatFilesByContents(selectedUris))
