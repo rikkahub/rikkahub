@@ -33,9 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.rikkahub.ui.theme.CustomColors
 
-private val CardGroupCorner = 12.dp
-private val CardGroupItemSpacing = 4.dp
-private val CardGroupInnerCorner = 2.dp
+private val CardGroupCorner = 20.dp
+private val CardGroupItemSpacing = 2.dp
+private val CardGroupInnerCorner = 4.dp
 
 data class CardGroupItem(
     val onClick: (() -> Unit)?,
