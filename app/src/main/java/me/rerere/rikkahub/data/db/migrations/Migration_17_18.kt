@@ -72,7 +72,6 @@ private fun dropLegacyConversationSourceColumn(db: SupportSQLiteDatabase) {
                 nodes TEXT NOT NULL,
                 create_at INTEGER NOT NULL,
                 update_at INTEGER NOT NULL,
-                truncate_index INTEGER NOT NULL DEFAULT -1,
                 suggestions TEXT NOT NULL DEFAULT '[]',
                 is_pinned INTEGER NOT NULL DEFAULT 0
             )
@@ -87,7 +86,6 @@ private fun dropLegacyConversationSourceColumn(db: SupportSQLiteDatabase) {
                 nodes,
                 create_at,
                 update_at,
-                truncate_index,
                 suggestions,
                 is_pinned
             )
@@ -98,7 +96,6 @@ private fun dropLegacyConversationSourceColumn(db: SupportSQLiteDatabase) {
                 nodes,
                 create_at,
                 update_at,
-                truncate_index,
                 suggestions,
                 is_pinned
             FROM ConversationEntity

@@ -30,7 +30,6 @@ import me.rerere.rikkahub.data.db.migrations.Migration_11_12
 import me.rerere.rikkahub.data.db.migrations.Migration_13_14
 import me.rerere.rikkahub.data.db.migrations.Migration_14_15
 import me.rerere.rikkahub.data.db.migrations.Migration_15_16
-import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_17_18
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
@@ -59,7 +58,6 @@ val dataSourceModule = module {
                 Migration_13_14,
                 Migration_14_15,
                 Migration_15_16,
-                Migration_16_17,
                 Migration_17_18
             )
             .addCallback(object : RoomDatabase.Callback() {

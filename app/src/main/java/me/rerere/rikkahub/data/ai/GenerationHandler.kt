@@ -28,7 +28,6 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
-import me.rerere.ai.ui.truncate
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxApprovalBlacklistMatcher
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
@@ -74,7 +73,6 @@ class GenerationHandler(
         assistant: Assistant,
         memories: List<AssistantMemory>? = null,
         tools: List<Tool> = emptyList(),
-        truncateIndex: Int = -1,
         maxSteps: Int = 256,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
@@ -148,7 +146,6 @@ class GenerationHandler(
                     provider = provider,
                     tools = toolsInternal,
                     memories = memories ?: emptyList(),
-                    truncateIndex = truncateIndex,
                     stream = assistant.streamOutput
                 )
                 messages = messages.visualTransforms(
@@ -331,7 +328,6 @@ class GenerationHandler(
         provider: ProviderSetting,
         tools: List<Tool>,
         memories: List<AssistantMemory>,
-        truncateIndex: Int,
         stream: Boolean
     ) {
         val internalMessages = buildList {
@@ -358,7 +354,7 @@ class GenerationHandler(
                 }
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(messages.truncate(truncateIndex).limitContext(assistant.contextMessageSize))
+            addAll(messages.limitContext(assistant.contextMessageSize))
         }.transforms(
             transformers = transformers,
             context = context,

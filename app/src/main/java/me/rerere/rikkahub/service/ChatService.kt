@@ -44,7 +44,6 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
-import me.rerere.ai.ui.truncate
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
@@ -572,7 +571,6 @@ class ChatService(
                     )
                 }
             },
-            truncateIndex = -1,
         ).collect { chunk ->
             when (chunk) {
                 is GenerationChunk.Messages -> {
@@ -778,7 +776,6 @@ class ChatService(
                         )
                     }
                 },
-                truncateIndex = conversation.truncateIndex,
             ).onCompletion {
                 // 取消 Live Update 通知
                 cancelLiveUpdateNotification(conversationId)
@@ -907,7 +904,7 @@ class ChatService(
                     UIMessage.user(
                         prompt = settings.titlePrompt.applyPlaceholders(
                             "locale" to Locale.getDefault().displayName,
-                            "content" to conversation.currentMessages.truncate(conversation.truncateIndex)
+                            "content" to conversation.currentMessages
                                 .takeLast(4).joinToString("\n\n") { it.summaryAsText() })
                     ),
                 ),
@@ -951,7 +948,7 @@ class ChatService(
                     UIMessage.user(
                         settings.suggestionPrompt.applyPlaceholders(
                             "locale" to Locale.getDefault().displayName,
-                            "content" to conversation.currentMessages.truncate(conversation.truncateIndex)
+                            "content" to conversation.currentMessages
                                 .takeLast(8).joinToString("\n\n") { it.summaryAsText() }),
                     )
                 ),
@@ -1000,7 +997,7 @@ class ChatService(
         val providerHandler = providerManager.getProviderByType(provider)
 
         val maxMessagesPerChunk = 256
-        val allMessages = conversation.currentMessages.truncate(conversation.truncateIndex)
+        val allMessages = conversation.currentMessages
 
         // Split messages into those to compress and those to keep
         val messagesToCompress: List<UIMessage>
@@ -1063,7 +1060,6 @@ class ChatService(
         }
         val newConversation = conversation.copy(
             messageNodes = newMessageNodes,
-            truncateIndex = -1,
             chatSuggestions = emptyList(),
         )
 

@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 18,
-    "identityHash": "0c5ccc362503d9d79e8644d491bd6e52",
+    "identityHash": "8127b84fd6b802778515fd60a5d47b0d",
     "entities": [
       {
         "tableName": "ConversationEntity",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `assistant_id` TEXT NOT NULL DEFAULT '0950e2dc-9bd5-4801-afa3-aa887aa36b4e', `title` TEXT NOT NULL, `nodes` TEXT NOT NULL, `create_at` INTEGER NOT NULL, `update_at` INTEGER NOT NULL, `truncate_index` INTEGER NOT NULL DEFAULT -1, `suggestions` TEXT NOT NULL DEFAULT '[]', `is_pinned` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `assistant_id` TEXT NOT NULL DEFAULT '0950e2dc-9bd5-4801-afa3-aa887aa36b4e', `title` TEXT NOT NULL, `nodes` TEXT NOT NULL, `create_at` INTEGER NOT NULL, `update_at` INTEGER NOT NULL, `suggestions` TEXT NOT NULL DEFAULT '[]', `is_pinned` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -44,13 +44,6 @@
             "columnName": "update_at",
             "affinity": "INTEGER",
             "notNull": true
-          },
-          {
-            "fieldPath": "truncateIndex",
-            "columnName": "truncate_index",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "-1"
           },
           {
             "fieldPath": "chatSuggestions",
@@ -501,7 +494,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0c5ccc362503d9d79e8644d491bd6e52')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8127b84fd6b802778515fd60a5d47b0d')"
     ]
   }
 }

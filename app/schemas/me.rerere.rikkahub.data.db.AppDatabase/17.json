@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 17,
-    "identityHash": "0c5ccc362503d9d79e8644d491bd6e52",
+    "identityHash": "b1d4a5727071f28cbdf3a51be712fcfc",
     "entities": [
       {
         "tableName": "ConversationEntity",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `assistant_id` TEXT NOT NULL DEFAULT '0950e2dc-9bd5-4801-afa3-aa887aa36b4e', `title` TEXT NOT NULL, `nodes` TEXT NOT NULL, `create_at` INTEGER NOT NULL, `update_at` INTEGER NOT NULL, `truncate_index` INTEGER NOT NULL DEFAULT -1, `suggestions` TEXT NOT NULL DEFAULT '[]', `is_pinned` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `assistant_id` TEXT NOT NULL DEFAULT '0950e2dc-9bd5-4801-afa3-aa887aa36b4e', `title` TEXT NOT NULL, `nodes` TEXT NOT NULL, `create_at` INTEGER NOT NULL, `update_at` INTEGER NOT NULL, `suggestions` TEXT NOT NULL DEFAULT '[]', `is_pinned` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -44,13 +44,6 @@
             "columnName": "update_at",
             "affinity": "INTEGER",
             "notNull": true
-          },
-          {
-            "fieldPath": "truncateIndex",
-            "columnName": "truncate_index",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "-1"
           },
           {
             "fieldPath": "chatSuggestions",
@@ -379,129 +372,11 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_favorites_created_at` ON `${TABLE_NAME}` (`created_at`)"
           }
         ]
-      },
-      {
-        "tableName": "scheduled_task_run",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `task_id` TEXT NOT NULL, `task_title_snapshot` TEXT NOT NULL, `assistant_id_snapshot` TEXT NOT NULL, `status` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `finished_at` INTEGER NOT NULL, `duration_ms` INTEGER NOT NULL, `prompt_snapshot` TEXT NOT NULL, `result_text` TEXT NOT NULL, `error_text` TEXT NOT NULL, `model_id_snapshot` TEXT, `provider_name_snapshot` TEXT NOT NULL, PRIMARY KEY(`id`))",
-        "fields": [
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "taskId",
-            "columnName": "task_id",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "taskTitleSnapshot",
-            "columnName": "task_title_snapshot",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "assistantIdSnapshot",
-            "columnName": "assistant_id_snapshot",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "status",
-            "columnName": "status",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "startedAt",
-            "columnName": "started_at",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "finishedAt",
-            "columnName": "finished_at",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "durationMs",
-            "columnName": "duration_ms",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "promptSnapshot",
-            "columnName": "prompt_snapshot",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "resultText",
-            "columnName": "result_text",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "errorText",
-            "columnName": "error_text",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "modelIdSnapshot",
-            "columnName": "model_id_snapshot",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "providerNameSnapshot",
-            "columnName": "provider_name_snapshot",
-            "affinity": "TEXT",
-            "notNull": true
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "id"
-          ]
-        },
-        "indices": [
-          {
-            "name": "index_scheduled_task_run_task_id",
-            "unique": false,
-            "columnNames": [
-              "task_id"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_scheduled_task_run_task_id` ON `${TABLE_NAME}` (`task_id`)"
-          },
-          {
-            "name": "index_scheduled_task_run_started_at",
-            "unique": false,
-            "columnNames": [
-              "started_at"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_scheduled_task_run_started_at` ON `${TABLE_NAME}` (`started_at`)"
-          },
-          {
-            "name": "index_scheduled_task_run_status",
-            "unique": false,
-            "columnNames": [
-              "status"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_scheduled_task_run_status` ON `${TABLE_NAME}` (`status`)"
-          }
-        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0c5ccc362503d9d79e8644d491bd6e52')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b1d4a5727071f28cbdf3a51be712fcfc')"
     ]
   }
 }
