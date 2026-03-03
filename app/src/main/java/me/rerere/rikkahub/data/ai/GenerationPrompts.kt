@@ -6,6 +6,7 @@ import kotlinx.serialization.json.put
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.toLocalDate
 
 internal fun buildMemoryPrompt(memories: List<AssistantMemory>) =
@@ -23,7 +24,7 @@ internal fun buildMemoryPrompt(memories: List<AssistantMemory>) =
                 })
             }
         }
-        append(json.toString())
+        append(JsonInstantPretty.encodeToString(json))
         appendLine()
     }
 
@@ -50,7 +51,7 @@ internal suspend fun buildRecentChatsPrompt(
                     })
                 }
             }
-            append(json.toString())
+            append(JsonInstantPretty.encodeToString(json))
             appendLine()
         }
     }
