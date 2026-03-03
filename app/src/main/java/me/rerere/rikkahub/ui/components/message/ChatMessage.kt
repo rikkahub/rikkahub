@@ -169,6 +169,7 @@ fun ChatMessage(
                 model = model,
                 onToolApproval = onToolApproval,
                 messageDepthFromEnd = messageDepthFromEnd,
+                onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
             )
 
             message.translation?.let { translation ->
@@ -265,6 +266,7 @@ private fun MessagePartsBlock(
     loading: Boolean,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     messageDepthFromEnd: Int? = null,
+    onUserMessageClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -349,9 +351,11 @@ private fun MessagePartsBlock(
                                     modifier = Modifier.animateContentSize()
                                 )
                             } else {
-                                Card(
+                                Surface(
                                     modifier = Modifier.animateContentSize(),
                                     shape = MaterialTheme.shapes.medium,
+                                    tonalElevation = 2.dp,
+                                    onClick = { onUserMessageClick?.invoke() },
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         MarkdownBlock(
@@ -368,12 +372,10 @@ private fun MessagePartsBlock(
                             }
                         } else {
                             if (settings.displaySetting.showAssistantBubble) {
-                                Card(
+                                Surface(
                                     modifier = Modifier.animateContentSize(),
                                     shape = MaterialTheme.shapes.medium,
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                                    )
+                                    tonalElevation = 2.dp,
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         MarkdownBlock(
