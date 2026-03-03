@@ -17,6 +17,8 @@ export interface DisplaySetting {
   sendOnEnter: boolean;
   enableAutoScroll: boolean;
   fontSizeRatio: number;
+  pasteLongTextAsFile: boolean;
+  pasteLongTextThreshold: number;
   [key: string]: unknown;
 }
 

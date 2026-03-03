@@ -115,7 +115,8 @@ const DOCUMENT_UPLOAD_ACCEPT_EXTENSIONS = [
 ] as const;
 
 const IMAGE_UPLOAD_ACCEPT = "image/*";
-const IMAGE_FILE_NAME_PATTERN = /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|webp)$/i;
+const IMAGE_FILE_NAME_PATTERN =
+  /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|webp)$/i;
 
 function isAllowedUploadFile(file: globalThis.File): boolean {
   if (file.type.startsWith("image/")) {
@@ -131,10 +132,14 @@ function isAllowedUploadFile(file: globalThis.File): boolean {
   }
 
   const fileName = file.name.toLowerCase();
-  return DOCUMENT_UPLOAD_ACCEPT_EXTENSIONS.some((extension) => fileName.endsWith(extension));
+  return DOCUMENT_UPLOAD_ACCEPT_EXTENSIONS.some((extension) =>
+    fileName.endsWith(extension),
+  );
 }
 
-function toMessagePart(file: UploadFilesResponseDto["files"][number]): UIMessagePart {
+function toMessagePart(
+  file: UploadFilesResponseDto["files"][number],
+): UIMessagePart {
   if (file.mime.startsWith("image/")) {
     return {
       type: "image",
@@ -231,6 +236,12 @@ function ChatInputInner({
   const sendOnEnter = useSettingsStore(
     (state) => state.settings?.displaySetting.sendOnEnter ?? true,
   );
+  const pasteLongTextAsFile = useSettingsStore(
+    (state) => state.settings?.displaySetting.pasteLongTextAsFile ?? false,
+  );
+  const pasteLongTextThreshold = useSettingsStore(
+    (state) => state.settings?.displaySetting.pasteLongTextThreshold ?? 1000,
+  );
   const { currentAssistant } = useCurrentAssistant();
 
   const quickMessages = React.useMemo(() => {
@@ -242,7 +253,8 @@ function ChatInputInner({
     return source
       .map((item) => {
         const title = typeof item?.title === "string" ? item.title.trim() : "";
-        const content = typeof item?.content === "string" ? item.content.trim() : "";
+        const content =
+          typeof item?.content === "string" ? item.content.trim() : "";
         if (!content) {
           return null;
         }
@@ -269,8 +281,10 @@ function ChatInputInner({
 
   const canStop = ready && Boolean(onStop) && isGenerating && !disabled;
   const canSend = ready && !isGenerating && !disabled && !isEmpty;
-  const canUpload = ready && !disabled && !isGenerating && !uploading && !submitting;
-  const canSwitchModel = ready && !disabled && !isGenerating && !uploading && !submitting;
+  const canUpload =
+    ready && !disabled && !isGenerating && !uploading && !submitting;
+  const canSwitchModel =
+    ready && !disabled && !isGenerating && !uploading && !submitting;
   const canUseQuickMessage = ready && !disabled && !uploading && !submitting;
   const actionDisabled = submitting || uploading || (!canStop && !canSend);
 
@@ -293,7 +307,9 @@ function ChatInputInner({
       const skippedFiles = allFiles.filter((f) => !isAllowedUploadFile(f));
 
       if (skippedFiles.length > 0) {
-        toast.warning(t("chat.unsupported_file_skipped", { count: skippedFiles.length }));
+        toast.warning(
+          t("chat.unsupported_file_skipped", { count: skippedFiles.length }),
+        );
       }
 
       if (uploadableFiles.length === 0) {
@@ -308,12 +324,17 @@ function ChatInputInner({
       setUploading(true);
       setError(null);
       try {
-        const response = await api.postMultipart<UploadFilesResponseDto>("files/upload", formData);
+        const response = await api.postMultipart<UploadFilesResponseDto>(
+          "files/upload",
+          formData,
+        );
         const parts = response.files.map(toMessagePart);
         onAddParts(parts);
       } catch (uploadError) {
         const message =
-          uploadError instanceof Error ? uploadError.message : t("chat.upload_failed");
+          uploadError instanceof Error
+            ? uploadError.message
+            : t("chat.upload_failed");
         setError(message);
       } finally {
         setUploading(false);
@@ -340,7 +361,10 @@ function ChatInputInner({
         await onSend();
       }
     } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : t("chat.send_failed");
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : t("chat.send_failed");
       setError(message);
     } finally {
       setSubmitting(false);
@@ -418,6 +442,20 @@ function ChatInputInner({
     (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
       if (!canUpload) return;
 
+      // 粘贴长文本自动转换为文件
+      if (pasteLongTextAsFile) {
+        const text = event.clipboardData.getData("text/plain");
+        if (text.length > pasteLongTextThreshold) {
+          event.preventDefault();
+          const file = new globalThis.File([text], "pasted_text.txt", {
+            type: "text/plain",
+          });
+          toast.info(t("chat.long_text_as_file"));
+          void uploadFiles([file]);
+          return;
+        }
+      }
+
       const uploadableFiles = Array.from(event.clipboardData.items)
         .filter((item) => item.kind === "file")
         .map((item) => item.getAsFile())
@@ -431,7 +469,7 @@ function ChatInputInner({
       event.preventDefault();
       void uploadFiles(uploadableFiles);
     },
-    [canUpload, uploadFiles],
+    [canUpload, pasteLongTextAsFile, pasteLongTextThreshold, t, uploadFiles],
   );
 
   const handleDragEnter = React.useCallback(
@@ -458,14 +496,17 @@ function ChatInputInner({
     [canUpload, dragActive],
   );
 
-  const handleDragLeave = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) {
-      setDragActive(false);
-    }
-  }, []);
+  const handleDragLeave = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (dragDepthRef.current === 0) {
+        setDragActive(false);
+      }
+    },
+    [],
+  );
 
   const handleDrop = React.useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
@@ -480,8 +521,12 @@ function ChatInputInner({
     [canUpload, uploadFiles],
   );
 
-  const sendHint = sendOnEnter ? t("chat.send_hint_enter") : t("chat.send_hint_newline");
-  const placeholder = ready ? t("chat.placeholder_ready") : t("chat.placeholder_not_ready");
+  const sendHint = sendOnEnter
+    ? t("chat.send_hint_enter")
+    : t("chat.send_hint_newline");
+  const placeholder = ready
+    ? t("chat.placeholder_ready")
+    : t("chat.placeholder_not_ready");
 
   return (
     <div
@@ -494,7 +539,8 @@ function ChatInputInner({
         <div
           className={cn(
             "relative flex flex-col gap-2 rounded-lg border bg-muted/50 p-2 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring",
-            dragActive && "border-primary/40 bg-primary/5 ring-2 ring-primary/30",
+            dragActive &&
+              "border-primary/40 bg-primary/5 ring-2 ring-primary/30",
           )}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
@@ -566,12 +612,18 @@ function ChatInputInner({
                     <button
                       className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                       onClick={async () => {
-                        if (!ready || disabled || isGenerating || submitting) return;
+                        if (!ready || disabled || isGenerating || submitting)
+                          return;
 
                         const fileId = getPartFileId(part);
-                        if (fileId != null && (shouldDeleteFileOnRemove?.(part) ?? true)) {
+                        if (
+                          fileId != null &&
+                          (shouldDeleteFileOnRemove?.(part) ?? true)
+                        ) {
                           try {
-                            await api.delete<{ status: string }>(`files/${fileId}`);
+                            await api.delete<{ status: string }>(
+                              `files/${fileId}`,
+                            );
                           } catch (deleteError) {
                             const message =
                               deleteError instanceof Error
@@ -607,7 +659,10 @@ function ChatInputInner({
           />
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1">
-              <DropdownMenu open={uploadMenuOpen} onOpenChange={setUploadMenuOpen}>
+              <DropdownMenu
+                open={uploadMenuOpen}
+                onOpenChange={setUploadMenuOpen}
+              >
                 <input
                   ref={fileInputRef}
                   className="hidden"
@@ -632,11 +687,18 @@ function ChatInputInner({
                     className="size-8 rounded-full text-muted-foreground hover:text-foreground"
                   >
                     <Plus
-                      className={cn("size-4 transition-transform", uploadMenuOpen && "rotate-45")}
+                      className={cn(
+                        "size-4 transition-transform",
+                        uploadMenuOpen && "rotate-45",
+                      )}
                     />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="min-w-36" side="top" align="start">
+                <DropdownMenuContent
+                  className="min-w-36"
+                  side="top"
+                  align="start"
+                >
                   <DropdownMenuItem
                     onClick={() => {
                       imageInputRef.current?.click();
@@ -689,8 +751,12 @@ function ChatInputInner({
             </Button>
           </div>
         </div>
-        <p className="mt-2 text-center text-xs text-muted-foreground">{sendHint}</p>
-        {error ? <p className="mt-1 text-center text-xs text-destructive">{error}</p> : null}
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          {sendHint}
+        </p>
+        {error ? (
+          <p className="mt-1 text-center text-xs text-destructive">{error}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -744,7 +810,9 @@ function QuickMessageButton({
               }}
             >
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{quickMessage.title}</div>
+                <div className="truncate text-sm font-medium">
+                  {quickMessage.title}
+                </div>
                 <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
                   {quickMessage.content}
                 </div>
