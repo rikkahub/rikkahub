@@ -230,8 +230,22 @@ private fun ColumnScope.ModelList(
 
     var searchKeywords by remember { mutableStateOf("") }
 
+    val typeFilteredModelsByProvider = remember(providers, modelType) {
+        providers.associate { provider ->
+            provider.id to provider.models.fastFilter { it.type == modelType }
+        }
+    }
+
+    val searchFilteredModelsByProvider = remember(providers, modelType, searchKeywords) {
+        providers.associate { provider ->
+            provider.id to provider.models.fastFilter {
+                it.type == modelType && it.displayName.contains(searchKeywords, true)
+            }
+        }
+    }
+
     // 计算当前选中模型的位置
-    val selectedModelPosition = remember(currentModel, favoriteModels, providers, modelType) {
+    val selectedModelPosition = remember(currentModel, favoriteModels, providers, typeFilteredModelsByProvider) {
         if (currentModel == null) return@remember 0
 
         var position = 0
@@ -260,7 +274,7 @@ private fun ColumnScope.ModelList(
         // 在providers中查找
         for (provider in providers) {
             position += 1 // provider header
-            val models = provider.models.filter { it.type == modelType }
+            val models = typeFilteredModelsByProvider[provider.id].orEmpty()
             val modelIndex = models.indexOfFirst { it.id == currentModel }
             if (modelIndex >= 0) {
                 position += modelIndex
@@ -304,7 +318,7 @@ private fun ColumnScope.ModelList(
     }
     val haptic = LocalHapticFeedback.current
 
-    val providerPositions = remember(providers, favoriteModels) {
+    val providerPositions = remember(providers, favoriteModels, searchFilteredModelsByProvider) {
         var currentIndex = 0
         if (providers.isEmpty()) {
             currentIndex = 1 // no providers item
@@ -314,12 +328,10 @@ private fun ColumnScope.ModelList(
             currentIndex += favoriteModels.size // favorite models
         }
 
-        providers.mapIndexed { index, provider ->
+        providers.map { provider ->
             val position = currentIndex
             currentIndex += 1 // provider header
-            currentIndex += provider.models.fastFilter {
-                it.type == modelType && it.displayName.contains(searchKeywords, true)
-            }.size
+            currentIndex += searchFilteredModelsByProvider[provider.id].orEmpty().size
             provider.id to position
         }.toMap()
     }
@@ -466,12 +478,7 @@ private fun ColumnScope.ModelList(
             }
 
             items(
-                items = providerSetting.models.fastFilter {
-                    it.type == modelType && it.displayName.contains(
-                        searchKeywords,
-                        true
-                    )
-                },
+                items = searchFilteredModelsByProvider[providerSetting.id].orEmpty(),
                 key = { it.id }
             ) { model ->
                 val favorite = settings.value.favoriteModels.contains(model.id)
