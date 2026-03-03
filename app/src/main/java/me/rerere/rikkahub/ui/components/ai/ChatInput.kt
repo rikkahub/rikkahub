@@ -107,6 +107,7 @@ import com.composables.icons.lucide.Zap
 import com.dokar.sonner.ToastType
 import com.yalantis.ucrop.UCrop
 import com.yalantis.ucrop.UCropActivity
+import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
@@ -146,6 +147,7 @@ fun ChatInput(
     conversation: Conversation,
     settings: Settings,
     mcpManager: McpManager,
+    hazeState: HazeState,
     enableSearch: Boolean,
     termuxCommandModeEnabled: Boolean,
     onToggleSearch: (Boolean) -> Unit,

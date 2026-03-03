@@ -79,6 +79,8 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MousePointer2
 import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.X
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -121,6 +123,7 @@ fun ChatList(
     loading: Boolean,
     previewMode: Boolean,
     settings: Settings,
+    hazeState: HazeState,
     errors: List<ChatError> = emptyList(),
     onDismissError: (Uuid) -> Unit = {},
     onClearAllErrors: () -> Unit = {},
@@ -148,6 +151,7 @@ fun ChatList(
                 innerPadding = innerPadding,
                 conversation = conversation,
                 settings = settings,
+                hazeState = hazeState,
                 onJumpToMessage = onJumpToMessage,
                 animatedVisibilityScope = this@AnimatedContent,
             )
@@ -158,6 +162,7 @@ fun ChatList(
                 state = state,
                 loading = loading,
                 settings = settings,
+                hazeState = hazeState,
                 errors = errors,
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
@@ -184,6 +189,7 @@ private fun ChatListNormal(
     state: LazyListState,
     loading: Boolean,
     settings: Settings,
+    hazeState: HazeState,
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
@@ -263,12 +269,13 @@ private fun ChatListNormal(
 
         LazyColumn(
             state = state,
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp),
+            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .hazeSource(state = hazeState)
+                .padding(top = innerPadding.calculateTopPadding()),
         ) {
             itemsIndexed(
                 items = conversation.messageNodes,
@@ -549,6 +556,7 @@ private fun ChatListPreview(
     innerPadding: PaddingValues,
     conversation: Conversation,
     settings: Settings,
+    hazeState: HazeState,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onJumpToMessage: (Int) -> Unit
 ) {
@@ -566,7 +574,7 @@ private fun ChatListPreview(
 
     Column(
         modifier = Modifier
-            .padding(innerPadding)
+            .padding(top = innerPadding.calculateTopPadding())
             .fillMaxSize(),
     ) {
         // 搜索框
@@ -602,7 +610,7 @@ private fun ChatListPreview(
 
         // 消息预览
         LazyColumn(
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp),
+            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxWidth()
