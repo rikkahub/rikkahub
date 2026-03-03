@@ -212,7 +212,7 @@ fun ChatInput(
             modifier = modifier
                 .imePadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Surface(
@@ -230,12 +230,14 @@ fun ChatInput(
                     }
 
                     TextInputRow(
-                        state = state, onSendMessage = { sendMessage() })
+                        state = state,
+                        onSendMessage = { sendMessage() }
+                    )
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                            .padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -1020,11 +1022,11 @@ private fun useCropLauncher(
         cropOutputUri = Uri.fromFile(outputFile)
 
         val cropIntent = UCrop.of(sourceUri, cropOutputUri!!).withOptions(UCrop.Options().apply {
-                setFreeStyleCropEnabled(true)
-                setAllowedGestures(
-                    UCropActivity.SCALE, UCropActivity.ROTATE, UCropActivity.NONE
-                )
-                setCompressionFormat(Bitmap.CompressFormat.PNG)
+            setFreeStyleCropEnabled(true)
+            setAllowedGestures(
+                UCropActivity.SCALE, UCropActivity.ROTATE, UCropActivity.NONE
+            )
+            setCompressionFormat(Bitmap.CompressFormat.PNG)
         }).withMaxResultSize(4096, 4096).getIntent(context)
 
         cropActivityLauncher.launch(cropIntent)
