@@ -77,6 +77,7 @@ fun ColumnScope.ConversationList(
     conversationJobs: Collection<Uuid>,
     listState: LazyListState,
     modifier: Modifier = Modifier,
+    headerContent: (@Composable () -> Unit)? = null,
     onClick: (Conversation) -> Unit = {},
     onDelete: (Conversation) -> Unit = {},
     onRegenerateTitle: (Conversation) -> Unit = {},
@@ -104,6 +105,12 @@ fun ColumnScope.ConversationList(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (headerContent != null) {
+            item(key = "drawer_header_actions") {
+                headerContent()
+            }
+        }
+
         if (conversations.itemCount == 0) {
             item {
                 Surface(

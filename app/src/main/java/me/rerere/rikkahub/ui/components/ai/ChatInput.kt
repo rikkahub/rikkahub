@@ -91,6 +91,7 @@ import coil3.compose.AsyncImage
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Camera
+import com.composables.icons.lucide.Code
 import com.composables.icons.lucide.FileAudio
 import com.composables.icons.lucide.Files
 import com.composables.icons.lucide.Fullscreen
@@ -151,8 +152,10 @@ fun ChatInput(
     hazeState: HazeState,
     enableSearch: Boolean,
     termuxCommandModeEnabled: Boolean,
+    codeBlockRichRenderEnabled: Boolean,
     onToggleSearch: (Boolean) -> Unit,
     onToggleTermuxCommandMode: (Boolean) -> Unit,
+    onToggleCodeBlockRichRender: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onUpdateChatModel: (Model) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
@@ -398,6 +401,8 @@ fun ChatInput(
                     onShowCompressDialogChange = { showCompressDialog = it },
                     termuxCommandModeEnabled = termuxCommandModeEnabled,
                     onToggleTermuxCommandMode = onToggleTermuxCommandMode,
+                    codeBlockRichRenderEnabled = codeBlockRichRenderEnabled,
+                    onToggleCodeBlockRichRender = onToggleCodeBlockRichRender,
                     onDismiss = { dismissFilesPicker() }
                 )
             }
@@ -781,6 +786,8 @@ private fun FilesPicker(
     onShowCompressDialogChange: (Boolean) -> Unit,
     termuxCommandModeEnabled: Boolean,
     onToggleTermuxCommandMode: (Boolean) -> Unit,
+    codeBlockRichRenderEnabled: Boolean,
+    onToggleCodeBlockRichRender: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val settings = LocalSettings.current
@@ -900,6 +907,32 @@ private fun FilesPicker(
                 .clip(MaterialTheme.shapes.large)
                 .clickable {
                     onToggleTermuxCommandMode(!termuxCommandModeEnabled)
+                },
+        )
+
+        ListItem(
+            leadingContent = {
+                Icon(
+                    imageVector = Lucide.Code,
+                    contentDescription = stringResource(R.string.setting_display_page_code_block_rich_render_title),
+                )
+            },
+            headlineContent = {
+                Text(stringResource(R.string.setting_display_page_code_block_rich_render_title))
+            },
+            supportingContent = {
+                Text(stringResource(R.string.setting_display_page_code_block_rich_render_desc))
+            },
+            trailingContent = {
+                Switch(
+                    checked = codeBlockRichRenderEnabled,
+                    onCheckedChange = onToggleCodeBlockRichRender,
+                )
+            },
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.large)
+                .clickable {
+                    onToggleCodeBlockRichRender(!codeBlockRichRenderEnabled)
                 },
         )
     }

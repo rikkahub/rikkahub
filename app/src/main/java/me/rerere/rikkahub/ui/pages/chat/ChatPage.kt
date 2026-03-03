@@ -294,11 +294,21 @@ private fun ChatPageContent(
                     },
                     enableSearch = enableWebSearch,
                     termuxCommandModeEnabled = setting.termuxCommandModeEnabled,
+                    codeBlockRichRenderEnabled = setting.displaySetting.enableCodeBlockRichRender,
                     onToggleSearch = {
                         vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
                     },
                     onToggleTermuxCommandMode = {
                         vm.updateSettings(setting.copy(termuxCommandModeEnabled = it))
+                    },
+                    onToggleCodeBlockRichRender = {
+                        vm.updateSettings(
+                            setting.copy(
+                                displaySetting = setting.displaySetting.copy(
+                                    enableCodeBlockRichRender = it
+                                )
+                            )
+                        )
                     },
                     onSendClick = {
                         val contents = inputState.getContents()

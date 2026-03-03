@@ -195,8 +195,6 @@ fun ChatDrawerContent(
                 }
             }
 
-            DrawerActions(navController = navController)
-
             ConversationList(
                 current = current,
                 conversations = conversations,
@@ -205,6 +203,9 @@ fun ChatDrawerContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
+                headerContent = {
+                    DrawerActions(navController = navController)
+                },
                 onClick = {
                     navigateToChatPage(navController, it.id)
                 },
@@ -438,7 +439,9 @@ fun ChatDrawerContent(
 
 @Composable
 private fun DrawerActions(navController: Navigator) {
-    Column {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
         // 搜索入口
         Surface(
             onClick = { navController.navigate(Screen.MessageSearch) },
