@@ -895,5 +895,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_mcp_page_import_confirm">インポート</string>
   <string name="setting_display_page_enable_blur_effect_title">ぼかし効果を有効にする</string>
   <string name="setting_display_page_enable_blur_effect_desc">チャット入力バーにぼかし効果を有効にする</string>
+  <string name="setting_page_web_server_localhost_only">localhostのみ</string>
+  <string name="setting_page_web_server_localhost_only_desc">localhost (127.0.0.1) のみでリッスンし、LANおよびmDNSアクセスを無効化</string>
 </resources>
 
