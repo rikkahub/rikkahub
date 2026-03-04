@@ -1,4 +1,3 @@
-
 package me.rerere.rikkahub.ui.components.message
 
 import androidx.compose.foundation.LocalIndication
@@ -35,31 +34,30 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.BookOpenText
-import com.composables.icons.lucide.CircleStop
-import com.composables.icons.lucide.Copy
-import com.composables.icons.lucide.Ellipsis
-import com.composables.icons.lucide.GitFork
-import com.composables.icons.lucide.Heart
-import com.composables.icons.lucide.Languages
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Pencil
-import com.composables.icons.lucide.RefreshCw
-import com.composables.icons.lucide.Share
-import com.composables.icons.lucide.TextSelect
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.Volume2
 import kotlinx.coroutines.delay
 import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Edit01
+import me.rerere.hugeicons.stroke.FavouriteCircle
+import me.rerere.hugeicons.stroke.GitFork
+import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.Refresh03
+import me.rerere.hugeicons.stroke.Share04
+import me.rerere.hugeicons.stroke.StopCircle
+import me.rerere.hugeicons.stroke.Translate
+import me.rerere.hugeicons.stroke.VolumeHigh
+import me.rerere.hugeicons.stroke.WebDesign01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
-import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.utils.copyMessageToClipboard
 import me.rerere.rikkahub.utils.extractQuotedContentAsText
 import me.rerere.rikkahub.utils.toLocalString
@@ -92,7 +90,9 @@ fun ColumnScope.ChatMessageActionButtons(
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Lucide.Copy, stringResource(R.string.copy), modifier = Modifier
+            imageVector = HugeIcons.Copy01,
+            contentDescription = stringResource(R.string.copy),
+            modifier = Modifier
                 .clip(CircleShape)
                 .clickable { context.copyMessageToClipboard(message) }
                 .padding(8.dp)
@@ -100,7 +100,9 @@ fun ColumnScope.ChatMessageActionButtons(
         )
 
         Icon(
-            Lucide.RefreshCw, stringResource(R.string.regenerate), modifier = Modifier
+            imageVector = HugeIcons.Refresh03,
+            contentDescription = stringResource(R.string.regenerate),
+            modifier = Modifier
                 .clip(CircleShape)
                 .clickable {
                     if (message.role == MessageRole.USER) {
@@ -119,7 +121,7 @@ fun ColumnScope.ChatMessageActionButtons(
             val isSpeaking by tts.isSpeaking.collectAsState()
             val isAvailable by tts.isAvailable.collectAsState()
             Icon(
-                imageVector = if (isSpeaking) Lucide.CircleStop else Lucide.Volume2,
+                imageVector = if (isSpeaking) HugeIcons.StopCircle else HugeIcons.VolumeHigh,
                 contentDescription = stringResource(R.string.tts),
                 modifier = Modifier
                     .clip(CircleShape)
@@ -149,7 +151,7 @@ fun ColumnScope.ChatMessageActionButtons(
             // Translation button
             if (onTranslate != null) {
                 Icon(
-                    imageVector = Lucide.Languages,
+                    imageVector = HugeIcons.Translate,
                     contentDescription = stringResource(R.string.translate),
                     modifier = Modifier
                         .clip(CircleShape)
@@ -167,7 +169,7 @@ fun ColumnScope.ChatMessageActionButtons(
         }
 
         Icon(
-            imageVector = Lucide.Ellipsis,
+            imageVector = HugeIcons.MoreVertical,
             contentDescription = stringResource(R.string.more_options),
             modifier = Modifier
                 .clip(CircleShape)
@@ -261,7 +263,7 @@ fun ChatMessageActionsSheet(
                         .fillMaxWidth()
                 ) {
                     Icon(
-                        imageVector = Lucide.TextSelect,
+                        imageVector = HugeIcons.Edit01,
                         contentDescription = null,
                         modifier = Modifier.padding(4.dp)
                     )
@@ -292,7 +294,7 @@ fun ChatMessageActionsSheet(
                             .fillMaxWidth()
                     ) {
                         Icon(
-                            imageVector = Lucide.BookOpenText,
+                            imageVector = HugeIcons.WebDesign01,
                             contentDescription = null,
                             modifier = Modifier.padding(4.dp)
                         )
@@ -320,7 +322,7 @@ fun ChatMessageActionsSheet(
                         .fillMaxWidth()
                 ) {
                     Icon(
-                        imageVector = Lucide.Pencil,
+                        imageVector = HugeIcons.Edit01,
                         contentDescription = null,
                         modifier = Modifier.padding(4.dp)
                     )
@@ -347,7 +349,7 @@ fun ChatMessageActionsSheet(
                         .fillMaxWidth()
                 ) {
                     Icon(
-                        imageVector = Lucide.Share,
+                        imageVector = HugeIcons.Share04,
                         contentDescription = null,
                         modifier = Modifier.padding(4.dp)
                     )
@@ -374,7 +376,7 @@ fun ChatMessageActionsSheet(
                         .fillMaxWidth()
                 ) {
                     Icon(
-                        imageVector = Lucide.GitFork,
+                        imageVector = HugeIcons.GitFork,
                         contentDescription = null,
                         modifier = Modifier.padding(4.dp)
                     )
@@ -401,7 +403,7 @@ fun ChatMessageActionsSheet(
                             .fillMaxWidth()
                     ) {
                         Icon(
-                            imageVector = Lucide.Heart,
+                            imageVector = HugeIcons.FavouriteCircle,
                             contentDescription = null,
                             modifier = Modifier.padding(4.dp)
                         )
@@ -435,7 +437,7 @@ fun ChatMessageActionsSheet(
                         .fillMaxWidth()
                 ) {
                     Icon(
-                        imageVector = Lucide.Trash2,
+                        imageVector = HugeIcons.Delete01,
                         contentDescription = null,
                         modifier = Modifier.padding(4.dp)
                     )
