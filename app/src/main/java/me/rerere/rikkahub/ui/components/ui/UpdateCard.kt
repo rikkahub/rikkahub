@@ -29,8 +29,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.rikkahub.ui.icons.Lucide
 import com.dokar.sonner.ToastType
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Download01
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -102,7 +104,7 @@ fun UpdateCard(vm: ChatVM) {
                         )
                         IconButton(onClick = { dismissed = true }) {
                             Icon(
-                                Lucide.X,
+                                imageVector = HugeIcons.Cancel01,
                                 contentDescription = "关闭",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -170,7 +172,7 @@ fun UpdateCard(vm: ChatVM) {
                                 },
                                 leadingContent = {
                                     Icon(
-                                        Lucide.Download,
+                                        imageVector = HugeIcons.Download01,
                                         contentDescription = null
                                     )
                                 }
