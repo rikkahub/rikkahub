@@ -15,8 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.Coins
-import com.composables.icons.lucide.Lucide
+import me.rerere.rikkahub.ui.icons.Lucide
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.utils.SimpleCache

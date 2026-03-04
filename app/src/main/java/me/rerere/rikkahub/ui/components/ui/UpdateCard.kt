@@ -29,9 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Download
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.X
+import me.rerere.rikkahub.ui.icons.Lucide
 import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock

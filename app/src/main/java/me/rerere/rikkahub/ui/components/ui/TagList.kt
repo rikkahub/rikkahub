@@ -30,9 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.X
+import me.rerere.rikkahub.ui.icons.Lucide
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Tag
 import kotlin.uuid.Uuid

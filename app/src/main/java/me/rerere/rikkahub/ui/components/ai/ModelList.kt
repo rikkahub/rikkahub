@@ -58,16 +58,7 @@ import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Boxes
-import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.GripHorizontal
-import com.composables.icons.lucide.Hammer
-import com.composables.icons.lucide.Heart
-import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Type
-import com.composables.icons.lucide.X
+import me.rerere.rikkahub.ui.icons.Lucide
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
