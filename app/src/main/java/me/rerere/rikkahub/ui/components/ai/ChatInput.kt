@@ -920,9 +920,6 @@ private fun FilesPicker(
             headlineContent = {
                 Text(stringResource(R.string.setting_display_page_code_block_rich_render_title))
             },
-            supportingContent = {
-                Text(stringResource(R.string.setting_display_page_code_block_rich_render_desc))
-            },
             trailingContent = {
                 Switch(
                     checked = codeBlockRichRenderEnabled,
