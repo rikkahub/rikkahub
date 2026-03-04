@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -23,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.BackupReminderConfig
-import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import me.rerere.rikkahub.utils.toLocalDateTime
 import java.time.Instant
@@ -45,24 +43,23 @@ fun ReminderTab(vm: BackupVM) {
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        OutlinedCard {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FormItem(
-                    label = { Text(stringResource(R.string.backup_page_reminder_enable)) },
-                    tail = {
-                        Switch(
-                            checked = config.enabled,
-                            onCheckedChange = { updateConfig(config.copy(enabled = it)) }
-                        )
-                    }
-                )
-                if (config.enabled) {
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_reminder_interval)) }
-                    ) {
+        CardGroup(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            item(
+                trailingContent = {
+                    Switch(
+                        checked = config.enabled,
+                        onCheckedChange = { updateConfig(config.copy(enabled = it)) },
+                    )
+                },
+                headlineContent = { Text(stringResource(R.string.backup_page_reminder_enable)) },
+            )
+
+            if (config.enabled) {
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_reminder_interval)) },
+                    supportingContent = {
                         val intervals = listOf(1, 3, 7, 14, 30)
                         SingleChoiceSegmentedButtonRow(
                             modifier = Modifier.fillMaxWidth(),
@@ -80,21 +77,20 @@ fun ReminderTab(vm: BackupVM) {
                                 }
                             }
                         }
-                    }
-                    val lastBackupText = if (config.lastBackupTime == 0L) {
-                        stringResource(R.string.backup_page_reminder_no_record)
-                    } else {
-                        stringResource(
-                            R.string.backup_page_reminder_last_time,
-                            Instant.ofEpochMilli(config.lastBackupTime).toLocalDateTime()
-                        )
-                    }
-                    Text(
-                        text = lastBackupText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    },
+                )
+
+                val lastBackupText = if (config.lastBackupTime == 0L) {
+                    stringResource(R.string.backup_page_reminder_no_record)
+                } else {
+                    stringResource(
+                        R.string.backup_page_reminder_last_time,
+                        Instant.ofEpochMilli(config.lastBackupTime).toLocalDateTime()
                     )
                 }
+                item(
+                    headlineContent = { Text(lastBackupText) },
+                )
             }
         }
     }

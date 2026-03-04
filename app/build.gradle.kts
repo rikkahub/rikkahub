@@ -256,6 +256,7 @@ dependencies {
 
     // lucide icons
     implementation(libs.lucide.icons)
+    implementation(libs.huge.icons)
 
     // image viewer
     implementation(libs.image.viewer)

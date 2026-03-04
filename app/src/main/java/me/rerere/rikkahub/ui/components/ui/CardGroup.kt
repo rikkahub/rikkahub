@@ -130,7 +130,7 @@ private fun CardGroupListItem(
 fun CardGroup(
     modifier: Modifier = Modifier,
     title: (@Composable () -> Unit)? = null,
-    content: CardGroupScope.() -> Unit,
+    content: @Composable CardGroupScope.() -> Unit,
 ) {
     val scope = CardGroupScope()
     scope.content()

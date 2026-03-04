@@ -183,6 +183,9 @@ object CustomColors {
     val cardColors: CardColors
         @Composable get() = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainer)
 
+    val cardColorsOnSurfaceContainer: CardColors
+        @Composable get() = CardDefaults.cardColors(containerColor = colorScheme.surfaceBright)
+
     val listItemColors: ListItemColors
         @Composable get() = ListItemDefaults.colors(containerColor = colorScheme.surfaceBright)
 }

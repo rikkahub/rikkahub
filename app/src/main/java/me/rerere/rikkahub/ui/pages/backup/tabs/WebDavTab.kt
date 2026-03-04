@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -58,7 +56,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
-import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import me.rerere.rikkahub.utils.UiState
@@ -121,14 +119,10 @@ fun WebDavTab(
                 fileSummaryText = backupFileSummary
             )
 
-            OutlinedCard {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_webdav_server_address)) }
-                    ) {
+            CardGroup {
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_webdav_server_address)) },
+                    supportingContent = {
                         OutlinedTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = webDavConfig.url,
@@ -136,10 +130,11 @@ fun WebDavTab(
                             placeholder = { Text("https://example.com/dav") },
                             singleLine = true
                         )
-                    }
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_username)) }
-                    ) {
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_username)) },
+                    supportingContent = {
                         OutlinedTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = webDavConfig.username,
@@ -152,10 +147,11 @@ fun WebDavTab(
                             },
                             singleLine = true
                         )
-                    }
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_password)) }
-                    ) {
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_password)) },
+                    supportingContent = {
                         var passwordVisible by remember { mutableStateOf(false) }
                         OutlinedTextField(
                             modifier = Modifier.fillMaxWidth(),
@@ -174,29 +170,25 @@ fun WebDavTab(
                             },
                             singleLine = true
                         )
-                    }
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_path)) }
-                    ) {
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_path)) },
+                    supportingContent = {
                         OutlinedTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = webDavConfig.path,
                             onValueChange = { updateWebDavConfig(webDavConfig.copy(path = it.trim())) },
                             singleLine = true
                         )
-                    }
-                }
+                    },
+                )
             }
 
-            OutlinedCard {
-                FormItem(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    label = {
-                        Text(stringResource(R.string.backup_page_backup_items))
-                    }
-                ) {
+            CardGroup {
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_backup_items)) },
+                    supportingContent = {
                     MultiChoiceSegmentedButtonRow(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -225,7 +217,8 @@ fun WebDavTab(
                             }
                         }
                     }
-                }
+                    },
+                )
             }
         }
 
@@ -418,28 +411,31 @@ private fun BackupStatusCard(
     lastBackupText: String,
     fileSummaryText: String,
 ) {
-    Card {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = lastBackupText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = fileSummaryText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+    CardGroup {
+        item(
+            headlineContent = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            supportingContent = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = lastBackupText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = fileSummaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+        )
     }
 }
 
@@ -450,67 +446,69 @@ private fun WebDavBackupItemCard(
     onDelete: (WebDavBackupItem) -> Unit = {},
     onRestore: (WebDavBackupItem) -> Unit = {},
 ) {
-    Card {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = item.displayName,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+    CardGroup {
+        item(
+            headlineContent = {
                 Text(
-                    text = item.lastModified.toLocalDateTime(),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = item.displayName,
+                    style = MaterialTheme.typography.titleMedium
                 )
-                Text(
-                    text = item.size.fileSizeToString(),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(
-                onClick = {
-                    onDelete(item)
-                },
-                enabled = !isRestoring
-            ) {
-                Text(stringResource(R.string.backup_page_delete))
-            }
-            Button(
-                onClick = {
-                    onRestore(item)
-                },
-                enabled = !isRestoring
-            ) {
-                if (isRestoring) {
-                    CircularWavyProgressIndicator(
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(
-                    if (isRestoring) {
-                        stringResource(R.string.backup_page_restoring)
-                    } else {
-                        stringResource(R.string.backup_page_restore_now)
+            },
+            supportingContent = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = item.lastModified.toLocalDateTime(),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = item.size.fileSizeToString(),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
-                )
-            }
-        }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                onDelete(item)
+                            },
+                            enabled = !isRestoring
+                        ) {
+                            Text(stringResource(R.string.backup_page_delete))
+                        }
+                        Button(
+                            onClick = {
+                                onRestore(item)
+                            },
+                            enabled = !isRestoring
+                        ) {
+                            if (isRestoring) {
+                                CircularWavyProgressIndicator(
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(
+                                if (isRestoring) {
+                                    stringResource(R.string.backup_page_restoring)
+                                } else {
+                                    stringResource(R.string.backup_page_restore_now)
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+        )
     }
 }
