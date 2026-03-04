@@ -19,7 +19,11 @@ internal fun shouldParseThinkTagAfterVisualRegex(
     text: String,
     assistant: Assistant,
     messageDepthFromEnd: Int?,
+    enableThinkRegex: Boolean,
 ): Boolean {
+    if (!enableThinkRegex) {
+        return THINKING_REGEX.containsMatchIn(text)
+    }
     val textAfterVisualRegex = text.replaceRegexes(
         assistant = assistant,
         scope = AssistantAffectScope.ASSISTANT,
@@ -46,7 +50,8 @@ object ThinkTagTransformer : OutputMessageTransformer {
                             shouldParseThinkTagAfterVisualRegex(
                                 text = part.text,
                                 assistant = ctx.assistant,
-                                messageDepthFromEnd = messageDepth
+                                messageDepthFromEnd = messageDepth,
+                                enableThinkRegex = ctx.settings.displaySetting.enableThinkRegex
                             )
                         ) {
                             val stripped = part.text.replace(THINKING_REGEX, "")
@@ -89,7 +94,8 @@ object ThinkTagTransformer : OutputMessageTransformer {
                             shouldParseThinkTagAfterVisualRegex(
                                 text = part.text,
                                 assistant = ctx.assistant,
-                                messageDepthFromEnd = messageDepth
+                                messageDepthFromEnd = messageDepth,
+                                enableThinkRegex = ctx.settings.displaySetting.enableThinkRegex
                             )
                         ) {
                             val stripped = part.text.replace(THINKING_REGEX, "")

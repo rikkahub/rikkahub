@@ -18,6 +18,7 @@ class ThinkTagTransformerTest {
                 text = "<think>inner</think>answer",
                 assistant = assistant,
                 messageDepthFromEnd = 1,
+                enableThinkRegex = true,
             )
         )
     }
@@ -41,6 +42,7 @@ class ThinkTagTransformerTest {
                 text = "<think>inner</think>answer",
                 assistant = assistant,
                 messageDepthFromEnd = 1,
+                enableThinkRegex = true,
             )
         )
     }
@@ -65,6 +67,31 @@ class ThinkTagTransformerTest {
                 text = "<think>inner</think>answer",
                 assistant = assistant,
                 messageDepthFromEnd = 1,
+                enableThinkRegex = true,
+            )
+        )
+    }
+
+    @Test
+    fun `disabled think regex switch should bypass visual regex gating`() {
+        val assistant = Assistant(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    findRegex = "</?think>",
+                    replaceString = "",
+                    affectingScope = setOf(AssistantAffectScope.ASSISTANT),
+                    visualOnly = true,
+                )
+            )
+        )
+
+        assertTrue(
+            shouldParseThinkTagAfterVisualRegex(
+                text = "<think>inner</think>answer",
+                assistant = assistant,
+                messageDepthFromEnd = 1,
+                enableThinkRegex = false,
             )
         )
     }

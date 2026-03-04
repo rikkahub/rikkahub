@@ -130,8 +130,8 @@ private val inputTransformers by lazy {
 private val outputTransformers by lazy {
     listOf(
         ThinkTagTransformer,
-        Base64ImageToLocalFileTransformer,
         RegexOutputTransformer,
+        Base64ImageToLocalFileTransformer,
     )
 }
 
