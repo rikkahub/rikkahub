@@ -28,9 +28,12 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import me.rerere.rikkahub.ui.icons.Lucide
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.service.ChatError
 import kotlin.uuid.Uuid
@@ -65,7 +68,7 @@ fun ErrorCardsDisplay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
-                            imageVector = Lucide.Trash2,
+                            imageVector = HugeIcons.Delete01,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.onErrorContainer,
@@ -151,7 +154,7 @@ fun ErrorCard(
                 modifier = Modifier.size(32.dp),
             ) {
                 Icon(
-                    imageVector = Lucide.Copy,
+                    imageVector = HugeIcons.Copy01,
                     contentDescription = "Copy error message",
                     tint = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.size(18.dp),
@@ -162,7 +165,7 @@ fun ErrorCard(
                 modifier = Modifier.size(32.dp),
             ) {
                 Icon(
-                    imageVector = Lucide.X,
+                    imageVector = HugeIcons.Cancel01,
                     contentDescription = stringResource(R.string.chat_page_dismiss_error),
                     tint = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.size(18.dp),
