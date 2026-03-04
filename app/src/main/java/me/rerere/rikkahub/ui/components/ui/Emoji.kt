@@ -48,8 +48,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import me.rerere.rikkahub.ui.icons.Lucide
 import kotlinx.coroutines.launch
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Search01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.utils.Emoji
 import me.rerere.rikkahub.utils.EmojiData
@@ -93,7 +94,7 @@ fun EmojiPicker(
                         placeholder = { Text(stringResource(R.string.emoji_picker_search_placeholder)) },
                         leadingIcon = {
                             Icon(
-                                imageVector = Lucide.Search,
+                                imageVector = HugeIcons.Search01,
                                 contentDescription = "Search"
                             )
                         },
