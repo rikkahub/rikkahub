@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -22,9 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Trash
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -95,7 +95,7 @@ fun CustomHeaders(headers: List<CustomHeader>, onUpdate: (List<CustomHeader>) ->
                             onUpdate(updatedHeaders)
                         }) {
                             Icon(
-                                Lucide.Trash,
+                                HugeIcons.Delete01,
                                 contentDescription = stringResource(R.string.assistant_page_delete_header)
                             )
                         }
@@ -113,7 +113,7 @@ fun CustomHeaders(headers: List<CustomHeader>, onUpdate: (List<CustomHeader>) ->
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(Lucide.Plus, contentDescription = stringResource(R.string.assistant_page_add_header))
+            Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.assistant_page_add_header))
             Spacer(Modifier.width(4.dp))
             Text(stringResource(R.string.assistant_page_add_header))
         }
@@ -200,7 +200,7 @@ fun CustomBodies(customBodies: List<CustomBody>, onUpdate: (List<CustomBody>) ->
                             onUpdate(updatedBodies)
                         }) {
                             Icon(
-                                Lucide.Trash,
+                                HugeIcons.Delete01,
                                 contentDescription = stringResource(R.string.assistant_page_delete_body)
                             )
                         }
@@ -218,7 +218,7 @@ fun CustomBodies(customBodies: List<CustomBody>, onUpdate: (List<CustomBody>) ->
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(Lucide.Plus, contentDescription = stringResource(R.string.assistant_page_add_body))
+            Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.assistant_page_add_body))
             Spacer(Modifier.width(4.dp))
             Text(stringResource(R.string.assistant_page_add_body))
         }

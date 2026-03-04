@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.developer
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.FileScript
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,8 +23,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Logs
-import com.composables.icons.lucide.Lucide
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.ai.AILogging
 import org.koin.androidx.compose.koinViewModel
@@ -51,7 +51,7 @@ fun DeveloperPage(vm: DeveloperVM = koinViewModel()) {
                         Text(text = "Developer")
                     },
                     icon = {
-                        Icon(Lucide.Logs, null)
+                        Icon(HugeIcons.FileScript, null)
                     }
                 )
             }

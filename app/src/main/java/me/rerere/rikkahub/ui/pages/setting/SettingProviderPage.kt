@@ -1,6 +1,14 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import android.net.Uri
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Camera01
+import me.rerere.hugeicons.stroke.DragDropHorizontal
+import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -55,14 +63,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Camera
-import com.composables.icons.lucide.GripHorizontal
-import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
 import io.github.g00fy2.quickie.QRResult
 import io.github.g00fy2.quickie.ScanQRCode
@@ -174,12 +174,12 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text(stringResource(R.string.setting_provider_page_search_providers)) },
                 leadingIcon = {
-                    Icon(Lucide.Search, contentDescription = null)
+                    Icon(HugeIcons.Search01, contentDescription = null)
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Lucide.X, contentDescription = "Clear")
+                            Icon(HugeIcons.Cancel01, contentDescription = "Clear")
                         }
                     }
                 },
@@ -224,7 +224,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                         )
                                 ) {
                                     Icon(
-                                        imageVector = Lucide.GripHorizontal,
+                                        imageVector = HugeIcons.DragDropHorizontal,
                                         contentDescription = null
                                     )
                                 }
@@ -265,7 +265,7 @@ private fun ImportProviderButton(
             showImportDialog = true
         }
     ) {
-        Icon(Lucide.Import, null)
+        Icon(HugeIcons.FileImport, null)
     }
 
     if (showImportDialog) {
@@ -308,7 +308,7 @@ private fun ImportProviderButton(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Icon(
-                                    imageVector = Lucide.Camera,
+                                    imageVector = HugeIcons.Camera01,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -341,7 +341,7 @@ private fun ImportProviderButton(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Icon(
-                                    imageVector = Lucide.Image,
+                                    imageVector = HugeIcons.Image02,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -458,7 +458,7 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
             dialogState.open(ProviderSetting.OpenAI())
         }
     ) {
-        Icon(Lucide.Plus, "Add")
+        Icon(HugeIcons.Add01, "Add")
     }
 
     if (dialogState.isEditing) {

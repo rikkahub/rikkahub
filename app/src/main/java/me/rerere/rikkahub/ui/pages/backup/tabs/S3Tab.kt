@@ -1,5 +1,9 @@
 package me.rerere.rikkahub.ui.pages.backup.tabs
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
+import me.rerere.hugeicons.stroke.Upload02
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,10 +51,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Eye
-import com.composables.icons.lucide.EyeOff
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Upload
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
@@ -154,9 +154,9 @@ fun S3Tab(
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
                                 val image = if (passwordVisible) {
-                                    Lucide.EyeOff
+                                    HugeIcons.ViewOff
                                 } else {
-                                    Lucide.Eye
+                                    HugeIcons.View
                                 }
                                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                     Icon(imageVector = image, contentDescription = null)
@@ -297,7 +297,7 @@ fun S3Tab(
                         modifier = Modifier.size(18.dp)
                     )
                 } else {
-                    Icon(Lucide.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(HugeIcons.Upload02, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(

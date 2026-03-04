@@ -1,5 +1,17 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.MaskTheater01
+import me.rerere.hugeicons.stroke.InLove
+import me.rerere.hugeicons.stroke.Clock01
+import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.LanguageCircle
+import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Sparkles
+import me.rerere.hugeicons.stroke.Award01
+import me.rerere.hugeicons.stroke.ChartColumn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,20 +57,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.ui.context.Navigator
 import androidx.paging.compose.collectAsLazyPagingItems
-import com.composables.icons.lucide.Drama
-import com.composables.icons.lucide.Heart
-import com.composables.icons.lucide.History
-import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.Languages
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Pencil
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Settings
-import com.composables.icons.lucide.Sparkles
-import com.composables.icons.lucide.Trophy
-import com.composables.icons.lucide.ChartNoAxesColumn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import me.rerere.hugeicons.stroke.LookTop
+import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
@@ -82,7 +84,6 @@ import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatDrawerContent(
     navController: Navigator,
@@ -179,7 +180,7 @@ fun ChatDrawerContent(
                         )
 
                         Icon(
-                            imageVector = Lucide.Pencil,
+                            imageVector = HugeIcons.PencilEdit01,
                             contentDescription = "Edit",
                             modifier = Modifier
                                 .onClick {
@@ -263,7 +264,7 @@ fun ChatDrawerContent(
                 DrawerAction(
                     icon = {
                         Icon(
-                            imageVector = Lucide.Drama,
+                            imageVector = HugeIcons.LookTop,
                             contentDescription = stringResource(R.string.assistant_page_title)
                         )
                     },
@@ -278,7 +279,7 @@ fun ChatDrawerContent(
                 Box {
                     DrawerAction(
                         icon = {
-                            Icon(Lucide.Sparkles, "Menu")
+                            Icon(HugeIcons.Sparkles, "Menu")
                         },
                         label = {
                             Text(stringResource(R.string.menu))
@@ -293,7 +294,7 @@ fun ChatDrawerContent(
                     ) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.chat_page_menu_ai_translator)) },
-                            leadingIcon = { Icon(Lucide.Languages, null) },
+                            leadingIcon = { Icon(HugeIcons.LanguageCircle, null) },
                             onClick = {
                                 showMenuPopup = false
                                 navController.navigate(Screen.Translator)
@@ -301,7 +302,7 @@ fun ChatDrawerContent(
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.chat_page_menu_image_generation)) },
-                            leadingIcon = { Icon(Lucide.Image, null) },
+                            leadingIcon = { Icon(HugeIcons.Image02, null) },
                             onClick = {
                                 showMenuPopup = false
                                 navController.navigate(Screen.ImageGen)
@@ -312,7 +313,7 @@ fun ChatDrawerContent(
 
                 DrawerAction(
                     icon = {
-                        Icon(Lucide.Heart, stringResource(R.string.favorite_page_title))
+                        Icon(HugeIcons.InLove, stringResource(R.string.favorite_page_title))
                     },
                     label = {
                         Text(stringResource(R.string.favorite_page_title))
@@ -324,7 +325,7 @@ fun ChatDrawerContent(
 
                 DrawerAction(
                     icon = {
-                        Icon(Lucide.ChartNoAxesColumn, "统计数据")
+                        Icon(HugeIcons.ChartColumn, "统计数据")
                     },
                     label = {
                         Text("统计数据")
@@ -338,7 +339,7 @@ fun ChatDrawerContent(
 
                 DrawerAction(
                     icon = {
-                        Icon(Lucide.Settings, null)
+                        Icon(HugeIcons.Settings03, null)
                     },
                     label = { Text(stringResource(R.string.settings)) },
                     onClick = {
@@ -455,7 +456,7 @@ private fun DrawerActions(navController: Navigator) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Icon(
-                    imageVector = Lucide.Search,
+                    imageVector = HugeIcons.Search01,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurface,
@@ -485,7 +486,7 @@ private fun DrawerActions(navController: Navigator) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Icon(
-                    imageVector = Lucide.History,
+                    imageVector = HugeIcons.TransactionHistory,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurface,

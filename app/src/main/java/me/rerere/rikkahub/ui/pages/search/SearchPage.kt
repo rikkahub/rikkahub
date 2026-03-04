@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.search
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Refresh01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,8 +33,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.RefreshCw
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -101,7 +101,10 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                         onClick = { showRebuildDialog = true },
                         enabled = !vm.isRebuilding,
                     ) {
-                        Icon(Lucide.RefreshCw, contentDescription = stringResource(R.string.search_page_rebuild_button))
+                        Icon(
+                            HugeIcons.Refresh01,
+                            contentDescription = stringResource(R.string.search_page_rebuild_button)
+                        )
                     }
                 },
                 scrollBehavior = scrollBehavior,
