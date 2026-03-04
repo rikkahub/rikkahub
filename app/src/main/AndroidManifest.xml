@@ -55,12 +55,6 @@
         <category android:name="android.intent.category.DEFAULT" />
         <data android:mimeType="text/plain" />
       </intent-filter>
-      <intent-filter>
-        <action android:name="android.intent.action.PROCESS_TEXT" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <data android:mimeType="text/plain" />
-      </intent-filter>
-
       <meta-data
         android:name="android.app.shortcuts"
         android:resource="@xml/shortcuts" />
@@ -76,6 +70,20 @@
         <data
           android:host="shortcut"
           android:scheme="rikkahub" />
+      </intent-filter>
+    </activity>
+
+    <activity
+      android:name=".ui.activity.TextSelectionActivity"
+      android:exported="true"
+      android:label="@string/text_selection_menu_label"
+      android:theme="@style/Theme.Rikkahub.Translucent"
+      android:configChanges="keyboardHidden|orientation|screenSize"
+      android:windowSoftInputMode="adjustResize">
+      <intent-filter>
+        <action android:name="android.intent.action.PROCESS_TEXT" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="text/plain" />
       </intent-filter>
     </activity>
 

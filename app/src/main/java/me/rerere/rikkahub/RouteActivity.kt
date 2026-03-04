@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -51,9 +52,13 @@ import coil3.svg.SvgDecoder
 import com.dokar.sonner.Toaster
 import com.dokar.sonner.rememberToasterState
 import kotlinx.serialization.Serializable
+import kotlinx.coroutines.launch
 import me.rerere.highlight.Highlighter
 import me.rerere.highlight.LocalHighlighter
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.ui.components.ui.TTSController
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -85,6 +90,7 @@ import me.rerere.rikkahub.ui.pages.prompts.PromptPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
+import me.rerere.rikkahub.ui.pages.setting.SettingAndroidIntegrationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
@@ -106,10 +112,12 @@ import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import androidx.compose.foundation.layout.Arrangement
+import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.db.MigrationState
+import me.rerere.rikkahub.service.ChatService
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
@@ -121,6 +129,7 @@ class RouteActivity : ComponentActivity() {
     private val highlighter by inject<Highlighter>()
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
+    private val chatService by inject<ChatService>()
     private var navStack: MutableList<NavKey>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -156,7 +165,6 @@ class RouteActivity : ComponentActivity() {
                 action = intent?.action
                 putExtra(Intent.EXTRA_TEXT, intent?.getStringExtra(Intent.EXTRA_TEXT))
                 putExtra(Intent.EXTRA_STREAM, intent?.getStringExtra(Intent.EXTRA_STREAM))
-                putExtra(Intent.EXTRA_PROCESS_TEXT, intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT))
             }
         }
 
@@ -167,17 +175,79 @@ class RouteActivity : ComponentActivity() {
                     val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
                     backStack.add(Screen.ShareHandler(text, imageUri))
                 }
-
-                Intent.ACTION_PROCESS_TEXT -> {
-                    val text = shareIntent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString() ?: ""
-                    backStack.add(Screen.ShareHandler(text, null))
-                }
             }
         }
     }
 
+    private suspend fun handleTextSelectionContinueIntent(
+        backStack: MutableList<NavKey>,
+        targetIntent: Intent,
+        settings: Settings,
+    ): Boolean {
+        if (!targetIntent.getBooleanExtra("continue_conversation", false)) return false
+
+        val selectedText = targetIntent.getStringExtra("selected_text").orEmpty()
+        val aiResponse = targetIntent.getStringExtra("ai_response").orEmpty()
+        val userPrompt = targetIntent.getStringExtra("user_prompt").orEmpty()
+
+        val userContent = buildString {
+            if (selectedText.isNotBlank()) {
+                append(selectedText.trim())
+            }
+            if (userPrompt.isNotBlank()) {
+                if (isNotEmpty()) append("\n\n")
+                append(userPrompt.trim())
+            }
+        }.trim()
+
+        val nodes = mutableListOf<MessageNode>()
+        if (userContent.isNotBlank()) {
+            nodes.add(MessageNode.of(UIMessage.user(userContent)))
+        }
+        if (aiResponse.isNotBlank()) {
+            nodes.add(MessageNode.of(UIMessage.assistant(aiResponse)))
+        }
+
+        clearTextSelectionExtras(targetIntent)
+        if (nodes.isEmpty()) return true
+
+        val assistantId = runCatching {
+            targetIntent.getStringExtra("selection_assistant_id")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { Uuid.parse(it) }
+        }.getOrNull() ?: settings.assistantId
+
+        val conversationId = Uuid.random()
+        val conversation = Conversation.ofId(
+            id = conversationId,
+            assistantId = assistantId,
+            messages = nodes,
+        )
+        chatService.saveConversation(conversationId, conversation)
+        backStack.add(Screen.Chat(conversationId.toString()))
+        return true
+    }
+
+    private fun clearTextSelectionExtras(targetIntent: Intent) {
+        targetIntent.removeExtra("continue_conversation")
+        targetIntent.removeExtra("selected_text")
+        targetIntent.removeExtra("ai_response")
+        targetIntent.removeExtra("user_prompt")
+        targetIntent.removeExtra("selection_assistant_id")
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        val backStack = navStack
+        if (intent.getBooleanExtra("continue_conversation", false)) {
+            if (backStack != null) {
+                lifecycleScope.launch {
+                    handleTextSelectionContinueIntent(backStack, intent, settingsStore.settingsFlow.value)
+                }
+            }
+            return
+        }
         intent.getStringExtra("scheduledTaskRunId")?.let { runId ->
             navStack?.add(Screen.ScheduledTaskRunDetail(runId))
             return
@@ -222,7 +292,12 @@ class RouteActivity : ComponentActivity() {
         SideEffect { this@RouteActivity.navStack = backStack }
 
         ShareHandler(backStack)
-        LaunchedEffect(backStack) {
+        LaunchedEffect(backStack, settings) {
+            intent?.let { launchIntent ->
+                if (handleTextSelectionContinueIntent(backStack, launchIntent, settings)) {
+                    return@LaunchedEffect
+                }
+            }
             intent?.getStringExtra("scheduledTaskRunId")?.let { runId ->
                 backStack.add(Screen.ScheduledTaskRunDetail(runId))
                 intent?.removeExtra("scheduledTaskRunId")
@@ -389,6 +464,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingSearch> {
                                 SettingSearchPage()
+                            }
+
+                            entry<Screen.SettingAndroidIntegration> {
+                                SettingAndroidIntegrationPage()
                             }
 
                             entry<Screen.SettingScheduledTasks> {
@@ -576,6 +655,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingSearch : Screen
+
+    @Serializable
+    data object SettingAndroidIntegration : Screen
 
     @Serializable
     data object SettingScheduledTasks : Screen
