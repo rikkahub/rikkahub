@@ -42,6 +42,8 @@ import kotlinx.coroutines.isActive
 import me.rerere.ai.provider.Model
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Idea01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
@@ -118,7 +120,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
         onExpandedChange = ::onExpandedChange,
         icon = {
             Icon(
-                painter = painterResource(R.drawable.deepthink),
+                imageVector = HugeIcons.Idea01,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.secondary,
