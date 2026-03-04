@@ -31,15 +31,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.Lightbulb
-import com.composables.icons.lucide.LightbulbOff
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Sparkle
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Idea01
+import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 
@@ -78,7 +76,7 @@ fun ReasoningButton(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.deepthink),
+                    imageVector = HugeIcons.Idea01,
                     contentDescription = null,
                 )
                 Box(
@@ -120,7 +118,7 @@ fun ReasoningPicker(
             ReasoningLevelCard(
                 selected = currentLevel == ReasoningLevel.OFF,
                 icon = {
-                    Icon(Lucide.LightbulbOff, null)
+                    Icon(HugeIcons.Zap, null)
                 },
                 title = {
                     Text(stringResource(id = R.string.reasoning_off))
@@ -135,7 +133,7 @@ fun ReasoningPicker(
             ReasoningLevelCard(
                 selected = currentLevel == ReasoningLevel.AUTO,
                 icon = {
-                    Icon(Lucide.Sparkle, null)
+                    Icon(HugeIcons.Idea01, null)
                 },
                 title = {
                     Text(stringResource(id = R.string.reasoning_auto))
@@ -150,7 +148,7 @@ fun ReasoningPicker(
             ReasoningLevelCard(
                 selected = currentLevel == ReasoningLevel.LOW,
                 icon = {
-                    Icon(Lucide.Lightbulb, null)
+                    Icon(HugeIcons.Idea01, null)
                 },
                 title = {
                     Text(stringResource(id = R.string.reasoning_light))
@@ -165,7 +163,7 @@ fun ReasoningPicker(
             ReasoningLevelCard(
                 selected = currentLevel == ReasoningLevel.MEDIUM,
                 icon = {
-                    Icon(Lucide.Lightbulb, null)
+                    Icon(HugeIcons.Idea01, null)
                 },
                 title = {
                     Text(stringResource(id = R.string.reasoning_medium))
@@ -180,7 +178,7 @@ fun ReasoningPicker(
             ReasoningLevelCard(
                 selected = currentLevel == ReasoningLevel.HIGH,
                 icon = {
-                    Icon(Lucide.Lightbulb, null)
+                    Icon(HugeIcons.Idea01, null)
                 },
                 title = {
                     Text(stringResource(id = R.string.reasoning_heavy))
