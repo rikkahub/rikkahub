@@ -106,11 +106,8 @@ class WebServerService : Service() {
                 when {
                     state.isRunning -> {
                         wasRunning = true
-                        val url = if (state.localhostOnly) {
-                            "http://localhost:${state.port}"
-                        } else {
-                            "http://${state.address ?: "localhost"}:${state.port}"
-                        }
+                        val host = if (state.localhostOnly) "localhost" else (state.address ?: "localhost")
+                        val url = "http://$host:${state.port}"
                         updateNotification(buildRunningNotification(url))
                     }
 

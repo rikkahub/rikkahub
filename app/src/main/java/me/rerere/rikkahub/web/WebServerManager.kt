@@ -59,32 +59,26 @@ class WebServerManager(
         }
 
         appScope.launch {
+            // 仅本机模式绑定回环地址
+            val host = if (localhostOnly) HOST_LOOPBACK else HOST_ALL_INTERFACES
+            val baseState = WebServerState(
+                port = port,
+                serviceName = serviceName,
+                localhostOnly = localhostOnly
+            )
             try {
                 _state.value = _state.value.copy(isLoading = true)
-                // 仅本机模式绑定回环地址
-                val host = if (localhostOnly) HOST_LOOPBACK else HOST_ALL_INTERFACES
                 Log.i(TAG, "Starting web server on $host:$port")
                 if (!isPortAvailable(port)) {
                     Log.w(TAG, "Port $port is already in use")
-                    _state.value = WebServerState(
-                        isRunning = false,
-                        port = port,
-                        serviceName = serviceName,
-                        localhostOnly = localhostOnly,
-                        error = "Port $port is already in use"
-                    )
+                    _state.value = baseState.copy(error = "Port $port is already in use")
                     return@launch
                 }
                 server = startWebServer(port = port, host = host) {
                     configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
                 }.start(wait = false)
 
-                _state.value = WebServerState(
-                    isRunning = true,
-                    port = port,
-                    serviceName = serviceName,
-                    localhostOnly = localhostOnly
-                )
+                _state.value = baseState.copy(isRunning = true)
                 // 仅局域网模式注册 mDNS
                 if (!localhostOnly) {
                     runCatching {
@@ -103,16 +97,10 @@ class WebServerManager(
                         Log.w(TAG, "NSD register failed", it)
                     }
                 }
-                Log.i(TAG, "Web server started successfully on port $port")
+                Log.i(TAG, "Web server started successfully on $host:$port")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start web server", e)
-                _state.value = WebServerState(
-                    isRunning = false,
-                    port = port,
-                    serviceName = serviceName,
-                    localhostOnly = localhostOnly,
-                    error = e.message
-                )
+                _state.value = baseState.copy(error = e.message)
             }
         }
     }
