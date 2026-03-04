@@ -20,9 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.DatabaseBackup
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.X
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.DatabaseRestore
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 
@@ -48,7 +48,7 @@ fun BackupReminderCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = Lucide.DatabaseBackup,
+                imageVector = HugeIcons.DatabaseRestore,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.primary,
@@ -75,7 +75,7 @@ fun BackupReminderCard(
                 modifier = Modifier.size(32.dp),
             ) {
                 Icon(
-                    imageVector = Lucide.X,
+                    imageVector = HugeIcons.Cancel01,
                     contentDescription = stringResource(R.string.backup_page_reminder_dismiss),
                     modifier = Modifier.size(16.dp),
                 )

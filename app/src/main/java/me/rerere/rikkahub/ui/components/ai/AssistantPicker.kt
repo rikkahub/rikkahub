@@ -38,10 +38,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.Drama
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Pen
 import kotlinx.coroutines.launch
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Edit03
+import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
@@ -64,7 +64,7 @@ fun AssistantPicker(
 
     NavigationDrawerItem(
         icon = {
-            Icon(Lucide.Drama, contentDescription = null)
+            Icon(HugeIcons.LookTop, contentDescription = null)
         },
         label = {
             Row(
@@ -236,7 +236,7 @@ private fun AssistantItem(
                 }
             ) {
                 Icon(
-                    imageVector = Lucide.Pen,
+                    imageVector = HugeIcons.Edit03,
                     contentDescription = null
                 )
             }

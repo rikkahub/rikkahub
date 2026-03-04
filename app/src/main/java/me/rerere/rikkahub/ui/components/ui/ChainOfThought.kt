@@ -9,26 +9,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocal
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,13 +39,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastForEach
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.rikkahub.R
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.ChevronUp
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Sparkles
 
 private val LocalCardColor = staticCompositionLocalOf { Color.White }
 
@@ -102,7 +97,7 @@ fun <T> ChainOfThought(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                                imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.primary,
@@ -141,7 +136,7 @@ fun <T> ChainOfThought(
                     }
                 ) {
                     Column {
-                        visibleSteps.forEach { step ->
+                        visibleSteps.fastForEach { step ->
                             scope.content(step)
                         }
                     }
@@ -304,14 +299,14 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
                 // 指示器：onClick 显示向右箭头，content 显示展开/折叠箭头
                 if (onClick != null) {
                     Icon(
-                        imageVector = Lucide.ChevronRight,
+                        imageVector = HugeIcons.ArrowRight01,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else if (hasContent) {
                     Icon(
-                        imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                        imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -367,11 +362,17 @@ private fun ChainOfThoughtPreview() {
                         .fillMaxWidth()
                         .padding(16.dp),
                     steps = listOf(
-                        StepData("Searching the web", Lucide.Search, "3 results", hasContent = true),
-                        StepData("Reading documents", Lucide.Sparkles, "Completed", hasOnClick = true),
-                        StepData("Analyzing results (controlled)", Lucide.Sparkles, "In progress", hasContent = true, controlled = true),
+                        StepData("Searching the web", HugeIcons.Search01, "3 results", hasContent = true),
+                        StepData("Reading documents", HugeIcons.Sparkles, "Completed", hasOnClick = true),
+                        StepData(
+                            "Analyzing results (controlled)",
+                            HugeIcons.Sparkles,
+                            "In progress",
+                            hasContent = true,
+                            controlled = true
+                        ),
                         StepData("Step without icon", null, null),
-                        StepData("Final step", Lucide.Sparkles, "Done"),
+                        StepData("Final step", HugeIcons.Sparkles, "Done"),
                     ),
                     collapsedVisibleCount = 2,
                 ) { step ->
