@@ -978,8 +978,6 @@
   <string name="assistant_page_local_tools_tts_desc">Let the AI speak text aloud to you using the device TTS engine</string>
   <string name="setting_display_page_show_thinking_content_title">Show Thinking Content</string>
   <string name="setting_display_page_show_thinking_content_desc">Whether to expand and show the thinking process by default during generation</string>
-  <string name="setting_display_page_enable_think_regex_title">Enable Think Regex</string>
-  <string name="setting_display_page_enable_think_regex_desc">Allow visual regex rules to affect think-tag parsing (takes effect below think transform priority)</string>
   <string name="setting_page_scheduled_tasks">Scheduled Tasks</string>
   <string name="setting_page_scheduled_tasks_desc">Manage background scheduled tasks and execution options</string>
   <string name="chat_page_scheduled_task_runs">Scheduled Task Runs</string>

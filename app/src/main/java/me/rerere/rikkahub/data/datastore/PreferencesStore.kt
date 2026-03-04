@@ -575,7 +575,6 @@ data class DisplaySetting(
     val showModelName: Boolean = true,
     val showTokenUsage: Boolean = true,
     val showThinkingContent: Boolean = true,
-    val enableThinkRegex: Boolean = true,
     val autoCloseThinking: Boolean = true,
     val showUpdates: Boolean = true,
     val showMessageJumper: Boolean = true,

@@ -303,18 +303,6 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             },
                         )
                         item(
-                            headlineContent = { Text(stringResource(R.string.setting_display_page_enable_think_regex_title)) },
-                            supportingContent = { Text(stringResource(R.string.setting_display_page_enable_think_regex_desc)) },
-                            trailingContent = {
-                                Switch(
-                                    checked = displaySetting.enableThinkRegex,
-                                    onCheckedChange = {
-                                        updateDisplaySetting(displaySetting.copy(enableThinkRegex = it))
-                                    }
-                                )
-                            },
-                        )
-                        item(
                             headlineContent = { Text(stringResource(R.string.setting_display_page_auto_collapse_thinking_title)) },
                             supportingContent = { Text(stringResource(R.string.setting_display_page_auto_collapse_thinking_desc)) },
                             trailingContent = {
