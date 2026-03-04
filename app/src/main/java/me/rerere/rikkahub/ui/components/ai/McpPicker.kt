@@ -36,10 +36,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFilter
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.CircleAlert
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MessageSquareOff
-import com.composables.icons.lucide.Terminal
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Alert01
+import me.rerere.hugeicons.stroke.Icon1stBracket
+import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
@@ -98,7 +98,7 @@ fun McpPickerButton(
                         }
                     ) {
                         Icon(
-                            imageVector = Lucide.Terminal,
+                            imageVector = HugeIcons.McpServer,
                             contentDescription = stringResource(R.string.mcp_picker_title),
                         )
                     }
@@ -177,18 +177,18 @@ fun McpPicker(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     when (status) {
-                        McpStatus.Idle -> Icon(Lucide.MessageSquareOff, null)
+                        McpStatus.Idle -> Icon(HugeIcons.Icon1stBracket, null)
                         McpStatus.Connecting -> CircularProgressIndicator(
                             modifier = Modifier.size(
                                 24.dp
                             )
                         )
 
-                        McpStatus.Connected -> Icon(Lucide.Terminal, null)
+                        McpStatus.Connected -> Icon(HugeIcons.McpServer, null)
                         is McpStatus.Reconnecting -> CircularProgressIndicator(
                             modifier = Modifier.size(24.dp)
                         )
-                        is McpStatus.Error -> Icon(Lucide.CircleAlert, null)
+                        is McpStatus.Error -> Icon(HugeIcons.Alert01, null)
                     }
                     Column(
                         modifier = Modifier.weight(1f),
