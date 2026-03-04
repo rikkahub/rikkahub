@@ -38,25 +38,28 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.BadgeInfo
-import com.composables.icons.lucide.BookOpen
-import com.composables.icons.lucide.Boxes
-import com.composables.icons.lucide.Database
-import com.composables.icons.lucide.Drama
-import com.composables.icons.lucide.Earth
-import com.composables.icons.lucide.Globe
-import com.composables.icons.lucide.Hammer
-import com.composables.icons.lucide.HardDrive
-import com.composables.icons.lucide.Heart
-import com.composables.icons.lucide.Library
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MessageCircleWarning
-import com.composables.icons.lucide.Monitor
-import com.composables.icons.lucide.ScrollText
-import com.composables.icons.lucide.Share2
-import com.composables.icons.lucide.SunMoon
-import com.composables.icons.lucide.Terminal
-import com.composables.icons.lucide.Volume2
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.AiMagic
+import me.rerere.hugeicons.stroke.Alert01
+import me.rerere.hugeicons.stroke.Book01
+import me.rerere.hugeicons.stroke.Book03
+import me.rerere.hugeicons.stroke.Bookshelf01
+import me.rerere.hugeicons.stroke.Brain02
+import me.rerere.hugeicons.stroke.Clapping01
+import me.rerere.hugeicons.stroke.Database02
+import me.rerere.hugeicons.stroke.Developer
+import me.rerere.hugeicons.stroke.GlobalSearch
+import me.rerere.hugeicons.stroke.ImageUpload
+import me.rerere.hugeicons.stroke.InLove
+import me.rerere.hugeicons.stroke.LookTop
+import me.rerere.hugeicons.stroke.McpServer
+import me.rerere.hugeicons.stroke.Megaphone01
+import me.rerere.hugeicons.stroke.SecurityWarning
+import me.rerere.hugeicons.stroke.ServerStack01
+import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Share04
+import me.rerere.hugeicons.stroke.Sun01
+import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
@@ -89,7 +92,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
             onDismissRequest = {
                 vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
             },
-            icon = { Icon(Lucide.Heart, null) },
+            icon = { Icon(HugeIcons.WavingHand01, null) },
             title = { Text(stringResource(R.string.setting_page_sponsor_alert_title)) },
             text = { Text(stringResource(R.string.setting_page_sponsor_alert_desc)) },
             confirmButton = {
@@ -127,7 +130,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                                 navController.navigate(Screen.Developer)
                             }
                         ) {
-                            Icon(Lucide.Hammer, "Developer")
+                            Icon(HugeIcons.Developer, "Developer")
                         }
                     }
                 },
@@ -160,7 +163,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     title = { Text(stringResource(R.string.setting_page_general_settings)) },
                 ) {
                     item(
-                        leadingContent = { Icon(Lucide.SunMoon, null) },
+                        leadingContent = { Icon(HugeIcons.Sun01, null) },
                         trailingContent = {
                             Select(
                                 options = ColorMode.entries,
@@ -188,19 +191,19 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingDisplay) },
-                        leadingContent = { Icon(Lucide.Monitor, null) },
+                        leadingContent = { Icon(HugeIcons.Settings03, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_display_setting_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_display_setting)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Assistant) },
-                        leadingContent = { Icon(Lucide.Drama, null) },
+                        leadingContent = { Icon(HugeIcons.LookTop, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_assistant_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_assistant)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Prompts) },
-                        leadingContent = { Icon(Lucide.BookOpen, null) },
+                        leadingContent = { Icon(HugeIcons.Book03, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_prompts_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_prompts_title)) },
                     )
@@ -214,37 +217,37 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingModels) },
-                        leadingContent = { Icon(Lucide.Hammer, null) },
+                        leadingContent = { Icon(HugeIcons.AiMagic, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_default_model_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_default_model)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingProvider) },
-                        leadingContent = { Icon(Lucide.Boxes, null) },
+                        leadingContent = { Icon(HugeIcons.Brain02, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_providers_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_providers)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingSearch) },
-                        leadingContent = { Icon(Lucide.Earth, null) },
+                        leadingContent = { Icon(HugeIcons.GlobalSearch, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_search_service_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_search_service)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingTTS) },
-                        leadingContent = { Icon(Lucide.Volume2, null) },
+                        leadingContent = { Icon(HugeIcons.Megaphone01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_tts_service_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_tts_service)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingMcp) },
-                        leadingContent = { Icon(Lucide.Terminal, null) },
+                        leadingContent = { Icon(HugeIcons.McpServer, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_mcp_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_mcp)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingWeb) },
-                        leadingContent = { Icon(Lucide.Globe, null) },
+                        leadingContent = { Icon(HugeIcons.ServerStack01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_web_server_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_web_server)) },
                     )
@@ -261,13 +264,13 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.Backup) },
-                        leadingContent = { Icon(Lucide.Database, null) },
+                        leadingContent = { Icon(HugeIcons.Database02, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_data_backup_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_data_backup)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingFiles) },
-                        leadingContent = { Icon(Lucide.HardDrive, null) },
+                        leadingContent = { Icon(HugeIcons.ImageUpload, null) },
                         supportingContent = {
                             if (storageState.first == -1) {
                                 Text(stringResource(R.string.calculating))
@@ -297,7 +300,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingAbout) },
-                        leadingContent = { Icon(Lucide.BadgeInfo, null) },
+                        leadingContent = { Icon(HugeIcons.Clapping01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_about_desc)) },
                         trailingContent = {
                             Row(
@@ -332,19 +335,19 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     )
                     item(
                         onClick = { context.openUrl("https://docs.rikka-ai.com/docs/basic/get-started") },
-                        leadingContent = { Icon(Lucide.Library, null) },
+                        leadingContent = { Icon(HugeIcons.Book01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_documentation_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_documentation)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Log) },
-                        leadingContent = { Icon(Lucide.ScrollText, null) },
+                        leadingContent = { Icon(HugeIcons.Bookshelf01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_request_logs_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_request_logs)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingDonate) },
-                        leadingContent = { Icon(Lucide.Heart, null) },
+                        leadingContent = { Icon(HugeIcons.InLove, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_donate_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_donate)) },
                     )
@@ -359,7 +362,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                                 Toast.makeText(context, noShareApp, Toast.LENGTH_SHORT).show()
                             }
                         },
-                        leadingContent = { Icon(Lucide.Share2, null) },
+                        leadingContent = { Icon(HugeIcons.Share04, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_share_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_share)) },
                     )
@@ -391,7 +394,7 @@ private fun ProviderConfigWarningCard(navController: Navigator) {
                     Text(stringResource(R.string.setting_page_config_api_desc))
                 },
                 leadingContent = {
-                    Icon(Lucide.MessageCircleWarning, null)
+                    Icon(HugeIcons.Alert01, null)
                 },
                 colors = ListItemDefaults.colors(
                     containerColor = Color.Transparent
