@@ -100,6 +100,7 @@ fun SettingWebPage() {
         val intent = Intent(context, WebServerService::class.java).apply {
             action = WebServerService.ACTION_START
             putExtra(WebServerService.EXTRA_PORT, settings.webServerPort)
+            putExtra(WebServerService.EXTRA_LOCALHOST_ONLY, settings.webServerLocalhostOnly)
         }
         context.startForegroundService(intent)
         scope.launch {
@@ -223,6 +224,24 @@ fun SettingWebPage() {
                         },
                     )
                     item(
+                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_localhost_only)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_web_server_localhost_only_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.webServerLocalhostOnly,
+                                onCheckedChange = { checked ->
+                                    scope.launch {
+                                        settingsStore.update {
+                                            it.copy(webServerLocalhostOnly = checked)
+                                        }
+                                    }
+                                },
+                                // 运行中不允许切换 需重启服务生效
+                                enabled = !serverState.isRunning,
+                            )
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable)) },
                         supportingContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable_desc)) },
                         trailingContent = {
@@ -284,12 +303,23 @@ fun SettingWebPage() {
                         },
                     )
                     if (serverState.isRunning) {
-                        val lanUrl = "http://${serverState.address ?: "localhost"}:${serverState.port}"
-                        item(
-                            onClick = { copyUrl(lanUrl) },
-                            headlineContent = { Text(stringResource(R.string.setting_page_web_server_lan_address)) },
-                            supportingContent = { Text(lanUrl) },
-                        )
+                        if (!serverState.localhostOnly) {
+                            val lanUrl = "http://${serverState.address ?: "localhost"}:${serverState.port}"
+                            item(
+                                onClick = { copyUrl(lanUrl) },
+                                headlineContent = { Text(stringResource(R.string.setting_page_web_server_lan_address)) },
+                                supportingContent = { Text(lanUrl) },
+                            )
+
+                            if (serverState.hostname != null) {
+                                val mdnsUrl = "http://${serverState.hostname}:${serverState.port}"
+                                item(
+                                    onClick = { copyUrl(mdnsUrl) },
+                                    headlineContent = { Text(stringResource(R.string.setting_page_web_server_mdns_address)) },
+                                    supportingContent = { Text(mdnsUrl) },
+                                )
+                            }
+                        }
 
                         val localUrl = "http://localhost:${serverState.port}"
                         item(
@@ -297,15 +327,6 @@ fun SettingWebPage() {
                             headlineContent = { Text(stringResource(R.string.setting_page_web_server_local_address)) },
                             supportingContent = { Text(localUrl) },
                         )
-
-                        if (serverState.hostname != null) {
-                            val mdnsUrl = "http://${serverState.hostname}:${serverState.port}"
-                            item(
-                                onClick = { copyUrl(mdnsUrl) },
-                                headlineContent = { Text(stringResource(R.string.setting_page_web_server_mdns_address)) },
-                                supportingContent = { Text(mdnsUrl) },
-                            )
-                        }
                     }
                     item(
                         headlineContent = {
