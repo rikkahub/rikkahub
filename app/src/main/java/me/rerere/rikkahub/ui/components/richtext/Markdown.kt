@@ -729,7 +729,7 @@ private fun Paragraph(
     val density = LocalDensity.current
     FlowRow(
         modifier = modifier.then(
-            if (node.nextSibling() != null) Modifier.padding(bottom = 16.dp)
+            if (node.nextSibling() != null) Modifier.padding(bottom = LocalTextStyle.current.fontSize.toDp())
             else Modifier
         )
     ) {
