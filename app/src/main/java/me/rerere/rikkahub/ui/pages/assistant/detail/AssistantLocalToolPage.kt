@@ -7,16 +7,15 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -24,7 +23,8 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -36,18 +36,23 @@ fun AssistantLocalToolPage(id: String) {
         }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(stringResource(R.string.assistant_page_tab_local_tools))
                 },
                 navigationIcon = {
                     BackButton()
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
             )
-        }
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         AssistantLocalToolContent(
             modifier = Modifier.padding(innerPadding),
@@ -63,6 +68,15 @@ private fun AssistantLocalToolContent(
     assistant: Assistant,
     onUpdate: (Assistant) -> Unit
 ) {
+    fun toggleLocalTool(option: LocalToolOption, enabled: Boolean) {
+        val newLocalTools = if (enabled) {
+            assistant.localTools + option
+        } else {
+            assistant.localTools - option
+        }
+        onUpdate(assistant.copy(localTools = newLocalTools))
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -71,102 +85,63 @@ private fun AssistantLocalToolContent(
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // JavaScript 引擎工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_javascript_engine_title),
-            description = stringResource(R.string.assistant_page_local_tools_javascript_engine_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.JavascriptEngine),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.JavascriptEngine
-                } else {
-                    assistant.localTools - LocalToolOption.JavascriptEngine
+        CardGroup {
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_javascript_engine_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_javascript_engine_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.JavascriptEngine),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.JavascriptEngine, it) }
+                    )
                 }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
-
-        // 时间信息工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_time_info_title),
-            description = stringResource(R.string.assistant_page_local_tools_time_info_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.TimeInfo),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.TimeInfo
-                } else {
-                    assistant.localTools - LocalToolOption.TimeInfo
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_time_info_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_time_info_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.TimeInfo),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.TimeInfo, it) }
+                    )
                 }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
-
-        // 剪贴板工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_clipboard_title),
-            description = stringResource(R.string.assistant_page_local_tools_clipboard_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.Clipboard),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.Clipboard
-                } else {
-                    assistant.localTools - LocalToolOption.Clipboard
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_clipboard_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_clipboard_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.Clipboard),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Clipboard, it) }
+                    )
                 }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
-
-        // TTS工具卡片
-        LocalToolCard(
-            title = stringResource(R.string.assistant_page_local_tools_tts_title),
-            description = stringResource(R.string.assistant_page_local_tools_tts_desc),
-            isEnabled = assistant.localTools.contains(LocalToolOption.Tts),
-            onToggle = { enabled ->
-                val newLocalTools = if (enabled) {
-                    assistant.localTools + LocalToolOption.Tts
-                } else {
-                    assistant.localTools - LocalToolOption.Tts
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_tts_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_tts_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.Tts),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Tts, it) }
+                    )
                 }
-                onUpdate(assistant.copy(localTools = newLocalTools))
-            }
-        )
-    }
-}
-
-@Composable
-private fun LocalToolCard(
-    title: String,
-    description: String,
-    isEnabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    content: @Composable (() -> Unit)? = null
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        )
-    ) {
-        FormItem(
-            modifier = Modifier.padding(8.dp),
-            label = {
-                Text(title)
-            },
-            description = {
-                Text(description)
-            },
-            tail = {
-                Switch(
-                    checked = isEnabled,
-                    onCheckedChange = onToggle
-                )
-            },
-            content = {
-                if (isEnabled && content != null) {
-                    content()
-                } else {
-                    null
-                }
-            }
-        )
+            )
+        }
     }
 }
