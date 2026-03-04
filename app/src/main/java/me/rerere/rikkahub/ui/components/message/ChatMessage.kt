@@ -297,29 +297,42 @@ private fun MessagePartsBlock(
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {
                 if (block.steps.isNotEmpty()) {
-                    ChainOfThought(
-                        modifier = Modifier.animateContentSize(),
-                        steps = block.steps,
-                    ) { step ->
-                        when (step) {
-                            is ThinkingStep.ReasoningStep -> {
-                                key(step.reasoning.createdAt) {
-                                    ChatMessageReasoningStep(
-                                        reasoning = step.reasoning,
-                                        model = model,
-                                        assistant = assistant,
-                                    )
+                    val hasToolSteps = block.steps.any { it is ThinkingStep.ToolStep }
+                    if (hasToolSteps) {
+                        ChainOfThought(
+                            modifier = Modifier.animateContentSize(),
+                            steps = block.steps,
+                        ) { step ->
+                            when (step) {
+                                is ThinkingStep.ReasoningStep -> {
+                                    key(step.reasoning.createdAt) {
+                                        ChatMessageReasoningStep(
+                                            reasoning = step.reasoning,
+                                            model = model,
+                                            assistant = assistant,
+                                        )
+                                    }
+                                }
+
+                                is ThinkingStep.ToolStep -> {
+                                    key(step.tool.toolCallId.ifBlank { step.hashCode().toString() }) {
+                                        ChatMessageToolStep(
+                                            tool = step.tool,
+                                            loading = loading && !step.tool.isExecuted,
+                                            onToolApproval = onToolApproval,
+                                        )
+                                    }
                                 }
                             }
-
-                            is ThinkingStep.ToolStep -> {
-                                key(step.tool.toolCallId.ifBlank { step.hashCode().toString() }) {
-                                    ChatMessageToolStep(
-                                        tool = step.tool,
-                                        loading = loading && !step.tool.isExecuted,
-                                        onToolApproval = onToolApproval,
-                                    )
-                                }
+                        }
+                    } else {
+                        block.steps.filterIsInstance<ThinkingStep.ReasoningStep>().fastForEach { step ->
+                            key(step.reasoning.createdAt) {
+                                SimpleReasoningStep(
+                                    reasoning = step.reasoning,
+                                    model = model,
+                                    assistant = assistant,
+                                )
                             }
                         }
                     }
