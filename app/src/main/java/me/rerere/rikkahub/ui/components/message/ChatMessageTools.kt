@@ -59,6 +59,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Clipboard
 import me.rerere.hugeicons.stroke.Clock01
+import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Eraser
 import me.rerere.hugeicons.stroke.GlobalSearch
@@ -66,6 +67,7 @@ import me.rerere.hugeicons.stroke.QuillWrite01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.hugeicons.stroke.Time02
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.R
@@ -116,7 +118,7 @@ private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
 
     ToolNames.SEARCH_WEB -> HugeIcons.Search01
     ToolNames.SCRAPE_WEB -> HugeIcons.GlobalSearch
-    ToolNames.GET_TIME_INFO -> HugeIcons.Clock01
+    ToolNames.GET_TIME_INFO -> HugeIcons.Time02
     ToolNames.CLIPBOARD -> HugeIcons.Clipboard
     ToolNames.TTS -> HugeIcons.VolumeHigh
     else -> HugeIcons.Tools
