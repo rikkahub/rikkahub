@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.pages.setting
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,20 +11,21 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -35,6 +35,8 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.model.Sponsor
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.onError
 import me.rerere.rikkahub.utils.onLoading
@@ -44,17 +46,23 @@ import org.koin.compose.koinInject
 
 @Composable
 fun SettingDonatePage() {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(text = stringResource(R.string.donate_page_title))
                 },
                 navigationIcon = {
                     BackButton()
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
             )
-        }
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { paddings ->
         Column(
             modifier = Modifier
@@ -63,14 +71,7 @@ fun SettingDonatePage() {
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = stringResource(R.string.donate_page_donation_methods),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-
-            Kofi()
-            Afdian()
+            DonateMethodsCardGroup()
 
             Text(
                 text = stringResource(R.string.donate_page_sponsor_list),
@@ -88,73 +89,35 @@ fun SettingDonatePage() {
 }
 
 @Composable
-private fun Kofi() {
+private fun DonateMethodsCardGroup() {
     val context = LocalContext.current
-    Card(
+    CardGroup(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        onClick = {
-            context.openUrl("https://ko-fi.com/reovodev")
-        }
+        title = { Text(stringResource(R.string.donate_page_donation_methods)) },
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            AsyncImage(
-                model = R.drawable.kofi,
-                contentDescription = null,
-                modifier = Modifier.size(28.dp)
-            )
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = "Kofi",
-                    style = MaterialTheme.typography.titleMedium,
+        item(
+            onClick = { context.openUrl("https://ko-fi.com/reovodev") },
+            leadingContent = {
+                AsyncImage(
+                    model = R.drawable.kofi,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
                 )
-                Text(
-                    text = stringResource(R.string.donate_page_kofi_desc),
-                    style = MaterialTheme.typography.bodySmall,
+            },
+            supportingContent = { Text(stringResource(R.string.donate_page_kofi_desc)) },
+            headlineContent = { Text("Kofi") },
+        )
+        item(
+            onClick = { context.openUrl("https://afdian.com/a/reovo") },
+            leadingContent = {
+                Icon(
+                    painter = painterResource(R.drawable.afdian),
+                    contentDescription = null,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun Afdian() {
-    val context = LocalContext.current
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        onClick = {
-            context.openUrl("https://afdian.com/a/reovo")
-        }
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.afdian),
-                contentDescription = null
-            )
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = "爱发电",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = stringResource(R.string.donate_page_afdian_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
+            },
+            supportingContent = { Text(stringResource(R.string.donate_page_afdian_desc)) },
+            headlineContent = { Text("爱发电") },
+        )
     }
 }
 
@@ -182,24 +145,22 @@ private fun Sponsors(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(value) {
-                    Surface {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            AsyncImage(
-                                model = it.avatar,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .size(48.dp)
-                            )
-                            Text(
-                                text = it.userName,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                            )
-                        }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AsyncImage(
+                            model = it.avatar,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .size(48.dp)
+                        )
+                        Text(
+                            text = it.userName,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                        )
                     }
                 }
             }
@@ -213,4 +174,3 @@ private fun Sponsors(modifier: Modifier = Modifier) {
         }
     }
 }
-
