@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -58,7 +56,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.s3.S3Config
-import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import me.rerere.rikkahub.utils.UiState
@@ -121,14 +119,10 @@ fun S3Tab(
                 fileSummaryText = backupFileSummary
             )
 
-            OutlinedCard {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_s3_endpoint)) }
-                    ) {
+            CardGroup {
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_s3_endpoint)) },
+                    supportingContent = {
                         OutlinedTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.endpoint,
@@ -136,20 +130,22 @@ fun S3Tab(
                             placeholder = { Text("https://s3.amazonaws.com") },
                             singleLine = true
                         )
-                    }
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_s3_access_key_id)) }
-                    ) {
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_s3_access_key_id)) },
+                    supportingContent = {
                         OutlinedTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.accessKeyId,
                             onValueChange = { updateS3Config(s3Config.copy(accessKeyId = it.trim())) },
                             singleLine = true
                         )
-                    }
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_s3_secret_access_key)) }
-                    ) {
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_s3_secret_access_key)) },
+                    supportingContent = {
                         var passwordVisible by remember { mutableStateOf(false) }
                         OutlinedTextField(
                             modifier = Modifier.fillMaxWidth(),
@@ -168,10 +164,11 @@ fun S3Tab(
                             },
                             singleLine = true
                         )
-                    }
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_s3_bucket)) }
-                    ) {
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_s3_bucket)) },
+                    supportingContent = {
                         OutlinedTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.bucket,
@@ -179,10 +176,11 @@ fun S3Tab(
                             placeholder = { Text("my-bucket") },
                             singleLine = true
                         )
-                    }
-                    FormItem(
-                        label = { Text(stringResource(R.string.backup_page_s3_region)) }
-                    ) {
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_s3_region)) },
+                    supportingContent = {
                         OutlinedTextField(
                             modifier = Modifier.fillMaxWidth(),
                             value = s3Config.region,
@@ -190,48 +188,44 @@ fun S3Tab(
                             placeholder = { Text("auto") },
                             singleLine = true
                         )
-                    }
-                }
+                    },
+                )
             }
 
-            OutlinedCard {
-                FormItem(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    label = {
-                        Text(stringResource(R.string.backup_page_backup_items))
-                    }
-                ) {
-                    MultiChoiceSegmentedButtonRow(
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        S3Config.BackupItem.entries.forEachIndexed { index, item ->
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(
-                                    index = index,
-                                    count = S3Config.BackupItem.entries.size
-                                ),
-                                onCheckedChange = { checked ->
-                                    val newItems = if (checked) {
-                                        s3Config.items + item
-                                    } else {
-                                        s3Config.items - item
-                                    }
-                                    updateS3Config(s3Config.copy(items = newItems))
-                                },
-                                checked = item in s3Config.items
-                            ) {
-                                Text(
-                                    when (item) {
-                                        S3Config.BackupItem.DATABASE -> stringResource(R.string.backup_page_chat_records)
-                                        S3Config.BackupItem.FILES -> stringResource(R.string.backup_page_files)
-                                    }
-                                )
+            CardGroup {
+                item(
+                    headlineContent = { Text(stringResource(R.string.backup_page_backup_items)) },
+                    supportingContent = {
+                        MultiChoiceSegmentedButtonRow(
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            S3Config.BackupItem.entries.forEachIndexed { index, item ->
+                                SegmentedButton(
+                                    shape = SegmentedButtonDefaults.itemShape(
+                                        index = index,
+                                        count = S3Config.BackupItem.entries.size
+                                    ),
+                                    onCheckedChange = { checked ->
+                                        val newItems = if (checked) {
+                                            s3Config.items + item
+                                        } else {
+                                            s3Config.items - item
+                                        }
+                                        updateS3Config(s3Config.copy(items = newItems))
+                                    },
+                                    checked = item in s3Config.items
+                                ) {
+                                    Text(
+                                        when (item) {
+                                            S3Config.BackupItem.DATABASE -> stringResource(R.string.backup_page_chat_records)
+                                            S3Config.BackupItem.FILES -> stringResource(R.string.backup_page_files)
+                                        }
+                                    )
+                                }
                             }
                         }
-                    }
-                }
+                    },
+                )
             }
         }
 
@@ -425,28 +419,31 @@ private fun BackupStatusCard(
     lastBackupText: String,
     fileSummaryText: String,
 ) {
-    Card {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = lastBackupText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = fileSummaryText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+    CardGroup {
+        item(
+            headlineContent = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            supportingContent = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = lastBackupText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = fileSummaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+        )
     }
 }
 
@@ -457,67 +454,69 @@ private fun S3BackupItemCard(
     onDelete: (S3BackupItem) -> Unit = {},
     onRestore: (S3BackupItem) -> Unit = {},
 ) {
-    Card {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = item.displayName,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+    CardGroup {
+        item(
+            headlineContent = {
                 Text(
-                    text = item.lastModified.toLocalDateTime(),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = item.displayName,
+                    style = MaterialTheme.typography.titleMedium
                 )
-                Text(
-                    text = item.size.fileSizeToString(),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(
-                onClick = {
-                    onDelete(item)
-                },
-                enabled = !isRestoring
-            ) {
-                Text(stringResource(R.string.backup_page_delete))
-            }
-            Button(
-                onClick = {
-                    onRestore(item)
-                },
-                enabled = !isRestoring
-            ) {
-                if (isRestoring) {
-                    CircularWavyProgressIndicator(
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(
-                    if (isRestoring) {
-                        stringResource(R.string.backup_page_restoring)
-                    } else {
-                        stringResource(R.string.backup_page_restore_now)
+            },
+            supportingContent = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = item.lastModified.toLocalDateTime(),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = item.size.fileSizeToString(),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
-                )
-            }
-        }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                onDelete(item)
+                            },
+                            enabled = !isRestoring
+                        ) {
+                            Text(stringResource(R.string.backup_page_delete))
+                        }
+                        Button(
+                            onClick = {
+                                onRestore(item)
+                            },
+                            enabled = !isRestoring
+                        ) {
+                            if (isRestoring) {
+                                CircularWavyProgressIndicator(
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(
+                                if (isRestoring) {
+                                    stringResource(R.string.backup_page_restoring)
+                                } else {
+                                    stringResource(R.string.backup_page_restore_now)
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+        )
     }
 }

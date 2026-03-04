@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -33,7 +34,6 @@ import me.rerere.rikkahub.ui.pages.backup.tabs.WebDavTab
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupPage(vm: BackupVM = koinViewModel()) {
     val pagerState = rememberPagerState { 4 }
@@ -64,7 +64,8 @@ fun BackupPage(vm: BackupVM = koinViewModel()) {
         ) {
             SecondaryScrollableTabRow(
                 selectedTabIndex = pagerState.currentPage,
-                containerColor = CustomColors.topBarColors.containerColor
+                containerColor = CustomColors.topBarColors.containerColor,
+                edgePadding = 4.dp,
             ) {
                 Tab(
                     selected = pagerState.currentPage == 0,
