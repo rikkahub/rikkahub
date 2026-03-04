@@ -208,14 +208,14 @@ class RouteActivity : ComponentActivity() {
             nodes.add(MessageNode.of(UIMessage.assistant(aiResponse)))
         }
 
-        clearTextSelectionExtras(targetIntent)
-        if (nodes.isEmpty()) return true
-
         val assistantId = runCatching {
             targetIntent.getStringExtra("selection_assistant_id")
                 ?.takeIf { it.isNotBlank() }
                 ?.let { Uuid.parse(it) }
         }.getOrNull() ?: settings.assistantId
+
+        clearTextSelectionExtras(targetIntent)
+        if (nodes.isEmpty()) return true
 
         val conversationId = Uuid.random()
         val conversation = Conversation.ofId(

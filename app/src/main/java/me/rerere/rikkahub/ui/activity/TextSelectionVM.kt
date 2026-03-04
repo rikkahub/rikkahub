@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.stateIn
@@ -152,6 +153,7 @@ class TextSelectionVM(
                         temperature = assistant.temperature ?: 0.7f,
                     ),
                 ).catch { error ->
+                    if (error is CancellationException) throw error
                     Log.e(TAG, "Stream error", error)
                     state = TextSelectionState.Error(error.message ?: "Unknown error")
                 }.collect { chunk ->
@@ -162,6 +164,8 @@ class TextSelectionVM(
                 if (currentState is TextSelectionState.Result) {
                     state = currentState.copy(isStreaming = false)
                 }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 Log.e(TAG, "Failed to execute text selection action", error)
                 state = TextSelectionState.Error(error.message ?: "Unknown error")
