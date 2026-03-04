@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.components.ai
 
 import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -58,7 +57,6 @@ import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.rikkahub.ui.icons.Lucide
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -67,6 +65,16 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Brain02
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.DragDropHorizontal
+import me.rerere.hugeicons.stroke.Favourite
+import me.rerere.hugeicons.stroke.Image03
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Text
+import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -130,7 +138,7 @@ fun ModelSelector(
                     }
                 ) {
                     Icon(
-                        Lucide.X,
+                        imageVector = HugeIcons.Cancel01,
                         contentDescription = "Clear"
                     )
                 }
@@ -150,7 +158,7 @@ fun ModelSelector(
                 )
             } else {
                 Icon(
-                    Lucide.Boxes,
+                    imageVector = HugeIcons.Brain02,
                     contentDescription = stringResource(R.string.setting_model_page_chat_model),
                     modifier = Modifier.size(20.dp)
                 )
@@ -350,7 +358,7 @@ private fun ColumnScope.ModelList(
                 unfocusedContainerColor = Color.Transparent,
             ),
             leadingIcon = {
-                Icon(Lucide.Search, null)
+                Icon(HugeIcons.Search01, null)
             },
             maxLines = 1,
         )
@@ -427,7 +435,7 @@ private fun ColumnScope.ModelList(
                         },
                         dragHandle = {
                             Icon(
-                                imageVector = Lucide.GripHorizontal,
+                                imageVector = HugeIcons.DragDropHorizontal,
                                 contentDescription = null,
                                 modifier = Modifier.longPressDraggableHandle(
                                     onDragStarted = {
@@ -510,7 +518,7 @@ private fun ColumnScope.ModelList(
                                 )
                             } else {
                                 Icon(
-                                    Lucide.Heart,
+                                    imageVector = HugeIcons.Favourite,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -686,8 +694,8 @@ fun ModelModalityTag(model: Model) {
         model.inputModalities.fastForEach { modality ->
             Icon(
                 imageVector = when (modality) {
-                    Modality.TEXT -> Lucide.Type
-                    Modality.IMAGE -> Lucide.Image
+                    Modality.TEXT -> HugeIcons.Text
+                    Modality.IMAGE -> HugeIcons.Image03
                 },
                 contentDescription = null,
                 modifier = Modifier
@@ -696,15 +704,15 @@ fun ModelModalityTag(model: Model) {
             )
         }
         Icon(
-            imageVector = Lucide.ChevronRight,
+            imageVector = HugeIcons.ArrowRight01,
             contentDescription = null,
             modifier = Modifier.size(LocalTextStyle.current.lineHeight.toDp())
         )
         model.outputModalities.fastForEach { modality ->
             Icon(
                 imageVector = when (modality) {
-                    Modality.TEXT -> Lucide.Type
-                    Modality.IMAGE -> Lucide.Image
+                    Modality.TEXT -> HugeIcons.Text
+                    Modality.IMAGE -> HugeIcons.Image03
                 },
                 contentDescription = null,
                 modifier = Modifier
@@ -724,7 +732,7 @@ fun ModelAbilityTag(model: Model) {
                     type = TagType.WARNING
                 ) {
                     Icon(
-                        imageVector = Lucide.Hammer,
+                        imageVector = HugeIcons.Tools,
                         contentDescription = null,
                         modifier = Modifier.size(LocalTextStyle.current.lineHeight.toDp())
                     )
