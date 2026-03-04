@@ -16,11 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.ArrowDown
-import com.composables.icons.lucide.ArrowUp
-import com.composables.icons.lucide.Clock
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Zap
+
+import me.rerere.rikkahub.ui.icons.Lucide
 import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.ui.context.LocalSettings

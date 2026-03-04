@@ -15,9 +15,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.FileDown
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Share2
+
+import me.rerere.rikkahub.ui.icons.Lucide
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.export.ExporterState
 

@@ -28,10 +28,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastForEach
-import com.composables.icons.lucide.ExternalLink
-import com.composables.icons.lucide.Lucide
 import kotlinx.coroutines.launch
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Link01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
@@ -95,7 +94,7 @@ fun InjectionSelector(
                 )
             }
             IconButton(onClick = onNavigateToPrompts) {
-                Icon(Lucide.ExternalLink, contentDescription = null)
+                Icon(HugeIcons.Link01, contentDescription = null)
             }
         }
 
@@ -244,7 +243,7 @@ private fun InjectionEmptyState(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
             )
             TextButton(onClick = onNavigateToPrompts) {
-                Icon(Lucide.ExternalLink, contentDescription = null)
+                Icon(HugeIcons.Link01, contentDescription = null)
                 Text(stringResource(R.string.injection_selector_go_to_prompts))
             }
         }

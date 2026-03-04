@@ -28,8 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MessageCircleWarning
+import me.rerere.rikkahub.ui.icons.Lucide
 import me.rerere.rikkahub.R
 
 /**

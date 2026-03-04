@@ -48,8 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Search
+import me.rerere.rikkahub.ui.icons.Lucide
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.utils.Emoji

@@ -39,9 +39,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
-import com.composables.icons.lucide.Fullscreen
-import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
+
+import me.rerere.rikkahub.ui.icons.Lucide
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

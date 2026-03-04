@@ -29,9 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.Lucide
+import me.rerere.rikkahub.ui.icons.Lucide
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull

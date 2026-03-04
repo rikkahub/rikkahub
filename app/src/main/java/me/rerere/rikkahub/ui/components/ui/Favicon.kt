@@ -18,8 +18,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
-import com.composables.icons.lucide.Earth
-import com.composables.icons.lucide.Lucide
+import me.rerere.rikkahub.ui.icons.Lucide
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 @Composable

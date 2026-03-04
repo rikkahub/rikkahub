@@ -26,13 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.ChevronLeft
-import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.FastForward
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Pause
-import com.composables.icons.lucide.Play
-import com.composables.icons.lucide.X
+import me.rerere.rikkahub.ui.icons.Lucide
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.hooks.CustomTtsState
 import me.rerere.tts.model.PlaybackState

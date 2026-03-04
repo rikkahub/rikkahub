@@ -19,8 +19,7 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import coil3.compose.rememberAsyncImagePainter
-import com.composables.icons.lucide.Download
-import com.composables.icons.lucide.Lucide
+import me.rerere.rikkahub.ui.icons.Lucide
 import com.dokar.sonner.ToastType
 import com.jvziyaoyao.scale.image.pager.ImagePager
 import com.jvziyaoyao.scale.zoomable.pager.rememberZoomablePagerState
