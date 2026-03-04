@@ -62,6 +62,7 @@ import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share04
 import me.rerere.hugeicons.stroke.Sun01
+import me.rerere.hugeicons.stroke.TextSelection
 import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -259,6 +260,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(Lucide.FolderOpen, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_termux_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_termux)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingAndroidIntegration) },
+                        leadingContent = { Icon(HugeIcons.TextSelection, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_android_integration_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_android_integration)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingWeb) },
