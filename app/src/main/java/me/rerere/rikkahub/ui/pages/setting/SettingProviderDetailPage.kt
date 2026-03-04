@@ -1,5 +1,15 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Package01
+import me.rerere.hugeicons.stroke.Connect
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Refresh03
+import me.rerere.hugeicons.stroke.Tools
+import me.rerere.hugeicons.stroke.Share01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -77,16 +87,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFilter
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Boxes
-import com.composables.icons.lucide.Cable
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.RotateCw
-import com.composables.icons.lucide.Settings2
-import com.composables.icons.lucide.Share
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -184,7 +184,7 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                             shareSheetState.show(provider)
                         }
                     ) {
-                        Icon(Lucide.Share, null)
+                        Icon(HugeIcons.Share01, null)
                     }
                 }
             )
@@ -194,7 +194,7 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 NavigationBarItem(
                     selected = pager.currentPage == 0,
                     label = { Text(stringResource(id = R.string.setting_provider_page_configuration)) },
-                    icon = { Icon(Lucide.Settings2, null) },
+                    icon = { Icon(HugeIcons.Tools, null) },
                     onClick = {
                         scope.launch {
                             pager.animateScrollToPage(0)
@@ -204,7 +204,7 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 NavigationBarItem(
                     selected = pager.currentPage == 1,
                     label = { Text(stringResource(id = R.string.setting_provider_page_models)) },
-                    icon = { Icon(Lucide.Boxes, null) },
+                    icon = { Icon(HugeIcons.Package01, null) },
                     onClick = {
                         scope.launch {
                             pager.animateScrollToPage(1)
@@ -300,7 +300,7 @@ private fun SettingProviderConfigPage(
                         showDeleteDialog = true
                     },
                 ) {
-                    Icon(Lucide.Trash2, "Delete")
+                    Icon(HugeIcons.Delete01, "Delete")
                 }
             }
 
@@ -311,7 +311,7 @@ private fun SettingProviderConfigPage(
                 enabled = !internalProvider.isUsingDefaultBaseUrl(),
             ) {
                 Icon(
-                    imageVector = Lucide.RotateCw,
+                    imageVector = HugeIcons.Refresh03,
                     contentDescription = stringResource(R.string.setting_model_page_reset_to_default)
                 )
             }
@@ -387,7 +387,7 @@ private fun ConnectionTester(
             showTestDialog = true
         }
     ) {
-        Icon(Lucide.Cable, null)
+        Icon(HugeIcons.Connect, null)
     }
     if (showTestDialog) {
         var model by remember(internalProvider) {
@@ -840,7 +840,7 @@ private fun AddModelButton(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    Lucide.Plus,
+                    HugeIcons.Add01,
                     contentDescription = stringResource(R.string.setting_provider_page_add_model)
                 )
                 AnimatedVisibility(expanded) {
@@ -872,7 +872,7 @@ private fun AddModelButton(
                             }
                         }
                     ) {
-                        Icon(Lucide.ChevronDown, null)
+                        Icon(HugeIcons.ArrowDown01, null)
                     }
                 }
             ) {
@@ -1063,9 +1063,9 @@ private fun ModelPicker(
                                     }
                                 ) {
                                     if (selectedModels.any { model -> model.modelId == it.modelId }) {
-                                        Icon(Lucide.X, null)
+                                        Icon(HugeIcons.Cancel01, null)
                                     } else {
-                                        Icon(Lucide.Plus, null)
+                                        Icon(HugeIcons.Add01, null)
                                     }
                                 }
                             }
@@ -1100,7 +1100,7 @@ private fun ModelPicker(
                 showModal = true
             }
         ) {
-            Icon(Lucide.Boxes, null)
+            Icon(HugeIcons.Package01, null)
         }
     }
 }
@@ -1295,7 +1295,7 @@ private fun ModelCard(
                             },
                             modifier = Modifier.align(Alignment.CenterStart)
                         ) {
-                            Icon(Lucide.X, null)
+                            Icon(HugeIcons.Cancel01, null)
                         }
                         Text(
                             text = stringResource(R.string.setting_provider_page_edit_model),
@@ -1360,7 +1360,7 @@ private fun ModelCard(
                         }
                     }
                 ) {
-                    Icon(Lucide.X, null)
+                    Icon(HugeIcons.Cancel01, null)
                 }
                 FilledIconButton(
                     onClick = {
@@ -1371,7 +1371,7 @@ private fun ModelCard(
                     }
                 ) {
                     Icon(
-                        Lucide.Trash2,
+                        HugeIcons.Delete01,
                         contentDescription = stringResource(R.string.chat_page_delete)
                     )
                 }
@@ -1432,7 +1432,7 @@ private fun ModelCard(
                         dialogState.open(model.copy())
                     }
                 ) {
-                    Icon(Lucide.Settings2, "Edit")
+                    Icon(HugeIcons.Tools, "Edit")
                 }
             }
         }
@@ -1567,14 +1567,14 @@ private fun ProviderOverrideSettings(
                                 showProviderConfig = true
                             }
                         ) {
-                            Icon(Lucide.Settings2, contentDescription = "Edit override")
+                            Icon(HugeIcons.Tools, contentDescription = "Edit override")
                         }
                         IconButton(
                             onClick = {
                                 onUpdateProviderOverride(null)
                             }
                         ) {
-                            Icon(Lucide.X, contentDescription = "Remove override")
+                            Icon(HugeIcons.Cancel01, contentDescription = "Remove override")
                         }
                     }
                 }
@@ -1592,7 +1592,7 @@ private fun ProviderOverrideSettings(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Lucide.Plus, contentDescription = null)
+                Icon(HugeIcons.Add01, contentDescription = null)
                 Spacer(modifier = Modifier.size(8.dp))
                 Text(stringResource(R.string.setting_provider_page_add_provider_override))
             }

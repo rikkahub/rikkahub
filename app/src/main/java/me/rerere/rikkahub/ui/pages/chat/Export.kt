@@ -4,6 +4,14 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Book02
+import me.rerere.hugeicons.stroke.Book04
+import me.rerere.hugeicons.stroke.Earth
+import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Wrench01
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -58,14 +66,6 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.request.crossfade
-import com.composables.icons.lucide.BookDashed
-import com.composables.icons.lucide.BookHeart
-import com.composables.icons.lucide.Earth
-import com.composables.icons.lucide.FileText
-import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Wrench
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -158,7 +158,7 @@ fun ChatExportSheet(
                             Text(stringResource(id = R.string.chat_page_export_markdown_desc))
                         },
                         leadingContent = {
-                            Icon(Lucide.FileText, contentDescription = null)
+                            Icon(HugeIcons.File02, contentDescription = null)
                         }
                     )
                 }
@@ -177,7 +177,7 @@ fun ChatExportSheet(
                                 Text(stringResource(id = R.string.chat_page_export_image_desc))
                             },
                             leadingContent = {
-                                Icon(Lucide.Image, contentDescription = null)
+                                Icon(HugeIcons.Image02, contentDescription = null)
                             }
                         )
 
@@ -741,14 +741,14 @@ private fun ChainOfThoughtScope.ExportedToolStep(
             Icon(
                 imageVector = when (tool.toolName) {
                     "memory_tool" -> when (memoryAction) {
-                        "create", "edit" -> Lucide.BookHeart
-                        "delete" -> Lucide.BookDashed
-                        else -> Lucide.Wrench
+                        "create", "edit" -> HugeIcons.Book04
+                        "delete" -> HugeIcons.Book02
+                        else -> HugeIcons.Wrench01
                     }
 
-                    "search_web" -> Lucide.Search
-                    "scrape_web" -> Lucide.Earth
-                    else -> Lucide.Wrench
+                    "search_web" -> HugeIcons.Search01
+                    "scrape_web" -> HugeIcons.Earth
+                    else -> HugeIcons.Wrench01
                 },
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),

@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.content.MediaType
@@ -108,6 +109,7 @@ import me.rerere.common.android.appTempFolder
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -233,7 +235,7 @@ fun ChatInput(
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (state.messageContent.isNotEmpty()) {
                         MediaFileInputRow(state = state)
@@ -331,15 +333,18 @@ fun ChatInput(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(36.dp)
                                 .clip(CircleShape)
-                                .combinedClickable(enabled = loading || !state.isEmpty(), onClick = {
-                                    dismissExpand()
-                                    sendMessage()
-                                }, onLongClick = {
-                                    dismissExpand()
-                                    sendMessageWithoutAnswer()
-                                })
+                                .combinedClickable(
+                                    enabled = loading || !state.isEmpty(),
+                                    onClick = {
+                                        dismissExpand()
+                                        sendMessage()
+                                    }, onLongClick = {
+                                        dismissExpand()
+                                        sendMessageWithoutAnswer()
+                                    }
+                                )
                         ) {
                             val containerColor = when {
                                 loading -> MaterialTheme.colorScheme.errorContainer // 加载时，红色
@@ -365,7 +370,7 @@ fun ChatInput(
                                 )
                             } else {
                                 Icon(
-                                    imageVector = HugeIcons.ArrowUp01,
+                                    imageVector = HugeIcons.ArrowUp02,
                                     contentDescription = stringResource(R.string.send),
                                     tint = contentColor
                                 )

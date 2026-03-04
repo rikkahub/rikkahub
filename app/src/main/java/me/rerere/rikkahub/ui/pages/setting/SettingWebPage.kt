@@ -3,6 +3,11 @@ package me.rerere.rikkahub.ui.pages.setting
 import android.content.Intent
 import android.os.Build
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
+import me.rerere.hugeicons.stroke.Play
+import me.rerere.hugeicons.stroke.StopCircle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,11 +49,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Eye
-import com.composables.icons.lucide.EyeOff
-import com.composables.icons.lucide.Play
-import com.composables.icons.lucide.Square
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -157,7 +157,7 @@ fun SettingWebPage() {
                         )
                     } else {
                         Icon(
-                            imageVector = if (serverState.isRunning) Lucide.Square else Lucide.Play,
+                            imageVector = if (serverState.isRunning) HugeIcons.StopCircle else HugeIcons.Play,
                             contentDescription = null,
                         )
                     }
@@ -265,7 +265,7 @@ fun SettingWebPage() {
                                 trailingIcon = {
                                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                         Icon(
-                                            imageVector = if (passwordVisible) Lucide.EyeOff else Lucide.Eye,
+                                            imageVector = if (passwordVisible) HugeIcons.ViewOff else HugeIcons.View,
                                             contentDescription = null
                                         )
                                     }

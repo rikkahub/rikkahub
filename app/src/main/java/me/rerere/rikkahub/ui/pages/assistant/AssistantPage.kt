@@ -1,5 +1,11 @@
 package me.rerere.rikkahub.ui.pages.assistant
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -50,13 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Copy
-import com.composables.icons.lucide.EllipsisVertical
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.X
+import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
@@ -123,7 +123,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                         onClick = {
                             createState.open(Assistant())
                         }) {
-                        Icon(Lucide.Plus, stringResource(R.string.assistant_page_add))
+                        Icon(HugeIcons.Add01, stringResource(R.string.assistant_page_add))
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -162,12 +162,12 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     .padding(horizontal = 16.dp),
                 placeholder = { Text(stringResource(R.string.assistant_page_search_placeholder)) },
                 leadingIcon = {
-                    Icon(Lucide.Search, contentDescription = null)
+                    Icon(HugeIcons.Search01, contentDescription = null)
                 },
                 trailingIcon = {
                     if (searchQuery.isNotBlank()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Lucide.X, contentDescription = null)
+                            Icon(HugeIcons.Cancel01, contentDescription = null)
                         }
                     }
                 },
@@ -471,7 +471,7 @@ private fun AssistantItem(
                 onClick = onShowActions
             ) {
                 Icon(
-                    imageVector = Lucide.EllipsisVertical,
+                    imageVector = HugeIcons.MoreVertical,
                     contentDescription = stringResource(R.string.assistant_page_actions)
                 )
             }
@@ -522,7 +522,7 @@ private fun AssistantActionSheet(
                 headlineContent = { Text(stringResource(R.string.assistant_page_clone)) },
                 leadingContent = {
                     Icon(
-                        imageVector = Lucide.Copy,
+                        imageVector = HugeIcons.Copy01,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -542,7 +542,7 @@ private fun AssistantActionSheet(
                     },
                     leadingContent = {
                         Icon(
-                            imageVector = Lucide.Trash2,
+                            imageVector = HugeIcons.Delete01,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.error
                         )

@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.ui.pages.translator
 
 import android.content.ClipData
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Clipboard
+import me.rerere.hugeicons.stroke.LanguageCircle
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
@@ -48,10 +51,6 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.ClipboardCopy
-import com.composables.icons.lucide.ClipboardPaste
-import com.composables.icons.lucide.Languages
-import com.composables.icons.lucide.Lucide
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.ModelType
@@ -152,7 +151,7 @@ fun TranslatorPage(vm: TranslatorVM = koinViewModel()) {
                         }
                     }
                 ) {
-                    Icon(Lucide.ClipboardPaste, null)
+                    Icon(HugeIcons.Clipboard, null)
                     Text("粘贴文本", modifier = Modifier.padding(start = 4.dp))
                 }
             }
@@ -197,7 +196,7 @@ fun TranslatorPage(vm: TranslatorVM = koinViewModel()) {
                         }
                     }
                 ) {
-                    Icon(Lucide.ClipboardCopy, null)
+                    Icon(HugeIcons.Clipboard, null)
                     Text("复制翻译结果", modifier = Modifier.padding(start = 4.dp))
                 }
             }
@@ -317,7 +316,7 @@ private fun BottomBar(
                         modifier = Modifier.padding(horizontal = 8.dp)
                     ) {
                         Icon(
-                            Lucide.Languages,
+                            HugeIcons.LanguageCircle,
                             contentDescription = null,
                             modifier = Modifier.size(20.dp)
                         )

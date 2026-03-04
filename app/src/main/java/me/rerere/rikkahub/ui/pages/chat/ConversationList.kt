@@ -1,5 +1,11 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Forward02
+import me.rerere.hugeicons.stroke.Pin
+import me.rerere.hugeicons.stroke.PinOff
+import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -42,12 +48,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MoveRight
-import com.composables.icons.lucide.Pin
-import com.composables.icons.lucide.PinOff
-import com.composables.icons.lucide.RefreshCw
-import com.composables.icons.lucide.Trash2
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.theme.extendColors
@@ -202,7 +202,7 @@ private fun PinnedHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = Lucide.Pin,
+            imageVector = HugeIcons.Pin,
             contentDescription = null,
             modifier = Modifier.size(16.dp),
             tint = MaterialTheme.colorScheme.primary
@@ -267,7 +267,7 @@ private fun ConversationItem(
             // 置顶图标
             AnimatedVisibility(conversation.isPinned) {
                 Icon(
-                    imageVector = Lucide.Pin,
+                    imageVector = HugeIcons.Pin,
                     contentDescription = "Pinned",
                     modifier = Modifier.size(12.dp),
                     tint = MaterialTheme.colorScheme.primary
@@ -300,7 +300,7 @@ private fun ConversationItem(
                     },
                     leadingIcon = {
                         Icon(
-                            if (conversation.isPinned) Lucide.PinOff else Lucide.Pin,
+                            if (conversation.isPinned) HugeIcons.PinOff else HugeIcons.Pin,
                             null
                         )
                     }
@@ -315,7 +315,7 @@ private fun ConversationItem(
                         showDropdownMenu = false
                     },
                     leadingIcon = {
-                        Icon(Lucide.RefreshCw, null)
+                        Icon(HugeIcons.Refresh01, null)
                     }
                 )
 
@@ -328,7 +328,7 @@ private fun ConversationItem(
                         showDropdownMenu = false
                     },
                     leadingIcon = {
-                        Icon(Lucide.MoveRight, null)
+                        Icon(HugeIcons.Forward02, null)
                     }
                 )
 
@@ -341,7 +341,7 @@ private fun ConversationItem(
                         showDropdownMenu = false
                     },
                     leadingIcon = {
-                        Icon(Lucide.Trash2, null)
+                        Icon(HugeIcons.Delete01, null)
                     }
                 )
             }

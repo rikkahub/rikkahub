@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -297,29 +299,42 @@ private fun MessagePartsBlock(
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {
                 if (block.steps.isNotEmpty()) {
-                    ChainOfThought(
-                        modifier = Modifier.animateContentSize(),
-                        steps = block.steps,
-                    ) { step ->
-                        when (step) {
-                            is ThinkingStep.ReasoningStep -> {
-                                key(step.reasoning.createdAt) {
-                                    ChatMessageReasoningStep(
-                                        reasoning = step.reasoning,
-                                        model = model,
-                                        assistant = assistant,
-                                    )
+                    val hasToolSteps = block.steps.any { it is ThinkingStep.ToolStep }
+                    if (hasToolSteps) {
+                        ChainOfThought(
+                            modifier = Modifier.animateContentSize(),
+                            steps = block.steps,
+                        ) { step ->
+                            when (step) {
+                                is ThinkingStep.ReasoningStep -> {
+                                    key(step.reasoning.createdAt) {
+                                        ChatMessageReasoningStep(
+                                            reasoning = step.reasoning,
+                                            model = model,
+                                            assistant = assistant,
+                                        )
+                                    }
+                                }
+
+                                is ThinkingStep.ToolStep -> {
+                                    key(step.tool.toolCallId.ifBlank { step.hashCode().toString() }) {
+                                        ChatMessageToolStep(
+                                            tool = step.tool,
+                                            loading = loading && !step.tool.isExecuted,
+                                            onToolApproval = onToolApproval,
+                                        )
+                                    }
                                 }
                             }
-
-                            is ThinkingStep.ToolStep -> {
-                                key(step.tool.toolCallId.ifBlank { step.hashCode().toString() }) {
-                                    ChatMessageToolStep(
-                                        tool = step.tool,
-                                        loading = loading && !step.tool.isExecuted,
-                                        onToolApproval = onToolApproval,
-                                    )
-                                }
+                        }
+                    } else {
+                        block.steps.filterIsInstance<ThinkingStep.ReasoningStep>().fastForEach { step ->
+                            key(step.reasoning.createdAt) {
+                                SimpleReasoningStep(
+                                    reasoning = step.reasoning,
+                                    model = model,
+                                    assistant = assistant,
+                                )
                             }
                         }
                     }

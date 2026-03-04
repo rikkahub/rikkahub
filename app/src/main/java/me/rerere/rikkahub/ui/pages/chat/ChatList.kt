@@ -1,5 +1,14 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.ArrowDownDouble
+import me.rerere.hugeicons.stroke.ArrowUpDouble
+import me.rerere.hugeicons.stroke.CursorPointer01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -70,15 +79,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceAtLeast
 import androidx.compose.ui.zIndex
-import com.composables.icons.lucide.Check
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronUp
-import com.composables.icons.lucide.ChevronsDown
-import com.composables.icons.lucide.ChevronsUp
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MousePointer2
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.X
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
@@ -264,7 +264,7 @@ private fun ChatListNormal(
             state = state,
             contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(state = hazeState)
@@ -388,7 +388,7 @@ private fun ChatListNormal(
                                 selectedItems.clear()
                             }
                         ) {
-                            Icon(Lucide.X, null)
+                            Icon(HugeIcons.Cancel01, null)
                         }
                     }
                     Tooltip(
@@ -405,7 +405,7 @@ private fun ChatListNormal(
                                 }
                             }
                         ) {
-                            Icon(Lucide.MousePointer2, null)
+                            Icon(HugeIcons.CursorPointer01, null)
                         }
                     }
                     Tooltip(
@@ -422,7 +422,7 @@ private fun ChatListNormal(
                                 }
                             }
                         ) {
-                            Icon(Lucide.Check, null)
+                            Icon(HugeIcons.Tick01, null)
                         }
                     }
                 }
@@ -563,7 +563,7 @@ private fun ChatListPreview(
             placeholder = { Text(stringResource(R.string.history_page_search)) },
             leadingIcon = {
                 Icon(
-                    imageVector = Lucide.Search,
+                    imageVector = HugeIcons.Search01,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )
@@ -572,7 +572,7 @@ private fun ChatListPreview(
                 if (searchQuery.isNotEmpty()) {
                     IconButton(onClick = { searchQuery = "" }) {
                         Icon(
-                            imageVector = Lucide.X,
+                            imageVector = HugeIcons.Cancel01,
                             contentDescription = "Clear",
                             modifier = Modifier.size(20.dp)
                         )
@@ -712,7 +712,7 @@ private fun BoxScope.MessageJumper(
                 ).copy(alpha = 0.65f)
             ) {
                 Icon(
-                    imageVector = Lucide.ChevronsUp,
+                    imageVector = HugeIcons.ArrowUpDouble,
                     contentDescription = null,
                     modifier = Modifier
                         .padding(4.dp)
@@ -735,7 +735,7 @@ private fun BoxScope.MessageJumper(
                 ).copy(alpha = 0.65f)
             ) {
                 Icon(
-                    imageVector = Lucide.ChevronUp,
+                    imageVector = HugeIcons.ArrowUp01,
                     contentDescription = null,
                     modifier = Modifier
                         .padding(4.dp)
@@ -753,7 +753,7 @@ private fun BoxScope.MessageJumper(
                 ).copy(alpha = 0.65f)
             ) {
                 Icon(
-                    imageVector = Lucide.ChevronDown,
+                    imageVector = HugeIcons.ArrowDown01,
                     contentDescription = null,
                     modifier = Modifier
                         .padding(4.dp)
@@ -771,7 +771,7 @@ private fun BoxScope.MessageJumper(
                 ).copy(alpha = 0.65f),
             ) {
                 Icon(
-                    imageVector = Lucide.ChevronsDown,
+                    imageVector = HugeIcons.ArrowDownDouble,
                     contentDescription = stringResource(R.string.chat_page_scroll_to_bottom),
                     modifier = Modifier
                         .padding(4.dp)

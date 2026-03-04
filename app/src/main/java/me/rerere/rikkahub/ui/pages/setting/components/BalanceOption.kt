@@ -1,5 +1,9 @@
 package me.rerere.rikkahub.ui.pages.setting.components
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.Refresh03
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,10 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronUp
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.RotateCw
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.common.http.isJsonExprValid
@@ -64,12 +64,12 @@ fun SettingProviderBalanceOption(
             ) {
                 if (expand) {
                     Icon(
-                        imageVector = Lucide.ChevronUp,
+                        imageVector = HugeIcons.ArrowUp01,
                         contentDescription = null,
                     )
                 } else {
                     Icon(
-                        imageVector = Lucide.ChevronDown,
+                        imageVector = HugeIcons.ArrowDown01,
                         contentDescription = null,
                     )
                 }
@@ -108,7 +108,7 @@ fun SettingProviderBalanceOption(
                         }
                     }
                 ) {
-                    Icon(Lucide.RotateCw, null)
+                    Icon(HugeIcons.Refresh03, null)
                 }
             }
         }

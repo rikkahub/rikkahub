@@ -42,7 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import me.rerere.rikkahub.ui.icons.Lucide
+import androidx.compose.ui.util.fastForEach
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -55,6 +55,21 @@ import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.highlight.HighlightText
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Clipboard
+import me.rerere.hugeicons.stroke.Clock01
+import me.rerere.hugeicons.stroke.Clock02
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Eraser
+import me.rerere.hugeicons.stroke.GlobalSearch
+import me.rerere.hugeicons.stroke.QuillWrite01
+import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.hugeicons.stroke.Time02
+import me.rerere.hugeicons.stroke.Tools
+import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -96,22 +111,17 @@ private object ClipboardActions {
 
 private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
     ToolNames.MEMORY -> when (action) {
-        MemoryActions.CREATE, MemoryActions.EDIT -> Lucide.BookHeart
-        MemoryActions.DELETE -> Lucide.BookDashed
-        else -> Lucide.Wrench
+        MemoryActions.CREATE, MemoryActions.EDIT -> HugeIcons.QuillWrite01
+        MemoryActions.DELETE -> HugeIcons.Eraser
+        else -> HugeIcons.QuillWrite01
     }
 
-    ToolNames.SEARCH_WEB -> Lucide.Search
-    ToolNames.SCRAPE_WEB -> Lucide.Earth
-    ToolNames.GET_TIME_INFO -> Lucide.Clock
-    ToolNames.CLIPBOARD -> when (action) {
-        ClipboardActions.READ -> Lucide.Clipboard
-        ClipboardActions.WRITE -> Lucide.ClipboardPaste
-        else -> Lucide.Clipboard
-    }
-    ToolNames.TTS -> Lucide.Volume2
-
-    else -> Lucide.Wrench
+    ToolNames.SEARCH_WEB -> HugeIcons.Search01
+    ToolNames.SCRAPE_WEB -> HugeIcons.GlobalSearch
+    ToolNames.GET_TIME_INFO -> HugeIcons.Time02
+    ToolNames.CLIPBOARD -> HugeIcons.Clipboard
+    ToolNames.TTS -> HugeIcons.VolumeHigh
+    else -> HugeIcons.Tools
 }
 
 private fun JsonElement?.getStringContent(key: String): String? =
@@ -224,7 +234,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                         modifier = Modifier.size(28.dp),
                     ) {
                         Icon(
-                            imageVector = Lucide.X,
+                            imageVector = HugeIcons.Cancel01,
                             contentDescription = stringResource(R.string.chat_message_tool_deny),
                             modifier = Modifier.size(14.dp)
                         )
@@ -234,7 +244,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                         modifier = Modifier.size(28.dp),
                     ) {
                         Icon(
-                            imageVector = Lucide.Check,
+                            imageVector = HugeIcons.Tick01,
                             contentDescription = stringResource(R.string.chat_message_tool_approve),
                             modifier = Modifier.size(14.dp)
                         )
@@ -323,7 +333,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                                 modifier = Modifier.size(28.dp),
                             ) {
                                 Icon(
-                                    imageVector = Lucide.RotateCcw,
+                                    imageVector = HugeIcons.Refresh01,
                                     contentDescription = "Replay",
                                     modifier = Modifier.size(14.dp),
                                 )
@@ -610,7 +620,7 @@ private fun GenericToolPreview(
                     }
                 ) {
                     Icon(
-                        Lucide.Trash2,
+                        imageVector = HugeIcons.Delete01,
                         contentDescription = "Delete memory"
                     )
                 }
@@ -634,7 +644,7 @@ private fun GenericToolPreview(
                 }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    output.forEach { part ->
+                    output.fastForEach { part ->
                         when (part) {
                             is UIMessagePart.Text -> HighlightCodeBlock(
                                 code = runCatching {

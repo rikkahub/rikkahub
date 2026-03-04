@@ -1,5 +1,11 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -56,12 +62,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronUp
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.X
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
@@ -152,7 +152,7 @@ private fun AssistantPromptContent(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
             Column(
-                modifier = Modifier.padding(8.dp),
+                modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val systemPromptValue = rememberTextFieldState(
@@ -372,7 +372,7 @@ private fun AssistantPromptContent(
                                     )
                                 }
                             ) {
-                                Icon(Lucide.X, null)
+                                Icon(HugeIcons.Cancel01, null)
                             }
                         }
                         OutlinedTextField(
@@ -414,7 +414,7 @@ private fun AssistantPromptContent(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Lucide.Plus, null)
+                    Icon(HugeIcons.Add01, null)
                 }
             }
         }
@@ -473,7 +473,7 @@ private fun AssistantPromptContent(
                                     )
                                 }
                             ) {
-                                Icon(Lucide.X, null)
+                                Icon(HugeIcons.Cancel01, null)
                             }
                         }
                         OutlinedTextField(
@@ -507,7 +507,7 @@ private fun AssistantPromptContent(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Lucide.Plus, null)
+                    Icon(HugeIcons.Add01, null)
                 }
             }
         }
@@ -548,7 +548,7 @@ private fun AssistantPromptContent(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Lucide.Plus, null)
+                    Icon(HugeIcons.Add01, null)
                 }
             }
         }
@@ -608,7 +608,7 @@ private fun AssistantRegexCard(
                     }
                 ) {
                     Icon(
-                        imageVector = if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                        imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
                         contentDescription = null
                     )
                 }
@@ -759,7 +759,7 @@ private fun AssistantRegexCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Icon(Lucide.Trash2, null)
+                        Icon(HugeIcons.Delete01, null)
                         Text(stringResource(R.string.delete))
                     }
                 }

@@ -32,9 +32,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import me.rerere.rikkahub.ui.icons.Lucide
 import com.dokar.sonner.ToastType
 import com.google.common.cache.CacheBuilder
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Download01
+import me.rerere.hugeicons.stroke.View
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
@@ -160,7 +163,7 @@ fun Mermaid(
                     },
                 ) {
                     Icon(
-                        Lucide.Eye,
+                        HugeIcons.View,
                         contentDescription = "Prewview"
                     )
                 }
@@ -173,7 +176,7 @@ fun Mermaid(
                     },
                 ) {
                     Icon(
-                        Lucide.Download,
+                        HugeIcons.Download01,
                         contentDescription = stringResource(R.string.mermaid_export)
                     )
                 }
@@ -206,7 +209,7 @@ fun Mermaid(
                         }
                     ) {
                         Icon(
-                            Lucide.X,
+                            HugeIcons.Cancel01,
                             contentDescription = "Close"
                         )
                     }

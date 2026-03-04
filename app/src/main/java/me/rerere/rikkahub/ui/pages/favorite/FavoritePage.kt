@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.favorite
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,8 +39,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -162,7 +162,7 @@ private fun SwipeableFavoriteCard(
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 Icon(
-                    imageVector = Lucide.Trash2,
+                    imageVector = HugeIcons.Delete01,
                     contentDescription = stringResource(R.string.assistant_page_remove),
                     tint = MaterialTheme.colorScheme.onErrorContainer,
                 )

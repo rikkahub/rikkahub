@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,9 +45,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.R
@@ -218,7 +218,7 @@ private fun FileItem(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Lucide.Image,
+                            imageVector = HugeIcons.Image02,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -229,7 +229,10 @@ private fun FileItem(
                     onClick = onDelete,
                     modifier = Modifier.align(Alignment.TopEnd)
                 ) {
-                    Icon(Lucide.Trash2, contentDescription = stringResource(R.string.setting_files_page_delete_content_description))
+                    Icon(
+                        HugeIcons.Delete01,
+                        contentDescription = stringResource(R.string.setting_files_page_delete_content_description)
+                    )
                 }
             }
 

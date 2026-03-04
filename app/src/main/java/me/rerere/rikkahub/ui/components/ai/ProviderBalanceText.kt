@@ -15,9 +15,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import me.rerere.rikkahub.ui.icons.Lucide
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.MoneyBag02
 import me.rerere.rikkahub.utils.SimpleCache
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
@@ -68,7 +69,7 @@ fun ProviderBalanceText(
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Icon(
-            imageVector = Lucide.Coins,
+            imageVector = HugeIcons.MoneyBag02,
             contentDescription = null,
             modifier = Modifier.size(style.fontSize.toDp()),
             tint = color.takeOrElse { LocalContentColor.current }

@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Alert01
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -8,8 +10,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.TriangleAlert
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
@@ -65,7 +65,7 @@ fun ConversationSizeWarningDialog(
         onDismissRequest = onDismiss,
         icon = {
             Icon(
-                imageVector = Lucide.TriangleAlert,
+                imageVector = HugeIcons.Alert01,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.tertiary
             )

@@ -1,5 +1,17 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.AlertCircle
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.MessageBlocked
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Console
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Upload02
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,18 +78,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.CircleAlert
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronUp
-import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MessageSquareOff
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Settings
-import com.composables.icons.lucide.Terminal
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.Upload
-import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -85,6 +85,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import me.rerere.ai.core.InputSchema
+import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
@@ -143,14 +144,14 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                             showImportDialog = true
                         }
                     ) {
-                        Icon(Lucide.Import, null)
+                        Icon(HugeIcons.FileImport, null)
                     }
                     IconButton(
                         onClick = {
                             creationState.open(McpServerConfig.StreamableHTTPServer())
                         }
                     ) {
-                        Icon(Lucide.Plus, null)
+                        Icon(HugeIcons.Add01, null)
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -253,14 +254,14 @@ private fun McpServerItem(
                         scope.launch { dismissBoxState.reset() }
                     }
                 ) {
-                    Icon(Lucide.X, null)
+                    Icon(HugeIcons.Cancel01, null)
                 }
                 FilledTonalIconButton(
                     onClick = {
                         onDelete()
                     }
                 ) {
-                    Icon(Lucide.Trash2, null)
+                    Icon(HugeIcons.Delete01, null)
                 }
             }
         },
@@ -281,18 +282,18 @@ private fun McpServerItem(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 when (status) {
-                    McpStatus.Idle -> Icon(Lucide.MessageSquareOff, null)
+                    McpStatus.Idle -> Icon(HugeIcons.MessageBlocked, null)
                     McpStatus.Connecting -> CircularProgressIndicator(
                         modifier = Modifier.size(
                             24.dp
                         )
                     )
 
-                    McpStatus.Connected -> Icon(Lucide.Terminal, null)
+                    McpStatus.Connected -> Icon(HugeIcons.McpServer, null)
                     is McpStatus.Reconnecting -> CircularProgressIndicator(
                         modifier = Modifier.size(24.dp)
                     )
-                    is McpStatus.Error -> Icon(Lucide.CircleAlert, null)
+                    is McpStatus.Error -> Icon(HugeIcons.AlertCircle, null)
                 }
 
                 Column(
@@ -337,7 +338,7 @@ private fun McpServerItem(
                         onEdit(item)
                     }
                 ) {
-                    Icon(Lucide.Settings, null)
+                    Icon(HugeIcons.Settings03, null)
                 }
             }
         }
@@ -700,7 +701,7 @@ private fun McpCommonOptionsConfigure(
                             )
                         }) {
                             Icon(
-                                Lucide.Trash2,
+                                HugeIcons.Delete01,
                                 contentDescription = stringResource(R.string.setting_mcp_page_delete_header)
                             )
                         }
@@ -726,7 +727,7 @@ private fun McpCommonOptionsConfigure(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
-                        Lucide.Plus,
+                        HugeIcons.Add01,
                         contentDescription = stringResource(R.string.setting_mcp_page_add_header)
                     )
                     Spacer(Modifier.width(4.dp))
@@ -859,7 +860,7 @@ private fun McpToolCard(
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                        if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )

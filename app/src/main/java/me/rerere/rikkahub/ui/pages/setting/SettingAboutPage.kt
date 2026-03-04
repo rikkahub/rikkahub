@@ -1,5 +1,11 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Code
+import me.rerere.hugeicons.stroke.Earth
+import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.Github
+import me.rerere.hugeicons.stroke.SmartPhone01
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -35,12 +41,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.composables.icons.lucide.Code
-import com.composables.icons.lucide.Earth
-import com.composables.icons.lucide.FileText
-import com.composables.icons.lucide.Github
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Phone
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -140,14 +140,14 @@ fun SettingAboutPage() {
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = LocalIndication.current,
                             ),
-                            leadingContent = { Icon(Lucide.Code, null) },
+                            leadingContent = { Icon(HugeIcons.Code, null) },
                             supportingContent = {
                                 Text("${BuildConfig.VERSION_NAME} / ${BuildConfig.VERSION_CODE}")
                             },
                             headlineContent = { Text(stringResource(R.string.about_page_version)) },
                         )
                         item(
-                            leadingContent = { Icon(Lucide.Phone, null) },
+                            leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
                             supportingContent = {
                                 Text("${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} / Android ${android.os.Build.VERSION.RELEASE} / SDK ${android.os.Build.VERSION.SDK_INT}")
                             },
@@ -162,19 +162,19 @@ fun SettingAboutPage() {
                     ) {
                         item(
                             onClick = { context.openUrl("https://rikka-ai.com/") },
-                            leadingContent = { Icon(Lucide.Earth, null) },
+                            leadingContent = { Icon(HugeIcons.Earth, null) },
                             supportingContent = { Text("https://rikka-ai.com") },
                             headlineContent = { Text(stringResource(R.string.about_page_website)) },
                         )
                         item(
                             onClick = { context.openUrl("https://github.com/rikkahub/rikkahub") },
-                            leadingContent = { Icon(Lucide.Github, null) },
+                            leadingContent = { Icon(HugeIcons.Github, null) },
                             supportingContent = { Text("https://github.com/rikkahub/rikkahub") },
                             headlineContent = { Text(stringResource(R.string.about_page_github)) },
                         )
                         item(
                             onClick = { context.openUrl("https://github.com/rikkahub/rikkahub/blob/master/LICENSE") },
-                            leadingContent = { Icon(Lucide.FileText, null) },
+                            leadingContent = { Icon(HugeIcons.File02, null) },
                             supportingContent = { Text("https://github.com/rikkahub/rikkahub/blob/master/LICENSE") },
                             headlineContent = { Text(stringResource(R.string.about_page_license)) },
                         )

@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.backup.tabs
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.File01
+import me.rerere.hugeicons.stroke.FileImport
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -20,9 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.File
-import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
@@ -185,7 +185,7 @@ fun ImportExportTab(
                         if (isExporting) {
                             CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
                         } else {
-                            Icon(Lucide.File, null)
+                            Icon(HugeIcons.File01, null)
                         }
                     },
                 )
@@ -211,7 +211,7 @@ fun ImportExportTab(
                         if (isRestoring) {
                             CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
                         } else {
-                            Icon(Lucide.Import, null)
+                            Icon(HugeIcons.FileImport, null)
                         }
                     },
                 )
@@ -239,7 +239,7 @@ fun ImportExportTab(
                         if (isRestoring && importType == "chatbox") {
                             CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
                         } else {
-                            Icon(Lucide.Import, null)
+                            Icon(HugeIcons.FileImport, null)
                         }
                     },
                 )
