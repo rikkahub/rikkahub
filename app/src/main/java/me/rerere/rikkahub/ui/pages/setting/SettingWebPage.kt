@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import me.rerere.hugeicons.stroke.Stop
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
@@ -158,7 +159,7 @@ fun SettingWebPage() {
                         )
                     } else {
                         Icon(
-                            imageVector = if (serverState.isRunning) HugeIcons.StopCircle else HugeIcons.Play,
+                            imageVector = if (serverState.isRunning) HugeIcons.Stop else HugeIcons.Play,
                             contentDescription = null,
                         )
                     }
