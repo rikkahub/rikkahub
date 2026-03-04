@@ -66,12 +66,13 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import androidx.core.net.toUri
-import me.rerere.rikkahub.ui.icons.Lucide
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
@@ -360,7 +361,7 @@ private fun MarkdownNode(
                 ) {
                     if (isChecked) {
                         Icon(
-                            imageVector = Lucide.Check,
+                            imageVector = HugeIcons.Tick01,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
