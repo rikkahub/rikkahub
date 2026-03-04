@@ -39,12 +39,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
-
-import me.rerere.rikkahub.ui.icons.Lucide
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.modifier.onClick
@@ -132,7 +133,7 @@ fun TextArea(
                 ) {
                     if (enableFullscreen) {
                         Icon(
-                            imageVector = Lucide.Fullscreen,
+                            imageVector = HugeIcons.FullScreen,
                             contentDescription = stringResource(R.string.text_area_fullscreen_edit),
                             modifier = Modifier
                                 .onClick(onClick = {
@@ -143,7 +144,7 @@ fun TextArea(
                     }
 
                     Icon(
-                        imageVector = Lucide.Import,
+                        imageVector = HugeIcons.FileImport,
                         contentDescription = stringResource(R.string.text_area_import_from_file),
                         modifier = Modifier
                             .onClick(onClick = {
