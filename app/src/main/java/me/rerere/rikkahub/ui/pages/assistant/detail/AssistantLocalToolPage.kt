@@ -7,16 +7,15 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -24,7 +23,8 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolCatalog
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -36,18 +36,23 @@ fun AssistantLocalToolPage(id: String) {
         }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(stringResource(R.string.assistant_page_tab_local_tools))
                 },
                 navigationIcon = {
                     BackButton()
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
             )
-        }
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         AssistantLocalToolContent(
             modifier = Modifier.padding(innerPadding),
@@ -71,58 +76,30 @@ private fun AssistantLocalToolContent(
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        LocalToolCatalog.all.forEach { tool ->
-            LocalToolCard(
-                title = stringResource(tool.titleRes),
-                description = stringResource(tool.descRes),
-                isEnabled = assistant.localTools.contains(tool.option),
-                onToggle = { enabled ->
-                    val newLocalTools = if (enabled) {
-                        (assistant.localTools + tool.option).distinct()
-                    } else {
-                        assistant.localTools - tool.option
+        CardGroup {
+            LocalToolCatalog.all.forEach { tool ->
+                item(
+                    headlineContent = {
+                        Text(stringResource(tool.titleRes))
+                    },
+                    supportingContent = {
+                        Text(stringResource(tool.descRes))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = assistant.localTools.contains(tool.option),
+                            onCheckedChange = { enabled ->
+                                val newLocalTools = if (enabled) {
+                                    (assistant.localTools + tool.option).distinct()
+                                } else {
+                                    assistant.localTools - tool.option
+                                }
+                                onUpdate(assistant.copy(localTools = newLocalTools))
+                            }
+                        )
                     }
-                    onUpdate(assistant.copy(localTools = newLocalTools))
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun LocalToolCard(
-    title: String,
-    description: String,
-    isEnabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    content: @Composable (() -> Unit)? = null
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        )
-    ) {
-        FormItem(
-            modifier = Modifier.padding(8.dp),
-            label = {
-                Text(title)
-            },
-            description = {
-                Text(description)
-            },
-            tail = {
-                Switch(
-                    checked = isEnabled,
-                    onCheckedChange = onToggle
                 )
-            },
-            content = {
-                if (isEnabled && content != null) {
-                    content()
-                } else {
-                    null
-                }
             }
-        )
+        }
     }
 }

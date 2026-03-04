@@ -745,7 +745,7 @@ private fun Paragraph(
     }
 
     val paragraphModifier = modifier.then(
-        if (node.nextSibling() != null) Modifier.padding(bottom = 16.dp)
+        if (node.nextSibling() != null) Modifier.padding(bottom = LocalTextStyle.current.fontSize.toDp())
         else Modifier
     )
 
@@ -768,9 +768,7 @@ private fun Paragraph(
 
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
-    FlowRow(
-        modifier = paragraphModifier
-    ) {
+    FlowRow(modifier = paragraphModifier) {
         val annotatedString = remember(content, enableLatexRendering) {
             buildAnnotatedString {
                 node.children.fastForEach { child ->
