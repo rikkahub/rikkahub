@@ -104,7 +104,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.appTempFolder
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -197,7 +197,7 @@ fun ChatInput(
                 .imePadding()
                 .navigationBarsPadding()
                 .padding(horizontal = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Surface(
                 modifier = Modifier
@@ -218,7 +218,7 @@ fun ChatInput(
                 color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
             ) {
                 Column(
-                    modifier = Modifier.padding(vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     // Medias
@@ -227,14 +227,15 @@ fun ChatInput(
                     // Text Input Row
                     TextInputRow(
                         state = state,
-                        context = context,
                         termuxCommandModeEnabled = termuxCommandModeEnabled,
                         onSendMessage = { sendMessage() }
                     )
 
                     // Actions Row
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -242,7 +243,7 @@ fun ChatInput(
                             modifier = Modifier
                                 .weight(1f)
                                 .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             // Model Picker
                             ModelSelector(
@@ -333,15 +334,14 @@ fun ChatInput(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(36.dp)
                                 .clip(CircleShape)
                                 .combinedClickable(
                                     enabled = loading || !state.isEmpty(),
                                     onClick = {
                                         dismissFilesPicker()
                                         sendMessage()
-                                    },
-                                    onLongClick = {
+                                    }, onLongClick = {
                                         dismissFilesPicker()
                                         sendMessageWithoutAnswer()
                                     }
@@ -367,7 +367,11 @@ fun ChatInput(
                                 KeepScreenOn()
                                 Icon(HugeIcons.Cancel01, stringResource(R.string.stop), tint = contentColor)
                             } else {
-                                Icon(HugeIcons.ArrowUp01, stringResource(R.string.send), tint = contentColor)
+                                Icon(
+                                    imageVector = HugeIcons.ArrowUp02,
+                                    contentDescription = stringResource(R.string.send),
+                                    tint = contentColor
+                                )
                             }
                         }
                     }
@@ -410,148 +414,132 @@ fun ChatInput(
 @Composable
 private fun TextInputRow(
     state: ChatInputState,
-    context: Context,
     termuxCommandModeEnabled: Boolean,
     onSendMessage: () -> Unit,
 ) {
     val settings = LocalSettings.current
     val filesManager: FilesManager = koinInject()
     val assistant = settings.getCurrentAssistant()
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // TextField
-        Surface(
-            shape = RoundedCornerShape(32.dp),
-            tonalElevation = 4.dp,
-            modifier = Modifier.weight(1f)
-        ) {
-            Column {
-                if (state.isEditing()) {
-                    Surface(
-                        tonalElevation = 8.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(R.string.editing),
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Icon(
-                                HugeIcons.Cancel01, stringResource(R.string.cancel_edit),
-                                modifier = Modifier
-                                    .clickable {
-                                        state.clearInput()
-                                    }
-                            )
-                        }
-                    }
-                }
-                var isFocused by remember { mutableStateOf(false) }
-                var isFullScreen by remember { mutableStateOf(false) }
-                val receiveContentListener = remember(settings.displaySetting.pasteLongTextAsFile, settings.displaySetting.pasteLongTextThreshold) {
-                    ReceiveContentListener { transferableContent ->
-                        when {
-                            transferableContent.hasMediaType(MediaType.Image) -> {
-                                transferableContent.consume { item ->
-                                    val uri = item.uri
-                                    if (uri != null) {
-                                        state.addImages(
-                                            filesManager.createChatFilesByContents(
-                                                listOf(
-                                                    uri
-                                                )
-                                            )
-                                        )
-                                    }
-                                    uri != null
-                                }
-                            }
-
-                            settings.displaySetting.pasteLongTextAsFile &&
-                                transferableContent.hasMediaType(MediaType.Text) -> {
-                                transferableContent.consume { item ->
-                                    val text = item.text?.toString()
-                                    if (text != null && text.length > settings.displaySetting.pasteLongTextThreshold) {
-                                        val document = filesManager.createChatTextFile(text)
-                                        state.addFiles(listOf(document))
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                }
-                            }
-
-                            else -> transferableContent
-                        }
-                    }
-                }
-                TextField(
-                    state = state.textContent,
+        if (state.isEditing()) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .contentReceiver(receiveContentListener)
-                        .onFocusChanged {
-                            isFocused = it.isFocused
-                        },
-                    shape = RoundedCornerShape(32.dp),
-                    placeholder = {
-                        Text(stringResource(R.string.chat_input_placeholder))
-                    },
-                    lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
-                    keyboardOptions = KeyboardOptions(
-                        imeAction = if (settings.displaySetting.sendOnEnter) ImeAction.Send else ImeAction.Default
-                    ),
-                    onKeyboardAction = {
-                        if (settings.displaySetting.sendOnEnter && !state.isEmpty()) {
-                            onSendMessage()
-                        }
-                    },
-                    colors = TextFieldDefaults.colors().copy(
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                    ),
-                    trailingIcon = {
-                        if (isFocused) {
-                            IconButton(
-                                onClick = {
-                                    isFullScreen = !isFullScreen
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = stringResource(R.string.editing))
+                    Spacer(Modifier.weight(1f))
+                    Icon(
+                        imageVector = HugeIcons.Cancel01,
+                        contentDescription = stringResource(R.string.cancel_edit),
+                        modifier = Modifier.clickable { state.clearInput() }
+                    )
+                }
+            }
+        }
+
+        var isFocused by remember { mutableStateOf(false) }
+        var isFullScreen by remember { mutableStateOf(false) }
+        val receiveContentListener =
+            remember(settings.displaySetting.pasteLongTextAsFile, settings.displaySetting.pasteLongTextThreshold) {
+                ReceiveContentListener { transferableContent ->
+                    when {
+                        transferableContent.hasMediaType(MediaType.Image) -> {
+                            transferableContent.consume { item ->
+                                val uri = item.uri
+                                if (uri != null) {
+                                    state.addImages(
+                                        filesManager.createChatFilesByContents(
+                                            listOf(uri)
+                                        )
+                                    )
                                 }
-                            ) {
-                                Icon(HugeIcons.FullScreen, null)
-                            }
-                        }
-                    },
-                    leadingIcon = when {
-                        termuxCommandModeEnabled && !state.isEditing() -> {
-                            {
-                                TermuxCommandModePrefix()
+                                uri != null
                             }
                         }
 
-                        assistant.quickMessages.isNotEmpty() -> {
-                            {
-                                QuickMessageButton(assistant = assistant, state = state)
+                        settings.displaySetting.pasteLongTextAsFile && transferableContent.hasMediaType(MediaType.Text) -> {
+                            transferableContent.consume { item ->
+                                val text = item.text?.toString()
+                                if (text != null && text.length > settings.displaySetting.pasteLongTextThreshold) {
+                                    val document = filesManager.createChatTextFile(text)
+                                    state.addFiles(listOf(document))
+                                    true
+                                } else {
+                                    false
+                                }
                             }
                         }
 
-                        else -> null
-                    },
-                )
-                if (isFullScreen) {
-                    FullScreenEditor(state = state) {
-                        isFullScreen = false
+                        else -> transferableContent
                     }
                 }
+            }
+        TextField(
+            state = state.textContent,
+            modifier = Modifier
+                .fillMaxWidth()
+                .contentReceiver(receiveContentListener)
+                .onFocusChanged {
+                    isFocused = it.isFocused
+                },
+            shape = MaterialTheme.shapes.largeIncreased,
+            placeholder = {
+                Text(stringResource(R.string.chat_input_placeholder))
+            },
+            lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
+            keyboardOptions = KeyboardOptions(
+                imeAction = if (settings.displaySetting.sendOnEnter) ImeAction.Send else ImeAction.Default
+            ),
+            onKeyboardAction = {
+                if (settings.displaySetting.sendOnEnter && !state.isEmpty()) {
+                    onSendMessage()
+                }
+            },
+            colors = TextFieldDefaults.colors().copy(
+                unfocusedIndicatorColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+            ),
+            trailingIcon = {
+                if (isFocused) {
+                    IconButton(
+                        onClick = {
+                            isFullScreen = !isFullScreen
+                        }
+                    ) {
+                        Icon(HugeIcons.FullScreen, null)
+                    }
+                }
+            },
+            leadingIcon = when {
+                termuxCommandModeEnabled && !state.isEditing() -> {
+                    {
+                        TermuxCommandModePrefix()
+                    }
+                }
+
+                assistant.quickMessages.isNotEmpty() -> {
+                    {
+                        QuickMessageButton(assistant = assistant, state = state)
+                    }
+                }
+
+                else -> null
+            },
+        )
+        if (isFullScreen) {
+            FullScreenEditor(state = state) {
+                isFullScreen = false
             }
         }
     }

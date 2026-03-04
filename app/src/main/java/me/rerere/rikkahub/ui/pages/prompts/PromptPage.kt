@@ -1,5 +1,17 @@
 package me.rerere.rikkahub.ui.pages.prompts
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Book01
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.Download01
+import me.rerere.hugeicons.stroke.FileDownload
+import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Tools
+import me.rerere.hugeicons.stroke.Share03
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.MagicWand01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,19 +79,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Book
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.Download
-import com.composables.icons.lucide.FileDown
-import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Settings2
-import com.composables.icons.lucide.Share2
-import com.composables.icons.lucide.Syringe
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.Wand
-import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
@@ -126,7 +125,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 NavigationBarItem(
                     selected = pagerState.currentPage == 0,
                     label = { Text(stringResource(R.string.prompt_page_message_template_tab)) },
-                    icon = { Icon(Lucide.Wand, null) },
+                    icon = { Icon(HugeIcons.MagicWand01, null) },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(0) }
                     }
@@ -134,7 +133,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 NavigationBarItem(
                     selected = pagerState.currentPage == 1,
                     label = { Text(stringResource(R.string.prompt_page_mode_injection_tab)) },
-                    icon = { Icon(Lucide.Syringe, null) },
+                    icon = { Icon(HugeIcons.Tools, null) },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(1) }
                     }
@@ -142,7 +141,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 NavigationBarItem(
                     selected = pagerState.currentPage == 2,
                     label = { Text(stringResource(R.string.prompt_page_lorebook_tab)) },
-                    icon = { Icon(Lucide.Book, null) },
+                    icon = { Icon(HugeIcons.Book01, null) },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(2) }
                     }
@@ -292,7 +291,7 @@ private fun ModeInjectionTab(
                 .offset(y = -ScreenOffset),
             leadingContent = {
                 IconButton(onClick = { importer.importFromFile() }) {
-                    Icon(Lucide.Import, null)
+                    Icon(HugeIcons.FileImport, null)
                 }
             },
         ) {
@@ -301,7 +300,7 @@ private fun ModeInjectionTab(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Lucide.Plus, null)
+                    Icon(HugeIcons.Add01, null)
                     AnimatedVisibility(expanded) {
                         Row {
                             Spacer(modifier = Modifier.size(8.dp))
@@ -348,7 +347,7 @@ private fun ModeInjectionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { scope.launch { swipeState.reset() } }) {
-                    Icon(Lucide.X, null)
+                    Icon(HugeIcons.Cancel01, null)
                 }
                 FilledIconButton(onClick = {
                     scope.launch {
@@ -356,7 +355,7 @@ private fun ModeInjectionCard(
                         swipeState.reset()
                     }
                 }) {
-                    Icon(Lucide.Trash2, stringResource(R.string.prompt_page_delete))
+                    Icon(HugeIcons.Delete01, stringResource(R.string.prompt_page_delete))
                 }
             }
         },
@@ -402,10 +401,10 @@ private fun ModeInjectionCard(
                     }
                 }
                 IconButton(onClick = { showExportDialog = true }) {
-                    Icon(Lucide.Share2, stringResource(R.string.export_title))
+                    Icon(HugeIcons.Share03, stringResource(R.string.export_title))
                 }
                 IconButton(onClick = onEdit) {
-                    Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
+                    Icon(HugeIcons.Tools, stringResource(R.string.prompt_page_edit))
                 }
             }
         }
@@ -440,7 +439,7 @@ private fun ModeInjectionEditSheet(
                     onDismiss()
                 }
             }) {
-                Icon(Lucide.ChevronDown, null)
+                Icon(HugeIcons.ArrowDown01, null)
             }
         }
     ) {
@@ -691,7 +690,7 @@ private fun LorebookTab(
                 .offset(y = -ScreenOffset),
             leadingContent = {
                 IconButton(onClick = { importer.importFromFile() }) {
-                    Icon(Lucide.Import, null)
+                    Icon(HugeIcons.FileImport, null)
                 }
             },
         ) {
@@ -700,7 +699,7 @@ private fun LorebookTab(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Lucide.Plus, null)
+                    Icon(HugeIcons.Add01, null)
                     AnimatedVisibility(expanded) {
                         Row {
                             Spacer(modifier = Modifier.size(8.dp))
@@ -747,7 +746,7 @@ private fun LorebookCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { scope.launch { swipeState.reset() } }) {
-                    Icon(Lucide.X, null)
+                    Icon(HugeIcons.Cancel01, null)
                 }
                 FilledIconButton(onClick = {
                     scope.launch {
@@ -755,7 +754,7 @@ private fun LorebookCard(
                         swipeState.reset()
                     }
                 }) {
-                    Icon(Lucide.Trash2, stringResource(R.string.prompt_page_delete))
+                    Icon(HugeIcons.Delete01, stringResource(R.string.prompt_page_delete))
                 }
             }
         },
@@ -812,10 +811,10 @@ private fun LorebookCard(
                     }
                 }
                 IconButton(onClick = { showExportDialog = true }) {
-                    Icon(Lucide.Share2, stringResource(R.string.export_title))
+                    Icon(HugeIcons.Share03, stringResource(R.string.export_title))
                 }
                 IconButton(onClick = onEdit) {
-                    Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
+                    Icon(HugeIcons.Tools, stringResource(R.string.prompt_page_edit))
                 }
             }
         }
@@ -858,7 +857,7 @@ private fun LorebookEditSheet(
                     onDismiss()
                 }
             }) {
-                Icon(Lucide.ChevronDown, null)
+                Icon(HugeIcons.ArrowDown01, null)
             }
         }
     ) {
@@ -918,7 +917,7 @@ private fun LorebookEditSheet(
                     IconButton(onClick = {
                         entryEditState.open(PromptInjection.RegexInjection())
                     }) {
-                        Icon(Lucide.Plus, stringResource(R.string.prompt_page_add_entry))
+                        Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add_entry))
                     }
                 }
 
@@ -1001,10 +1000,10 @@ private fun RegexInjectionEntryCard(
                 }
             }
             IconButton(onClick = onEdit) {
-                Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
+                Icon(HugeIcons.Tools, stringResource(R.string.prompt_page_edit))
             }
             IconButton(onClick = onDelete) {
-                Icon(Lucide.Trash2, stringResource(R.string.prompt_page_delete))
+                Icon(HugeIcons.Delete01, stringResource(R.string.prompt_page_delete))
             }
         }
     }
@@ -1097,7 +1096,7 @@ private fun RegexInjectionEditDialog(
                                     },
                                     modifier = Modifier.size(16.dp)
                                 ) {
-                                    Icon(Lucide.X, null, modifier = Modifier.size(12.dp))
+                                    Icon(HugeIcons.Cancel01, null, modifier = Modifier.size(12.dp))
                                 }
                             }
                         )
@@ -1123,7 +1122,7 @@ private fun RegexInjectionEditDialog(
                             }
                         }
                     ) {
-                        Icon(Lucide.Plus, stringResource(R.string.prompt_page_add))
+                        Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add))
                     }
                 }
 

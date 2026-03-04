@@ -1,5 +1,11 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.DragDropHorizontal
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.QuillWrite01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
@@ -47,12 +53,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.GripHorizontal
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.SquarePen
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -103,7 +103,7 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
                         }
                     ) {
                         Icon(
-                            imageVector = Lucide.Plus,
+                            imageVector = HugeIcons.Add01,
                             contentDescription = stringResource(R.string.setting_page_search_add_provider)
                         )
                     }
@@ -177,7 +177,7 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
                             .animateItem(),
                         dragHandle = {
                             Icon(
-                                imageVector = Lucide.GripHorizontal,
+                                imageVector = HugeIcons.DragDropHorizontal,
                                 contentDescription = null,
                                 modifier = Modifier.longPressDraggableHandle(
                                     onDragStarted = {
@@ -269,7 +269,7 @@ private fun SearchProviderCard(
                     }
                 ) {
                     Icon(
-                        imageVector = if (expand) Lucide.X else Lucide.SquarePen,
+                        imageVector = if (expand) HugeIcons.Cancel01 else HugeIcons.QuillWrite01,
                         contentDescription = if (expand) "Hide details" else "Show details"
                     )
                 }
@@ -399,7 +399,7 @@ private fun SearchProviderCard(
                         onClick = onDeleteService
                     ) {
                         Icon(
-                            Lucide.Trash2,
+                            HugeIcons.Delete01,
                             contentDescription = stringResource(R.string.setting_page_search_delete_provider)
                         )
                     }

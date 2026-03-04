@@ -3,6 +3,11 @@ package me.rerere.rikkahub.ui.pages.setting
 import android.content.Intent
 import android.os.Build
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
+import me.rerere.hugeicons.stroke.Play
+import me.rerere.hugeicons.stroke.StopCircle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,12 +49,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Eye
-import com.composables.icons.lucide.EyeOff
-import com.composables.icons.lucide.Play
-import com.composables.icons.lucide.Square
 import kotlinx.coroutines.launch
+import me.rerere.hugeicons.stroke.Stop
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
@@ -100,6 +101,7 @@ fun SettingWebPage() {
         val intent = Intent(context, WebServerService::class.java).apply {
             action = WebServerService.ACTION_START
             putExtra(WebServerService.EXTRA_PORT, settings.webServerPort)
+            putExtra(WebServerService.EXTRA_LOCALHOST_ONLY, settings.webServerLocalhostOnly)
         }
         context.startForegroundService(intent)
         scope.launch {
@@ -157,7 +159,7 @@ fun SettingWebPage() {
                         )
                     } else {
                         Icon(
-                            imageVector = if (serverState.isRunning) Lucide.Square else Lucide.Play,
+                            imageVector = if (serverState.isRunning) HugeIcons.Stop else HugeIcons.Play,
                             contentDescription = null,
                         )
                     }
@@ -223,6 +225,24 @@ fun SettingWebPage() {
                         },
                     )
                     item(
+                        headlineContent = { Text(stringResource(R.string.setting_page_web_server_localhost_only)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_web_server_localhost_only_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.webServerLocalhostOnly,
+                                onCheckedChange = { checked ->
+                                    scope.launch {
+                                        settingsStore.update {
+                                            it.copy(webServerLocalhostOnly = checked)
+                                        }
+                                    }
+                                },
+                                // 运行中不允许切换 需重启服务生效
+                                enabled = !serverState.isRunning,
+                            )
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable)) },
                         supportingContent = { Text(stringResource(R.string.setting_page_web_server_jwt_enable_desc)) },
                         trailingContent = {
@@ -265,7 +285,7 @@ fun SettingWebPage() {
                                 trailingIcon = {
                                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                         Icon(
-                                            imageVector = if (passwordVisible) Lucide.EyeOff else Lucide.Eye,
+                                            imageVector = if (passwordVisible) HugeIcons.ViewOff else HugeIcons.View,
                                             contentDescription = null
                                         )
                                     }
@@ -284,28 +304,31 @@ fun SettingWebPage() {
                         },
                     )
                     if (serverState.isRunning) {
-                        val lanUrl = "http://${serverState.address ?: "localhost"}:${serverState.port}"
-                        item(
-                            onClick = { copyUrl(lanUrl) },
-                            headlineContent = { Text(stringResource(R.string.setting_page_web_server_lan_address)) },
-                            supportingContent = { Text(lanUrl) },
-                        )
+                        val port = serverState.port
+                        if (!serverState.localhostOnly) {
+                            val lanUrl = "http://${serverState.address ?: "localhost"}:$port"
+                            item(
+                                onClick = { copyUrl(lanUrl) },
+                                headlineContent = { Text(stringResource(R.string.setting_page_web_server_lan_address)) },
+                                supportingContent = { Text(lanUrl) },
+                            )
 
-                        val localUrl = "http://localhost:${serverState.port}"
+                            if (serverState.hostname != null) {
+                                val mdnsUrl = "http://${serverState.hostname}:$port"
+                                item(
+                                    onClick = { copyUrl(mdnsUrl) },
+                                    headlineContent = { Text(stringResource(R.string.setting_page_web_server_mdns_address)) },
+                                    supportingContent = { Text(mdnsUrl) },
+                                )
+                            }
+                        }
+
+                        val localUrl = "http://localhost:$port"
                         item(
                             onClick = { copyUrl(localUrl) },
                             headlineContent = { Text(stringResource(R.string.setting_page_web_server_local_address)) },
                             supportingContent = { Text(localUrl) },
                         )
-
-                        if (serverState.hostname != null) {
-                            val mdnsUrl = "http://${serverState.hostname}:${serverState.port}"
-                            item(
-                                onClick = { copyUrl(mdnsUrl) },
-                                headlineContent = { Text(stringResource(R.string.setting_page_web_server_mdns_address)) },
-                                supportingContent = { Text(mdnsUrl) },
-                            )
-                        }
                     }
                     item(
                         headlineContent = {

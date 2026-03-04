@@ -20,12 +20,15 @@ import me.rerere.rikkahub.web.startWebServer
 import java.net.ServerSocket
 
 private const val TAG = "WebServerManager"
+private const val HOST_ALL_INTERFACES = "0.0.0.0"
+private const val HOST_LOOPBACK = "127.0.0.1"
 
 data class WebServerState(
     val isRunning: Boolean = false,
     val isLoading: Boolean = false,
     val port: Int = 8080,
     val serviceName: String = DEFAULT_SERVICE_NAME,
+    val localhostOnly: Boolean = false,
     val hostname: String? = null,
     val address: String? = null,
     val error: String? = null
@@ -47,7 +50,8 @@ class WebServerManager(
 
     fun start(
         port: Int = 8080,
-        serviceName: String = DEFAULT_SERVICE_NAME
+        serviceName: String = DEFAULT_SERVICE_NAME,
+        localhostOnly: Boolean = false
     ) {
         if (server != null) {
             Log.w(TAG, "Server already running")
@@ -55,52 +59,48 @@ class WebServerManager(
         }
 
         appScope.launch {
+            // 仅本机模式绑定回环地址
+            val host = if (localhostOnly) HOST_LOOPBACK else HOST_ALL_INTERFACES
+            val baseState = WebServerState(
+                port = port,
+                serviceName = serviceName,
+                localhostOnly = localhostOnly
+            )
             try {
                 _state.value = _state.value.copy(isLoading = true)
-                Log.i(TAG, "Starting web server on port $port")
+                Log.i(TAG, "Starting web server on $host:$port")
                 if (!isPortAvailable(port)) {
                     Log.w(TAG, "Port $port is already in use")
-                    _state.value = WebServerState(
-                        isRunning = false,
-                        port = port,
-                        serviceName = serviceName,
-                        error = "Port $port is already in use"
-                    )
+                    _state.value = baseState.copy(error = "Port $port is already in use")
                     return@launch
                 }
-                server = startWebServer(port = port) {
+                server = startWebServer(port = port, host = host) {
                     configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
                 }.start(wait = false)
 
-                _state.value = WebServerState(
-                    isRunning = true,
-                    port = port,
-                    serviceName = serviceName
-                )
-                runCatching {
-                    nsdRegistrar.register(
-                        port = port,
-                        serviceName = serviceName,
-                        onRegistered = { info ->
-                            _state.value = _state.value.copy(
-                                serviceName = info.serviceName,
-                                hostname = info.hostname,
-                                address = info.address.hostAddress
-                            )
-                        }
-                    )
-                }.onFailure {
-                    Log.w(TAG, "NSD register failed", it)
+                _state.value = baseState.copy(isRunning = true)
+                // 仅局域网模式注册 mDNS
+                if (!localhostOnly) {
+                    runCatching {
+                        nsdRegistrar.register(
+                            port = port,
+                            serviceName = serviceName,
+                            onRegistered = { info ->
+                                _state.value = _state.value.copy(
+                                    serviceName = info.serviceName,
+                                    hostname = info.hostname,
+                                    address = info.address.hostAddress
+                                )
+                            }
+                        )
+                    }.onFailure {
+                        Log.w(TAG, "NSD register failed", it)
+                    }
                 }
-                Log.i(TAG, "Web server started successfully on port $port")
+                Log.i(TAG, "Web server started successfully on $host:$port")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start web server", e)
-                _state.value = WebServerState(
-                    isRunning = false,
-                    port = port,
-                    serviceName = serviceName,
-                    error = e.message
-                )
+                _state.value = baseState.copy(error = e.message)
             }
         }
     }
@@ -129,10 +129,11 @@ class WebServerManager(
 
     fun restart(
         port: Int = _state.value.port,
-        serviceName: String = _state.value.serviceName
+        serviceName: String = _state.value.serviceName,
+        localhostOnly: Boolean = _state.value.localhostOnly
     ) {
         stop()
-        start(port, serviceName)
+        start(port, serviceName, localhostOnly)
     }
 
     private fun isPortAvailable(port: Int): Boolean {

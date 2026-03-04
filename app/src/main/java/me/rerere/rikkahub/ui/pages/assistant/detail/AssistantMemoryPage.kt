@@ -1,5 +1,9 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,10 +41,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Pencil
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Trash2
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
@@ -266,7 +266,7 @@ private fun AssistantMemoryContent(
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
                 Icon(
-                    imageVector = Lucide.Plus,
+                    imageVector = HugeIcons.Add01,
                     contentDescription = null
                 )
             }
@@ -343,13 +343,13 @@ private fun MemoryItem(
             IconButton(
                 onClick = { onEditMemory(memory) }
             ) {
-                Icon(Lucide.Pencil, null)
+                Icon(HugeIcons.PencilEdit01, null)
             }
             IconButton(
                 onClick = { onDeleteMemory(memory) }
             ) {
                 Icon(
-                    Lucide.Trash2,
+                    HugeIcons.Delete01,
                     stringResource(R.string.assistant_page_delete)
                 )
             }

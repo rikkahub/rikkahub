@@ -1,5 +1,14 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.BookOpen01
+import me.rerere.hugeicons.stroke.Brain02
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Code
+import me.rerere.hugeicons.stroke.Message02
+import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Injection
+import me.rerere.hugeicons.stroke.Wrench01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
@@ -23,15 +32,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.BookOpen
-import com.composables.icons.lucide.Brain
-import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.Code
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MessageSquare
-import com.composables.icons.lucide.Settings
-import com.composables.icons.lucide.Syringe
-import com.composables.icons.lucide.Wrench
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Assistant
@@ -95,52 +95,52 @@ fun AssistantDetailPage(id: String) {
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.AssistantBasic(id)) },
-                        leadingContent = { Icon(Lucide.Settings, null) },
+                        leadingContent = { Icon(HugeIcons.Settings03, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_basic_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_basic)) },
-                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantPrompt(id)) },
-                        leadingContent = { Icon(Lucide.MessageSquare, null) },
+                        leadingContent = { Icon(HugeIcons.Message02, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_prompt_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_prompt)) },
-                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantInjections(id)) },
-                        leadingContent = { Icon(Lucide.Syringe, null) },
+                        leadingContent = { Icon(HugeIcons.Injection, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_injections_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_injections)) },
-                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantMemory(id)) },
-                        leadingContent = { Icon(Lucide.Brain, null) },
+                        leadingContent = { Icon(HugeIcons.Brain02, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_memory_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_memory)) },
-                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantRequest(id)) },
-                        leadingContent = { Icon(Lucide.Code, null) },
+                        leadingContent = { Icon(HugeIcons.Code, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_request_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_request)) },
-                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantMcp(id)) },
-                        leadingContent = { Icon(Lucide.Wrench, null) },
+                        leadingContent = { Icon(HugeIcons.Wrench01, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_mcp_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_mcp)) },
-                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantLocalTool(id)) },
-                        leadingContent = { Icon(Lucide.BookOpen, null) },
+                        leadingContent = { Icon(HugeIcons.BookOpen01, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_local_tools_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_local_tools)) },
-                        trailingContent = { Icon(Lucide.ChevronRight, null) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }
             }

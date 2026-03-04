@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.setting.components
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Tick01
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
@@ -32,8 +34,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
-import com.composables.icons.lucide.Check
-import com.composables.icons.lucide.Lucide
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.PresetTheme
 import me.rerere.rikkahub.ui.theme.PresetThemes
@@ -101,7 +101,7 @@ fun PresetThemeButton(
             }
             if (selected) {
                 Icon(
-                    Lucide.Check,
+                    HugeIcons.Tick01,
                     contentDescription = null,
                     tint = scheme.contentColorFor(scheme.onPrimary)
                 )

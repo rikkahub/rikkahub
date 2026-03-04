@@ -1,5 +1,10 @@
 package me.rerere.rikkahub.ui.pages.webview
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Bug01
+import me.rerere.hugeicons.stroke.Earth
+import me.rerere.hugeicons.stroke.Refresh01
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,13 +34,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.ArrowRight
-import com.composables.icons.lucide.Bug
-import com.composables.icons.lucide.Earth
-import com.composables.icons.lucide.EllipsisVertical
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.RefreshCw
 import me.rerere.rikkahub.R
+import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
@@ -88,21 +88,21 @@ fun WebViewPage(url: String, content: String) {
                 },
                 actions = {
                     IconButton(onClick = { state.reload() }) {
-                        Icon(Lucide.RefreshCw, contentDescription = stringResource(R.string.webview_page_refresh))
+                        Icon(HugeIcons.Refresh01, contentDescription = stringResource(R.string.webview_page_refresh))
                     }
 
                     IconButton(
                         onClick = { state.goForward() },
                         enabled = state.canGoForward
                     ) {
-                        Icon(Lucide.ArrowRight, contentDescription = stringResource(R.string.webview_page_forward))
+                        Icon(HugeIcons.ArrowRight01, contentDescription = stringResource(R.string.webview_page_forward))
                     }
 
                     val urlHandler = LocalUriHandler.current
                     IconButton(
                         onClick = { showDropdown = true }
                     ) {
-                        Icon(Lucide.EllipsisVertical, contentDescription = stringResource(R.string.webview_page_more_options))
+                        Icon(HugeIcons.MoreVertical, contentDescription = stringResource(R.string.webview_page_more_options))
 
                         DropdownMenu(
                             expanded = showDropdown,
@@ -110,7 +110,7 @@ fun WebViewPage(url: String, content: String) {
                         ) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.webview_page_open_in_browser)) },
-                                leadingIcon = { Icon(Lucide.Earth, contentDescription = null) },
+                                leadingIcon = { Icon(HugeIcons.Earth, contentDescription = null) },
                                 onClick = {
                                     showDropdown = false
                                     state.currentUrl?.let { url ->
@@ -122,7 +122,7 @@ fun WebViewPage(url: String, content: String) {
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.webview_page_console_logs)) },
-                                leadingIcon = { Icon(Lucide.Bug, contentDescription = null) },
+                                leadingIcon = { Icon(HugeIcons.Bug01, contentDescription = null) },
                                 onClick = {
                                     showDropdown = false
                                     showConsoleSheet = true

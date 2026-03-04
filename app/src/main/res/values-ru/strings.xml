@@ -1023,4 +1023,6 @@
   <string name="webview_page_refresh">Обновить</string>
   <string name="webview_page_forward">Вперёд</string>
   <string name="webview_page_more_options">Дополнительно</string>
+  <string name="setting_page_web_server_localhost_only">Только localhost</string>
+  <string name="setting_page_web_server_localhost_only_desc">Принимать запросы только на localhost (127.0.0.1), отключить доступ по LAN и mDNS</string>
 </resources>
