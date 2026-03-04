@@ -888,5 +888,7 @@
   <string name="setting_mcp_page_import_confirm">Импорт</string>
   <string name="setting_display_page_enable_blur_effect_title">Включить эффект размытия</string>
   <string name="setting_display_page_enable_blur_effect_desc">Включить эффект размытия на панели ввода чата</string>
+  <string name="setting_page_web_server_localhost_only">Только localhost</string>
+  <string name="setting_page_web_server_localhost_only_desc">Принимать запросы только на localhost (127.0.0.1), отключить доступ по LAN и mDNS</string>
 </resources>
 

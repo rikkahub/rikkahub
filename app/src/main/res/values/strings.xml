@@ -806,6 +806,8 @@
   <string name="setting_page_web_server_jwt_enable_desc">Require password verification when accessing the web interface</string>
   <string name="setting_page_web_server_password">Access password</string>
   <string name="setting_page_web_server_password_desc">Password required for web interface access</string>
+  <string name="setting_page_web_server_localhost_only">Only localhost</string>
+  <string name="setting_page_web_server_localhost_only_desc">Listen only on localhost (127.0.0.1), disable LAN and mDNS access</string>
   <string name="setting_page_web_server_lan_address">LAN Address</string>
   <string name="setting_page_web_server_mdns_address">mDNS Address</string>
   <string name="setting_page_web_server_error">Error</string>

@@ -17,9 +17,10 @@ import io.ktor.server.sse.SSE
 
 fun startWebServer(
     port: Int = 8080,
+    host: String = "0.0.0.0",
     module: suspend Application.() -> Unit
 ): EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration> {
-    return embeddedServer(CIO, port = port, host = "0.0.0.0", module = {
+    return embeddedServer(CIO, port = port, host = host, module = {
         install(Compression)
         install(CORS) {
             allowHeader(HttpHeaders.ContentType)
