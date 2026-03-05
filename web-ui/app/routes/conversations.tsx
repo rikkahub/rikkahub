@@ -15,6 +15,7 @@ import {
 } from "~/components/extended/conversation";
 import { ChatInput } from "~/components/input/chat-input";
 import { ChatMessage } from "~/components/message/chat-message";
+import { Button } from "~/components/ui/button";
 import { Drawer, DrawerContent } from "~/components/ui/drawer";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "~/components/ui/resizable";
 import { TypingIndicator } from "~/components/ui/typing-indicator";
@@ -24,6 +25,7 @@ import { toConversationSummaryUpdate, useConversationList } from "~/hooks/use-co
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { useCurrentModel } from "~/hooks/use-current-model";
 import { getAssistantDisplayName, getModelDisplayName } from "~/lib/display";
+import { convertConversationToMarkdown, downloadMarkdown } from "~/lib/export-markdown";
 import { cn } from "~/lib/utils";
 import api, { sse } from "~/services/api";
 import { useChatInputStore, useAppStore } from "~/stores";
@@ -1021,6 +1023,15 @@ function ConversationsPageInner() {
           onRemovePart={handleRemoveInputPart}
           onSend={handleSend}
           onStop={activeId ? handleStop : undefined}
+          onExportConversation={
+            detail && detail.messages.length > 0
+              ? (includeReasoning: boolean) => {
+                  const content = convertConversationToMarkdown(detail, includeReasoning);
+                  const filename = `${detail.title || "conversation"}.md`;
+                  downloadMarkdown(content, filename);
+                }
+              : undefined
+          }
         />
       </div>
     </div>

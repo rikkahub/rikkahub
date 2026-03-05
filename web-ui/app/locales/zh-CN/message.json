@@ -24,6 +24,8 @@
     "more_actions": "更多操作",
     "create_fork": "创建分叉",
     "delete": "删除",
+    "export_markdown": "导出为 Markdown",
+    "export_markdown_with_reasoning": "导出为 Markdown（含推理过程）",
     "prompt_tokens_with_cache": "{{promptTokens}} tokens ({{cachedTokens}} cached)",
     "prompt_tokens": "{{promptTokens}} tokens",
     "completion_tokens": "{{completionTokens}} tokens",

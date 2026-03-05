@@ -3,6 +3,7 @@ import * as React from "react";
 import {
   ArrowUp,
   File,
+  FileDown,
   Image,
   LoaderCircle,
   Mic,
@@ -52,6 +53,7 @@ export interface ChatInputProps {
   onStop?: () => Promise<void> | void;
   onCancelEdit?: () => void;
   onSuggestionClick?: (suggestion: string) => void;
+  onExportConversation?: (includeReasoning: boolean) => void;
   className?: string;
 }
 
@@ -230,6 +232,7 @@ function ChatInputInner({
   onStop,
   onCancelEdit,
   onSuggestionClick,
+  onExportConversation,
   className,
 }: ChatInputProps) {
   const { t } = useTranslation("input");
@@ -715,6 +718,26 @@ function ChatInputInner({
                     <File className="size-4" />
                     {t("chat.upload_document")}
                   </DropdownMenuItem>
+                  {onExportConversation && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onExportConversation(false);
+                      }}
+                    >
+                      <FileDown className="size-4" />
+                      {t("chat.export_conversation")}
+                    </DropdownMenuItem>
+                  )}
+                  {onExportConversation && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onExportConversation(true);
+                      }}
+                    >
+                      <FileDown className="size-4" />
+                      {t("chat.export_conversation_with_reasoning")}
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
               <ModelList disabled={!canSwitchModel} className="max-w-64" />

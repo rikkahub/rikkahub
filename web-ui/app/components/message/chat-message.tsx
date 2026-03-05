@@ -10,6 +10,7 @@ import {
   Clock3,
   Copy,
   Ellipsis,
+  FileDown,
   GitFork,
   Pencil,
   RefreshCw,
@@ -28,6 +29,7 @@ import type {
 } from "~/types";
 
 import { copyTextToClipboard } from "~/lib/clipboard";
+import { convertMessageToMarkdown, downloadMarkdown } from "~/lib/export-markdown";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import {
@@ -414,32 +416,50 @@ const ChatMessageActionsRow = React.memo(({
         </>
       )}
 
-      {onDelete && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              aria-label={t("chat_message.more_actions")}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            aria-label={t("chat_message.more_actions")}
+            disabled={actionDisabled}
+            size="icon-xs"
+            title={t("chat_message.more_actions")}
+            type="button"
+            variant="ghost"
+          >
+            <Ellipsis className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align={alignRight ? "end" : "start"}>
+          <DropdownMenuItem
+            onSelect={() => {
+              const content = convertMessageToMarkdown(message, false);
+              downloadMarkdown(content, `message-${message.id}.md`);
+            }}
+          >
+            <FileDown className="size-3.5" />
+            {t("chat_message.export_markdown")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              const content = convertMessageToMarkdown(message, true);
+              downloadMarkdown(content, `message-${message.id}.md`);
+            }}
+          >
+            <FileDown className="size-3.5" />
+            {t("chat_message.export_markdown_with_reasoning")}
+          </DropdownMenuItem>
+          {onFork && (
+            <DropdownMenuItem
               disabled={actionDisabled}
-              size="icon-xs"
-              title={t("chat_message.more_actions")}
-              type="button"
-              variant="ghost"
+              onSelect={() => {
+                void handleFork();
+              }}
             >
-              <Ellipsis className="size-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align={alignRight ? "end" : "start"}>
-            {onFork && (
-              <DropdownMenuItem
-                disabled={actionDisabled}
-                onSelect={() => {
-                  void handleFork();
-                }}
-              >
-                <GitFork className="size-3.5" />
-                {t("chat_message.create_fork")}
-              </DropdownMenuItem>
-            )}
+              <GitFork className="size-3.5" />
+              {t("chat_message.create_fork")}
+            </DropdownMenuItem>
+          )}
+          {onDelete && (
             <DropdownMenuItem
               variant="destructive"
               disabled={actionDisabled}
@@ -450,9 +470,9 @@ const ChatMessageActionsRow = React.memo(({
               <Trash2 className="size-3.5" />
               {t("chat_message.delete")}
             </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 });
