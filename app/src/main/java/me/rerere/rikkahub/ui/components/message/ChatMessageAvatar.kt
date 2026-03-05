@@ -51,12 +51,14 @@ fun ChatMessageUserAvatar(
                     maxLines = 1,
                     color = LocalContentColor.current.copy(alpha = 0.85f),
                 )
-                Text(
-                    text = message.createdAt.toJavaLocalDateTime().toLocalString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LocalContentColor.current.copy(alpha = 0.6f),
-                    maxLines = 1,
-                )
+                if (settings.displaySetting.showDateBelowName) {
+                    Text(
+                        text = message.createdAt.toJavaLocalDateTime().toLocalString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LocalContentColor.current.copy(alpha = 0.6f),
+                        maxLines = 1,
+                    )
+                }
             }
             UIAvatar(
                 name = nickname,
@@ -102,12 +104,14 @@ fun ChatMessageAssistantAvatar(
                             style = MaterialTheme.typography.titleSmallEmphasized,
                             maxLines = 1,
                         )
-                        Text(
-                            text = message.createdAt.toJavaLocalDateTime().toLocalString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = LocalContentColor.current.copy(alpha = 0.8f),
-                            maxLines = 1,
-                        )
+                        if (settings.displaySetting.showDateBelowName) {
+                            Text(
+                                text = message.createdAt.toJavaLocalDateTime().toLocalString(),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = LocalContentColor.current.copy(alpha = 0.8f),
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             } else {
@@ -126,11 +130,13 @@ fun ChatMessageAssistantAvatar(
                             text = model.displayName,
                             style = MaterialTheme.typography.titleSmallEmphasized,
                         )
-                        Text(
-                            text = message.createdAt.toJavaLocalDateTime().toLocalString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = LocalContentColor.current.copy(alpha = 0.8f)
-                        )
+                        if (settings.displaySetting.showDateBelowName) {
+                            Text(
+                                text = message.createdAt.toJavaLocalDateTime().toLocalString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LocalContentColor.current.copy(alpha = 0.8f)
+                            )
+                        }
                     }
                 }
             }

@@ -895,5 +895,6 @@
   <string name="setting_display_page_enable_blur_effect_desc">在聊天輸入列啟用模糊效果</string>
   <string name="setting_page_web_server_localhost_only">僅限本機</string>
   <string name="setting_page_web_server_localhost_only_desc">僅監聽 localhost (127.0.0.1)，停用區域網路與 mDNS 存取</string>
+  <string name="setting_display_page_show_date_below_name_title">在名稱下方顯示日期</string>
+  <string name="setting_display_page_show_date_below_name_desc">是否在暱稱或模型名稱下方顯示訊息日期</string>
 </resources>
-
