@@ -3,7 +3,15 @@
     "allow": [
       "Bash(./gradlew:*)",
       "Bash(find:*)",
-      "Bash(uv run --directory locale-tui src/main.py:*)"
+      "Bash(uv run --directory locale-tui src/main.py:*)",
+      "Bash(git fetch upstream)",
+      "Bash(git merge upstream/master)",
+      "Bash(git push origin master)",
+      "Bash(git add app/src/main/java/me/rerere/rikkahub/data/model/TextSelectionConfig.kt app/src/main/java/me/rerere/rikkahub/ui/activity/TextSelectionVM.kt app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingAndroidIntegrationPage.kt app/src/main/res/values/strings.xml app/src/main/res/values-zh/strings.xml app/src/main/res/values-zh-rTW/strings.xml app/src/main/res/values-ja/strings.xml app/src/main/res/values-ko-rKR/strings.xml app/src/main/res/values-ru/strings.xml)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nfeat\\(text-selection\\): support per-action model selection\n\nAllow each text selection action \\(translate, explain, summarize, ask\\) to\nspecify its own model, so users can use lighter models for quick tasks\ninstead of the heavy main chat model. Falls back to assistant/global model\nwhen not set.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)",
+      "Bash(git pull origin master --rebase)",
+      "Bash(git stash && git pull origin master --rebase && git stash pop)"
     ],
     "deny": []
   }
