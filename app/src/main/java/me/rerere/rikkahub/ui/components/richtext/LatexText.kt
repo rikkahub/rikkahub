@@ -16,12 +16,12 @@ import androidx.compose.ui.unit.TextUnit
 import ru.noties.jlatexmath.JLatexMathDrawable
 import kotlin.math.ceil
 
-data class LatexSize(
+internal data class LatexSize(
     val widthPx: Int,
     val heightPx: Int
 )
 
-fun assumeLatexSize(latex: String, fontSize: Float): LatexSize? {
+internal fun assumeLatexSize(latex: String, fontSize: Float): LatexSize? {
     return runCatching {
         JLatexMathDrawable.builder(processLatex(latex))
             .textSize(fontSize)
@@ -61,7 +61,7 @@ fun LatexText(
     )
     val density = LocalDensity.current
 
-    val drawable = remember(latex, fontSize, style) {
+    val drawable = remember(latex, fontSize, style.color, style.background) {
         runCatching {
             with(density) {
                 getLatexDrawable(
