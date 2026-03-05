@@ -894,5 +894,6 @@
   <string name="setting_page_web_server_localhost_only_desc">Принимать запросы только на localhost (127.0.0.1), отключить доступ по LAN и mDNS</string>
   <string name="setting_display_page_show_date_below_name_title">Показывать дату под именем</string>
   <string name="setting_display_page_show_date_below_name_desc">Показывать дату сообщения под ником или названием модели</string>
+  <string name="chat_page_message_count">%d сообщений</string>
 </resources>
 

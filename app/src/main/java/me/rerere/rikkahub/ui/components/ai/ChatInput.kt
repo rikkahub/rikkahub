@@ -905,6 +905,15 @@ private fun FilesPicker(
             headlineContent = {
                 Text(stringResource(R.string.chat_page_compress_context))
             },
+            trailingContent = {
+                if (conversation.messageNodes.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.chat_page_message_count, conversation.messageNodes.size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
             modifier = Modifier
                 .clip(MaterialTheme.shapes.large)
                 .clickable {
