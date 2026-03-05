@@ -1,0 +1,38 @@
+name: Web UI Checks
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-ui:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: web-ui
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: web-ui
+        run: bun run typecheck
+
+      - name: Build
+        working-directory: web-ui
+        run: bun run build
