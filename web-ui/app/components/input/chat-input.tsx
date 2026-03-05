@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { fileTypeFromBuffer } from "file-type";
 import {
   ArrowUp,
   File,
@@ -57,86 +58,26 @@ export interface ChatInputProps {
   className?: string;
 }
 
-const DOCUMENT_UPLOAD_ACCEPT_EXTENSIONS = [
-  // Documents
-  ".pdf",
-  ".doc",
-  ".docx",
-  ".ppt",
-  ".pptx",
-  ".txt",
-  ".md",
-  ".csv",
-  ".json",
-  // Config files
-  ".yml",
-  ".yaml",
-  ".ini",
-  ".toml",
-  ".env",
-  ".conf",
-  ".config",
-  // Code files
-  ".go",
-  ".py",
-  ".js",
-  ".ts",
-  ".tsx",
-  ".jsx",
-  ".vue",
-  ".rs",
-  ".java",
-  ".kt",
-  ".c",
-  ".cpp",
-  ".h",
-  ".cs",
-  ".rb",
-  ".php",
-  ".swift",
-  ".dart",
-  ".scala",
-  ".sh",
-  ".bash",
-  ".zsh",
-  // Web
-  ".html",
-  ".htm",
-  ".css",
-  ".scss",
-  ".less",
-  ".xml",
-  // Data
-  ".sql",
-  ".graphql",
-  ".proto",
-  // Other text
-  ".log",
-  ".diff",
-  ".patch",
-] as const;
-
 const IMAGE_UPLOAD_ACCEPT = "image/*";
-const IMAGE_FILE_NAME_PATTERN =
-  /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|webp)$/i;
 
-function isAllowedUploadFile(file: globalThis.File): boolean {
-  if (file.type.startsWith("image/")) {
+async function isAllowedUploadFile(file: globalThis.File): Promise<boolean> {
+  const buffer = await file.slice(0, 4100).arrayBuffer();
+  const detected = await fileTypeFromBuffer(buffer);
+
+  // 无法识别 magic bytes → 文本文件 → 允许
+  if (!detected) return true;
+
+  // 识别为图片 / 视频 / 音频 → 允许
+  if (
+    detected.mime.startsWith("image/") ||
+    detected.mime.startsWith("video/") ||
+    detected.mime.startsWith("audio/")
+  ) {
     return true;
   }
 
-  if (file.type.length === 0 && IMAGE_FILE_NAME_PATTERN.test(file.name)) {
-    return true;
-  }
-
-  if (file.type.startsWith("text/")) {
-    return true;
-  }
-
-  const fileName = file.name.toLowerCase();
-  return DOCUMENT_UPLOAD_ACCEPT_EXTENSIONS.some((extension) =>
-    fileName.endsWith(extension),
-  );
+  // 其他可识别的二进制格式（exe、zip 等）→ 拒绝
+  return false;
 }
 
 function toMessagePart(
@@ -306,8 +247,11 @@ function ChatInputInner({
       }
 
       const allFiles = Array.from(fileList);
-      const uploadableFiles = allFiles.filter(isAllowedUploadFile);
-      const skippedFiles = allFiles.filter((f) => !isAllowedUploadFile(f));
+      const results = await Promise.all(
+        allFiles.map(async (f) => ({ file: f, allowed: await isAllowedUploadFile(f) })),
+      );
+      const uploadableFiles = results.filter((r) => r.allowed).map((r) => r.file);
+      const skippedFiles = results.filter((r) => !r.allowed).map((r) => r.file);
 
       if (skippedFiles.length > 0) {
         toast.warning(
@@ -442,7 +386,7 @@ function ChatInputInner({
   );
 
   const handlePaste = React.useCallback(
-    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
       if (!canUpload) return;
 
       // 粘贴长文本自动转换为文件
@@ -459,11 +403,17 @@ function ChatInputInner({
         }
       }
 
-      const uploadableFiles = Array.from(event.clipboardData.items)
-        .filter((item) => item.kind === "file")
-        .map((item) => item.getAsFile())
-        .filter((file): file is globalThis.File => file !== null)
-        .filter(isAllowedUploadFile);
+      const uploadableFiles = (
+        await Promise.all(
+          Array.from(event.clipboardData.items)
+            .filter((item) => item.kind === "file")
+            .map((item) => item.getAsFile())
+            .filter((file): file is globalThis.File => file !== null)
+            .map(async (file) => ({ file, allowed: await isAllowedUploadFile(file) })),
+        )
+      )
+        .filter((r) => r.allowed)
+        .map((r) => r.file);
 
       if (uploadableFiles.length === 0) {
         return;
@@ -654,7 +604,9 @@ function ChatInputInner({
             value={value}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
+            onPaste={(event) => {
+                void handlePaste(event);
+              }}
             placeholder={placeholder}
             disabled={!ready || disabled}
             className="min-h-[60px] max-h-[200px] resize-none border-0 bg-transparent dark:bg-transparent p-2 text-sm shadow-none focus-visible:ring-0"
@@ -669,7 +621,6 @@ function ChatInputInner({
                 <input
                   ref={fileInputRef}
                   className="hidden"
-                  accept={DOCUMENT_UPLOAD_ACCEPT_EXTENSIONS.join(",")}
                   multiple
                   onChange={handleUploadInputChange}
                   type="file"
