@@ -154,6 +154,14 @@
   @apply bg-transparent p-0 text-sm font-mono leading-relaxed;
 }
 
+/* KaTeX Display */
+.markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Tables (GFM) */
 .markdown table {
   @apply my-4 w-full border-collapse overflow-hidden rounded-lg border border-border;

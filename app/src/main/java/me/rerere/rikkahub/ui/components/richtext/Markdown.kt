@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -189,7 +190,8 @@ fun MarkdownBlock(
     content: String,
     modifier: Modifier = Modifier,
     style: TextStyle = LocalTextStyle.current,
-    onClickCitation: (String) -> Unit = {}
+    onClickCitation: (String) -> Unit = {},
+    allowInlinePromotion: Boolean = true,
 ) {
     var (data, setData) = remember {
         val preprocessed = preProcess(content)
@@ -221,7 +223,10 @@ fun MarkdownBlock(
         ) {
             astTree.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = preprocessed, onClickCitation = onClickCitation
+                    node = child,
+                    content = preprocessed,
+                    onClickCitation = onClickCitation,
+                    allowInlinePromotion = allowInlinePromotion,
                 )
             }
         }
@@ -268,14 +273,19 @@ private fun MarkdownNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    listLevel: Int = 0
+    listLevel: Int = 0,
+    allowInlinePromotion: Boolean = true,
 ) {
     when (node.type) {
         // 文件根节点
         MarkdownElementTypes.MARKDOWN_FILE -> {
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    modifier = modifier,
+                    onClickCitation = onClickCitation,
+                    allowInlinePromotion = allowInlinePromotion,
                 )
             }
         }
@@ -283,7 +293,11 @@ private fun MarkdownNode(
         // 段落
         MarkdownElementTypes.PARAGRAPH -> {
             Paragraph(
-                node = node, content = content, modifier = modifier, onClickCitation = onClickCitation
+                node = node,
+                content = content,
+                modifier = modifier,
+                onClickCitation = onClickCitation,
+                allowInlinePromotion = allowInlinePromotion,
             )
         }
 
@@ -317,6 +331,7 @@ private fun MarkdownNode(
                                 onClickCitation = onClickCitation,
                                 modifier = modifier.padding(vertical = headingPadding),
                                 trim = true,
+                                allowInlinePromotion = allowInlinePromotion,
                             )
                         }
                     }
@@ -331,7 +346,8 @@ private fun MarkdownNode(
                 content = content,
                 modifier = modifier.padding(vertical = 4.dp),
                 onClickCitation = onClickCitation,
-                level = listLevel
+                level = listLevel,
+                allowInlinePromotion = allowInlinePromotion,
             )
         }
 
@@ -341,7 +357,8 @@ private fun MarkdownNode(
                 content = content,
                 modifier = modifier.padding(vertical = 4.dp),
                 onClickCitation = onClickCitation,
-                level = listLevel
+                level = listLevel,
+                allowInlinePromotion = allowInlinePromotion,
             )
         }
 
@@ -389,7 +406,10 @@ private fun MarkdownNode(
                         .padding(8.dp)) {
                     node.children.fastForEach { child ->
                         MarkdownNode(
-                            node = child, content = content, onClickCitation = onClickCitation
+                            node = child,
+                            content = content,
+                            onClickCitation = onClickCitation,
+                            allowInlinePromotion = allowInlinePromotion,
                         )
                     }
                 }
@@ -419,7 +439,11 @@ private fun MarkdownNode(
             ProvideTextStyle(TextStyle(fontStyle = FontStyle.Italic)) {
                 node.children.fastForEach { child ->
                     MarkdownNode(
-                        node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                        node = child,
+                        content = content,
+                        modifier = modifier,
+                        onClickCitation = onClickCitation,
+                        allowInlinePromotion = allowInlinePromotion,
                     )
                 }
             }
@@ -429,7 +453,11 @@ private fun MarkdownNode(
             ProvideTextStyle(TextStyle(fontWeight = FontWeight.SemiBold)) {
                 node.children.fastForEach { child ->
                     MarkdownNode(
-                        node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                        node = child,
+                        content = content,
+                        modifier = modifier,
+                        onClickCitation = onClickCitation,
+                        allowInlinePromotion = allowInlinePromotion,
                     )
                 }
             }
@@ -574,7 +602,11 @@ private fun MarkdownNode(
             // 递归处理其他节点的子节点
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    modifier = modifier,
+                    onClickCitation = onClickCitation,
+                    allowInlinePromotion = allowInlinePromotion,
                 )
             }
         }
@@ -587,7 +619,8 @@ private fun UnorderedListNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    level: Int = 0
+    level: Int = 0,
+    allowInlinePromotion: Boolean = true,
 ) {
     val bulletStyle = when (level % 3) {
         0 -> "• "
@@ -605,7 +638,8 @@ private fun UnorderedListNode(
                     content = content,
                     bulletText = bulletStyle,
                     onClickCitation = onClickCitation,
-                    level = level
+                    level = level,
+                    allowInlinePromotion = allowInlinePromotion,
                 )
             }
         }
@@ -618,7 +652,8 @@ private fun OrderedListNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    level: Int = 0
+    level: Int = 0,
+    allowInlinePromotion: Boolean = true,
 ) {
     Column(modifier.padding(start = (level * 8).dp)) {
         var index = 1
@@ -631,7 +666,8 @@ private fun OrderedListNode(
                     content = content,
                     bulletText = numberText,
                     onClickCitation = onClickCitation,
-                    level = level
+                    level = level,
+                    allowInlinePromotion = allowInlinePromotion,
                 )
                 index++
             }
@@ -641,7 +677,12 @@ private fun OrderedListNode(
 
 @Composable
 private fun ListItemNode(
-    node: ASTNode, content: String, bulletText: String, onClickCitation: (String) -> Unit = {}, level: Int
+    node: ASTNode,
+    content: String,
+    bulletText: String,
+    onClickCitation: (String) -> Unit = {},
+    level: Int,
+    allowInlinePromotion: Boolean = true,
 ) {
     Column {
         // 分离列表项的直接内容和嵌套列表
@@ -664,6 +705,7 @@ private fun ListItemNode(
                             content = content,
                             onClickCitation = onClickCitation,
                             listLevel = level,
+                            allowInlinePromotion = allowInlinePromotion,
                         )
                     }
                 }
@@ -672,7 +714,11 @@ private fun ListItemNode(
         // nestedLists 渲染处理
         nestedLists.fastForEach { nestedList ->
             MarkdownNode(
-                node = nestedList, content = content, onClickCitation = onClickCitation, listLevel = level + 1 // 增加层级
+                node = nestedList,
+                content = content,
+                onClickCitation = onClickCitation,
+                listLevel = level + 1, // 增加层级
+                allowInlinePromotion = allowInlinePromotion,
             )
         }
     }
@@ -703,13 +749,17 @@ private fun Paragraph(
     trim: Boolean = false,
     onClickCitation: (String) -> Unit = {},
     modifier: Modifier,
+    allowInlinePromotion: Boolean = true,
 ) {
     // dumpAst(node, content)
     if (node.findChildOfTypeRecursive(MarkdownElementTypes.IMAGE, GFMElementTypes.BLOCK_MATH) != null) {
         FlowRow(modifier = modifier) {
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    onClickCitation = onClickCitation,
+                    allowInlinePromotion = allowInlinePromotion,
                 )
             }
         }
@@ -727,12 +777,52 @@ private fun Paragraph(
 
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
-    FlowRow(
+    BoxWithConstraints(
         modifier = modifier.then(
             if (node.nextSibling() != null) Modifier.padding(bottom = LocalTextStyle.current.fontSize.toDp())
             else Modifier
         )
     ) {
+        val paragraphText = remember(node, content) {
+            node.getTextInNode(content)
+        }
+        val containerWidthPx = with(density) {
+            maxWidth.toPx()
+        }
+        val textSizePx = with(density) {
+            if (textStyle.fontSize != TextUnit.Unspecified) textStyle.fontSize.toPx() else 0f
+        }
+        val rewrittenParagraph = remember(
+            paragraphText,
+            containerWidthPx,
+            textSizePx,
+            enableLatexRendering,
+            allowInlinePromotion,
+        ) {
+            if (!enableLatexRendering || !allowInlinePromotion || containerWidthPx <= 0f || textSizePx <= 0f) {
+                paragraphText
+            } else {
+                // 行内公式超出容器就提升成块级
+                val segments = collectInlineMathSegments(node, content, textSizePx)
+                promoteInlineMathByWidth(
+                    text = paragraphText,
+                    inlineMathSegments = segments.map { segment ->
+                        segment.relativeTo(node.startOffset)
+                    },
+                    containerWidthPx = containerWidthPx
+                )
+            }
+        }
+        if (rewrittenParagraph != paragraphText) {
+            // 关闭二次提升避免递归
+            MarkdownBlock(
+                content = rewrittenParagraph,
+                onClickCitation = onClickCitation,
+                allowInlinePromotion = false,
+            )
+            return@BoxWithConstraints
+        }
+
         val annotatedString = remember(content, enableLatexRendering) {
             buildAnnotatedString {
                 node.children.fastForEach { child ->
@@ -752,7 +842,7 @@ private fun Paragraph(
         }
         Text(
             text = annotatedString,
-            modifier = Modifier,
+            modifier = Modifier.fillMaxWidth(),
             inlineContent = inlineContents,
             softWrap = true,
             overflow = TextOverflow.Visible,
@@ -761,6 +851,73 @@ private fun Paragraph(
             )
         )
     }
+}
+
+internal data class InlineMathSegment(
+    val start: Int,
+    val end: Int,
+    val rawText: String,
+    val estimatedWidthPx: Float,
+)
+
+private fun InlineMathSegment.relativeTo(baseOffset: Int): InlineMathSegment {
+    return copy(
+        start = start - baseOffset,
+        end = end - baseOffset
+    )
+}
+
+private fun collectInlineMathSegments(node: ASTNode, content: String, fontSizePx: Float): List<InlineMathSegment> {
+    val segments = mutableListOf<InlineMathSegment>()
+    node.traverseChildren { child ->
+        if (child.type == GFMElementTypes.INLINE_MATH) {
+            val raw = child.getTextInNode(content)
+            val widthPx = assumeLatexSize(raw, fontSizePx)?.widthPx?.toFloat() ?: 0f
+            segments += InlineMathSegment(
+                start = child.startOffset,
+                end = child.endOffset,
+                rawText = raw,
+                estimatedWidthPx = widthPx,
+            )
+        }
+    }
+    return segments
+}
+
+internal fun promoteInlineMathByWidth(
+    text: String,
+    inlineMathSegments: List<InlineMathSegment>,
+    containerWidthPx: Float,
+): String {
+    if (inlineMathSegments.isEmpty() || containerWidthPx <= 0f) return text
+
+    val sorted = inlineMathSegments.sortedBy { segment ->
+        segment.start
+    }
+    val builder = StringBuilder(text.length + sorted.size * 2)
+    var cursor = 0
+    sorted.fastForEach { segment ->
+        if (segment.start < cursor || segment.end > text.length) return@fastForEach
+        builder.append(text.substring(cursor, segment.start))
+        if (segment.estimatedWidthPx > containerWidthPx) {
+            builder.append(inlineToBlockMath(segment.rawText))
+        } else {
+            builder.append(segment.rawText)
+        }
+        cursor = segment.end
+    }
+    builder.append(text.substring(cursor))
+    return builder.toString()
+}
+
+internal fun inlineToBlockMath(raw: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.startsWith("$$") && trimmed.endsWith("$$")) return raw
+    if (trimmed.startsWith("$") && trimmed.endsWith("$") && trimmed.length >= 2) {
+        val inner = trimmed.removePrefix("$").removeSuffix("$")
+        return "$$${inner}$$"
+    }
+    return raw
 }
 
 @Composable
@@ -983,25 +1140,38 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
 
         node.type == GFMElementTypes.INLINE_MATH -> {
             if (enableLatexRendering) {
-                // formula as id
                 val formula = node.getTextInNode(content)
-                appendInlineContent(formula, "[Latex]")
-                val (width, height) = with(density) {
+                val size = if (style.fontSize != TextUnit.Unspecified) {
                     assumeLatexSize(
-                        latex = formula, fontSize = style.fontSize.toPx()
-                    ).let {
-                        it.width().toSp() to it.height().toSp()
-                    }
+                        latex = formula,
+                        fontSize = with(density) { style.fontSize.toPx() }
+                    )
+                } else {
+                    null
                 }
-                inlineContents.putIfAbsent(/* key = */ formula,/* value = */ InlineTextContent(
-                    placeholder = Placeholder(
-                        width = width, height = height, placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
-                    ), children = {
-                        MathInline(
-                            latex = formula, modifier = Modifier
-                        )
-                    })
-                )
+                if (size == null) {
+                    append(formula)
+                } else {
+                    appendInlineContent(formula, "[Latex]")
+                    val (width, height) = with(density) {
+                        size.widthPx.toSp() to size.heightPx.toSp()
+                    }
+                    inlineContents.putIfAbsent(
+                        formula,
+                        InlineTextContent(
+                            placeholder = Placeholder(
+                                width = width,
+                                height = height,
+                                placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
+                            ),
+                            children = {
+                                MathInline(
+                                    latex = formula,
+                                    modifier = Modifier
+                                )
+                            })
+                    )
+                }
             } else {
                 // 禁用 LaTeX 渲染时，以等宽字体显示原始公式
                 val formula = node.getTextInNode(content)
