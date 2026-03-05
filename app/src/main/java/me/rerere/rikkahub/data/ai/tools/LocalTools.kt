@@ -5,6 +5,7 @@ import com.whl.quickjs.wrapper.QuickJSContext
 import com.whl.quickjs.wrapper.QuickJSObject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -81,6 +82,7 @@ class LocalTools(
                             put("description", "The JavaScript code to execute")
                         })
                     },
+                    required = listOf("code")
                 )
             },
             execute = {
@@ -110,7 +112,9 @@ class LocalTools(
                         put("logs", JsonPrimitive(logs.joinToString("\n")))
                     }
                     put(
-                        "result", when (result) {
+                        key = "result",
+                        element = when (result) {
+                            null -> JsonNull
                             is QuickJSObject -> JsonPrimitive(result.stringify())
                             else -> JsonPrimitive(result.toString())
                         }

@@ -279,6 +279,18 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             },
                         )
                         item(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_show_date_below_name_title)) },
+                            supportingContent = { Text(stringResource(R.string.setting_display_page_show_date_below_name_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = displaySetting.showDateBelowName,
+                                    onCheckedChange = {
+                                        updateDisplaySetting(displaySetting.copy(showDateBelowName = it))
+                                    }
+                                )
+                            },
+                        )
+                        item(
                             headlineContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_title)) },
                             supportingContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_desc)) },
                             trailingContent = {

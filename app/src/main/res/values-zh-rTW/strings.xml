@@ -153,10 +153,12 @@
   <string name="backup_page_export_desc">導出APP數據為檔案</string>
   <string name="backup_page_exporting">正在導出...</string>
   <string name="backup_page_files">檔案</string>
-  <string name="backup_page_import_chatbox_desc">導入ChatBox數據</string>
+  <string name="backup_page_import_chatbox_desc">匯入 ChatBox 提供者設定</string>
+  <string name="backup_page_import_cherry_studio_desc">匯入 Cherry Studio 提供者設定</string>
   <string name="backup_page_import_desc">導入本地備份檔案</string>
   <string name="backup_page_import_export">本地</string>
   <string name="backup_page_import_from_chatbox">從ChatBox導入</string>
+  <string name="backup_page_import_from_cherry_studio">從Cherry Studio導入</string>
   <string name="backup_page_import_from_other_app">從其他APP導入</string>
   <string name="backup_page_importing">正在恢復...</string>
   <string name="backup_page_loading_failed">載入備份檔案失敗: %s</string>
@@ -1055,5 +1057,7 @@
   <string name="text_selection_action_model_desc">為該操作指定模型。未設定時使用助手或預設對話模型。</string>
   <string name="text_selection_reset_actions_desc">還原內建動作預設值</string>
   <string name="text_selection_no_actions_enabled">未啟用任何快速動作。</string>
+  <string name="setting_display_page_show_date_below_name_title">在名稱下方顯示日期</string>
+  <string name="setting_display_page_show_date_below_name_desc">是否在暱稱或模型名稱下方顯示訊息日期</string>
 </resources>
 

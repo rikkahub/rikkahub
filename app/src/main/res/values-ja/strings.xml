@@ -153,10 +153,12 @@
   <string name="backup_page_export_desc">アプリデータをファイルにエクスポート</string>
   <string name="backup_page_exporting">エクスポート中...</string>
   <string name="backup_page_files">ファイル</string>
-  <string name="backup_page_import_chatbox_desc">ChatBoxデータをインポート</string>
+  <string name="backup_page_import_chatbox_desc">ChatBoxプロバイダー設定をインポート</string>
+  <string name="backup_page_import_cherry_studio_desc">Cherry Studioプロバイダー設定をインポート</string>
   <string name="backup_page_import_desc">ローカルバックアップファイルをインポート</string>
   <string name="backup_page_import_export">ローカル</string>
   <string name="backup_page_import_from_chatbox">ChatBoxからインポート</string>
+  <string name="backup_page_import_from_cherry_studio">Cherry Studioからインポート</string>
   <string name="backup_page_import_from_other_app">他のアプリからインポート</string>
   <string name="backup_page_importing">インポート中...</string>
   <string name="backup_page_loading_failed">バックアップファイルの読み込み失敗: %s</string>
@@ -1057,5 +1059,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="text_selection_action_model_desc">このアクション用のモデルを指定します。未設定の場合、アシスタントまたはデフォルトチャットモデルを使用します。</string>
   <string name="text_selection_reset_actions_desc">標準のアクションプリセットを復元します</string>
   <string name="text_selection_no_actions_enabled">クイックアクションは有効になっていません。</string>
+  <string name="setting_display_page_show_date_below_name_title">名前の下に日付を表示</string>
+  <string name="setting_display_page_show_date_below_name_desc">ニックネームまたはモデル名の下にメッセージの日付を表示するかどうか</string>
 </resources>
 
