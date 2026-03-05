@@ -1046,6 +1046,8 @@
   <string name="text_selection_edit_action">Изменить действие</string>
   <string name="text_selection_action_name">Название действия</string>
   <string name="text_selection_action_prompt">Шаблон подсказки</string>
+  <string name="text_selection_action_model">Модель</string>
+  <string name="text_selection_action_model_desc">Укажите модель для этого действия. Если не задано, используется модель ассистента или модель чата по умолчанию.</string>
   <string name="text_selection_reset_actions_desc">Восстановить встроенные предустановки действий</string>
   <string name="text_selection_no_actions_enabled">Быстрые действия отключены.</string>
 </resources>

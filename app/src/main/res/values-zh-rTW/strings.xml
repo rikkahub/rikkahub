@@ -1051,6 +1051,8 @@
   <string name="text_selection_edit_action">編輯動作</string>
   <string name="text_selection_action_name">動作名稱</string>
   <string name="text_selection_action_prompt">提示範本</string>
+  <string name="text_selection_action_model">模型</string>
+  <string name="text_selection_action_model_desc">為該操作指定模型。未設定時使用助手或預設對話模型。</string>
   <string name="text_selection_reset_actions_desc">還原內建動作預設值</string>
   <string name="text_selection_no_actions_enabled">未啟用任何快速動作。</string>
 </resources>

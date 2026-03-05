@@ -1071,6 +1071,8 @@
   <string name="text_selection_edit_action">Edit Action</string>
   <string name="text_selection_action_name">Action Name</string>
   <string name="text_selection_action_prompt">Prompt Template</string>
+  <string name="text_selection_action_model">Model</string>
+  <string name="text_selection_action_model_desc">Specify a model for this action. If not set, uses the assistant or default chat model.</string>
   <string name="text_selection_reset_actions_desc">Restore built-in action presets</string>
   <string name="text_selection_no_actions_enabled">No quick actions are enabled.</string>
 </resources>

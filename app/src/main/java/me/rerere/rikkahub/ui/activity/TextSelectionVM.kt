@@ -125,7 +125,7 @@ class TextSelectionVM(
             try {
                 val currentSettings = settingsStore.settingsFlow.value
                 val assistant = resolveAssistant(currentSettings)
-                val model = resolveModel(currentSettings, assistant)
+                val model = resolveModel(currentSettings, assistant, action)
                 val providerSetting = model?.findProvider(currentSettings.providers)
 
                 if (model == null || providerSetting == null) {
@@ -193,7 +193,11 @@ class TextSelectionVM(
         settings.textSelectionConfig.assistantId?.let { settings.getAssistantById(it) }
             ?: settings.getCurrentAssistant()
 
-    private fun resolveModel(settings: Settings, assistant: Assistant): Model? {
+    private fun resolveModel(settings: Settings, assistant: Assistant, action: TextSelectionAction): Model? {
+        // Priority: action-level model > assistant model > global chat model
+        action.modelId?.let { actionModelId ->
+            settings.findModelById(actionModelId)?.let { return it }
+        }
         val modelId = assistant.chatModelId ?: settings.chatModelId
         return settings.findModelById(modelId)
     }

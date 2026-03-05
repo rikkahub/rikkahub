@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -26,10 +27,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.DEFAULT_TEXT_SELECTION_ACTIONS
 import me.rerere.rikkahub.data.model.TextSelectionAction
+import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.Select
@@ -179,14 +183,27 @@ fun SettingAndroidIntegrationPage(
                     title = { Text(stringResource(R.string.text_selection_actions)) },
                 ) {
                     config.actions.forEach { action ->
+                        val actionModelName = action.modelId?.let { id ->
+                            settings.providers.findModelById(id)?.displayName
+                        }
                         item(
                             onClick = { editingAction = action },
                             headlineContent = { Text(localizedActionName(action)) },
                             supportingContent = {
-                                Text(
-                                    text = action.prompt.replace("\n", " "),
-                                    maxLines = 1,
-                                )
+                                androidx.compose.foundation.layout.Column {
+                                    if (actionModelName != null) {
+                                        Text(
+                                            text = actionModelName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                        )
+                                    }
+                                    Text(
+                                        text = action.prompt.replace("\n", " "),
+                                        maxLines = 1,
+                                    )
+                                }
                             },
                             leadingContent = {
                                 Icon(
@@ -251,10 +268,13 @@ private fun EditActionDialog(
     onDismiss: () -> Unit,
     onSave: (TextSelectionAction) -> Unit,
 ) {
+    val settingsStore = koinInject<SettingsStore>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val displayActionName = localizedActionName(action)
     var name by remember(action.id, displayActionName) { mutableStateOf(displayActionName) }
     var prompt by remember(action.id) { mutableStateOf(action.prompt) }
     var enabled by remember(action.id) { mutableStateOf(action.enabled) }
+    var modelId by remember(action.id) { mutableStateOf(action.modelId) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -274,6 +294,35 @@ private fun EditActionDialog(
                     label = { Text(stringResource(R.string.text_selection_action_prompt)) },
                     minLines = 4,
                 )
+                androidx.compose.foundation.layout.Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.text_selection_action_model),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    androidx.compose.foundation.layout.Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        ModelSelector(
+                            modelId = modelId,
+                            type = ModelType.CHAT,
+                            onSelect = { model ->
+                                // When cleared, Model() has empty modelId, set to null
+                                modelId = if (model.modelId.isEmpty()) null else model.id
+                            },
+                            providers = settings.providers,
+                            allowClear = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.text_selection_action_model_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 androidx.compose.foundation.layout.Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
@@ -298,6 +347,7 @@ private fun EditActionDialog(
                             },
                             prompt = prompt.trim().ifBlank { action.prompt },
                             enabled = enabled,
+                            modelId = modelId,
                         )
                     )
                 }

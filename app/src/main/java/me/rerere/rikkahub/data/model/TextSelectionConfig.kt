@@ -18,6 +18,7 @@ data class TextSelectionAction(
     val prompt: String,
     val enabled: Boolean = true,
     val isCustomPrompt: Boolean = false,
+    val modelId: Uuid? = null,
 )
 
 val DEFAULT_TEXT_SELECTION_ACTIONS = listOf(
