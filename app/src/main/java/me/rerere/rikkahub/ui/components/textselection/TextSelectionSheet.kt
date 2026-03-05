@@ -222,7 +222,7 @@ private fun ActionSelectionContent(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = action.name,
+                                    text = localizedActionName(action),
                                     style = MaterialTheme.typography.labelLarge,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,

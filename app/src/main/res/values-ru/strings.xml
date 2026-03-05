@@ -1025,4 +1025,28 @@
   <string name="webview_page_more_options">Дополнительно</string>
   <string name="setting_page_web_server_localhost_only">Только localhost</string>
   <string name="setting_page_web_server_localhost_only_desc">Принимать запросы только на localhost (127.0.0.1), отключить доступ по LAN и mDNS</string>
+  <string name="setting_android_integration">Интеграция с Android</string>
+  <string name="setting_android_integration_desc">Настройки всплывающего окна выделения текста</string>
+  <string name="text_selection_menu_label">Спросить RikkaHub</string>
+  <string name="text_selection_translate">Перевести</string>
+  <string name="text_selection_explain">Объяснить</string>
+  <string name="text_selection_summarize">Кратко изложить</string>
+  <string name="text_selection_ask">Спросить</string>
+  <string name="text_selection_custom_placeholder">Задайте вопрос об этом тексте…</string>
+  <string name="text_selection_copy">Копировать</string>
+  <string name="text_selection_continue_chat">Продолжить в приложении</string>
+  <string name="text_selection_generating">Создание…</string>
+  <string name="text_selection_try_it">Попробовать</string>
+  <string name="text_selection_setup_instructions">Выделите текст в любом приложении и коснитесь «Ask RikkaHub» на панели инструментов выделения текста.</string>
+  <string name="text_selection_demo_text">Это пример текста. Нажмите и удерживайте, затем выделите его, чтобы протестировать интеграцию панели выбора текста.</string>
+  <string name="text_selection_use_default">Использовать помощника по умолчанию</string>
+  <string name="text_selection_assistant">Ассистент</string>
+  <string name="text_selection_translate_language">Перевести на</string>
+  <string name="text_selection_actions">Быстрые действия</string>
+  <string name="text_selection_edit_action">Изменить действие</string>
+  <string name="text_selection_action_name">Название действия</string>
+  <string name="text_selection_action_prompt">Шаблон подсказки</string>
+  <string name="text_selection_reset_actions_desc">Восстановить встроенные предустановки действий</string>
+  <string name="text_selection_no_actions_enabled">Быстрые действия отключены.</string>
 </resources>
+

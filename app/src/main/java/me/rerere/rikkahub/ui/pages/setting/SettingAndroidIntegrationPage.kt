@@ -35,6 +35,7 @@ import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.icons.Lucide
 import me.rerere.rikkahub.utils.plus
+import me.rerere.rikkahub.ui.components.textselection.localizedActionName
 import org.koin.compose.koinInject
 
 private val CommonLanguages = listOf(
@@ -180,7 +181,7 @@ fun SettingAndroidIntegrationPage(
                     config.actions.forEach { action ->
                         item(
                             onClick = { editingAction = action },
-                            headlineContent = { Text(action.name) },
+                            headlineContent = { Text(localizedActionName(action)) },
                             supportingContent = {
                                 Text(
                                     text = action.prompt.replace("\n", " "),
@@ -250,7 +251,8 @@ private fun EditActionDialog(
     onDismiss: () -> Unit,
     onSave: (TextSelectionAction) -> Unit,
 ) {
-    var name by remember(action.id) { mutableStateOf(action.name) }
+    val displayActionName = localizedActionName(action)
+    var name by remember(action.id, displayActionName) { mutableStateOf(displayActionName) }
     var prompt by remember(action.id) { mutableStateOf(action.prompt) }
     var enabled by remember(action.id) { mutableStateOf(action.enabled) }
 
@@ -289,7 +291,11 @@ private fun EditActionDialog(
                 onClick = {
                     onSave(
                         action.copy(
-                            name = name.trim().ifBlank { action.name },
+                            name = if (action.isCustomPrompt) {
+                                name.trim().ifBlank { action.name }
+                            } else {
+                                action.name
+                            },
                             prompt = prompt.trim().ifBlank { action.prompt },
                             enabled = enabled,
                         )

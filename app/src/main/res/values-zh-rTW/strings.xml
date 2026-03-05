@@ -1030,4 +1030,28 @@
   <string name="webview_page_more_options">更多選項</string>
   <string name="setting_page_web_server_localhost_only">僅限本機</string>
   <string name="setting_page_web_server_localhost_only_desc">僅監聽 localhost (127.0.0.1)，停用區域網路與 mDNS 存取</string>
+  <string name="setting_android_integration">Android 整合</string>
+  <string name="setting_android_integration_desc">文字選取快顯設定</string>
+  <string name="text_selection_menu_label">詢問 RikkaHub</string>
+  <string name="text_selection_translate">翻譯</string>
+  <string name="text_selection_explain">解釋</string>
+  <string name="text_selection_summarize">摘要</string>
+  <string name="text_selection_ask">詢問</string>
+  <string name="text_selection_custom_placeholder">針對此文字提問…</string>
+  <string name="text_selection_copy">複製</string>
+  <string name="text_selection_continue_chat">在 App 中繼續</string>
+  <string name="text_selection_generating">正在產生…</string>
+  <string name="text_selection_try_it">試用</string>
+  <string name="text_selection_setup_instructions">在任何應用程式中選取文字，然後在文字工具列中點選「Ask RikkaHub」。</string>
+  <string name="text_selection_demo_text">這是範例文字。請長按並選取它，以測試選取工具列的整合。</string>
+  <string name="text_selection_use_default">使用預設助理</string>
+  <string name="text_selection_assistant">助理</string>
+  <string name="text_selection_translate_language">翻譯成</string>
+  <string name="text_selection_actions">快速操作</string>
+  <string name="text_selection_edit_action">編輯動作</string>
+  <string name="text_selection_action_name">動作名稱</string>
+  <string name="text_selection_action_prompt">提示範本</string>
+  <string name="text_selection_reset_actions_desc">還原內建動作預設值</string>
+  <string name="text_selection_no_actions_enabled">未啟用任何快速動作。</string>
 </resources>
+
