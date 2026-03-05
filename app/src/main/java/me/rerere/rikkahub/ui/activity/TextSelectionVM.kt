@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.activity
 
+import android.app.Application
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,12 +19,15 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.handleMessageChunk
+import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
+import me.rerere.rikkahub.data.ai.transformers.TransformerContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.TextSelectionAction
 
 private const val TAG = "TextSelectionVM"
@@ -42,6 +46,7 @@ sealed interface TextSelectionState {
 }
 
 class TextSelectionVM(
+    private val context: Application,
     private val settingsStore: SettingsStore,
     private val providerManager: ProviderManager,
 ) : ViewModel() {
@@ -134,12 +139,23 @@ class TextSelectionVM(
                     return@launch
                 }
 
-                val prompt = buildSystemPrompt(
+                val rawPrompt = buildSystemPrompt(
                     action = action,
                     settings = currentSettings,
                     assistantPrompt = assistant.systemPrompt,
                     customPromptText = customPromptText,
                 )
+                val prompt = runCatching {
+                    renderSystemPromptPlaceholders(
+                        prompt = rawPrompt,
+                        settings = currentSettings,
+                        model = model,
+                        assistant = assistant
+                    )
+                }.getOrElse { error ->
+                    Log.w(TAG, "Failed to render text selection prompt placeholders", error)
+                    rawPrompt
+                }
 
                 messages.add(UIMessage.system(prompt))
                 messages.add(UIMessage.user(selectedText))
@@ -177,9 +193,27 @@ class TextSelectionVM(
         settings.textSelectionConfig.assistantId?.let { settings.getAssistantById(it) }
             ?: settings.getCurrentAssistant()
 
-    private fun resolveModel(settings: Settings, assistant: me.rerere.rikkahub.data.model.Assistant): Model? {
+    private fun resolveModel(settings: Settings, assistant: Assistant): Model? {
         val modelId = assistant.chatModelId ?: settings.chatModelId
         return settings.findModelById(modelId)
+    }
+
+    private suspend fun renderSystemPromptPlaceholders(
+        prompt: String,
+        settings: Settings,
+        model: Model,
+        assistant: Assistant,
+    ): String {
+        val transformed = PlaceholderTransformer.transform(
+            ctx = TransformerContext(
+                context = context,
+                model = model,
+                assistant = assistant,
+                settings = settings
+            ),
+            messages = listOf(UIMessage.system(prompt))
+        )
+        return transformed.firstOrNull()?.toText().orEmpty()
     }
 
     private fun handleChunk(chunk: MessageChunk, model: Model) {

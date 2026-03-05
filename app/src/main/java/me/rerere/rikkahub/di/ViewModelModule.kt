@@ -60,5 +60,11 @@ val viewModelModule = module {
     viewModelOf(::FavoriteVM)
     viewModelOf(::SearchVM)
     viewModelOf(::StatsVM)
-    viewModelOf(::TextSelectionVM)
+    viewModel<TextSelectionVM> {
+        TextSelectionVM(
+            context = get(),
+            settingsStore = get(),
+            providerManager = get(),
+        )
+    }
 }
