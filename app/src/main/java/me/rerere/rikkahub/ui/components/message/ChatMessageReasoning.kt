@@ -1,16 +1,13 @@
 package me.rerere.rikkahub.ui.components.message
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -20,9 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,7 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Size
@@ -47,8 +41,6 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.ArrowRight01
-import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.Idea01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
@@ -243,58 +235,6 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
     )
 }
 
-/**
- * 仅有 reasoning（无工具调用）时的简洁显示：无背景色按钮，点击展开/折叠思考内容
- */
-@Composable
-fun SimpleReasoningStep(
-    reasoning: UIMessagePart.Reasoning,
-    model: Model?,
-    assistant: Assistant?,
-    fadeHeight: Float = 64f,
-) {
-    val (state, loading) = rememberReasoningState(reasoning)
-
-    Column(modifier = Modifier.animateContentSize()) {
-        Surface(
-            onClick = { state.onExpandedChange(state.expandState != ReasoningCardState.Expanded, loading) },
-            contentColor = LocalContentColor.current.copy(alpha = 0.7f),
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            ) {
-                if (loading && model != null && ModelRegistry.GEMINI_SERIES.match(model.modelId)) {
-                    GeminiReasoningTitle(reasoning = reasoning)
-                } else {
-                    Text(
-                        text = stringResource(
-                            R.string.deep_thinking_seconds,
-                            state.duration.toDouble(DurationUnit.SECONDS).toFloat()
-                        ),
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.shimmer(isLoading = loading),
-                    )
-                }
-                Icon(
-                    imageVector = if (state.expandState == ReasoningCardState.Expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowRight01,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-        if (state.expandState != ReasoningCardState.Collapsed) {
-            ReasoningContent(
-                reasoning = reasoning,
-                assistant = assistant,
-                expandState = state.expandState,
-                scrollState = state.scrollState,
-                fadeHeight = fadeHeight,
-            )
-        }
-    }
-}
 
 @Composable
 private fun GeminiReasoningTitle(reasoning: UIMessagePart.Reasoning) {
