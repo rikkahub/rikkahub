@@ -260,29 +260,31 @@ private fun MessagePartsBlock(
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
 
-    fun handleClickCitation(citationId: String) {
-        parts.forEach { part ->
-            if (part is UIMessagePart.Tool && part.toolName == "search_web" && part.isExecuted) {
-                val outputText = part.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-                val items =
-                    runCatching { JsonInstant.parseToJsonElement(outputText).jsonObject["items"]?.jsonArray }.getOrNull()
-                        ?: return@forEach
-                items.forEach { item ->
-                    val id = item.jsonObject["id"]?.jsonPrimitive?.content ?: return@forEach
-                    val url = item.jsonObject["url"]?.jsonPrimitive?.content ?: return@forEach
-                    if (citationId == id) {
-                        context.openUrl(url)
-                        return
+    // 消息输出HapticFeedback
+    val hapticFeedback = LocalHapticFeedback.current
+    val settings = LocalSettings.current
+    val partsState by rememberUpdatedState(parts)
+
+    val handleClickCitation: (String) -> Unit = remember {
+        handler@{ citationId ->
+            partsState.forEach { part ->
+                if (part is UIMessagePart.Tool && part.toolName == "search_web" && part.isExecuted) {
+                    val outputText = part.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+                    val items =
+                        runCatching { JsonInstant.parseToJsonElement(outputText).jsonObject["items"]?.jsonArray }.getOrNull()
+                            ?: return@forEach
+                    items.forEach { item ->
+                        val id = item.jsonObject["id"]?.jsonPrimitive?.content ?: return@forEach
+                        val url = item.jsonObject["url"]?.jsonPrimitive?.content ?: return@forEach
+                        if (citationId == id) {
+                            context.openUrl(url)
+                            return@handler
+                        }
                     }
                 }
             }
         }
     }
-
-    // 消息输出HapticFeedback
-    val hapticFeedback = LocalHapticFeedback.current
-    val settings = LocalSettings.current
-    val partsState by rememberUpdatedState(parts)
     LaunchedEffect(settings.displaySetting) {
         snapshotFlow { partsState }
             .debounce(50.milliseconds)
@@ -328,7 +330,7 @@ private fun MessagePartsBlock(
                 }
             }
 
-            is MessagePartBlock.ContentBlock -> when (val part = block.part) {
+            is MessagePartBlock.ContentBlock -> key(block.index) { when (val part = block.part) {
                 is UIMessagePart.Text -> {
                     SelectionContainer {
                         if (role == MessageRole.USER) {
@@ -345,7 +347,7 @@ private fun MessagePartsBlock(
                                             scope = AssistantAffectScope.USER,
                                             visual = true,
                                         ),
-                                        onClickCitation = { id -> handleClickCitation(id) }
+                                        onClickCitation = handleClickCitation
                                     )
                                 }
                             }
@@ -363,7 +365,7 @@ private fun MessagePartsBlock(
                                                 scope = AssistantAffectScope.ASSISTANT,
                                                 visual = true,
                                             ),
-                                            onClickCitation = { id -> handleClickCitation(id) },
+                                            onClickCitation = handleClickCitation,
                                         )
                                     }
                                 }
@@ -374,7 +376,7 @@ private fun MessagePartsBlock(
                                         scope = AssistantAffectScope.ASSISTANT,
                                         visual = true,
                                     ),
-                                    onClickCitation = { id -> handleClickCitation(id) },
+                                    onClickCitation = handleClickCitation,
                                     modifier = Modifier
                                         .animateContentSize()
                                 )
@@ -514,7 +516,7 @@ private fun MessagePartsBlock(
                 else -> {
                     // Skip unknown part types (e.g., deprecated ToolCall, ToolResult, Search)
                 }
-            }
+            } }
         }
     }
 
