@@ -29,7 +29,6 @@ jobs:
 
       - name: Prepare Google Services config
         env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
           PLACEHOLDER_GOOGLE_SERVICES_JSON: |
             {
               "project_info": {
@@ -68,11 +67,7 @@ jobs:
               "configuration_version": "1"
             }
         run: |
-          if [[ -n "${GOOGLE_SERVICES_JSON}" ]]; then
-            printf '%s' "${GOOGLE_SERVICES_JSON}" > app/google-services.json
-          else
-            printf '%s' "${PLACEHOLDER_GOOGLE_SERVICES_JSON}" > app/google-services.json
-          fi
+          printf '%s' "${PLACEHOLDER_GOOGLE_SERVICES_JSON}" > app/google-services.json
 
       - name: Run unit tests
         run: |
