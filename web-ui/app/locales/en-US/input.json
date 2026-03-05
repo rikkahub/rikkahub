@@ -93,6 +93,8 @@
     "delete_attachment_failed": "Failed to delete attachment",
     "upload_image": "Upload Image",
     "upload_document": "Upload Document",
+    "export_conversation": "Export Conversation as Markdown",
+    "export_conversation_with_reasoning": "Export Conversation as Markdown (with reasoning)",
     "unsupported_file_skipped": "{{count}} file(s) skipped due to unsupported format",
     "placeholder_ready": "Type a message...",
     "placeholder_not_ready": "Please select a conversation first",
