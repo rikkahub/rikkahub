@@ -30,11 +30,7 @@ jobs:
       - name: Prepare Google Services config
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: |
-          if [[ -n "${GOOGLE_SERVICES_JSON}" ]]; then
-            printf '%s' "${GOOGLE_SERVICES_JSON}" > app/google-services.json
-          else
-            cat > app/google-services.json <<'EOF'
+          PLACEHOLDER_GOOGLE_SERVICES_JSON: |
             {
               "project_info": {
                 "project_number": "000000000000",
@@ -71,7 +67,11 @@ jobs:
               ],
               "configuration_version": "1"
             }
-            EOF
+        run: |
+          if [[ -n "${GOOGLE_SERVICES_JSON}" ]]; then
+            printf '%s' "${GOOGLE_SERVICES_JSON}" > app/google-services.json
+          else
+            printf '%s' "${PLACEHOLDER_GOOGLE_SERVICES_JSON}" > app/google-services.json
           fi
 
       - name: Run Android lint
