@@ -149,10 +149,12 @@
   <string name="backup_page_export_desc">앱 데이터를 파일로 내보내기</string>
   <string name="backup_page_exporting">내보내는 중...</string>
   <string name="backup_page_files">파일</string>
-  <string name="backup_page_import_chatbox_desc">ChatBox 데이터 가져오기</string>
+  <string name="backup_page_import_chatbox_desc">ChatBox 공급자 구성 가져오기</string>
+  <string name="backup_page_import_cherry_studio_desc">Cherry Studio 공급자 설정 가져오기</string>
   <string name="backup_page_import_desc">로컬 백업 파일 가져오기</string>
   <string name="backup_page_import_export">로컬</string>
   <string name="backup_page_import_from_chatbox">ChatBox에서 가져오기</string>
+  <string name="backup_page_import_from_cherry_studio">Cherry Studio에서 가져오기</string>
   <string name="backup_page_import_from_other_app">다른 앱에서 가져오기</string>
   <string name="backup_page_importing">가져오는 중...</string>
   <string name="backup_page_loading_failed">백업 파일 로드 실패: %s</string>

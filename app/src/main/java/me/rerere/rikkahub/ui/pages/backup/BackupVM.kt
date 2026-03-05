@@ -17,6 +17,7 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3BackupItem
@@ -166,6 +167,22 @@ class BackupVM(
         }
 
         Log.i(TAG, "restoreFromChatBox: import ${importProviders.size} providers: $importProviders")
+
+        updateSettings(
+            settings.value.copy(
+                providers = importProviders + settings.value.providers,
+            )
+        )
+    }
+
+    fun restoreFromCherryStudio(file: File) {
+        val importProviders = CherryStudioProviderImporter.importProviders(file)
+
+        if (importProviders.isEmpty()) {
+            throw IllegalArgumentException("No importable providers found in Cherry Studio backup")
+        }
+
+        Log.i(TAG, "restoreFromCherryStudio: import ${importProviders.size} providers: $importProviders")
 
         updateSettings(
             settings.value.copy(

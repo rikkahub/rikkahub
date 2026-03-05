@@ -153,10 +153,12 @@
   <string name="backup_page_export_desc">Export app data to a file</string>
   <string name="backup_page_exporting">Exporting...</string>
   <string name="backup_page_files">Files</string>
-  <string name="backup_page_import_chatbox_desc">Import data from ChatBox</string>
+  <string name="backup_page_import_chatbox_desc">Import ChatBox provider configurations</string>
+  <string name="backup_page_import_cherry_studio_desc">Import Cherry Studio provider configurations</string>
   <string name="backup_page_import_desc">Import local backup file</string>
   <string name="backup_page_import_export">Local</string>
   <string name="backup_page_import_from_chatbox">Import from ChatBox</string>
+  <string name="backup_page_import_from_cherry_studio">Import from Cherry Studio</string>
   <string name="backup_page_import_from_other_app">Import from other app</string>
   <string name="backup_page_importing">Importing...</string>
   <string name="backup_page_loading_failed">Failed to load backup files: %s</string>
