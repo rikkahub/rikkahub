@@ -1054,5 +1054,6 @@
   <string name="text_selection_no_actions_enabled">Быстрые действия отключены.</string>
   <string name="setting_display_page_show_date_below_name_title">Показывать дату под именем</string>
   <string name="setting_display_page_show_date_below_name_desc">Показывать дату сообщения под ником или названием модели</string>
+  <string name="chat_page_message_count">%d сообщений</string>
 </resources>
 

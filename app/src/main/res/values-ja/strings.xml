@@ -1061,5 +1061,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="text_selection_no_actions_enabled">クイックアクションは有効になっていません。</string>
   <string name="setting_display_page_show_date_below_name_title">名前の下に日付を表示</string>
   <string name="setting_display_page_show_date_below_name_desc">ニックネームまたはモデル名の下にメッセージの日付を表示するかどうか</string>
+  <string name="chat_page_message_count">%d件のメッセージ</string>
 </resources>
 

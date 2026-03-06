@@ -1079,5 +1079,5 @@
   <string name="text_selection_action_model_desc">Specify a model for this action. If not set, uses the assistant or default chat model.</string>
   <string name="text_selection_reset_actions_desc">Restore built-in action presets</string>
   <string name="text_selection_no_actions_enabled">No quick actions are enabled.</string>
+  <string name="chat_page_message_count">%d messages</string>
 </resources>
-
