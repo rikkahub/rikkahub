@@ -186,6 +186,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
     model: Model?,
     assistant: Assistant?,
     fadeHeight: Float = 64f,
+    collapsedAdaptiveWidth: Boolean = false,
     messageDepthFromEnd: Int? = null,
 ) {
     val (state, loading) = rememberReasoningState(reasoning)
@@ -226,6 +227,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
                 )
             }
         },
+        collapsedAdaptiveWidth = collapsedAdaptiveWidth,
         contentVisible = state.expandState != ReasoningCardState.Collapsed,
         content = {
             ReasoningContent(

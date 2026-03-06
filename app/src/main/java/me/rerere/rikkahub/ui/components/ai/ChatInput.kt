@@ -7,6 +7,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -1080,7 +1081,7 @@ private fun ImagePickButton(onAddImages: (List<Uri>) -> Unit = {}) {
     )
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
+        ActivityResultContracts.PickMultipleVisualMedia()
     ) { selectedUris ->
         if (selectedUris.isNotEmpty()) {
             Log.d("ImagePickButton", "Selected URIs: $selectedUris")
@@ -1113,15 +1114,12 @@ private fun ImagePickButton(onAddImages: (List<Uri>) -> Unit = {}) {
         }
     }
 
-    BigIconTextButton(
-        icon = {
-            Icon(HugeIcons.Image02, null)
-        },
-        text = {
-            Text(stringResource(R.string.photo))
-        }
-    ) {
-        imagePickerLauncher.launch("image/*")
+    BigIconTextButton(icon = {
+        Icon(HugeIcons.Image02, null)
+    }, text = {
+        Text(stringResource(R.string.photo))
+    }) {
+        imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 }
 

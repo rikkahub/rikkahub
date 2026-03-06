@@ -51,6 +51,18 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GPT_5_3 = defineModel {
+        tokens("gpt", "5", "3")
+        visionInput()
+        toolAbility()
+    }
+
+    private val GPT_5_4 = defineModel {
+        tokens("gpt", "5", "4")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val GEMINI_20_FLASH = defineModel {
         tokens("gemini", "2", "0", "flash")
         visionInput()
@@ -314,6 +326,8 @@ object ModelRegistry {
         GPT_5,
         GPT_5_1,
         GPT_5_2,
+        GPT_5_3,
+        GPT_5_4,
         GEMINI_20_FLASH,
         GEMINI_2_5_FLASH,
         GEMINI_2_5_PRO,

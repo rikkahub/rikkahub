@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,6 +35,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useThrottle
@@ -62,12 +64,12 @@ fun UpdateCard(vm: ChatVM) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "检查更新失败",
+                    text = stringResource(R.string.update_card_check_failed),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.error
                 )
                 Text(
-                    text = it.message ?: "未知错误",
+                    text = it.message ?: stringResource(R.string.update_card_unknown_error),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -97,7 +99,7 @@ fun UpdateCard(vm: ChatVM) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "发现新版本 ${info.version}",
+                            text = stringResource(R.string.update_card_new_version_found, info.version),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.weight(1f)
@@ -105,7 +107,7 @@ fun UpdateCard(vm: ChatVM) {
                         IconButton(onClick = { dismissed = true }) {
                             Icon(
                                 imageVector = HugeIcons.Cancel01,
-                                contentDescription = "关闭",
+                                contentDescription = stringResource(R.string.update_card_close),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -122,7 +124,7 @@ fun UpdateCard(vm: ChatVM) {
             val downloadHandler = useThrottle<UpdateDownload>(500) { item ->
                 vm.updateChecker.downloadUpdate(context, item)
                 showDetail = false
-                toaster.show("已在下载，请在状态栏查看下载进度", type = ToastType.Info)
+                toaster.show(context.getString(R.string.update_card_downloading), type = ToastType.Info)
             }
             ModalBottomSheet(
                 onDismissRequest = { showDetail = false },
