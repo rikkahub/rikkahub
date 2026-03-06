@@ -66,7 +66,7 @@ export function groupMessageParts(parts: UIMessagePart[]): MessagePartBlock[] {
 interface MessagePartsProps {
   parts: UIMessagePart[];
   loading?: boolean;
-  onToolApproval?: (toolCallId: string, approved: boolean, reason: string) => void | Promise<void>;
+  onToolApproval?: (toolCallId: string, approved: boolean, reason: string, answer?: string) => void | Promise<void>;
   onClickCitation?: (id: string) => void;
 }
 
@@ -164,7 +164,7 @@ export const MessageParts = React.memo(({
 interface MessagePartProps {
   part: UIMessagePart;
   loading?: boolean;
-  onToolApproval?: (toolCallId: string, approved: boolean, reason: string) => void | Promise<void>;
+  onToolApproval?: (toolCallId: string, approved: boolean, reason: string, answer?: string) => void | Promise<void>;
   onClickCitation?: (id: string) => void;
 }
 

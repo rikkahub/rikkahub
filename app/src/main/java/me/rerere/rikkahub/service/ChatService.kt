@@ -378,7 +378,8 @@ class ChatService(
         conversationId: Uuid,
         toolCallId: String,
         approved: Boolean,
-        reason: String = ""
+        reason: String = "",
+        answer: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
@@ -386,10 +387,10 @@ class ChatService(
         val job = appScope.launch {
             try {
                 val conversation = session.state.value
-                val newApprovalState = if (approved) {
-                    ToolApprovalState.Approved
-                } else {
-                    ToolApprovalState.Denied(reason)
+                val newApprovalState = when {
+                    answer != null -> ToolApprovalState.Answered(answer)
+                    approved -> ToolApprovalState.Approved
+                    else -> ToolApprovalState.Denied(reason)
                 }
 
                 // Update the tool approval state

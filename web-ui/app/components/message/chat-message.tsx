@@ -54,7 +54,7 @@ interface ChatMessageProps {
   onSelectBranch?: (nodeId: string, selectIndex: number) => void | Promise<void>;
   onDelete?: (messageId: string) => void | Promise<void>;
   onFork?: (messageId: string) => void | Promise<void>;
-  onToolApproval?: (toolCallId: string, approved: boolean, reason: string) => void | Promise<void>;
+  onToolApproval?: (toolCallId: string, approved: boolean, reason: string, answer?: string) => void | Promise<void>;
 }
 
 function hasRenderablePart(part: UIMessagePart): boolean {

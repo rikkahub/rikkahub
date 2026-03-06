@@ -899,6 +899,10 @@
   <string name="setting_page_web_server_localhost_only_desc">僅監聽 localhost (127.0.0.1)，停用區域網路與 mDNS 存取</string>
   <string name="setting_display_page_show_date_below_name_title">在名稱下方顯示日期</string>
   <string name="setting_display_page_show_date_below_name_desc">是否在暱稱或模型名稱下方顯示訊息日期</string>
+  <string name="assistant_page_local_tools_ask_user_title">詢問使用者</string>
+  <string name="assistant_page_local_tools_ask_user_desc">允許 AI 向你提問以獲得更多資訊</string>
+  <string name="chat_message_tool_ask_questions">詢問 %d 個問題</string>
+  <string name="chat_message_tool_submit">提交</string>
   <string name="chat_page_message_count">%d 則訊息</string>
 </resources>
 
