@@ -41,6 +41,11 @@ object LocalToolCatalog {
             titleRes = R.string.assistant_page_local_tools_tts_title,
             descRes = R.string.assistant_page_local_tools_tts_desc,
         ),
+        LocalToolMeta(
+            option = LocalToolOption.AskUser,
+            titleRes = R.string.assistant_page_local_tools_ask_user_title,
+            descRes = R.string.assistant_page_local_tools_ask_user_desc,
+        ),
     )
 
     private val optionToMeta: Map<LocalToolOption, LocalToolMeta> = all.associateBy { it.option }

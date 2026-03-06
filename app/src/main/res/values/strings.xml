@@ -1079,5 +1079,9 @@
   <string name="text_selection_action_model_desc">Specify a model for this action. If not set, uses the assistant or default chat model.</string>
   <string name="text_selection_reset_actions_desc">Restore built-in action presets</string>
   <string name="text_selection_no_actions_enabled">No quick actions are enabled.</string>
+  <string name="assistant_page_local_tools_ask_user_title">Ask User</string>
+  <string name="assistant_page_local_tools_ask_user_desc">Allow the AI to ask you questions for clarification</string>
+  <string name="chat_message_tool_ask_questions">Ask %d questions</string>
+  <string name="chat_message_tool_submit">Submit</string>
   <string name="chat_page_message_count">%d messages</string>
 </resources>

@@ -138,6 +138,7 @@ fun ChatList(
     onClearTranslation: (UIMessage) -> Unit = {},
     onJumpToMessage: (Int) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
 ) {
     AnimatedContent(
@@ -177,6 +178,7 @@ fun ChatList(
                 onClearTranslation = onClearTranslation,
                 animatedVisibilityScope = this@AnimatedContent,
                 onToolApproval = onToolApproval,
+                onToolAnswer = onToolAnswer,
                 onToggleFavorite = onToggleFavorite,
             )
         }
@@ -204,6 +206,7 @@ private fun ChatListNormal(
     onClearTranslation: (UIMessage) -> Unit,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -330,6 +333,7 @@ private fun ChatListNormal(
                             onTranslate = onTranslate,
                             onClearTranslation = onClearTranslation,
                             onToolApproval = onToolApproval,
+                            onToolAnswer = onToolAnswer,
                             lastMessage = index == conversation.messageNodes.lastIndex,
                             messageDepthFromEnd = conversation.messageNodes.size - index,
                         )

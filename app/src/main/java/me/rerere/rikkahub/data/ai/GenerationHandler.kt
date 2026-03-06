@@ -109,7 +109,7 @@ class GenerationHandler(
 
             // Check if we have approved tool calls to execute (resuming after approval)
             val pendingTools = messages.lastOrNull()?.getTools()?.filter {
-                !it.isExecuted && (it.approvalState is ToolApprovalState.Approved || it.approvalState is ToolApprovalState.Denied)
+                !it.isExecuted && (it.approvalState is ToolApprovalState.Approved || it.approvalState is ToolApprovalState.Denied || it.approvalState is ToolApprovalState.Answered)
             } ?: emptyList()
 
             val toolsToProcess: List<UIMessagePart.Tool>
@@ -226,7 +226,9 @@ class GenerationHandler(
             } else {
                 // Resuming after approval - use the pending tools directly
                 Log.i(TAG, "generateText: resuming with ${pendingTools.size} approved/denied tools")
-                toolsToProcess = messages.last().getTools().filter { !it.isExecuted }
+                toolsToProcess = messages.last().getTools().filter {
+                    !it.isExecuted && (it.approvalState is ToolApprovalState.Approved || it.approvalState is ToolApprovalState.Denied || it.approvalState is ToolApprovalState.Answered)
+                }
             }
 
             // Handle tools (execute approved tools, handle denied tools)
@@ -248,6 +250,16 @@ class GenerationHandler(
                                         }
                                     )
                                 )
+                            )
+                        )
+                    }
+
+                    is ToolApprovalState.Answered -> {
+                        // Tool was answered by user (e.g., ask_user tool)
+                        val answer = (tool.approvalState as ToolApprovalState.Answered).answer
+                        executedTools += tool.copy(
+                            output = listOf(
+                                UIMessagePart.Text(answer)
                             )
                         )
                     }

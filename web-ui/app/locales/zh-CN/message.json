@@ -52,7 +52,11 @@
     "tool_name_label": "工具名：{{toolName}}",
     "parameters": "参数",
     "result": "结果",
-    "not_executed": "工具尚未执行"
+    "not_executed": "工具尚未执行",
+    "ask_user_title": "询问用户",
+    "ask_user_questions_count": "询问 {{count}} 个问题",
+    "ask_user_submit": "提交",
+    "ask_user_answered": "已回答"
   },
   "media_part": {
     "video_load_failed": "加载视频失败：{{url}}",

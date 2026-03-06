@@ -554,7 +554,7 @@ const ConversationTimeline = React.memo(({
   onFork: (messageId: string) => Promise<void>;
   onRegenerate: (messageId: string) => Promise<void>;
   onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
-  onToolApproval: (toolCallId: string, approved: boolean, reason: string) => Promise<void>;
+  onToolApproval: (toolCallId: string, approved: boolean, reason: string, answer?: string) => Promise<void>;
 }) => {
   const { t } = useTranslation("page");
   const canQuickJump =
@@ -774,12 +774,13 @@ function ConversationsPageInner() {
   );
 
   const handleToolApproval = React.useCallback(
-    async (toolCallId: string, approved: boolean, reason: string) => {
+    async (toolCallId: string, approved: boolean, reason: string, answer?: string) => {
       if (!activeId) return;
       await api.post<{ status: string }>(`conversations/${activeId}/tool-approval`, {
         toolCallId,
         approved,
         reason,
+        ...(answer != null ? { answer } : {}),
       });
     },
     [activeId],

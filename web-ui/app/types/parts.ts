@@ -6,7 +6,8 @@ export type ToolApprovalState =
   | { type: "auto" }
   | { type: "pending" }
   | { type: "approved" }
-  | { type: "denied"; reason: string };
+  | { type: "denied"; reason: string }
+  | { type: "answered"; answer: string };
 
 interface BaseMessagePart {
   metadata?: Record<string, unknown> | null;

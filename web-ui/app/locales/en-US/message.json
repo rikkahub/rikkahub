@@ -52,7 +52,11 @@
     "tool_name_label": "Tool: {{toolName}}",
     "parameters": "Parameters",
     "result": "Result",
-    "not_executed": "Tool has not run yet"
+    "not_executed": "Tool has not run yet",
+    "ask_user_title": "Ask User",
+    "ask_user_questions_count": "Ask {{count}} questions",
+    "ask_user_submit": "Submit",
+    "ask_user_answered": "Answered"
   },
   "media_part": {
     "video_load_failed": "Failed to load video: {{url}}",
