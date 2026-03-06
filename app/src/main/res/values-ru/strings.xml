@@ -899,5 +899,10 @@
   <string name="chat_message_tool_ask_questions">Задать %d вопросов</string>
   <string name="chat_message_tool_submit">Отправить</string>
   <string name="chat_page_message_count">%d сообщений</string>
+  <string name="update_card_check_failed">Проверка обновления не удалась</string>
+  <string name="update_card_unknown_error">Неизвестная ошибка</string>
+  <string name="update_card_new_version_found">Найдена новая версия %s</string>
+  <string name="update_card_close">Закрыть</string>
+  <string name="update_card_downloading">Идёт загрузка, следите за прогрессом в строке состояния</string>
 </resources>
 

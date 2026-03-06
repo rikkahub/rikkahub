@@ -906,5 +906,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_message_tool_ask_questions">%d 件の質問</string>
   <string name="chat_message_tool_submit">送信</string>
   <string name="chat_page_message_count">%d件のメッセージ</string>
+  <string name="update_card_check_failed">更新チェックに失敗しました</string>
+  <string name="update_card_unknown_error">不明なエラー</string>
+  <string name="update_card_new_version_found">新しいバージョンが見つかりました %s</string>
+  <string name="update_card_close">閉じる</string>
+  <string name="update_card_downloading">ダウンロード中です。進捗はステータスバーでご確認ください</string>
 </resources>
 

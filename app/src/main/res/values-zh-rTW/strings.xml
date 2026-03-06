@@ -904,5 +904,10 @@
   <string name="chat_message_tool_ask_questions">詢問 %d 個問題</string>
   <string name="chat_message_tool_submit">提交</string>
   <string name="chat_page_message_count">%d 則訊息</string>
+  <string name="update_card_check_failed">檢查更新失敗</string>
+  <string name="update_card_unknown_error">未知錯誤</string>
+  <string name="update_card_new_version_found">發現新版本 %s</string>
+  <string name="update_card_close">關閉</string>
+  <string name="update_card_downloading">正在下載，請查看狀態列以瞭解進度</string>
 </resources>
 

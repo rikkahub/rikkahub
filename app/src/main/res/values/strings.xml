@@ -904,5 +904,10 @@
   <string name="chat_message_tool_ask_questions">Ask %d questions</string>
   <string name="chat_message_tool_submit">Submit</string>
   <string name="chat_page_message_count">%d messages</string>
+  <string name="update_card_check_failed">Check update failed</string>
+  <string name="update_card_unknown_error">Unknown error</string>
+  <string name="update_card_new_version_found">New version found %s</string>
+  <string name="update_card_close">Close</string>
+  <string name="update_card_downloading">Downloading, please check status bar for progress</string>
 </resources>
 
