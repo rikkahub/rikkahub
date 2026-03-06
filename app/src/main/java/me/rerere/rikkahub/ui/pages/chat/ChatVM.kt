@@ -309,6 +309,14 @@ class ChatVM(
         chatService.handleToolApproval(_conversationId, toolCallId, approved, reason)
     }
 
+    fun handleToolAnswer(
+        toolCallId: String,
+        answer: String,
+    ) {
+        analytics.logEvent("ai_tool_answer", null)
+        chatService.handleToolApproval(_conversationId, toolCallId, approved = true, answer = answer)
+    }
+
     fun saveConversationAsync() {
         viewModelScope.launch {
             chatService.saveConversation(_conversationId, conversation.value)

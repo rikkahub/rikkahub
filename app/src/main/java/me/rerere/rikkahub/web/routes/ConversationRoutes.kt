@@ -315,7 +315,7 @@ fun Route.conversationRoutes(
         post("/{id}/tool-approval") {
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<ToolApprovalRequest>()
-            chatService.handleToolApproval(uuid, request.toolCallId, request.approved, request.reason)
+            chatService.handleToolApproval(uuid, request.toolCallId, request.approved, request.reason, request.answer)
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
 

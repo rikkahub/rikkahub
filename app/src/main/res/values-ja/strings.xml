@@ -901,6 +901,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_web_server_localhost_only_desc">localhost (127.0.0.1) のみでリッスンし、LANおよびmDNSアクセスを無効化</string>
   <string name="setting_display_page_show_date_below_name_title">名前の下に日付を表示</string>
   <string name="setting_display_page_show_date_below_name_desc">ニックネームまたはモデル名の下にメッセージの日付を表示するかどうか</string>
+  <string name="assistant_page_local_tools_ask_user_title">ユーザーに質問</string>
+  <string name="assistant_page_local_tools_ask_user_desc">AIがあなたに質問して情報を確認できるようにします</string>
+  <string name="chat_message_tool_ask_questions">%d 件の質問</string>
+  <string name="chat_message_tool_submit">送信</string>
   <string name="chat_page_message_count">%d件のメッセージ</string>
 </resources>
 

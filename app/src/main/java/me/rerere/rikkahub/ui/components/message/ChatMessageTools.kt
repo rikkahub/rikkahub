@@ -2,6 +2,8 @@ package me.rerere.rikkahub.ui.components.message
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +19,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -29,6 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,16 +51,20 @@ import androidx.compose.ui.util.fastForEach
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.highlight.HighlightText
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.BubbleChatQuestion
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Clipboard
 import me.rerere.hugeicons.stroke.Clock01
@@ -63,6 +72,7 @@ import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Eraser
 import me.rerere.hugeicons.stroke.GlobalSearch
+import me.rerere.hugeicons.stroke.Question
 import me.rerere.hugeicons.stroke.QuillWrite01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Search01
@@ -96,6 +106,7 @@ private object ToolNames {
     const val GET_TIME_INFO = "get_time_info"
     const val CLIPBOARD = "clipboard_tool"
     const val TTS = "text_to_speech"
+    const val ASK_USER = "ask_user"
 }
 
 private object MemoryActions {
@@ -121,6 +132,7 @@ private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
     ToolNames.GET_TIME_INFO -> HugeIcons.Time02
     ToolNames.CLIPBOARD -> HugeIcons.Clipboard
     ToolNames.TTS -> HugeIcons.VolumeHigh
+    ToolNames.ASK_USER -> HugeIcons.BubbleChatQuestion
     else -> HugeIcons.Tools
 }
 
@@ -132,7 +144,14 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     tool: UIMessagePart.Tool,
     loading: Boolean = false,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
+    val isAskUser = tool.toolName == ToolNames.ASK_USER
+
+    if (isAskUser) {
+        AskUserToolStep(tool = tool, loading = loading, onToolAnswer = onToolAnswer)
+        return
+    }
     var showResult by remember { mutableStateOf(false) }
     var showDenyDialog by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(true) }
@@ -670,6 +689,169 @@ private fun GenericToolPreview(
         }
     }
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChainOfThoughtScope.AskUserToolStep(
+    tool: UIMessagePart.Tool,
+    loading: Boolean,
+    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)?,
+) {
+    val isPending = tool.approvalState is ToolApprovalState.Pending
+    val isAnswered = tool.approvalState is ToolApprovalState.Answered
+    val arguments = tool.inputAsJson()
+
+    // Parse questions from arguments
+    val questions = remember(arguments) {
+        runCatching {
+            arguments.jsonObject["questions"]?.jsonArray?.map { q ->
+                val obj = q.jsonObject
+                AskUserQuestion(
+                    id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "",
+                    question = obj["question"]?.jsonPrimitive?.contentOrNull ?: "",
+                    options = obj["options"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
+                )
+            } ?: emptyList()
+        }.getOrElse { emptyList() }
+    }
+
+    // Track answers for each question
+    val answers = remember { mutableStateMapOf<String, String>() }
+
+    val firstQuestion = questions.firstOrNull()?.question ?: "..."
+
+    var expanded by remember { mutableStateOf(true) }
+
+    ControlledChainOfThoughtStep(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        icon = {
+            if (loading) {
+                DotLoading(size = 10.dp)
+            } else {
+                Icon(
+                    imageVector = HugeIcons.BubbleChatQuestion,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = LocalContentColor.current.copy(alpha = 0.7f)
+                )
+            }
+        },
+        label = {
+            Text(
+                text = if (questions.size <= 1) firstQuestion else stringResource(
+                    R.string.chat_message_tool_ask_questions,
+                    questions.size
+                ),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.shimmer(isLoading = loading),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        content = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                questions.forEach { q ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (questions.size > 1) {
+                            Text(
+                                text = q.question,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+
+                        if (isPending && onToolAnswer != null) {
+                            // Show options as chips
+                            if (q.options.isNotEmpty()) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    q.options.forEach { option ->
+                                        FilterChip(
+                                            selected = answers[q.id] == option,
+                                            onClick = { answers[q.id] = option },
+                                            label = {
+                                                Text(
+                                                    text = option,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Free text input
+                            OutlinedTextField(
+                                value = answers[q.id] ?: "",
+                                onValueChange = { answers[q.id] = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = MaterialTheme.typography.bodySmall,
+                                singleLine = false,
+                                minLines = 1,
+                                maxLines = 3,
+                            )
+                        } else if (isAnswered) {
+                            // Show the user's answer
+                            val answeredState = tool.approvalState as ToolApprovalState.Answered
+                            val answerJson = runCatching {
+                                JsonInstant.parseToJsonElement(answeredState.answer)
+                            }.getOrNull()
+                            val answerText = answerJson?.jsonObject?.get("answers")
+                                ?.jsonObject?.get(q.id)?.jsonPrimitive?.contentOrNull
+                                ?: answeredState.answer
+                            Text(
+                                text = answerText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+
+                // Submit button
+                if (isPending && onToolAnswer != null) {
+                    FilledTonalButton(
+                        onClick = {
+                            val answerPayload = buildJsonObject {
+                                put("answers", buildJsonObject {
+                                    questions.forEach { q ->
+                                        put(q.id, JsonPrimitive(answers[q.id] ?: ""))
+                                    }
+                                })
+                            }
+                            onToolAnswer(tool.toolCallId, answerPayload.toString())
+                        },
+                        enabled = questions.all { q -> !answers[q.id].isNullOrBlank() },
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Tick01,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.chat_message_tool_submit),
+                            modifier = Modifier.padding(start = 4.dp),
+                        )
+                    }
+                }
+            }
+        },
+    )
+}
+
+private data class AskUserQuestion(
+    val id: String,
+    val question: String,
+    val options: List<String>,
+)
 
 @Composable
 private fun ToolDenyReasonDialog(

@@ -899,6 +899,10 @@
   <string name="setting_mcp_page_import_confirm">Import</string>
   <string name="setting_display_page_enable_blur_effect_title">Enable Blur Effect</string>
   <string name="setting_display_page_enable_blur_effect_desc">Enable blur effect on chat input bar</string>
+  <string name="assistant_page_local_tools_ask_user_title">Ask User</string>
+  <string name="assistant_page_local_tools_ask_user_desc">Allow the AI to ask you questions for clarification</string>
+  <string name="chat_message_tool_ask_questions">Ask %d questions</string>
+  <string name="chat_message_tool_submit">Submit</string>
   <string name="chat_page_message_count">%d messages</string>
 </resources>
 
