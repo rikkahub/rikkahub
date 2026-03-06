@@ -51,6 +51,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastAll
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
 import androidx.core.content.FileProvider
@@ -304,9 +305,11 @@ private fun MessagePartsBlock(
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {
                 if (block.steps.isNotEmpty()) {
+                    val isReasoningOnlyBlock = block.steps.fastAll { it is ThinkingStep.ReasoningStep }
                     ChainOfThought(
                         modifier = Modifier.animateContentSize(),
                         steps = block.steps,
+                        collapsedAdaptiveWidth = isReasoningOnlyBlock,
                     ) { step ->
                         when (step) {
                             is ThinkingStep.ReasoningStep -> {
@@ -315,6 +318,7 @@ private fun MessagePartsBlock(
                                         reasoning = step.reasoning,
                                         model = model,
                                         assistant = assistant,
+                                        collapsedAdaptiveWidth = isReasoningOnlyBlock,
                                     )
                                 }
                             }
@@ -334,193 +338,195 @@ private fun MessagePartsBlock(
                 }
             }
 
-            is MessagePartBlock.ContentBlock -> key(block.index) { when (val part = block.part) {
-                is UIMessagePart.Text -> {
-                    SelectionContainer {
-                        if (role == MessageRole.USER) {
-                            Surface(
-                                modifier = Modifier.animateContentSize(),
-                                shape = MaterialTheme.shapes.medium,
-                                tonalElevation = 2.dp,
-                                onClick = { onUserMessageClick?.invoke() },
-                            ) {
-                                Column(modifier = Modifier.padding(8.dp)) {
-                                    MarkdownBlock(
-                                        content = part.text.replaceRegexes(
-                                            assistant = assistant,
-                                            scope = AssistantAffectScope.USER,
-                                            visual = true,
-                                        ),
-                                        onClickCitation = handleClickCitation
-                                    )
-                                }
-                            }
-                        } else {
-                            if (settings.displaySetting.showAssistantBubble) {
+            is MessagePartBlock.ContentBlock -> key(block.index) {
+                when (val part = block.part) {
+                    is UIMessagePart.Text -> {
+                        SelectionContainer {
+                            if (role == MessageRole.USER) {
                                 Surface(
                                     modifier = Modifier.animateContentSize(),
                                     shape = MaterialTheme.shapes.medium,
                                     tonalElevation = 2.dp,
+                                    onClick = { onUserMessageClick?.invoke() },
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         MarkdownBlock(
                                             content = part.text.replaceRegexes(
                                                 assistant = assistant,
-                                                scope = AssistantAffectScope.ASSISTANT,
+                                                scope = AssistantAffectScope.USER,
                                                 visual = true,
                                             ),
-                                            onClickCitation = handleClickCitation,
+                                            onClickCitation = handleClickCitation
                                         )
                                     }
                                 }
                             } else {
-                                MarkdownBlock(
-                                    content = part.text.replaceRegexes(
-                                        assistant = assistant,
-                                        scope = AssistantAffectScope.ASSISTANT,
-                                        visual = true,
-                                    ),
-                                    onClickCitation = handleClickCitation,
-                                    modifier = Modifier
-                                        .animateContentSize()
-                                )
-                            }
-                        }
-                    }
-                }
-
-                is UIMessagePart.Video -> {
-                    Surface(
-                        tonalElevation = 2.dp,
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW)
-                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            intent.data = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                part.url.toUri().toFile()
-                            )
-                            val chooserIndent = Intent.createChooser(intent, null)
-                            context.startActivity(chooserIndent)
-                        },
-                        modifier = Modifier,
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
-                            Icon(HugeIcons.Video01, null)
-                        }
-                    }
-                }
-
-                is UIMessagePart.Audio -> {
-                    Surface(
-                        tonalElevation = 2.dp,
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW)
-                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            intent.data = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                part.url.toUri().toFile()
-                            )
-                            val chooserIndent = Intent.createChooser(intent, null)
-                            context.startActivity(chooserIndent)
-                        },
-                        modifier = Modifier,
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) {
-                        ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = HugeIcons.MusicNote03,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                is UIMessagePart.Image -> {
-                    ZoomableAsyncImage(
-                        model = part.url,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .clip(MaterialTheme.shapes.medium)
-                            .height(72.dp)
-                    )
-                }
-
-                is UIMessagePart.Document -> {
-                    Surface(
-                        tonalElevation = 2.dp,
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW)
-                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            intent.data = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                part.url.toUri().toFile()
-                            )
-                            val chooserIndent = Intent.createChooser(intent, null)
-                            context.startActivity(chooserIndent)
-                        },
-                        modifier = Modifier,
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.tertiaryContainer
-                    ) {
-                        ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                when (part.mime) {
-                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> {
-                                        Icon(
-                                            painter = painterResource(R.drawable.docx),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                if (settings.displaySetting.showAssistantBubble) {
+                                    Surface(
+                                        modifier = Modifier.animateContentSize(),
+                                        shape = MaterialTheme.shapes.medium,
+                                        tonalElevation = 2.dp,
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            MarkdownBlock(
+                                                content = part.text.replaceRegexes(
+                                                    assistant = assistant,
+                                                    scope = AssistantAffectScope.ASSISTANT,
+                                                    visual = true,
+                                                ),
+                                                onClickCitation = handleClickCitation,
+                                            )
+                                        }
                                     }
-
-                                    "application/pdf" -> {
-                                        Icon(
-                                            painter = painterResource(R.drawable.pdf),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-
-                                    else -> {
-                                        Icon(
-                                            imageVector = HugeIcons.File02,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
+                                } else {
+                                    MarkdownBlock(
+                                        content = part.text.replaceRegexes(
+                                            assistant = assistant,
+                                            scope = AssistantAffectScope.ASSISTANT,
+                                            visual = true,
+                                        ),
+                                        onClickCitation = handleClickCitation,
+                                        modifier = Modifier
+                                            .animateContentSize()
+                                    )
                                 }
-
-                                Text(
-                                    text = part.fileName,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.widthIn(max = 200.dp)
-                                )
                             }
                         }
                     }
-                }
 
-                else -> {
-                    // Skip unknown part types (e.g., deprecated ToolCall, ToolResult, Search)
+                    is UIMessagePart.Video -> {
+                        Surface(
+                            tonalElevation = 2.dp,
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW)
+                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                intent.data = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    part.url.toUri().toFile()
+                                )
+                                val chooserIndent = Intent.createChooser(intent, null)
+                                context.startActivity(chooserIndent)
+                            },
+                            modifier = Modifier,
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
+                                Icon(HugeIcons.Video01, null)
+                            }
+                        }
+                    }
+
+                    is UIMessagePart.Audio -> {
+                        Surface(
+                            tonalElevation = 2.dp,
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW)
+                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                intent.data = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    part.url.toUri().toFile()
+                                )
+                                val chooserIndent = Intent.createChooser(intent, null)
+                                context.startActivity(chooserIndent)
+                            },
+                            modifier = Modifier,
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = HugeIcons.MusicNote03,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    is UIMessagePart.Image -> {
+                        ZoomableAsyncImage(
+                            model = part.url,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .clip(MaterialTheme.shapes.medium)
+                                .height(72.dp)
+                        )
+                    }
+
+                    is UIMessagePart.Document -> {
+                        Surface(
+                            tonalElevation = 2.dp,
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW)
+                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                intent.data = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    part.url.toUri().toFile()
+                                )
+                                val chooserIndent = Intent.createChooser(intent, null)
+                                context.startActivity(chooserIndent)
+                            },
+                            modifier = Modifier,
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    when (part.mime) {
+                                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> {
+                                            Icon(
+                                                painter = painterResource(R.drawable.docx),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+
+                                        "application/pdf" -> {
+                                            Icon(
+                                                painter = painterResource(R.drawable.pdf),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+
+                                        else -> {
+                                            Icon(
+                                                imageVector = HugeIcons.File02,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Text(
+                                        text = part.fileName,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.widthIn(max = 200.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        // Skip unknown part types (e.g., deprecated ToolCall, ToolResult, Search)
+                    }
                 }
-            } }
+            }
         }
     }
 
