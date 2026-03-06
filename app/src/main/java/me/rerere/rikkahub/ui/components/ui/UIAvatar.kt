@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -65,7 +66,7 @@ fun TextAvatar(
     ) {
         Text(
             text = text.take(1).uppercase(),
-            color = MaterialTheme.colorScheme.onSecondary,
+            color = LocalContentColor.current,
             maxLines = 1,
             overflow = TextOverflow.Clip,
             autoSize = TextAutoSize.StepBased(
