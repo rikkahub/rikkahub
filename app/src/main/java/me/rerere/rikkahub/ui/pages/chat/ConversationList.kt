@@ -50,6 +50,7 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.ui.modifier.overlayEdgeScrollGuard
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
@@ -101,7 +102,7 @@ fun ColumnScope.ConversationList(
 
     LazyColumn(
         state = listState,
-        modifier = modifier,
+        modifier = modifier.overlayEdgeScrollGuard(listState),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (conversations.itemCount == 0) {

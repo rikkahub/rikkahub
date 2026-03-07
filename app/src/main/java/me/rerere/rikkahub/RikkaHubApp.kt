@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.material3.ComposeMaterial3Flags
 import androidx.compose.runtime.Composer
 import androidx.compose.runtime.tooling.ComposeStackTraceMode
 import androidx.core.app.NotificationChannelCompat
@@ -46,6 +47,7 @@ const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 class RikkaHubApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        ComposeMaterial3Flags.isAnchoredDraggableComponentsInvalidationFixEnabled = true
         startKoin {
             androidLogger()
             androidContext(this@RikkaHubApp)

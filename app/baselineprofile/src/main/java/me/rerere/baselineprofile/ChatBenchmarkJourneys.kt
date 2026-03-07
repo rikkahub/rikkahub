@@ -27,6 +27,10 @@ internal fun MacrobenchmarkScope.launchAndRunChatJourney(device: UiDevice) {
     device.waitForIdle()
     openChatDrawer(device)
     scrollChatDrawer(device)
+    openAssistantPicker(device)
+    scrollAssistantPicker(device)
+    device.pressBack()
+    device.waitForIdle()
     device.pressBack()
     device.waitForIdle()
     openModelSelector(device)
@@ -49,8 +53,31 @@ private fun MacrobenchmarkScope.scrollChatDrawer(device: UiDevice) {
         (device.displayWidth * 0.45f).toInt(),
         device.displayHeight
     )
+    swipeWithin(device, drawerBounds, startYRatio = 0.95f, endYRatio = 0.08f)
     swipeWithin(device, drawerBounds, startYRatio = 0.85f, endYRatio = 0.2f)
-    swipeWithin(device, drawerBounds, startYRatio = 0.2f, endYRatio = 0.85f)
+    swipeWithin(device, drawerBounds, startYRatio = 0.08f, endYRatio = 0.95f)
+}
+
+private fun MacrobenchmarkScope.openAssistantPicker(device: UiDevice) {
+    val defaultAssistantLabel = targetString("assistant_page_default_assistant")
+    val assistantTrigger = device.findObject(By.text(defaultAssistantLabel)) ?: return
+    assistantTrigger.click()
+    device.wait(Until.hasObject(By.text(targetString("assistant_page_title"))), UI_WAIT_TIMEOUT_MS)
+    device.waitForIdle()
+}
+
+private fun MacrobenchmarkScope.scrollAssistantPicker(device: UiDevice) {
+    if (!device.hasObject(By.text(targetString("assistant_page_title")))) {
+        return
+    }
+    val sheetBounds = Rect(
+        0,
+        (device.displayHeight * 0.2f).toInt(),
+        device.displayWidth,
+        device.displayHeight
+    )
+    swipeWithin(device, sheetBounds, startYRatio = 0.9f, endYRatio = 0.18f)
+    swipeWithin(device, sheetBounds, startYRatio = 0.18f, endYRatio = 0.9f)
 }
 
 private fun MacrobenchmarkScope.openModelSelector(device: UiDevice) {
@@ -81,8 +108,8 @@ private fun MacrobenchmarkScope.scrollModelSelector(device: UiDevice) {
         device.displayWidth,
         device.displayHeight
     )
-    swipeWithin(device, sheetBounds, startYRatio = 0.8f, endYRatio = 0.3f)
-    swipeWithin(device, sheetBounds, startYRatio = 0.3f, endYRatio = 0.8f)
+    swipeWithin(device, sheetBounds, startYRatio = 0.92f, endYRatio = 0.16f)
+    swipeWithin(device, sheetBounds, startYRatio = 0.16f, endYRatio = 0.92f)
 }
 
 private fun MacrobenchmarkScope.dragFavoriteModelsIfPossible(device: UiDevice) {
@@ -114,7 +141,7 @@ private fun MacrobenchmarkScope.dragFavoriteModelsIfPossible(device: UiDevice) {
         from.centerY(),
         to.centerX(),
         to.centerY(),
-        12
+        6
     )
     device.waitForIdle()
 }

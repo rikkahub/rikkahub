@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -78,6 +79,7 @@ import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
 import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.modifier.overlayEdgeScrollGuard
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.openUrl
@@ -91,6 +93,7 @@ fun ChatDrawerContent(
     vm: ChatVM,
     settings: Settings,
     currentConversationId: Uuid,
+    drawerState: DrawerState?,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -120,100 +123,58 @@ fun ChatDrawerContent(
     var conversationToMove by remember { mutableStateOf<Conversation?>(null) }
     val bottomSheetState = rememberModalBottomSheetState()
 
-    ModalDrawerSheet(
-        modifier = Modifier.width(300.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (settings.displaySetting.showUpdates && !isPlayStore) {
-                UpdateCard(vm)
-            }
-
-            BackupReminderCard(
-                settings = settings,
-                onClick = { navController.navigate(Screen.Backup) },
-            )
-
-            DrawerIdentitySection(
-                settings = settings,
-                onEditNickname = {
-                    nicknameEditState.open(settings.displaySetting.userNickname)
-                },
-                onUpdateAvatar = { newAvatar ->
-                    vm.updateSettings(
-                        settings.copy(
-                            displaySetting = settings.displaySetting.copy(
-                                userAvatar = newAvatar
-                            )
-                        )
+    ChatDrawerSheet(
+        drawerState = drawerState,
+        vm = vm,
+        settings = settings,
+        isPlayStore = isPlayStore,
+        navController = navController,
+        currentConversationId = currentConversationId,
+        conversationListState = conversationListState,
+        conversations = conversations,
+        conversationJobs = conversationJobs.keys,
+        nicknameEdit = { nicknameEditState.open(settings.displaySetting.userNickname) },
+        onUpdateAvatar = { newAvatar ->
+            vm.updateSettings(
+                settings.copy(
+                    displaySetting = settings.displaySetting.copy(
+                        userAvatar = newAvatar
                     )
-                },
+                )
             )
-
-            DrawerActions(navController = navController)
-
-            ConversationList(
-                currentConversationId = currentConversationId,
-                conversations = conversations,
-                conversationJobs = conversationJobs.keys,
-                listState = conversationListState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                onClick = {
-                    navigateToChatPage(navController, it.id)
-                },
-                onRegenerateTitle = {
-                    vm.generateTitle(it, true)
-                },
-                onDelete = {
-                    vm.deleteConversation(it)
-                    // Refresh the conversation list to immediately remove the deleted item
-                    // This fixes the issue where deleted conversations sometimes remain visible
-                    // until manually clicked (issue #747)
-                    conversations.refresh()
-                    if (it.id == currentConversationId) {
-                        navigateToChatPage(navController)
-                    }
-                },
-                onPin = {
-                    vm.updatePinnedStatus(it)
-                },
-                onMoveToAssistant = {
-                    conversationToMove = it
-                    showMoveToAssistantSheet = true
+        },
+        onUpdateSettings = {
+            vm.updateSettings(it)
+            scope.launch {
+                val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
+                    Uuid.random()
+                } else {
+                    repo.getConversationsOfAssistant(it.assistantId)
+                        .first()
+                        .firstOrNull()
+                        ?.id ?: Uuid.random()
                 }
-            )
-
-            // 助手选择器
-            AssistantPicker(
-                settings = settings,
-                onUpdateSettings = {
-                    vm.updateSettings(it)
-                    scope.launch {
-                        val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
-                            Uuid.random()
-                        } else {
-                            repo.getConversationsOfAssistant(it.assistantId)
-                                .first()
-                                .firstOrNull()
-                                ?.id ?: Uuid.random()
-                        }
-                        navigateToChatPage(navigator = navController, chatId = id)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                onClickSetting = {
-                    val currentAssistantId = settings.assistantId
-                    navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
-                }
-            )
-
-            DrawerBottomActions(navController = navController)
+                navigateToChatPage(navigator = navController, chatId = id)
+            }
+        },
+        onDeleteConversation = {
+            vm.deleteConversation(it)
+            conversations.refresh()
+            if (it.id == currentConversationId) {
+                navigateToChatPage(navController)
+            }
+        },
+        onRegenerateTitle = {
+            vm.generateTitle(it, true)
+        },
+        onPinConversation = {
+            vm.updatePinnedStatus(it)
+        },
+        onMoveToAssistant = {
+            conversationToMove = it
+            showMoveToAssistantSheet = true
         }
-    }
+    )
 
     // 昵称编辑对话框
     nicknameEditState.EditStateContent { nickname, onUpdate ->
@@ -256,6 +217,7 @@ fun ChatDrawerContent(
 
     // 移动到助手 Bottom Sheet
     if (showMoveToAssistantSheet) {
+        val assistantListState = rememberLazyListState()
         ModalBottomSheet(
             onDismissRequest = {
                 showMoveToAssistantSheet = false
@@ -277,6 +239,8 @@ fun ChatDrawerContent(
                 )
 
                 LazyColumn(
+                    state = assistantListState,
+                    modifier = Modifier.overlayEdgeScrollGuard(assistantListState),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(settings.assistants) { assistant ->
@@ -297,6 +261,94 @@ fun ChatDrawerContent(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ChatDrawerSheet(
+    drawerState: DrawerState?,
+    vm: ChatVM,
+    settings: Settings,
+    isPlayStore: Boolean,
+    navController: Navigator,
+    currentConversationId: Uuid,
+    conversationListState: androidx.compose.foundation.lazy.LazyListState,
+    conversations: androidx.paging.compose.LazyPagingItems<ConversationListItem>,
+    conversationJobs: Collection<Uuid>,
+    nicknameEdit: () -> Unit,
+    onUpdateAvatar: (Avatar) -> Unit,
+    onUpdateSettings: (Settings) -> Unit,
+    onDeleteConversation: (Conversation) -> Unit,
+    onRegenerateTitle: (Conversation) -> Unit,
+    onPinConversation: (Conversation) -> Unit,
+    onMoveToAssistant: (Conversation) -> Unit,
+) {
+    val content: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (settings.displaySetting.showUpdates && !isPlayStore) {
+                UpdateCard(vm)
+            }
+
+            BackupReminderCard(
+                settings = settings,
+                onClick = { navController.navigate(Screen.Backup) },
+            )
+
+            DrawerIdentitySection(
+                settings = settings,
+                onEditNickname = nicknameEdit,
+                onUpdateAvatar = onUpdateAvatar,
+            )
+
+            DrawerActions(navController = navController)
+
+            ConversationList(
+                currentConversationId = currentConversationId,
+                conversations = conversations,
+                conversationJobs = conversationJobs,
+                listState = conversationListState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                onClick = {
+                    navigateToChatPage(navController, it.id)
+                },
+                onRegenerateTitle = onRegenerateTitle,
+                onDelete = onDeleteConversation,
+                onPin = onPinConversation,
+                onMoveToAssistant = onMoveToAssistant,
+            )
+
+            AssistantPicker(
+                settings = settings,
+                onUpdateSettings = onUpdateSettings,
+                modifier = Modifier.fillMaxWidth(),
+                onClickSetting = {
+                    val currentAssistantId = settings.assistantId
+                    navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
+                }
+            )
+
+            DrawerBottomActions(navController = navController)
+        }
+    }
+
+    if (drawerState != null) {
+        ModalDrawerSheet(
+            drawerState = drawerState,
+            modifier = Modifier.width(300.dp),
+        ) {
+            content()
+        }
+    } else {
+        ModalDrawerSheet(
+            modifier = Modifier.width(300.dp)
+        ) {
+            content()
         }
     }
 }

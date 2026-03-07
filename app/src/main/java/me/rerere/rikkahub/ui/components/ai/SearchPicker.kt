@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -51,6 +52,7 @@ import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.Navigator
+import me.rerere.rikkahub.ui.modifier.overlayEdgeScrollGuard
 import me.rerere.rikkahub.ui.pages.setting.SearchAbilityTagLine
 import me.rerere.search.SearchServiceOptions
 import org.koin.compose.koinInject
@@ -65,6 +67,7 @@ fun SearchPickerButton(
     model: Model?,
 ) {
     var showSearchPicker by remember { mutableStateOf(false) }
+    val searchGridState = rememberLazyGridState()
     val currentService = settings.searchServices.getOrNull(settings.searchServiceSelected)
 
     ToggleSurface(
@@ -132,7 +135,8 @@ fun SearchPickerButton(
                     model = model,
                     onDismiss = {
                         showSearchPicker = false
-                    }
+                    },
+                    gridState = searchGridState
                 )
             }
         }
@@ -147,7 +151,8 @@ private fun SearchPicker(
     modifier: Modifier = Modifier,
     onToggleSearch: (Boolean) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState
 ) {
     val navBackStack = LocalNavController.current
 
@@ -165,7 +170,8 @@ private fun SearchPicker(
             onToggleSearch = onToggleSearch,
             modifier = modifier,
             settings = settings,
-            onUpdateSearchService = onUpdateSearchService
+            onUpdateSearchService = onUpdateSearchService,
+            gridState = gridState
         )
     }
 }
@@ -178,7 +184,8 @@ private fun AppSearchSettings(
     onToggleSearch: (Boolean) -> Unit,
     modifier: Modifier,
     settings: Settings,
-    onUpdateSearchService: (Int) -> Unit
+    onUpdateSearchService: (Int) -> Unit,
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState
 ) {
     Card {
         Row(
@@ -223,7 +230,10 @@ private fun AppSearchSettings(
     }
 
     LazyVerticalGrid(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .overlayEdgeScrollGuard(gridState),
+        state = gridState,
         columns = GridCells.Adaptive(150.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +50,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberAssistantState
+import me.rerere.rikkahub.ui.modifier.overlayEdgeScrollGuard
 import kotlin.uuid.Uuid
 
 @Composable
@@ -131,6 +133,7 @@ private fun AssistantPickerSheet(
             }
         }
     }
+    val assistantListState = rememberLazyListState()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -176,7 +179,10 @@ private fun AssistantPickerSheet(
             // 助手列表
             val navController = LocalNavController.current
             LazyColumn(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .overlayEdgeScrollGuard(assistantListState),
+                state = assistantListState,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(filteredAssistants, key = { it.id }) { assistant ->

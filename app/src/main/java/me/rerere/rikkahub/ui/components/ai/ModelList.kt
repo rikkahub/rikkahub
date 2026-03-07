@@ -86,11 +86,13 @@ import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.icons.HeartIcon
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.modifier.overlayEdgeScrollGuard
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import sh.calvin.reorderable.rememberScroller
 import kotlin.uuid.Uuid
 
 @Composable
@@ -223,6 +225,10 @@ private fun reorderFavoriteModels(
     }
 }
 
+private fun androidx.compose.foundation.lazy.LazyListState.isItemVisible(index: Int): Boolean {
+    return layoutInfo.visibleItemsInfo.any { it.index == index }
+}
+
 @Composable
 private fun ColumnScope.ModelList(
     currentModel: Uuid? = null,
@@ -246,11 +252,17 @@ private fun ColumnScope.ModelList(
     var localFavoriteModelIds by remember(modelType) {
         mutableStateOf(favoriteModelIdsFromSettings)
     }
+    var localFavoriteModelIdSet by remember(modelType) {
+        mutableStateOf(favoriteModelIdsFromSettings.toSet())
+    }
     var isDraggingFavorites by remember(modelType) { mutableStateOf(false) }
 
     LaunchedEffect(favoriteModelIdsFromSettings, isDraggingFavorites) {
-        if (!isDraggingFavorites && localFavoriteModelIds != favoriteModelIdsFromSettings) {
-            localFavoriteModelIds = favoriteModelIdsFromSettings
+        if (!isDraggingFavorites) {
+            if (localFavoriteModelIds != favoriteModelIdsFromSettings) {
+                localFavoriteModelIds = favoriteModelIdsFromSettings
+            }
+            localFavoriteModelIdSet = favoriteModelIdsFromSettings.toSet()
         }
     }
 
@@ -275,9 +287,11 @@ private fun ColumnScope.ModelList(
     }
 
     fun updateFavoritesImmediately(updatedFavoriteModelIds: List<Uuid>) {
-        localFavoriteModelIds = updatedFavoriteModelIds.filter { modelId ->
+        val visibleFavoriteIds = updatedFavoriteModelIds.filter { modelId ->
             currentSettings.providers.findModelById(modelId)?.type == modelType
         }
+        localFavoriteModelIds = visibleFavoriteIds
+        localFavoriteModelIdSet = visibleFavoriteIds.toSet()
         persistFavoriteModels(updatedFavoriteModelIds)
     }
 
@@ -290,11 +304,6 @@ private fun ColumnScope.ModelList(
         )
         persistFavoriteModels(reorderedFavoriteModelIds)
     }
-
-    val favoriteModelIdSet = remember(localFavoriteModelIds) {
-        localFavoriteModelIds.toSet()
-    }
-
 
     var searchKeywords by remember { mutableStateOf("") }
 
@@ -357,7 +366,11 @@ private fun ColumnScope.ModelList(
     val lazyListState = rememberLazyListState(
         initialFirstVisibleItemIndex = selectedModelPosition
     )
-    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+    val reorderScroller = rememberScroller(lazyListState, 2200f)
+    val reorderableState = rememberReorderableLazyListState(
+        lazyListState = lazyListState,
+        scroller = reorderScroller
+    ) { from, to ->
         // 计算favorite models在列表中的位置偏移
         var favoriteStartIndex = 0
         if (providers.isEmpty()) {
@@ -381,14 +394,15 @@ private fun ColumnScope.ModelList(
     }
     val haptic = LocalHapticFeedback.current
 
-    val providerPositions = remember(providers, favoriteModels, searchFilteredModelsByProvider) {
+    val favoriteModelCount = favoriteModels.size
+    val providerPositions = remember(providers, favoriteModelCount, searchFilteredModelsByProvider) {
         var currentIndex = 0
         if (providers.isEmpty()) {
             currentIndex = 1 // no providers item
         }
-        if (favoriteModels.isNotEmpty()) {
+        if (favoriteModelCount > 0) {
             currentIndex += 1 // favorite header
-            currentIndex += favoriteModels.size // favorite models
+            currentIndex += favoriteModelCount // favorite models
         }
 
         providers.map { provider ->
@@ -430,11 +444,13 @@ private fun ColumnScope.ModelList(
 
     LazyColumn(
         state = lazyListState,
+        userScrollEnabled = !isDraggingFavorites,
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(8.dp),
         modifier = Modifier
             .weight(1f)
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .overlayEdgeScrollGuard(lazyListState),
     ) {
         if (providers.isEmpty()) {
             item {
@@ -545,7 +561,7 @@ private fun ColumnScope.ModelList(
                 key = { it.id },
                 contentType = { "provider_model" }
             ) { model ->
-                val favorite = model.id in favoriteModelIdSet
+                val favorite = model.id in localFavoriteModelIdSet
                 ModelItem(
                     model = model,
                     onSelect = onSelect,
@@ -590,7 +606,8 @@ private fun ColumnScope.ModelList(
 
     // 供应商Badge行
     val providerBadgeListState = rememberLazyListState()
-    LaunchedEffect(lazyListState, providerPositions, providers) {
+    LaunchedEffect(lazyListState, providerPositions, providers, isDraggingFavorites) {
+        if (isDraggingFavorites) return@LaunchedEffect
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .map { firstVisibleItemIndex ->
                 if (firstVisibleItemIndex <= 0) return@map null
@@ -604,8 +621,10 @@ private fun ColumnScope.ModelList(
             .debounce(100)
             .collect { providerIndex ->
                 if (providerIndex == null) {
-                    providerBadgeListState.requestScrollToItem(0)
-                } else {
+                    if (providerBadgeListState.firstVisibleItemIndex != 0) {
+                        providerBadgeListState.requestScrollToItem(0)
+                    }
+                } else if (!providerBadgeListState.isItemVisible(providerIndex)) {
                     providerBadgeListState.animateScrollToItem(providerIndex)
                 }
             }

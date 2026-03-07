@@ -40,6 +40,7 @@ import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningHigh
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningLow
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningMedium
+import me.rerere.rikkahub.ui.modifier.overlayEdgeScrollGuard
 
 @Composable
 fun ReasoningButton(
@@ -93,6 +94,7 @@ fun ReasoningPicker(
     onUpdateReasoningTokens: (Int) -> Unit,
 ) {
     val currentLevel = ReasoningLevel.fromBudgetTokens(reasoningTokens)
+    val scrollState = rememberScrollState()
     ModalBottomSheet(
         onDismissRequest = {
             onDismissRequest()
@@ -103,7 +105,8 @@ fun ReasoningPicker(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .overlayEdgeScrollGuard(scrollState)
+                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ReasoningLevelCard(
