@@ -18,6 +18,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxOutputFormatter
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
@@ -310,13 +311,16 @@ class LocalTools(
         needsApproval: Boolean,
         settingsStore: SettingsStore,
         termuxCommandManager: TermuxCommandManager,
+        assistant: Assistant,
     ): Tool {
+        val workdir = settingsStore.settingsFlow.value.termuxWorkdir
         return Tool(
             name = "termux_exec",
-            description = """
-                Run a shell command in local Termux and return stdout plus stderr as plain text.
-            """.trimIndent().replace("\n", " "),
-            systemPrompt = { _, _ -> buildTermuxWorkspacePrompt() },
+            description = buildToolDescription(
+                baseDescription = "Run a shell command in local Termux. Current workspace path: $workdir. Return stdout plus stderr as plain text.",
+                assistant = assistant,
+                toolName = "termux_exec",
+            ),
             needsApproval = needsApproval,
             parameters = {
                 InputSchema.Obj(
@@ -359,18 +363,11 @@ class LocalTools(
                     return@execute listOf(UIMessagePart.Text(message))
                 }
 
-                val output = buildString {
-                    append(result.stdout)
-                    if (result.stderr.isNotBlank()) {
-                        if (isNotEmpty() && !endsWith('\n')) append('\n')
-                        append(result.stderr)
-                    }
-                    val errMsg = result.errMsg
-                    if (!errMsg.isNullOrBlank()) {
-                        if (isNotEmpty() && !endsWith('\n')) append('\n')
-                        append(errMsg)
-                    }
-                }
+                val output = TermuxOutputFormatter.merge(
+                    stdout = result.stdout,
+                    stderr = result.stderr,
+                    errMsg = result.errMsg,
+                )
                 listOf(UIMessagePart.Text(output))
             }
         )
@@ -380,13 +377,15 @@ class LocalTools(
         needsApproval: Boolean,
         settingsStore: SettingsStore,
         termuxCommandManager: TermuxCommandManager,
+        assistant: Assistant,
     ): Tool {
         return Tool(
             name = "termux_python",
-            description = """
-                Run Python code in local Termux and return stdout plus stderr as plain text.
-            """.trimIndent().replace("\n", " "),
-            systemPrompt = { _, _ -> buildTermuxWorkspacePrompt() },
+            description = buildToolDescription(
+                baseDescription = "Run Python code in local Termux and return stdout plus stderr as plain text.",
+                assistant = assistant,
+                toolName = "termux_python",
+            ),
             needsApproval = needsApproval,
             parameters = {
                 InputSchema.Obj(
@@ -425,18 +424,11 @@ class LocalTools(
                     return@execute listOf(UIMessagePart.Text(message))
                 }
 
-                val output = buildString {
-                    append(termuxResult.stdout)
-                    if (termuxResult.stderr.isNotBlank()) {
-                        if (isNotEmpty() && !endsWith('\n')) append('\n')
-                        append(termuxResult.stderr)
-                    }
-                    val errMsg = termuxResult.errMsg
-                    if (!errMsg.isNullOrBlank()) {
-                        if (isNotEmpty() && !endsWith('\n')) append('\n')
-                        append(errMsg)
-                    }
-                }
+                val output = TermuxOutputFormatter.merge(
+                    stdout = termuxResult.stdout,
+                    stderr = termuxResult.stderr,
+                    errMsg = termuxResult.errMsg,
+                )
 
                 listOf(UIMessagePart.Text(output))
             }
@@ -453,14 +445,15 @@ class LocalTools(
         return LocalToolCatalog.options.mapNotNull { option ->
             if (!enabled.contains(option)) return@mapNotNull null
             when (option) {
-                LocalToolOption.JavascriptEngine -> javascriptTool
-                LocalToolOption.TimeInfo -> timeTool
-                LocalToolOption.Clipboard -> clipboardTool
+                LocalToolOption.JavascriptEngine -> javascriptTool.withAssistantPrompt(assistant)
+                LocalToolOption.TimeInfo -> timeTool.withAssistantPrompt(assistant)
+                LocalToolOption.Clipboard -> clipboardTool.withAssistantPrompt(assistant)
                 LocalToolOption.TermuxExec -> {
                     termuxExecTool(
                         needsApproval = termuxNeedsApproval,
                         settingsStore = settingsStore,
                         termuxCommandManager = termuxCommandManager,
+                        assistant = assistant,
                     )
                 }
 
@@ -469,18 +462,35 @@ class LocalTools(
                         needsApproval = termuxNeedsApproval,
                         settingsStore = settingsStore,
                         termuxCommandManager = termuxCommandManager,
+                        assistant = assistant,
                     )
                 }
 
-                LocalToolOption.Tts -> ttsTool
-                LocalToolOption.AskUser -> askUserTool
+                LocalToolOption.Tts -> ttsTool.withAssistantPrompt(assistant)
+                LocalToolOption.AskUser -> askUserTool.withAssistantPrompt(assistant)
             }
         }
     }
 
-    private fun buildTermuxWorkspacePrompt(): String {
-        val workdir = settingsStore.settingsFlow.value.termuxWorkdir
-        return "Current Termux workspace path: $workdir. Save and read files there by default unless the user requests another path."
+    private fun Tool.withAssistantPrompt(assistant: Assistant): Tool {
+        val description = buildToolDescription(
+            baseDescription = description,
+            assistant = assistant,
+            toolName = name,
+        )
+        return if (description == this.description) this else copy(description = description)
+    }
+
+    private fun buildToolDescription(
+        baseDescription: String,
+        assistant: Assistant,
+        toolName: String,
+    ): String {
+        val customPrompt = assistant.localToolPrompts[toolName]?.trim()
+        return listOfNotNull(
+            baseDescription.trim(),
+            customPrompt?.takeIf { it.isNotBlank() }
+        ).joinToString(separator = "\n")
     }
 
     companion object {

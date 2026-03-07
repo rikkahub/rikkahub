@@ -58,6 +58,7 @@ import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxDirectCommandParseResult
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxDirectCommandParser
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxOutputFormatter
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxResult
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
@@ -424,13 +425,10 @@ class ChatService(
     }
 
     private fun formatDirectTermuxOutput(result: TermuxResult): String {
-        val output = buildString {
-            append(result.stdout)
-            if (result.stderr.isNotBlank()) {
-                if (isNotEmpty() && !endsWith('\n')) append('\n')
-                append(result.stderr)
-            }
-        }
+        val output = TermuxOutputFormatter.merge(
+            stdout = result.stdout,
+            stderr = result.stderr,
+        )
         if (output.isNotBlank()) return output
 
         val fallback = buildList {
