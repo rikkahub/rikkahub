@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.utils
 
+import android.content.Context
+import me.rerere.rikkahub.R
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -10,6 +12,22 @@ import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.time.temporal.ChronoField
 import java.util.Locale
+
+/**
+ * 将 LocalDate 转换为聊天列表中使用的日期标签
+ * @param context Context 用于获取本地化字符串资源
+ * @return 格式化的日期标签 (今天/昨天/具体日期)
+ */
+fun LocalDate.toChatDateLabel(context: Context): String {
+    val today = LocalDate.now()
+    val yesterday = today.minusDays(1)
+
+    return when (this) {
+        today -> context.getString(R.string.chat_page_today)
+        yesterday -> context.getString(R.string.chat_page_yesterday)
+        else -> toLocalString(year != today.year)
+    }
+}
 
 fun Instant.toLocalDate(): String {
     val zoneId = ZoneId.systemDefault()
