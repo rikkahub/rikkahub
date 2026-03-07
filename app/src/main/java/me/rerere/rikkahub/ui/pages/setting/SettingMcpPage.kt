@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.pages.setting
 
-import android.Manifest
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AlertCircle
 import me.rerere.hugeicons.stroke.ArrowDown01
@@ -97,11 +96,6 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
-import me.rerere.rikkahub.ui.components.ui.permission.PermissionLocationCoarse
-import me.rerere.rikkahub.ui.components.ui.permission.PermissionLocationFine
-import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
-import me.rerere.rikkahub.ui.components.ui.permission.PermissionStatus
-import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.hooks.EditState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
@@ -135,11 +129,6 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
     }
     var showImportDialog by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
-    val locationPermissionState = rememberPermissionState(
-        permissions = setOf(PermissionLocationFine, PermissionLocationCoarse)
-    )
-    PermissionManager(permissionState = locationPermissionState)
 
     Scaffold(
         topBar = {
@@ -194,58 +183,6 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(16.dp)
             ) {
-                item("promptLocationPermission") {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.setting_mcp_page_prompt_location_title),
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            Text(
-                                text = stringResource(R.string.setting_mcp_page_prompt_location_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-
-                            val fineStatus = locationPermissionState.permissionStates[Manifest.permission.ACCESS_FINE_LOCATION]
-                            val coarseStatus = locationPermissionState.permissionStates[Manifest.permission.ACCESS_COARSE_LOCATION]
-                            val statusText = when {
-                                fineStatus == PermissionStatus.Granted -> {
-                                    stringResource(R.string.setting_mcp_page_prompt_location_status_precise)
-                                }
-
-                                coarseStatus == PermissionStatus.Granted -> {
-                                    stringResource(R.string.setting_mcp_page_prompt_location_status_approximate)
-                                }
-
-                                else -> {
-                                    stringResource(R.string.setting_mcp_page_prompt_location_status_denied)
-                                }
-                            }
-                            Text(
-                                text = statusText,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-
-                            Button(
-                                onClick = { locationPermissionState.requestPermissions() },
-                                modifier = Modifier.align(Alignment.End),
-                            ) {
-                                Text(stringResource(R.string.setting_mcp_page_prompt_location_action))
-                            }
-                        }
-                    }
-                }
-
                 items(mcpConfigs, key = { it.id }) { mcpConfig ->
                     McpServerItem(
                         item = mcpConfig,
