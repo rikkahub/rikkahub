@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
-import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
@@ -63,14 +62,12 @@ data class ConversationMeta(
     val id: Uuid,
     val assistantId: Uuid,
     val title: String,
-    val hasMessages: Boolean,
 )
 
 private fun Conversation.toMeta() = ConversationMeta(
     id = id,
     assistantId = assistantId,
     title = title,
-    hasMessages = messageNodes.isNotEmpty(),
 )
 
 class ChatVM(
@@ -90,27 +87,16 @@ class ChatVM(
     // 流式输出时只让真正依赖的子树重组
     val conversationMeta: StateFlow<ConversationMeta> = conversation
         .map { it.toMeta() }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, conversation.value.toMeta())
     val messageNodes: StateFlow<List<MessageNode>> = conversation
         .map { it.messageNodes }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, conversation.value.messageNodes)
     val chatSuggestions: StateFlow<List<String>> = conversation
         .map { it.chatSuggestions }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, conversation.value.chatSuggestions)
-    val messageCount: StateFlow<Int> = messageNodes
-        .map { it.size }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, conversation.value.messageNodes.size)
-    val lastAssistantMessage: StateFlow<UIMessage?> = conversation
-        .map { currentConversation ->
-            currentConversation.currentMessages.lastOrNull()
-                ?.takeIf { message -> message.role == MessageRole.ASSISTANT }
-        }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            conversation.value.currentMessages.lastOrNull()
-                ?.takeIf { message -> message.role == MessageRole.ASSISTANT }
-        )
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
 
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException

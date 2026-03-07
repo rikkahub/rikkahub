@@ -94,23 +94,6 @@ import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
-private fun rememberRenderedMessageText(
-    text: String,
-    assistant: Assistant?,
-    scope: AssistantAffectScope,
-): String {
-    // 可视化 regex 替换会被反复命中
-    // 这里按文本和助手配置缓存结果
-    return remember(text, assistant, scope) {
-        text.replaceRegexes(
-            assistant = assistant,
-            scope = scope,
-            visual = true,
-        )
-    }
-}
-
-@Composable
 fun ChatMessage(
     node: MessageNode,
     modifier: Modifier = Modifier,
@@ -363,11 +346,13 @@ private fun MessagePartsBlock(
                         } else {
                             AssistantAffectScope.ASSISTANT
                         }
-                        val renderedText = rememberRenderedMessageText(
-                            text = part.text,
-                            assistant = assistant,
-                            scope = scope,
-                        )
+                        val renderedText = remember(part.text, assistant, scope) {
+                            part.text.replaceRegexes(
+                                assistant = assistant,
+                                scope = scope,
+                                visual = true,
+                            )
+                        }
                         SelectionContainer {
                             if (role == MessageRole.USER) {
                                 Surface(

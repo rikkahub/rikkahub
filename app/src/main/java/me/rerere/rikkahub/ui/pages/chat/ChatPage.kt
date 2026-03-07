@@ -27,14 +27,17 @@ import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,6 +47,7 @@ import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
@@ -65,6 +69,7 @@ import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.testing.ChatUiTestTags
 import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.navigateToChatPage
 import org.koin.androidx.compose.koinViewModel
@@ -87,7 +92,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val conversationMeta by vm.conversationMeta.collectAsStateWithLifecycle()
     val messageNodes by vm.messageNodes.collectAsStateWithLifecycle()
     val chatSuggestions by vm.chatSuggestions.collectAsStateWithLifecycle()
-    val messageCount by vm.messageCount.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
@@ -184,7 +188,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     conversationMeta = conversationMeta,
                     messageNodes = messageNodes,
                     chatSuggestions = chatSuggestions,
-                    messageCount = messageCount,
                     drawerState = drawerState,
                     navController = navController,
                     vm = vm,
@@ -219,7 +222,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     conversationMeta = conversationMeta,
                     messageNodes = messageNodes,
                     chatSuggestions = chatSuggestions,
-                    messageCount = messageCount,
                     drawerState = drawerState,
                     navController = navController,
                     vm = vm,
@@ -248,7 +250,6 @@ private fun ChatPageContent(
     conversationMeta: ConversationMeta,
     messageNodes: List<me.rerere.rikkahub.data.model.MessageNode>,
     chatSuggestions: List<String>,
-    messageCount: Int,
     drawerState: DrawerState,
     navController: Navigator,
     vm: ChatVM,
@@ -263,8 +264,20 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
+    val messageCount = messageNodes.size
+    val lastAssistantMessage by remember(messageNodes) {
+        derivedStateOf {
+            messageNodes.lastOrNull()
+                ?.currentMessage
+                ?.takeIf { it.role == MessageRole.ASSISTANT }
+        }
+    }
 
-    TTSAutoPlay(vm = vm, setting = setting)
+    TTSAutoPlay(
+        generationDoneFlow = vm.generationDoneFlow,
+        setting = setting,
+        lastAssistantMessage = lastAssistantMessage,
+    )
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -276,6 +289,7 @@ private fun ChatPageContent(
                 TopBar(
                     settings = setting,
                     conversationMeta = conversationMeta,
+                    canEditTitle = messageNodes.isNotEmpty(),
                     currentChatModel = currentChatModel,
                     bigScreen = bigScreen,
                     drawerState = drawerState,
@@ -439,6 +453,7 @@ private fun ChatPageContent(
 private fun TopBar(
     settings: Settings,
     conversationMeta: ConversationMeta,
+    canEditTitle: Boolean,
     currentChatModel: Model?,
     drawerState: DrawerState,
     bigScreen: Boolean,
@@ -458,6 +473,7 @@ private fun TopBar(
         navigationIcon = {
             if (!bigScreen) {
                 IconButton(
+                    modifier = Modifier.testTag(ChatUiTestTags.CHAT_DRAWER_TRIGGER),
                     onClick = {
                         scope.launch { drawerState.open() }
                     }
@@ -470,7 +486,7 @@ private fun TopBar(
             val editTitleWarning = stringResource(R.string.chat_page_edit_title_warning)
             Surface(
                 onClick = {
-                    if (conversationMeta.hasMessages) {
+                    if (canEditTitle) {
                         titleState.open(conversationMeta.title)
                     } else {
                         toaster.show(editTitleWarning, type = ToastType.Warning)

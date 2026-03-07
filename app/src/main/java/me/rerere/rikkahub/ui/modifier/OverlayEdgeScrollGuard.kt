@@ -4,17 +4,18 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.nestedScrollModifierNode
+import androidx.compose.ui.node.DelegatingNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.unit.Velocity
 import kotlin.math.abs
+
+private const val EdgeRemainderThresholdPx = 0.5f
 
 fun Modifier.overlayEdgeScrollGuard(
     state: LazyListState,
@@ -47,39 +48,89 @@ private fun Modifier.overlayEdgeScrollGuard(
     orientation: Orientation,
     canScrollBackward: () -> Boolean,
     canScrollForward: () -> Boolean
-): Modifier = composed {
-    val canScrollBackwardState by rememberUpdatedState(canScrollBackward)
-    val canScrollForwardState by rememberUpdatedState(canScrollForward)
-    // 列表到边界后把剩余手势留在内层
-    // 避免外层 sheet 或 drawer 接手时先顿一下
-    val connection = remember(orientation) {
-        object : NestedScrollConnection {
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset {
-                return consumeScrollRemainderAtEdge(
-                    consumed = consumed.axisValue(orientation),
-                    available = available.axisValue(orientation),
-                    orientation = orientation,
-                    canScrollBackward = canScrollBackwardState(),
-                    canScrollForward = canScrollForwardState()
-                )
-            }
+): Modifier = this.then(
+    OverlayEdgeScrollGuardElement(
+        orientation = orientation,
+        canScrollBackward = canScrollBackward,
+        canScrollForward = canScrollForward,
+    )
+)
 
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                return consumeFlingRemainderAtEdge(
-                    consumed = consumed.axisValue(orientation),
-                    available = available.axisValue(orientation),
-                    orientation = orientation,
-                    canScrollBackward = canScrollBackwardState(),
-                    canScrollForward = canScrollForwardState()
-                )
-            }
+private data class OverlayEdgeScrollGuardElement(
+    val orientation: Orientation,
+    val canScrollBackward: () -> Boolean,
+    val canScrollForward: () -> Boolean,
+) : ModifierNodeElement<OverlayEdgeScrollGuardNode>() {
+    override fun create(): OverlayEdgeScrollGuardNode {
+        return OverlayEdgeScrollGuardNode(
+            orientation = orientation,
+            canScrollBackward = canScrollBackward,
+            canScrollForward = canScrollForward,
+        )
+    }
+
+    override fun update(node: OverlayEdgeScrollGuardNode) {
+        node.update(
+            orientation = orientation,
+            canScrollBackward = canScrollBackward,
+            canScrollForward = canScrollForward,
+        )
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "overlayEdgeScrollGuard"
+        properties["orientation"] = orientation
+    }
+}
+
+private class OverlayEdgeScrollGuardNode(
+    private var orientation: Orientation,
+    private var canScrollBackward: () -> Boolean,
+    private var canScrollForward: () -> Boolean,
+) : DelegatingNode() {
+    private val connection = object : NestedScrollConnection {
+        override fun onPostScroll(
+            consumed: Offset,
+            available: Offset,
+            source: NestedScrollSource
+        ): Offset {
+            return consumeScrollRemainderAtEdge(
+                consumed = consumed.axisValue(orientation),
+                available = available.axisValue(orientation),
+                orientation = orientation,
+                canScrollBackward = canScrollBackward(),
+                canScrollForward = canScrollForward()
+            )
+        }
+
+        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+            return consumeFlingRemainderAtEdge(
+                consumed = consumed.axisValue(orientation),
+                available = available.axisValue(orientation),
+                orientation = orientation,
+                canScrollBackward = canScrollBackward(),
+                canScrollForward = canScrollForward()
+            )
         }
     }
-    nestedScroll(connection)
+
+    @Suppress("unused")
+    private val nestedScrollNode = delegate(
+        nestedScrollModifierNode(
+            connection = connection,
+            dispatcher = null,
+        )
+    )
+
+    fun update(
+        orientation: Orientation,
+        canScrollBackward: () -> Boolean,
+        canScrollForward: () -> Boolean,
+    ) {
+        this.orientation = orientation
+        this.canScrollBackward = canScrollBackward
+        this.canScrollForward = canScrollForward
+    }
 }
 
 private fun consumeScrollRemainderAtEdge(
@@ -89,7 +140,7 @@ private fun consumeScrollRemainderAtEdge(
     canScrollBackward: Boolean,
     canScrollForward: Boolean
 ): Offset {
-    if (abs(consumed) <= 0.5f) return Offset.Zero
+    if (abs(consumed) <= EdgeRemainderThresholdPx) return Offset.Zero
     if (!shouldConsumeAtEdge(available, canScrollBackward, canScrollForward)) return Offset.Zero
     return when (orientation) {
         Orientation.Vertical -> Offset(x = 0f, y = available)
@@ -104,7 +155,7 @@ private fun consumeFlingRemainderAtEdge(
     canScrollBackward: Boolean,
     canScrollForward: Boolean
 ): Velocity {
-    if (abs(consumed) <= 0.5f) return Velocity.Zero
+    if (abs(consumed) <= EdgeRemainderThresholdPx) return Velocity.Zero
     if (!shouldConsumeAtEdge(available, canScrollBackward, canScrollForward)) return Velocity.Zero
     return when (orientation) {
         Orientation.Vertical -> Velocity(x = 0f, y = available)
@@ -117,7 +168,7 @@ private fun shouldConsumeAtEdge(
     canScrollBackward: Boolean,
     canScrollForward: Boolean
 ): Boolean {
-    if (abs(available) <= 0.5f) return false
+    if (abs(available) <= EdgeRemainderThresholdPx) return false
     return (available > 0f && !canScrollBackward) || (available < 0f && !canScrollForward)
 }
 

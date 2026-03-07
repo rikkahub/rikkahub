@@ -223,8 +223,7 @@ private fun ChatListNormal(
     // 比持续扫描整段可见项更轻
     val isAtBottom by remember(state) {
         derivedStateOf {
-            val lastVisibleKey = state.layoutInfo.visibleItemsInfo.lastOrNull()?.key
-            !state.canScrollForward || lastVisibleKey == ScrollBottomKey
+            !state.canScrollForward
         }
     }
 

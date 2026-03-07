@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
 import android.content.Intent
+import android.util.LruCache
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -86,7 +87,6 @@ import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
-import java.util.LinkedHashMap
 
 private val flavour by lazy {
     GFMFlavourDescriptor(
@@ -114,18 +114,12 @@ private data class ParsedMarkdown(
 // 流式更新和重复重组时尽量复用已经建好的 AST
 private object MarkdownParseCache {
     private const val MAX_ENTRIES = 128
-    private val cache = object : LinkedHashMap<String, ParsedMarkdown>(MAX_ENTRIES, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ParsedMarkdown>?): Boolean {
-            return size > MAX_ENTRIES
-        }
-    }
+    private val cache = LruCache<String, ParsedMarkdown>(MAX_ENTRIES)
 
-    @Synchronized
-    fun get(content: String): ParsedMarkdown? = cache[content]
+    fun get(content: String): ParsedMarkdown? = cache.get(content)
 
-    @Synchronized
     fun put(content: String, parsedMarkdown: ParsedMarkdown) {
-        cache[content] = parsedMarkdown
+        cache.put(content, parsedMarkdown)
     }
 }
 

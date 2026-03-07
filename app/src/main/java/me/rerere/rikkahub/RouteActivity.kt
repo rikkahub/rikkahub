@@ -35,6 +35,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -231,6 +233,7 @@ class RouteActivity : ComponentActivity() {
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
+                        .semantics { testTagsAsResourceId = true }
                 ) {
                     NavDisplay(
                         backStack = backStack,

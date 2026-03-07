@@ -53,6 +53,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -123,58 +125,109 @@ fun ChatDrawerContent(
     var conversationToMove by remember { mutableStateOf<Conversation?>(null) }
     val bottomSheetState = rememberModalBottomSheetState()
 
-    ChatDrawerSheet(
-        drawerState = drawerState,
-        vm = vm,
-        settings = settings,
-        isPlayStore = isPlayStore,
-        navController = navController,
-        currentConversationId = currentConversationId,
-        conversationListState = conversationListState,
-        conversations = conversations,
-        conversationJobs = conversationJobs.keys,
-        nicknameEdit = { nicknameEditState.open(settings.displaySetting.userNickname) },
-        onUpdateAvatar = { newAvatar ->
-            vm.updateSettings(
-                settings.copy(
-                    displaySetting = settings.displaySetting.copy(
-                        userAvatar = newAvatar
-                    )
-                )
+    val drawerContent: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier
+                .padding(8.dp)
+                .semantics { testTagsAsResourceId = true },
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (settings.displaySetting.showUpdates && !isPlayStore) {
+                UpdateCard(vm)
+            }
+
+            BackupReminderCard(
+                settings = settings,
+                onClick = { navController.navigate(Screen.Backup) },
             )
-        },
-        onUpdateSettings = {
-            vm.updateSettings(it)
-            scope.launch {
-                val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
-                    Uuid.random()
-                } else {
-                    repo.getConversationsOfAssistant(it.assistantId)
-                        .first()
-                        .firstOrNull()
-                        ?.id ?: Uuid.random()
+
+            DrawerIdentitySection(
+                settings = settings,
+                onEditNickname = { nicknameEditState.open(settings.displaySetting.userNickname) },
+                onUpdateAvatar = { newAvatar ->
+                    vm.updateSettings(
+                        settings.copy(
+                            displaySetting = settings.displaySetting.copy(
+                                userAvatar = newAvatar
+                            )
+                        )
+                    )
+                },
+            )
+
+            DrawerActions(navController = navController)
+
+            ConversationList(
+                currentConversationId = currentConversationId,
+                conversations = conversations,
+                conversationJobs = conversationJobs.keys,
+                listState = conversationListState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                onClick = {
+                    navigateToChatPage(navController, it.id)
+                },
+                onRegenerateTitle = {
+                    vm.generateTitle(it, true)
+                },
+                onDelete = {
+                    vm.deleteConversation(it)
+                    conversations.refresh()
+                    if (it.id == currentConversationId) {
+                        navigateToChatPage(navController)
+                    }
+                },
+                onPin = {
+                    vm.updatePinnedStatus(it)
+                },
+                onMoveToAssistant = {
+                    conversationToMove = it
+                    showMoveToAssistantSheet = true
+                },
+            )
+
+            AssistantPicker(
+                settings = settings,
+                onUpdateSettings = {
+                    vm.updateSettings(it)
+                    scope.launch {
+                        val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
+                            Uuid.random()
+                        } else {
+                            repo.getConversationsOfAssistant(it.assistantId)
+                                .first()
+                                .firstOrNull()
+                                ?.id ?: Uuid.random()
+                        }
+                        navigateToChatPage(navigator = navController, chatId = id)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                onClickSetting = {
+                    val currentAssistantId = settings.assistantId
+                    navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
                 }
-                navigateToChatPage(navigator = navController, chatId = id)
-            }
-        },
-        onDeleteConversation = {
-            vm.deleteConversation(it)
-            conversations.refresh()
-            if (it.id == currentConversationId) {
-                navigateToChatPage(navController)
-            }
-        },
-        onRegenerateTitle = {
-            vm.generateTitle(it, true)
-        },
-        onPinConversation = {
-            vm.updatePinnedStatus(it)
-        },
-        onMoveToAssistant = {
-            conversationToMove = it
-            showMoveToAssistantSheet = true
+            )
+
+            DrawerBottomActions(navController = navController)
         }
-    )
+    }
+
+    if (drawerState != null) {
+        ModalDrawerSheet(
+            drawerState = drawerState,
+            modifier = Modifier.width(300.dp),
+        ) {
+            drawerContent()
+        }
+    } else {
+        ModalDrawerSheet(
+            modifier = Modifier.width(300.dp)
+        ) {
+            drawerContent()
+        }
+    }
 
     // 昵称编辑对话框
     nicknameEditState.EditStateContent { nickname, onUpdate ->
@@ -261,96 +314,6 @@ fun ChatDrawerContent(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ChatDrawerSheet(
-    drawerState: DrawerState?,
-    vm: ChatVM,
-    settings: Settings,
-    isPlayStore: Boolean,
-    navController: Navigator,
-    currentConversationId: Uuid,
-    conversationListState: androidx.compose.foundation.lazy.LazyListState,
-    conversations: androidx.paging.compose.LazyPagingItems<ConversationListItem>,
-    conversationJobs: Collection<Uuid>,
-    nicknameEdit: () -> Unit,
-    onUpdateAvatar: (Avatar) -> Unit,
-    onUpdateSettings: (Settings) -> Unit,
-    onDeleteConversation: (Conversation) -> Unit,
-    onRegenerateTitle: (Conversation) -> Unit,
-    onPinConversation: (Conversation) -> Unit,
-    onMoveToAssistant: (Conversation) -> Unit,
-) {
-    // 抽屉头部 操作区 会话列表分开组成
-    // 列表滚动时尽量别把整张抽屉一起拖进重组
-    val content: @Composable () -> Unit = {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (settings.displaySetting.showUpdates && !isPlayStore) {
-                UpdateCard(vm)
-            }
-
-            BackupReminderCard(
-                settings = settings,
-                onClick = { navController.navigate(Screen.Backup) },
-            )
-
-            DrawerIdentitySection(
-                settings = settings,
-                onEditNickname = nicknameEdit,
-                onUpdateAvatar = onUpdateAvatar,
-            )
-
-            DrawerActions(navController = navController)
-
-            ConversationList(
-                currentConversationId = currentConversationId,
-                conversations = conversations,
-                conversationJobs = conversationJobs,
-                listState = conversationListState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                onClick = {
-                    navigateToChatPage(navController, it.id)
-                },
-                onRegenerateTitle = onRegenerateTitle,
-                onDelete = onDeleteConversation,
-                onPin = onPinConversation,
-                onMoveToAssistant = onMoveToAssistant,
-            )
-
-            AssistantPicker(
-                settings = settings,
-                onUpdateSettings = onUpdateSettings,
-                modifier = Modifier.fillMaxWidth(),
-                onClickSetting = {
-                    val currentAssistantId = settings.assistantId
-                    navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
-                }
-            )
-
-            DrawerBottomActions(navController = navController)
-        }
-    }
-
-    if (drawerState != null) {
-        ModalDrawerSheet(
-            drawerState = drawerState,
-            modifier = Modifier.width(300.dp),
-        ) {
-            content()
-        }
-    } else {
-        ModalDrawerSheet(
-            modifier = Modifier.width(300.dp)
-        ) {
-            content()
         }
     }
 }

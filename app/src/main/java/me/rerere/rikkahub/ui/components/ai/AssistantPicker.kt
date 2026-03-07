@@ -36,7 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -51,6 +54,7 @@ import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberAssistantState
 import me.rerere.rikkahub.ui.modifier.overlayEdgeScrollGuard
+import me.rerere.rikkahub.ui.testing.ChatUiTestTags
 import kotlin.uuid.Uuid
 
 @Composable
@@ -90,7 +94,7 @@ fun AssistantPicker(
         onClick = {
             showPicker = true
         },
-        modifier = modifier,
+        modifier = modifier.testTag(ChatUiTestTags.ASSISTANT_PICKER_TRIGGER),
         selected = false,
     )
 
@@ -143,7 +147,8 @@ private fun AssistantPickerSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.8f)
-                .padding(16.dp),
+                .padding(16.dp)
+                .semantics { testTagsAsResourceId = true },
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
@@ -181,6 +186,7 @@ private fun AssistantPickerSheet(
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
+                    .testTag(ChatUiTestTags.ASSISTANT_PICKER_LIST)
                     .overlayEdgeScrollGuard(assistantListState),
                 state = assistantListState,
                 verticalArrangement = Arrangement.spacedBy(8.dp),

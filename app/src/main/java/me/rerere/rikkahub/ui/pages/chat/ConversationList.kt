@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -51,6 +52,7 @@ import androidx.paging.compose.itemKey
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.modifier.overlayEdgeScrollGuard
+import me.rerere.rikkahub.ui.testing.ChatUiTestTags
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
@@ -102,7 +104,9 @@ fun ColumnScope.ConversationList(
 
     LazyColumn(
         state = listState,
-        modifier = modifier.overlayEdgeScrollGuard(listState),
+        modifier = modifier
+            .testTag(ChatUiTestTags.CHAT_DRAWER_CONVERSATION_LIST)
+            .overlayEdgeScrollGuard(listState),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (conversations.itemCount == 0) {
