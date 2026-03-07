@@ -84,6 +84,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.AppReorderableLazyListItem
 import me.rerere.rikkahub.ui.components.ui.ReorderItemPlacementPolicy
+import me.rerere.rikkahub.ui.components.ui.ReorderItemReleaseSettlePolicy
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.icons.HeartIcon
@@ -484,6 +485,7 @@ private fun ColumnScope.ModelList(
                     state = reorderableState,
                     key = "favorite:" + model.id.toString(),
                     placementPolicy = ReorderItemPlacementPolicy.LibraryDefault,
+                    releaseSettlePolicy = ReorderItemReleaseSettlePolicy.AdaptivePreserved,
                 ) { isDragging, itemModifier ->
                     ModelItem(
                         model = model,
