@@ -1,5 +1,6 @@
 package me.rerere.baselineprofile
 
+// 与 app 模块 ChatUiTestTags 保持一致
 internal object ChatBenchmarkTags {
     const val CHAT_DRAWER_TRIGGER = "chat_drawer_trigger"
     const val CHAT_DRAWER_CONVERSATION_LIST = "chat_drawer_conversation_list"

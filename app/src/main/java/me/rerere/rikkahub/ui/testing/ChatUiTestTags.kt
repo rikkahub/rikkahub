@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.testing
 
+// benchmark 模块的 ChatBenchmarkTags 需要和这里保持一致
 object ChatUiTestTags {
     const val CHAT_DRAWER_TRIGGER = "chat_drawer_trigger"
     const val CHAT_DRAWER_CONVERSATION_LIST = "chat_drawer_conversation_list"

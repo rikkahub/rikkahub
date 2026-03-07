@@ -84,9 +84,9 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
-import me.rerere.rikkahub.ui.components.ai.modelreorderable.ReorderableItem
-import me.rerere.rikkahub.ui.components.ai.modelreorderable.rememberReorderableLazyListState
-import me.rerere.rikkahub.ui.components.ai.modelreorderable.rememberScroller
+import me.rerere.rikkahub.ui.components.ai.modelreorderable.ReorderableItem as FavoriteReorderableItem
+import me.rerere.rikkahub.ui.components.ai.modelreorderable.rememberReorderableLazyListState as rememberFavoriteReorderableLazyListState
+import me.rerere.rikkahub.ui.components.ai.modelreorderable.rememberScroller as rememberFavoriteReorderableScroller
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
@@ -379,10 +379,10 @@ private fun ColumnScope.ModelList(
     )
     // 限制边缘自动滚动速度
     // 快速拖拽时别让列表冲得过猛
-    val reorderScroller = rememberScroller(lazyListState, 2200f)
-    val reorderableState = rememberReorderableLazyListState(
+    val favoriteReorderScroller = rememberFavoriteReorderableScroller(lazyListState, 2200f)
+    val favoriteReorderableState = rememberFavoriteReorderableLazyListState(
         lazyListState = lazyListState,
-        scroller = reorderScroller
+        scroller = favoriteReorderScroller
     ) { from, to ->
         // 计算favorite models在列表中的位置偏移
         var favoriteStartIndex = 0
@@ -498,8 +498,8 @@ private fun ColumnScope.ModelList(
                 key = { "favorite:" + it.first.id.toString() },
                 contentType = { "favorite_model" }
             ) { (model, provider) ->
-                ReorderableItem(
-                    state = reorderableState,
+                FavoriteReorderableItem(
+                    state = favoriteReorderableState,
                     key = "favorite:" + model.id.toString(),
                     modifier = Modifier.testTag(ChatUiTestTags.MODEL_SELECTOR_FAVORITE_ITEM),
                 ) { isDragging ->

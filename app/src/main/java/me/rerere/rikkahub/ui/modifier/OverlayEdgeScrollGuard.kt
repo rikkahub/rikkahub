@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.unit.Velocity
 import kotlin.math.abs
 
+// 列表到边界时还会有少量 scroll 和 fling 残量
+// 吃掉残量避免外层 sheet 或 drawer 接到手势后顿一下
 private const val EdgeRemainderThresholdPx = 0.5f
 
 fun Modifier.overlayEdgeScrollGuard(
@@ -94,6 +96,8 @@ private class OverlayEdgeScrollGuardNode(
             available: Offset,
             source: NestedScrollSource
         ): Offset {
+            // 只在内层到边界时消费 available
+            // 避免残量交给外层 overlay
             return consumeScrollRemainderAtEdge(
                 consumed = consumed.axisValue(orientation),
                 available = available.axisValue(orientation),
@@ -104,6 +108,7 @@ private class OverlayEdgeScrollGuardNode(
         }
 
         override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+            // fling 同理 只吃边界残量
             return consumeFlingRemainderAtEdge(
                 consumed = consumed.axisValue(orientation),
                 available = available.axisValue(orientation),
@@ -142,6 +147,7 @@ private fun consumeScrollRemainderAtEdge(
 ): Offset {
     if (abs(consumed) <= EdgeRemainderThresholdPx) return Offset.Zero
     if (!shouldConsumeAtEdge(available, canScrollBackward, canScrollForward)) return Offset.Zero
+    // 到边界后把剩余手势吃掉
     return when (orientation) {
         Orientation.Vertical -> Offset(x = 0f, y = available)
         Orientation.Horizontal -> Offset(x = available, y = 0f)
@@ -157,6 +163,7 @@ private fun consumeFlingRemainderAtEdge(
 ): Velocity {
     if (abs(consumed) <= EdgeRemainderThresholdPx) return Velocity.Zero
     if (!shouldConsumeAtEdge(available, canScrollBackward, canScrollForward)) return Velocity.Zero
+    // 到边界后把剩余惯性吃掉
     return when (orientation) {
         Orientation.Vertical -> Velocity(x = 0f, y = available)
         Orientation.Horizontal -> Velocity(x = available, y = 0f)

@@ -282,6 +282,8 @@ open class ReorderableLazyCollectionState<out T> internal constructor(
         val draggingItem = draggingItemLayoutInfo
 
         if (draggingItemIndex != null && draggingItem != null) {
+            // 松手后把拖拽项转成 settlingItem
+            // 释放归位动画在这里接管 避免依赖外部库的内部状态
             settlingItemKey = draggingItemKey
             val startOffset = draggingItemOffset
             val itemMainAxisSizePx = draggingItem.size.getAxis(orientation).coerceAtLeast(1)
@@ -511,6 +513,8 @@ private fun adaptiveReleaseSettleProfile(
     releaseDistancePx: Float,
     itemMainAxisSizePx: Int,
 ): ReleaseSettleProfile {
+    // 按释放距离归一化 stiffness
+    // 短距离更接近默认 长距离更快收敛
     val normalizedDistance = (releaseDistancePx / itemMainAxisSizePx.toFloat()).coerceIn(0f, 1f)
     val stiffness = Spring.StiffnessMedium +
         (Spring.StiffnessHigh - Spring.StiffnessMedium) * normalizedDistance

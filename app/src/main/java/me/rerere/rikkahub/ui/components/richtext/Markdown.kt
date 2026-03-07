@@ -112,14 +112,18 @@ private data class ParsedMarkdown(
 
 // 进程内 LRU 缓存
 // 流式更新和重复重组时尽量复用已经建好的 AST
+// 解析在后台线程进行 这里保证缓存访问线程安全
 private object MarkdownParseCache {
     private const val MAX_ENTRIES = 128
+    private val cacheLock = Any()
     private val cache = LruCache<String, ParsedMarkdown>(MAX_ENTRIES)
 
-    fun get(content: String): ParsedMarkdown? = cache.get(content)
+    fun get(content: String): ParsedMarkdown? = synchronized(cacheLock) { cache.get(content) }
 
     fun put(content: String, parsedMarkdown: ParsedMarkdown) {
-        cache.put(content, parsedMarkdown)
+        synchronized(cacheLock) {
+            cache.put(content, parsedMarkdown)
+        }
     }
 }
 

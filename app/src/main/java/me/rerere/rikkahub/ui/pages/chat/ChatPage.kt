@@ -333,7 +333,8 @@ private fun ChatPageContent(
                         } else {
                             vm.handleMessageSend(inputState.getContents())
                             scope.launch {
-                                chatListState.requestScrollToItem(messageCount + 5)
+                                val bottomIndex = vm.messageNodes.value.size + if (vm.conversationJob.value != null) 1 else 0
+                                chatListState.requestScrollToItem(bottomIndex)
                             }
                         }
                         inputState.clearInput()
@@ -347,7 +348,8 @@ private fun ChatPageContent(
                         } else {
                             vm.handleMessageSend(content = inputState.getContents(), answer = false)
                             scope.launch {
-                                chatListState.requestScrollToItem(messageCount + 5)
+                                val bottomIndex = vm.messageNodes.value.size + if (vm.conversationJob.value != null) 1 else 0
+                                chatListState.requestScrollToItem(bottomIndex)
                             }
                         }
                         inputState.clearInput()
