@@ -470,16 +470,16 @@ private fun MarkdownNode(
             val imageUrl =
                 node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_DESTINATION)?.getTextInNode(content) ?: ""
             Column(
-                modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally
+                modifier = modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 这里可以使用Coil等图片加载库加载图片
                 ZoomableAsyncImage(
                     model = imageUrl,
                     contentDescription = altText,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .widthIn(min = 120.dp)
-                        .heightIn(min = 120.dp),
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp, max = 400.dp),
                 )
             }
         }
@@ -563,13 +563,26 @@ private fun MarkdownNode(
             }
 
             if (renderTarget != null) {
-                WebRenderedCodeBlock(
-                    target = renderTarget,
-                    code = code,
-                    modifier = Modifier
-                        .padding(bottom = 4.dp)
-                        .fillMaxWidth()
-                )
+                when (renderTarget.renderType) {
+                    CodeBlockRenderType.SVG -> {
+                        SvgRenderedCodeBlock(
+                            code = code,
+                            modifier = Modifier
+                                .padding(bottom = 4.dp)
+                                .fillMaxWidth()
+                        )
+                    }
+
+                    CodeBlockRenderType.HTML -> {
+                        WebRenderedCodeBlock(
+                            target = renderTarget,
+                            code = code,
+                            modifier = Modifier
+                                .padding(bottom = 4.dp)
+                                .fillMaxWidth()
+                        )
+                    }
+                }
             } else {
                 HighlightCodeBlock(
                     code = code,

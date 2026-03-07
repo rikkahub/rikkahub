@@ -143,7 +143,13 @@ class RouteActivity : ComponentActivity() {
                         .crossfade(true)
                         .components {
                             add(OkHttpNetworkFetcherFactory(callFactory = { okHttpClient }))
-                            add(SvgDecoder.Factory(scaleToDensity = true))
+                            add(
+                                SvgDecoder.Factory(
+                                    scaleToDensity = true,
+                                    useViewBoundsAsIntrinsicSize = true,
+                                    renderToBitmap = true,
+                                )
+                            )
                         }
                         .build()
                 }

@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.browser.customtabs.CustomTabsIntent
@@ -114,7 +115,7 @@ fun Context.exportImage(
     activity: Activity,
     bitmap: Bitmap,
     fileName: String = "RikkaHub_${System.currentTimeMillis()}.png"
-) {
+): Boolean {
     // 检查存储权限（Android 9及以下需要）
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -125,13 +126,13 @@ fun Context.exportImage(
                 arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
                 1
             )
-            return
+            return false
         }
     }
 
     // 保存到相册
     var outputStream: OutputStream? = null
-    try {
+    return try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Android 10及以上使用MediaStore API
             val contentValues = ContentValues().apply {
@@ -140,16 +141,19 @@ fun Context.exportImage(
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
             }
             val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                outputStream = contentResolver.openOutputStream(it)
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream!!)
+                ?: return false
+            outputStream = contentResolver.openOutputStream(uri) ?: return false
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)) {
+                return false
             }
         } else {
             // Android 9及以下直接写入文件
             val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
             val image = File(imagesDir, fileName)
             outputStream = FileOutputStream(image)
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)) {
+                return false
+            }
 
             // 通知图库更新
             val mediaScanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
@@ -157,8 +161,10 @@ fun Context.exportImage(
             sendBroadcast(mediaScanIntent)
         }
         Log.i(TAG, "Image saved successfully: $fileName")
+        true
     } catch (e: Exception) {
         Log.e(TAG, "Failed to save image", e)
+        false
     } finally {
         outputStream?.close()
     }
@@ -167,8 +173,9 @@ fun Context.exportImage(
 fun Context.exportImageFile(
     activity: Activity,
     file: File,
-    fileName: String = "RikkaHub_${System.currentTimeMillis()}.png"
-) {
+    fileName: String = file.name,
+    mimeType: String? = null,
+): Boolean {
     // 检查存储权限（Android 9及以下需要）
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -179,29 +186,31 @@ fun Context.exportImageFile(
                 arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
                 1
             )
-            return
+            return false
         }
     }
 
     // 保存到相册
     var outputStream: OutputStream? = null
-    try {
+    val resolvedMimeType = resolveImageMimeType(file, mimeType)
+    val resolvedFileName = ensureImageFileName(fileName, resolvedMimeType)
+    return try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Android 10及以上使用MediaStore API
             val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                put(MediaStore.MediaColumns.DISPLAY_NAME, resolvedFileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, resolvedMimeType)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
             }
             val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                outputStream = contentResolver.openOutputStream(it)
-                file.inputStream().copyTo(outputStream!!)
-            }
+                ?: return false
+            val mediaOutputStream = contentResolver.openOutputStream(uri) ?: return false
+            outputStream = mediaOutputStream
+            file.inputStream().copyTo(mediaOutputStream)
         } else {
             // Android 9及以下直接写入文件
             val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-            val image = File(imagesDir, fileName)
+            val image = File(imagesDir, resolvedFileName)
             file.copyTo(image, overwrite = true)
 
             // 通知图库更新
@@ -209,10 +218,42 @@ fun Context.exportImageFile(
             mediaScanIntent.data = Uri.fromFile(image)
             sendBroadcast(mediaScanIntent)
         }
-        Log.i(TAG, "Image file saved successfully: $fileName")
+        Log.i(TAG, "Image file saved successfully: $resolvedFileName")
+        true
     } catch (e: Exception) {
         Log.e(TAG, "Failed to save image file", e)
+        false
     } finally {
         outputStream?.close()
     }
+}
+
+private fun resolveImageMimeType(file: File, mimeType: String?): String {
+    val normalizedMimeType = mimeType
+        ?.substringBefore(';')
+        ?.trim()
+        ?.lowercase()
+        ?.takeIf { it.isNotBlank() }
+    if (normalizedMimeType != null) {
+        return normalizedMimeType
+    }
+    return when (file.extension.lowercase()) {
+        "svg" -> "image/svg+xml"
+        else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
+    } ?: "image/png"
+}
+
+private fun ensureImageFileName(fileName: String, mimeType: String): String {
+    val normalizedFileName = fileName
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .ifBlank { "RikkaHub_${System.currentTimeMillis()}" }
+    if (normalizedFileName.contains('.')) {
+        return normalizedFileName
+    }
+    val extension = when (mimeType) {
+        "image/svg+xml" -> "svg"
+        else -> MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+    }
+    return if (extension.isNullOrBlank()) normalizedFileName else "$normalizedFileName.$extension"
 }

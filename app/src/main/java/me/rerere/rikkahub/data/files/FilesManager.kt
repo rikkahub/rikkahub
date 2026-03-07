@@ -15,6 +15,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLDecoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -26,7 +27,6 @@ import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.repository.FilesRepository
-import me.rerere.rikkahub.utils.exportImage
 import me.rerere.rikkahub.utils.exportImageFile
 import me.rerere.rikkahub.utils.getActivity
 import kotlin.io.encoding.Base64
@@ -293,35 +293,115 @@ class FilesManager(
         val activity = requireNotNull(activityContext.getActivity()) { "Activity not found" }
         when {
             image.startsWith("data:image") -> {
-                val byteArray = Base64.decode(image.substringAfter("base64,").toByteArray())
-                val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
-                activityContext.exportImage(activity, bitmap)
+                val inlineImage = parseInlineImage(image)
+                val tempFile = createTempImageFile(inlineImage.mimeType)
+                try {
+                    tempFile.writeBytes(inlineImage.bytes)
+                    check(
+                        activityContext.exportImageFile(
+                            activity = activity,
+                            file = tempFile,
+                            fileName = inlineImage.fileName,
+                            mimeType = inlineImage.mimeType,
+                        )
+                    ) { "Failed to save image" }
+                } finally {
+                    tempFile.delete()
+                }
             }
 
             image.startsWith("file:") -> {
                 val file = image.toUri().toFile()
-                activityContext.exportImageFile(activity, file)
+                check(file.exists()) { "Image file not found" }
+                check(
+                    activityContext.exportImageFile(
+                        activity = activity,
+                        file = file,
+                        fileName = file.name,
+                        mimeType = guessMimeType(file, file.name),
+                    )
+                ) { "Failed to save image file" }
+            }
+
+            image.startsWith("content:") -> {
+                val uri = image.toUri()
+                val fileName = getFileNameFromUri(uri) ?: "RikkaHub_${System.currentTimeMillis()}"
+                val mimeType = normalizeImageMimeType(
+                    getFileMimeType(uri)
+                        ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                            fileName.substringAfterLast('.', "").lowercase()
+                        )
+                )
+                val tempFile = createTempImageFile(mimeType)
+                try {
+                    activityContext.contentResolver.openInputStream(uri)?.use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    } ?: error("Image content not found")
+                    check(
+                        activityContext.exportImageFile(
+                            activity = activity,
+                            file = tempFile,
+                            fileName = ensureImageExtension(fileName, mimeType),
+                            mimeType = mimeType,
+                        )
+                    ) { "Failed to save content image" }
+                } finally {
+                    tempFile.delete()
+                }
             }
 
             image.startsWith("http") -> {
-                runCatching {
-                    val url = URL(image)
-                    val connection = url.openConnection() as HttpURLConnection
+                val connection = (URL(image).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 15000
+                }
+                var tempFile: File? = null
+                try {
                     connection.connect()
-
-                    if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                        val bitmap = BitmapFactory.decodeStream(connection.inputStream)
-                        activityContext.exportImage(activity, bitmap)
-                    } else {
-                        Log.e(
-                            TAG,
-                            "saveMessageImage: Failed to download image from $image, response code: ${connection.responseCode}"
-                        )
+                    check(connection.responseCode == HttpURLConnection.HTTP_OK) {
+                        "Failed to download image, response code: ${connection.responseCode}"
                     }
-                }.getOrNull()
+                    val mimeType = normalizeImageMimeType(connection.contentType)
+                    val fileName = resolveRemoteImageFileName(
+                        image = image,
+                        mimeType = mimeType,
+                        contentDisposition = connection.getHeaderField("Content-Disposition"),
+                    )
+                    tempFile = createTempImageFile(mimeType)
+                    connection.inputStream.use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    check(
+                        activityContext.exportImageFile(
+                            activity = activity,
+                            file = tempFile,
+                            fileName = fileName,
+                            mimeType = mimeType,
+                        )
+                    ) { "Failed to save downloaded image" }
+                } finally {
+                    connection.disconnect()
+                    tempFile?.delete()
+                }
             }
 
-            else -> error("Invalid image format")
+            else -> {
+                val file = File(image)
+                check(file.exists()) { "Image file not found" }
+                check(
+                    activityContext.exportImageFile(
+                        activity = activity,
+                        file = file,
+                        fileName = file.name,
+                        mimeType = guessMimeType(file, file.name),
+                    )
+                ) { "Failed to save local image file" }
+            }
         }
     }
 
@@ -457,8 +537,10 @@ class FilesManager(
     private fun guessMimeType(file: File, fileName: String): String {
         val ext = fileName.substringAfterLast('.', "").lowercase()
         if (ext.isNotEmpty()) {
-            return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
-                ?: "application/octet-stream"
+            return when (ext) {
+                "svg" -> "image/svg+xml"
+                else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+            } ?: "application/octet-stream"
         }
         return sniffMimeType(file)
     }
@@ -518,6 +600,88 @@ class FilesManager(
         return total > 0 && printable.toDouble() / total >= 0.8
     }
 
+    private fun parseInlineImage(image: String): InlineImageData {
+        val header = image.substringBefore(',')
+        check(header.contains(";base64")) { "Unsupported image data URL" }
+        val mimeType = normalizeImageMimeType(header.substringAfter("data:").substringBefore(';'))
+        val fileName = "RikkaHub_${System.currentTimeMillis()}.${extensionFromMimeType(mimeType)}"
+        return InlineImageData(
+            bytes = Base64.decode(image.substringAfter("base64,").toByteArray()),
+            mimeType = mimeType,
+            fileName = fileName,
+        )
+    }
+
+    private fun createTempImageFile(mimeType: String): File {
+        return File.createTempFile(
+            "message_image_",
+            ".${extensionFromMimeType(mimeType)}",
+            context.cacheDir,
+        )
+    }
+
+    private fun resolveRemoteImageFileName(
+        image: String,
+        mimeType: String,
+        contentDisposition: String?,
+    ): String {
+        extractFileNameFromContentDisposition(contentDisposition)?.let {
+            return ensureImageExtension(it, mimeType)
+        }
+
+        val pathName = runCatching { URL(image).path.substringAfterLast('/') }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+        if (pathName != null) {
+            return ensureImageExtension(pathName, mimeType)
+        }
+
+        return "RikkaHub_${System.currentTimeMillis()}.${extensionFromMimeType(mimeType)}"
+    }
+
+    private fun extractFileNameFromContentDisposition(contentDisposition: String?): String? {
+        if (contentDisposition.isNullOrBlank()) return null
+        val encodedFileName = Regex("filename\\*=UTF-8''([^;]+)", RegexOption.IGNORE_CASE)
+            .find(contentDisposition)
+            ?.groupValues
+            ?.getOrNull(1)
+        if (!encodedFileName.isNullOrBlank()) {
+            return URLDecoder.decode(encodedFileName, Charsets.UTF_8.name())
+        }
+
+        return Regex("filename=\"?([^\";]+)\"?", RegexOption.IGNORE_CASE)
+            .find(contentDisposition)
+            ?.groupValues
+            ?.getOrNull(1)
+    }
+
+    private fun normalizeImageMimeType(mimeType: String?): String {
+        return mimeType
+            ?.substringBefore(';')
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it.startsWith("image/") }
+            ?: "image/png"
+    }
+
+    private fun extensionFromMimeType(mimeType: String): String {
+        return when (mimeType) {
+            "image/svg+xml" -> "svg"
+            else -> MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+        } ?: "png"
+    }
+
+    private fun ensureImageExtension(fileName: String, mimeType: String): String {
+        val normalizedFileName = fileName
+            .substringAfterLast('/')
+            .substringAfterLast('\\')
+            .ifBlank { "RikkaHub_${System.currentTimeMillis()}" }
+        return if (normalizedFileName.contains('.')) {
+            normalizedFileName
+        } else {
+            "$normalizedFileName.${extensionFromMimeType(mimeType)}"
+        }
+    }
+
     private fun ByteArray.startsWithBytes(vararg values: Int): Boolean {
         if (this.size < values.size) return false
         for (i in values.indices) {
@@ -530,6 +694,12 @@ class FilesManager(
         compress(Bitmap.CompressFormat.PNG, 100, it)
         it.toByteArray()
     }
+
+    private data class InlineImageData(
+        val bytes: ByteArray,
+        val mimeType: String,
+        val fileName: String,
+    )
 }
 
 object FileFolders {

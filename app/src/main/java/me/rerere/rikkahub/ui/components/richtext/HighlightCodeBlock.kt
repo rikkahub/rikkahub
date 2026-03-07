@@ -377,6 +377,7 @@ private fun HighlightCodeActions(
                         "cpp", "c++" -> "cpp"
                         "c" -> "c"
                         "html" -> "html"
+                        "svg" -> "svg"
                         "css" -> "css"
                         "xml" -> "xml"
                         "json" -> "json"
