@@ -1,12 +1,7 @@
 package me.rerere.rikkahub.ui.components.ai
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.VectorConverter
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,7 +17,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -52,11 +46,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -64,12 +55,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastForEach
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -95,6 +84,9 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.ui.components.ai.modelreorderable.ReorderableItem
+import me.rerere.rikkahub.ui.components.ai.modelreorderable.rememberReorderableLazyListState
+import me.rerere.rikkahub.ui.components.ai.modelreorderable.rememberScroller
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
@@ -105,13 +97,7 @@ import me.rerere.rikkahub.ui.testing.ChatUiTestTags
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
-import sh.calvin.reorderable.ReorderableCollectionItemScope
-import sh.calvin.reorderable.rememberReorderableLazyListState
-import sh.calvin.reorderable.rememberScroller
-import kotlin.math.abs
 import kotlin.uuid.Uuid
-
-private const val FavoriteReleaseThresholdPx = 0.5f
 
 @Composable
 fun ModelSelector(
@@ -512,16 +498,15 @@ private fun ColumnScope.ModelList(
                 key = { "favorite:" + it.first.id.toString() },
                 contentType = { "favorite_model" }
             ) { (model, provider) ->
-                FavoriteModelReorderableItem(
+                ReorderableItem(
                     state = reorderableState,
                     key = "favorite:" + model.id.toString(),
-                ) { isDragging, itemModifier ->
+                    modifier = Modifier.testTag(ChatUiTestTags.MODEL_SELECTOR_FAVORITE_ITEM),
+                ) { isDragging ->
                     ModelItem(
                         model = model,
                         onSelect = onSelect,
-                        modifier = itemModifier
-                            .testTag(ChatUiTestTags.MODEL_SELECTOR_FAVORITE_ITEM)
-                            .scale(if (isDragging) 0.95f else 1f),
+                        modifier = Modifier.scale(if (isDragging) 0.95f else 1f),
                         providerSetting = provider,
                         select = model.id == currentModel,
                         onDismiss = {
@@ -688,130 +673,6 @@ private fun ColumnScope.ModelList(
                 )
             }
         }
-    }
-}
-
-private data class FavoriteReleaseSettleProfile(
-    val stiffness: Float,
-    val dampingRatio: Float,
-)
-
-@Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
-@Composable
-private fun LazyItemScope.FavoriteModelReorderableItem(
-    state: sh.calvin.reorderable.ReorderableLazyListState,
-    key: String,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    content: @Composable ReorderableCollectionItemScope.(isDragging: Boolean, itemModifier: Modifier) -> Unit,
-) {
-    val orientation = state.orientation
-    val isDragging by state.isItemDragging(key)
-    val previousDraggingItemKey = state.previousDraggingItemKey
-    val releaseOffset = remember(key) { Animatable(Offset.Zero, Offset.VectorConverter) }
-    var itemSize by remember(key) { mutableStateOf(IntSize.Zero) }
-    var isReleaseSettling by remember(key) { mutableStateOf(false) }
-
-    LaunchedEffect(isDragging, previousDraggingItemKey) {
-        if (isDragging || previousDraggingItemKey != key) {
-            isReleaseSettling = false
-            releaseOffset.snapTo(Offset.Zero)
-        }
-    }
-
-    LaunchedEffect(previousDraggingItemKey, isDragging, itemSize) {
-        if (isDragging || previousDraggingItemKey != key) return@LaunchedEffect
-
-        val startOffset = state.previousDraggingItemOffset.value
-        val releaseDistancePx = mainAxisDistance(startOffset, orientation)
-        if (releaseDistancePx <= FavoriteReleaseThresholdPx) {
-            isReleaseSettling = false
-            releaseOffset.snapTo(Offset.Zero)
-            return@LaunchedEffect
-        }
-
-        val settleProfile = adaptiveReleaseSettleProfile(
-            releaseDistancePx = releaseDistancePx,
-            itemMainAxisSizePx = when (orientation) {
-                Orientation.Vertical -> itemSize.height
-                Orientation.Horizontal -> itemSize.width
-            }.coerceAtLeast(1)
-        )
-
-        isReleaseSettling = true
-        releaseOffset.snapTo(startOffset)
-        releaseOffset.animateTo(
-            targetValue = Offset.Zero,
-            animationSpec = spring(
-                dampingRatio = settleProfile.dampingRatio,
-                stiffness = settleProfile.stiffness,
-            )
-        )
-        isReleaseSettling = false
-    }
-
-    val stateModifier = when {
-        isDragging -> Modifier.mainAxisTranslation(
-            orientation = orientation,
-            offsetProvider = { state.draggingItemOffset }
-        )
-
-        isReleaseSettling -> Modifier.mainAxisTranslation(
-            orientation = orientation,
-            offsetProvider = { releaseOffset.value }
-        )
-
-        else -> Modifier.animateItem()
-    }
-
-    sh.calvin.reorderable.ReorderableCollectionItem(
-        state,
-        key,
-        modifier
-            .onSizeChanged { itemSize = it }
-            .then(stateModifier),
-        enabled,
-        isDragging,
-    ) { dragging ->
-        content(dragging, Modifier)
-    }
-}
-
-private fun Modifier.mainAxisTranslation(
-    orientation: Orientation,
-    offsetProvider: () -> Offset,
-): Modifier {
-    return zIndex(1f).graphicsLayer {
-        val offset = offsetProvider()
-        translationX = 0f
-        translationY = 0f
-        when (orientation) {
-            Orientation.Vertical -> translationY = offset.y
-            Orientation.Horizontal -> translationX = offset.x
-        }
-    }
-}
-
-private fun adaptiveReleaseSettleProfile(
-    releaseDistancePx: Float,
-    itemMainAxisSizePx: Int,
-): FavoriteReleaseSettleProfile {
-    val normalizedDistance = (releaseDistancePx / itemMainAxisSizePx.toFloat()).coerceIn(0f, 1f)
-    val stiffness = Spring.StiffnessMedium +
-        (Spring.StiffnessHigh - Spring.StiffnessMedium) * normalizedDistance
-    return FavoriteReleaseSettleProfile(
-        stiffness = stiffness,
-        dampingRatio = Spring.DampingRatioNoBouncy,
-    )
-}
-
-private fun mainAxisDistance(
-    offset: Offset,
-    orientation: Orientation,
-): Float {
-    return when (orientation) {
-        Orientation.Vertical -> abs(offset.y)
-        Orientation.Horizontal -> abs(offset.x)
     }
 }
 

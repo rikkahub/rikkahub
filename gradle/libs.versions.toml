@@ -45,6 +45,7 @@ quickie-bundled = "1.11.0"
 sonner = "0.3.9"
 leakcanary = "2.14"
 workmanager = "2.11.1"
+# 其他排序页面仍走三方库 收藏模型释放归位已改成 app 内 vendored 实现
 reorderable = "3.0.0"
 mcp = "0.8.4"
 pebble = "4.1.0"
