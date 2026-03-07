@@ -13,6 +13,19 @@ import java.io.StringReader
 import java.io.StringWriter
 import java.time.Instant
 
+private class LazyCachedString(private val supplier: () -> String) {
+    @Volatile
+    private var cached: String? = null
+
+    override fun toString(): String {
+        val existing = cached
+        if (existing != null) return existing
+        return synchronized(this) {
+            cached ?: supplier().also { cached = it }
+        }
+    }
+}
+
 class TemplateTransformer(
     private val engine: PebbleEngine,
     private val settingsStore: SettingsStore
@@ -22,7 +35,7 @@ class TemplateTransformer(
         messages: List<UIMessage>,
     ): List<UIMessage> {
         val template = engine.getTemplate(ctx.assistant.id.toString())
-        val location = ctx.context.formatLastKnownLocationLngLat()
+        val location = LazyCachedString { ctx.context.formatLastKnownLocationLngLat() }
         return messages.map { message ->
             message.copy(
                 parts = message.parts.map { part ->

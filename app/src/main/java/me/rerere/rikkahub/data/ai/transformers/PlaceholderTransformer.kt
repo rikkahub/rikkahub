@@ -176,10 +176,16 @@ object PlaceholderTransformer : InputMessageTransformer, KoinComponent {
             assistant = ctx.assistant
         )
         defaultProvider.placeholders.forEach { (key, placeholderInfo) ->
+            val token = "{{$key}}"
+            val tokenLegacy = "{$key}"
+            if (!result.contains(token, ignoreCase = true) && !result.contains(tokenLegacy, ignoreCase = true)) {
+                return@forEach
+            }
+
             val value = placeholderInfo.resolver(ctx)
             result = result
-                .replace(oldValue = "{{$key}}", newValue = value, ignoreCase = true)
-                .replace(oldValue = "{$key}", newValue = value, ignoreCase = true)
+                .replace(oldValue = token, newValue = value, ignoreCase = true)
+                .replace(oldValue = tokenLegacy, newValue = value, ignoreCase = true)
         }
 
         return result
