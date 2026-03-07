@@ -82,6 +82,8 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.AppReorderableLazyListItem
+import me.rerere.rikkahub.ui.components.ui.ReorderItemPlacementPolicy
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.icons.HeartIcon
@@ -90,7 +92,6 @@ import me.rerere.rikkahub.ui.modifier.overlayEdgeScrollGuard
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
-import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import sh.calvin.reorderable.rememberScroller
 import kotlin.uuid.Uuid
@@ -479,16 +480,15 @@ private fun ColumnScope.ModelList(
                 key = { "favorite:" + it.first.id.toString() },
                 contentType = { "favorite_model" }
             ) { (model, provider) ->
-                ReorderableItem(
+                AppReorderableLazyListItem(
                     state = reorderableState,
-                    key = "favorite:" + model.id.toString()
-                ) { isDragging ->
+                    key = "favorite:" + model.id.toString(),
+                    placementPolicy = ReorderItemPlacementPolicy.LibraryDefault,
+                ) { isDragging, itemModifier ->
                     ModelItem(
                         model = model,
                         onSelect = onSelect,
-                        modifier = Modifier
-                            .scale(if (isDragging) 0.95f else 1f)
-                            .animateItem(),
+                        modifier = itemModifier.scale(if (isDragging) 0.95f else 1f),
                         providerSetting = provider,
                         select = model.id == currentModel,
                         onDismiss = {
