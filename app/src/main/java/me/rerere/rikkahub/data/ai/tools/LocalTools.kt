@@ -316,6 +316,7 @@ class LocalTools(
             description = """
                 Run a shell command in local Termux and return stdout plus stderr as plain text.
             """.trimIndent().replace("\n", " "),
+            systemPrompt = { _, _ -> buildTermuxWorkspacePrompt() },
             needsApproval = needsApproval,
             parameters = {
                 InputSchema.Obj(
@@ -385,6 +386,7 @@ class LocalTools(
             description = """
                 Run Python code in local Termux and return stdout plus stderr as plain text.
             """.trimIndent().replace("\n", " "),
+            systemPrompt = { _, _ -> buildTermuxWorkspacePrompt() },
             needsApproval = needsApproval,
             parameters = {
                 InputSchema.Obj(
@@ -474,6 +476,11 @@ class LocalTools(
                 LocalToolOption.AskUser -> askUserTool
             }
         }
+    }
+
+    private fun buildTermuxWorkspacePrompt(): String {
+        val workdir = settingsStore.settingsFlow.value.termuxWorkdir
+        return "Current Termux workspace path: $workdir. Save and read files there by default unless the user requests another path."
     }
 
     companion object {

@@ -360,10 +360,15 @@ class GenerationHandler(
                 }
 
                 // 工具prompt
-                tools.forEach { tool ->
-                    appendLine()
-                    append(tool.systemPrompt(model, messages))
+                tools.map { tool ->
+                    tool.systemPrompt(model, messages).trim()
                 }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .forEach { prompt ->
+                        appendLine()
+                        append(prompt)
+                    }
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
             addAll(messages.limitContext(assistant.contextMessageSize))
