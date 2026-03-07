@@ -11,7 +11,6 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -315,13 +314,7 @@ class LocalTools(
         return Tool(
             name = "termux_exec",
             description = """
-                Execute commands in the local Termux app (com.termux) via RUN_COMMAND intent.
-                You can provide either 'command' (shell string executed via bash -lc) OR 'command_path' + 'arguments'.
-                Default workdir comes from app Settings -> Termux.
-                Background and timeout are controlled by app Settings -> Termux.
-                Requires Termux installed, Termux allow-external-apps=true, and granting
-                com.termux.permission.RUN_COMMAND.
-                Returns plain text output like a terminal (stdout + stderr).
+                Run a shell command in local Termux and return stdout plus stderr as plain text.
             """.trimIndent().replace("\n", " "),
             needsApproval = needsApproval,
             parameters = {
@@ -329,62 +322,26 @@ class LocalTools(
                     properties = buildJsonObject {
                         put("command", buildJsonObject {
                             put("type", "string")
-                            put("description", "Shell command string executed via bash -lc (recommended)")
-                        })
-                        put("command_path", buildJsonObject {
-                            put("type", "string")
-                            put("description", "Absolute path to executable inside Termux (alternative to command)")
-                        })
-                        put("arguments", buildJsonObject {
-                            put("type", "array")
-                            put("items", buildJsonObject { put("type", "string") })
-                            put("description", "Arguments for command_path executable")
-                        })
-                        put("stdin", buildJsonObject {
-                            put("type", "string")
-                            put("description", "Optional stdin passed to the process")
-                        })
-                        put("workdir", buildJsonObject {
-                            put("type", "string")
-                            put(
-                                "description",
-                                "Working directory in Termux (defaults to global Termux workdir setting)"
-                            )
+                            put("description", "Shell command to execute")
                         })
                     },
+                    required = listOf("command"),
                 )
             },
             execute = execute@{ input ->
                 val params = input.jsonObject
                 val command = params["command"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-                val commandPath = params["command_path"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-                val stdin = params["stdin"]?.jsonPrimitive?.contentOrNull
-                val workdir = params["workdir"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-                    ?: settingsStore.settingsFlow.value.termuxWorkdir
-                val background = settingsStore.settingsFlow.value.termuxRunInBackground
-                val timeoutMs = settingsStore.settingsFlow.value.termuxTimeoutMs
-
-                val (finalCommandPath, finalArgs) = if (command != null) {
-                    TERMUX_BASH_PATH to listOf("-lc", command)
-                } else {
-                    val args = params["arguments"]?.jsonArray
-                        ?.mapNotNull { it.jsonPrimitive.contentOrNull }
-                        ?: emptyList()
-                    if (commandPath == null) {
-                        error("Either 'command' or 'command_path' is required")
-                    }
-                    commandPath to args
-                }
+                    ?: error("command is required")
+                val settings = settingsStore.settingsFlow.value
 
                 val result = runCatching {
                     termuxCommandManager.run(
                         TermuxRunCommandRequest(
-                            commandPath = finalCommandPath,
-                            arguments = finalArgs,
-                            workdir = workdir,
-                            stdin = stdin,
-                            background = background,
-                            timeoutMs = timeoutMs,
+                            commandPath = TERMUX_BASH_PATH,
+                            arguments = listOf("-lc", command),
+                            workdir = settings.termuxWorkdir,
+                            background = settings.termuxRunInBackground,
+                            timeoutMs = settings.termuxTimeoutMs,
                             label = "RikkaHub termux_exec",
                         )
                     )
@@ -426,11 +383,7 @@ class LocalTools(
         return Tool(
             name = "termux_python",
             description = """
-                Execute Python code in the local Termux environment. Input only Python code.
-                Default workdir comes from app Settings -> Termux.
-                Background and timeout are controlled by app Settings -> Termux.
-                Requires Termux installed and Python installed in Termux (pkg install python).
-                Returns plain text output like a terminal (stdout + stderr).
+                Run Python code in local Termux and return stdout plus stderr as plain text.
             """.trimIndent().replace("\n", " "),
             needsApproval = needsApproval,
             parameters = {
@@ -440,13 +393,6 @@ class LocalTools(
                             put("type", "string")
                             put("description", "Python code to execute")
                         })
-                        put("workdir", buildJsonObject {
-                            put("type", "string")
-                            put(
-                                "description",
-                                "Working directory in Termux (defaults to global Termux workdir setting)"
-                            )
-                        })
                     },
                     required = listOf("code"),
                 )
@@ -454,19 +400,17 @@ class LocalTools(
             execute = execute@{ input ->
                 val params = input.jsonObject
                 val code = params["code"]?.jsonPrimitive?.contentOrNull ?: error("code is required")
-                val workdir = params["workdir"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-                    ?: settingsStore.settingsFlow.value.termuxWorkdir
-                val timeoutMs = settingsStore.settingsFlow.value.termuxTimeoutMs
+                val settings = settingsStore.settingsFlow.value
 
                 val termuxResult = runCatching {
                     termuxCommandManager.run(
                         TermuxRunCommandRequest(
                             commandPath = TERMUX_PYTHON3_PATH,
                             arguments = listOf("-"),
-                            workdir = workdir,
+                            workdir = settings.termuxWorkdir,
                             stdin = code,
-                            background = settingsStore.settingsFlow.value.termuxRunInBackground,
-                            timeoutMs = timeoutMs,
+                            background = settings.termuxRunInBackground,
+                            timeoutMs = settings.termuxTimeoutMs,
                             label = "RikkaHub termux_python",
                         )
                     )

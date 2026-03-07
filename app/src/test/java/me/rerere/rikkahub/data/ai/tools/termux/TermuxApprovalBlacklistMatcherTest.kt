@@ -54,27 +54,6 @@ class TermuxApprovalBlacklistMatcherTest {
     }
 
     @Test
-    fun `shouldForceApproval should match command_path by executable name`() {
-        val tool = UIMessagePart.Tool(
-            toolCallId = "1",
-            toolName = "termux_exec",
-            input = """
-                {
-                  "command_path":"/data/data/com.termux/files/usr/bin/rm",
-                  "arguments":["-rf","/tmp/demo"]
-                }
-            """.trimIndent()
-        )
-
-        assertTrue(
-            TermuxApprovalBlacklistMatcher.shouldForceApproval(
-                tool = tool,
-                blacklistRules = listOf("rm")
-            )
-        )
-    }
-
-    @Test
     fun `shouldForceApproval should match python code rule`() {
         val tool = UIMessagePart.Tool(
             toolCallId = "1",

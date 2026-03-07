@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools.termux
 
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
@@ -44,23 +43,8 @@ object TermuxApprovalBlacklistMatcher {
     private fun extractTermuxExecCandidates(tool: UIMessagePart.Tool): List<String> {
         val params = tool.inputAsJson().jsonObject
         val command = params["command"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        if (command != null) {
-            return buildMatchCandidates(command)
-        }
-
-        val commandPath = params["command_path"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             ?: return emptyList()
-        val arguments = params["arguments"]?.jsonArray
-            ?.mapNotNull { it.jsonPrimitive.contentOrNull }
-            ?: emptyList()
-        val commandLine = buildString {
-            append(commandPath)
-            arguments.forEach { arg ->
-                append(" ")
-                append(arg)
-            }
-        }
-        return buildMatchCandidates(commandLine)
+        return buildMatchCandidates(command)
     }
 
     private fun extractTermuxPythonCandidates(tool: UIMessagePart.Tool): List<String> {
