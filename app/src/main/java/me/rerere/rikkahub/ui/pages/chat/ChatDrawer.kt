@@ -63,6 +63,7 @@ import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
@@ -89,7 +90,7 @@ fun ChatDrawerContent(
     navController: Navigator,
     vm: ChatVM,
     settings: Settings,
-    current: Conversation,
+    currentConversationId: Uuid,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -119,9 +120,6 @@ fun ChatDrawerContent(
     var conversationToMove by remember { mutableStateOf<Conversation?>(null) }
     val bottomSheetState = rememberModalBottomSheetState()
 
-    // Menu popup 状态
-    var showMenuPopup by remember { mutableStateOf(false) }
-
     ModalDrawerSheet(
         modifier = Modifier.width(300.dp)
     ) {
@@ -138,67 +136,26 @@ fun ChatDrawerContent(
                 onClick = { navController.navigate(Screen.Backup) },
             )
 
-            // 用户头像和昵称自定义区域
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                UIAvatar(
-                    name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
-                    value = settings.displaySetting.userAvatar,
-                    onUpdate = { newAvatar ->
-                        vm.updateSettings(
-                            settings.copy(
-                                displaySetting = settings.displaySetting.copy(
-                                    userAvatar = newAvatar
-                                )
+            DrawerIdentitySection(
+                settings = settings,
+                onEditNickname = {
+                    nicknameEditState.open(settings.displaySetting.userNickname)
+                },
+                onUpdateAvatar = { newAvatar ->
+                    vm.updateSettings(
+                        settings.copy(
+                            displaySetting = settings.displaySetting.copy(
+                                userAvatar = newAvatar
                             )
                         )
-                    },
-                    modifier = Modifier.size(50.dp),
-                )
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.clickable {
-                                nicknameEditState.open(settings.displaySetting.userNickname)
-                            }
-                        )
-
-                        Icon(
-                            imageVector = HugeIcons.PencilEdit01,
-                            contentDescription = "Edit",
-                            modifier = Modifier
-                                .onClick {
-                                    nicknameEditState.open(settings.displaySetting.userNickname)
-                                }
-                                .size(LocalTextStyle.current.fontSize.toDp())
-                        )
-                    }
-                    Greeting(
-                        style = MaterialTheme.typography.labelMedium,
                     )
-                }
-            }
+                },
+            )
 
             DrawerActions(navController = navController)
 
             ConversationList(
-                current = current,
+                currentConversationId = currentConversationId,
                 conversations = conversations,
                 conversationJobs = conversationJobs.keys,
                 listState = conversationListState,
@@ -217,7 +174,7 @@ fun ChatDrawerContent(
                     // This fixes the issue where deleted conversations sometimes remain visible
                     // until manually clicked (issue #747)
                     conversations.refresh()
-                    if (it.id == current.id) {
+                    if (it.id == currentConversationId) {
                         navigateToChatPage(navController)
                     }
                 },
@@ -254,99 +211,7 @@ fun ChatDrawerContent(
                 }
             )
 
-            Row(
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
-            ) {
-                DrawerAction(
-                    icon = {
-                        Icon(
-                            imageVector = HugeIcons.LookTop,
-                            contentDescription = stringResource(R.string.assistant_page_title)
-                        )
-                    },
-                    label = {
-                        Text(stringResource(R.string.assistant_page_title))
-                    },
-                    onClick = {
-                        navController.navigate(Screen.Assistant)
-                    },
-                )
-
-                Box {
-                    DrawerAction(
-                        icon = {
-                            Icon(HugeIcons.Sparkles, "Menu")
-                        },
-                        label = {
-                            Text(stringResource(R.string.menu))
-                        },
-                        onClick = {
-                            showMenuPopup = true
-                        },
-                    )
-                    DropdownMenu(
-                        expanded = showMenuPopup,
-                        onDismissRequest = { showMenuPopup = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.chat_page_menu_ai_translator)) },
-                            leadingIcon = { Icon(HugeIcons.LanguageCircle, null) },
-                            onClick = {
-                                showMenuPopup = false
-                                navController.navigate(Screen.Translator)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.chat_page_menu_image_generation)) },
-                            leadingIcon = { Icon(HugeIcons.Image02, null) },
-                            onClick = {
-                                showMenuPopup = false
-                                navController.navigate(Screen.ImageGen)
-                            }
-                        )
-                    }
-                }
-
-                DrawerAction(
-                    icon = {
-                        Icon(HugeIcons.InLove, stringResource(R.string.favorite_page_title))
-                    },
-                    label = {
-                        Text(stringResource(R.string.favorite_page_title))
-                    },
-                    onClick = {
-                        navController.navigate(Screen.Favorite)
-                    },
-                )
-
-                DrawerAction(
-                    icon = {
-                        Icon(HugeIcons.ChartColumn, "统计数据")
-                    },
-                    label = {
-                        Text("统计数据")
-                    },
-                    onClick = {
-                        navController.navigate(Screen.Stats)
-                    },
-                )
-
-                Spacer(Modifier.weight(1f))
-
-                DrawerAction(
-                    icon = {
-                        Icon(HugeIcons.Settings03, null)
-                    },
-                    label = { Text(stringResource(R.string.settings)) },
-                    onClick = {
-                        navController.navigate(Screen.Setting)
-                    },
-                )
-            }
+            DrawerBottomActions(navController = navController)
         }
     }
 
@@ -433,6 +298,156 @@ fun ChatDrawerContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DrawerIdentitySection(
+    settings: Settings,
+    onEditNickname: () -> Unit,
+    onUpdateAvatar: (Avatar) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        UIAvatar(
+            name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+            value = settings.displaySetting.userAvatar,
+            onUpdate = onUpdateAvatar,
+            modifier = Modifier.size(50.dp),
+        )
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable(onClick = onEditNickname)
+                )
+
+                Icon(
+                    imageVector = HugeIcons.PencilEdit01,
+                    contentDescription = "Edit",
+                    modifier = Modifier
+                        .onClick(onClick = onEditNickname)
+                        .size(LocalTextStyle.current.fontSize.toDp())
+                )
+            }
+            Greeting(
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DrawerBottomActions(navController: Navigator) {
+    var showMenuPopup by remember { mutableStateOf(false) }
+
+    Row(
+        horizontalArrangement = Arrangement.SpaceAround,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+    ) {
+        DrawerAction(
+            icon = {
+                Icon(
+                    imageVector = HugeIcons.LookTop,
+                    contentDescription = stringResource(R.string.assistant_page_title)
+                )
+            },
+            label = {
+                Text(stringResource(R.string.assistant_page_title))
+            },
+            onClick = {
+                navController.navigate(Screen.Assistant)
+            },
+        )
+
+        Box {
+            DrawerAction(
+                icon = {
+                    Icon(HugeIcons.Sparkles, "Menu")
+                },
+                label = {
+                    Text(stringResource(R.string.menu))
+                },
+                onClick = {
+                    showMenuPopup = true
+                },
+            )
+            DropdownMenu(
+                expanded = showMenuPopup,
+                onDismissRequest = { showMenuPopup = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.chat_page_menu_ai_translator)) },
+                    leadingIcon = { Icon(HugeIcons.LanguageCircle, null) },
+                    onClick = {
+                        showMenuPopup = false
+                        navController.navigate(Screen.Translator)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.chat_page_menu_image_generation)) },
+                    leadingIcon = { Icon(HugeIcons.Image02, null) },
+                    onClick = {
+                        showMenuPopup = false
+                        navController.navigate(Screen.ImageGen)
+                    }
+                )
+            }
+        }
+
+        DrawerAction(
+            icon = {
+                Icon(HugeIcons.InLove, stringResource(R.string.favorite_page_title))
+            },
+            label = {
+                Text(stringResource(R.string.favorite_page_title))
+            },
+            onClick = {
+                navController.navigate(Screen.Favorite)
+            },
+        )
+
+        DrawerAction(
+            icon = {
+                Icon(HugeIcons.ChartColumn, "统计数据")
+            },
+            label = {
+                Text("统计数据")
+            },
+            onClick = {
+                navController.navigate(Screen.Stats)
+            },
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        DrawerAction(
+            icon = {
+                Icon(HugeIcons.Settings03, null)
+            },
+            label = { Text(stringResource(R.string.settings)) },
+            onClick = {
+                navController.navigate(Screen.Setting)
+            },
+        )
     }
 }
 

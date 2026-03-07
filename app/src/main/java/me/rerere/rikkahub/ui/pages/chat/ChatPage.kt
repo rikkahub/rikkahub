@@ -57,7 +57,6 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
-import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -85,7 +84,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val scope = rememberCoroutineScope()
 
     val setting by vm.settings.collectAsStateWithLifecycle()
-    val conversation by vm.conversation.collectAsStateWithLifecycle()
+    val conversationMeta by vm.conversationMeta.collectAsStateWithLifecycle()
+    val messageNodes by vm.messageNodes.collectAsStateWithLifecycle()
+    val chatSuggestions by vm.chatSuggestions.collectAsStateWithLifecycle()
+    val messageCount by vm.messageCount.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
@@ -143,16 +145,16 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val chatListState = rememberLazyListState()
-    LaunchedEffect(vm) {
-        if (nodeId == null && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
-            chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
+    LaunchedEffect(vm, nodeId, messageNodes.size) {
+        if (nodeId == null && !vm.chatListInitialized && messageNodes.isNotEmpty()) {
+            chatListState.scrollToItem(messageNodes.size)
             vm.chatListInitialized = true
         }
     }
 
-    LaunchedEffect(nodeId, conversation.messageNodes.size) {
-        if (nodeId != null && conversation.messageNodes.isNotEmpty() && !vm.chatListInitialized) {
-            val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
+    LaunchedEffect(nodeId, messageNodes) {
+        if (nodeId != null && messageNodes.isNotEmpty() && !vm.chatListInitialized) {
+            val index = messageNodes.indexOfFirst { it.id == nodeId }
             if (index >= 0) {
                 chatListState.scrollToItem(index)
             }
@@ -166,7 +168,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                 drawerContent = {
                     ChatDrawerContent(
                         navController = navController,
-                        current = conversation,
+                        currentConversationId = conversationMeta.id,
                         vm = vm,
                         settings = setting
                     )
@@ -176,7 +178,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     inputState = inputState,
                     loadingJob = loadingJob,
                     setting = setting,
-                    conversation = conversation,
+                    conversationMeta = conversationMeta,
+                    messageNodes = messageNodes,
+                    chatSuggestions = chatSuggestions,
+                    messageCount = messageCount,
                     drawerState = drawerState,
                     navController = navController,
                     vm = vm,
@@ -197,7 +202,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                 drawerContent = {
                     ChatDrawerContent(
                         navController = navController,
-                        current = conversation,
+                        currentConversationId = conversationMeta.id,
                         vm = vm,
                         settings = setting
                     )
@@ -207,7 +212,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     inputState = inputState,
                     loadingJob = loadingJob,
                     setting = setting,
-                    conversation = conversation,
+                    conversationMeta = conversationMeta,
+                    messageNodes = messageNodes,
+                    chatSuggestions = chatSuggestions,
+                    messageCount = messageCount,
                     drawerState = drawerState,
                     navController = navController,
                     vm = vm,
@@ -233,7 +241,10 @@ private fun ChatPageContent(
     loadingJob: Job?,
     setting: Settings,
     bigScreen: Boolean,
-    conversation: Conversation,
+    conversationMeta: ConversationMeta,
+    messageNodes: List<me.rerere.rikkahub.data.model.MessageNode>,
+    chatSuggestions: List<String>,
+    messageCount: Int,
     drawerState: DrawerState,
     navController: Navigator,
     vm: ChatVM,
@@ -249,7 +260,7 @@ private fun ChatPageContent(
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
 
-    TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
+    TTSAutoPlay(vm = vm, setting = setting)
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -260,7 +271,8 @@ private fun ChatPageContent(
             topBar = {
                 TopBar(
                     settings = setting,
-                    conversation = conversation,
+                    conversationMeta = conversationMeta,
+                    currentChatModel = currentChatModel,
                     bigScreen = bigScreen,
                     drawerState = drawerState,
                     previewMode = previewMode,
@@ -280,7 +292,7 @@ private fun ChatPageContent(
                     state = inputState,
                     loading = loadingJob != null,
                     settings = setting,
-                    conversation = conversation,
+                    messageCount = messageCount,
                     mcpManager = vm.mcpManager,
                     hazeState = hazeState,
                     onCancelClick = {
@@ -303,7 +315,7 @@ private fun ChatPageContent(
                         } else {
                             vm.handleMessageSend(inputState.getContents())
                             scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                chatListState.requestScrollToItem(messageCount + 5)
                             }
                         }
                         inputState.clearInput()
@@ -317,7 +329,7 @@ private fun ChatPageContent(
                         } else {
                             vm.handleMessageSend(content = inputState.getContents(), answer = false)
                             scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                chatListState.requestScrollToItem(messageCount + 5)
                             }
                         }
                         inputState.clearInput()
@@ -354,7 +366,9 @@ private fun ChatPageContent(
         ) { innerPadding ->
             ChatList(
                 innerPadding = innerPadding,
-                conversation = conversation,
+                conversationMeta = conversationMeta,
+                messageNodes = messageNodes,
+                chatSuggestions = chatSuggestions,
                 state = chatListState,
                 loading = loadingJob != null,
                 previewMode = previewMode,
@@ -384,16 +398,7 @@ private fun ChatPageContent(
                     }
                 },
                 onUpdateMessage = { newNode ->
-                    vm.updateConversation(
-                        conversation.copy(
-                            messageNodes = conversation.messageNodes.map { node ->
-                                if (node.id == newNode.id) {
-                                    newNode
-                                } else {
-                                    node
-                                }
-                            }
-                        ))
+                    vm.updateMessageNode(newNode)
                     vm.saveConversationAsync()
                 },
                 onClickSuggestion = { suggestion ->
@@ -429,7 +434,8 @@ private fun ChatPageContent(
 @Composable
 private fun TopBar(
     settings: Settings,
-    conversation: Conversation,
+    conversationMeta: ConversationMeta,
+    currentChatModel: Model?,
     drawerState: DrawerState,
     bigScreen: Boolean,
     previewMode: Boolean,
@@ -460,8 +466,8 @@ private fun TopBar(
             val editTitleWarning = stringResource(R.string.chat_page_edit_title_warning)
             Surface(
                 onClick = {
-                    if (conversation.messageNodes.isNotEmpty()) {
-                        titleState.open(conversation.title)
+                    if (conversationMeta.hasMessages) {
+                        titleState.open(conversationMeta.title)
                     } else {
                         toaster.show(editTitleWarning, type = ToastType.Warning)
                     }
@@ -470,17 +476,16 @@ private fun TopBar(
             ) {
                 Column {
                     val assistant = settings.getCurrentAssistant()
-                    val model = settings.getCurrentChatModel()
-                    val provider = model?.findProvider(providers = settings.providers, checkOverwrite = false)
+                    val provider = currentChatModel?.findProvider(providers = settings.providers, checkOverwrite = false)
                     Text(
-                        text = conversation.title.ifBlank { stringResource(R.string.chat_page_new_chat) },
+                        text = conversationMeta.title.ifBlank { stringResource(R.string.chat_page_new_chat) },
                         maxLines = 1,
                         style = MaterialTheme.typography.bodyMedium,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (model != null && provider != null) {
+                    if (currentChatModel != null && provider != null) {
                         Text(
-                            text = "${assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) }} / ${model.displayName} (${provider.name})",
+                            text = "${assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) }} / ${currentChatModel.displayName} (${provider.name})",
                             overflow = TextOverflow.Ellipsis,
                             maxLines = 1,
                             color = LocalContentColor.current.copy(0.65f),

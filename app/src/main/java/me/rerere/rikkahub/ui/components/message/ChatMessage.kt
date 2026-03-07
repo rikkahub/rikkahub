@@ -94,6 +94,21 @@ import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
+private fun rememberRenderedMessageText(
+    text: String,
+    assistant: Assistant?,
+    scope: AssistantAffectScope,
+): String {
+    return remember(text, assistant, scope) {
+        text.replaceRegexes(
+            assistant = assistant,
+            scope = scope,
+            visual = true,
+        )
+    }
+}
+
+@Composable
 fun ChatMessage(
     node: MessageNode,
     modifier: Modifier = Modifier,
@@ -341,6 +356,16 @@ private fun MessagePartsBlock(
             is MessagePartBlock.ContentBlock -> key(block.index) {
                 when (val part = block.part) {
                     is UIMessagePart.Text -> {
+                        val scope = if (role == MessageRole.USER) {
+                            AssistantAffectScope.USER
+                        } else {
+                            AssistantAffectScope.ASSISTANT
+                        }
+                        val renderedText = rememberRenderedMessageText(
+                            text = part.text,
+                            assistant = assistant,
+                            scope = scope,
+                        )
                         SelectionContainer {
                             if (role == MessageRole.USER) {
                                 Surface(
@@ -351,11 +376,7 @@ private fun MessagePartsBlock(
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         MarkdownBlock(
-                                            content = part.text.replaceRegexes(
-                                                assistant = assistant,
-                                                scope = AssistantAffectScope.USER,
-                                                visual = true,
-                                            ),
+                                            content = renderedText,
                                             onClickCitation = handleClickCitation
                                         )
                                     }
@@ -369,22 +390,14 @@ private fun MessagePartsBlock(
                                     ) {
                                         Column(modifier = Modifier.padding(8.dp)) {
                                             MarkdownBlock(
-                                                content = part.text.replaceRegexes(
-                                                    assistant = assistant,
-                                                    scope = AssistantAffectScope.ASSISTANT,
-                                                    visual = true,
-                                                ),
+                                                content = renderedText,
                                                 onClickCitation = handleClickCitation,
                                             )
                                         }
                                     }
                                 } else {
                                     MarkdownBlock(
-                                        content = part.text.replaceRegexes(
-                                            assistant = assistant,
-                                            scope = AssistantAffectScope.ASSISTANT,
-                                            visual = true,
-                                        ),
+                                        content = renderedText,
                                         onClickCitation = handleClickCitation,
                                         modifier = Modifier
                                             .animateContentSize()

@@ -130,7 +130,6 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ui.InjectionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
@@ -153,7 +152,7 @@ enum class ExpandState {
 fun ChatInput(
     state: ChatInputState,
     loading: Boolean,
-    conversation: Conversation,
+    messageCount: Int,
     settings: Settings,
     mcpManager: McpManager,
     hazeState: HazeState,
@@ -409,7 +408,7 @@ fun ChatInput(
                         color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
                     ) {
                         FilesPicker(
-                            conversation = conversation,
+                            messageCount = messageCount,
                             state = state,
                             assistant = assistant,
                             onCompressContext = onCompressContext,
@@ -809,7 +808,7 @@ private fun attachmentNameFromUrl(
 
 @Composable
 private fun FilesPicker(
-    conversation: Conversation,
+    messageCount: Int,
     assistant: Assistant,
     state: ChatInputState,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
@@ -907,9 +906,9 @@ private fun FilesPicker(
                 Text(stringResource(R.string.chat_page_compress_context))
             },
             trailingContent = {
-                if (conversation.messageNodes.isNotEmpty()) {
+                if (messageCount > 0) {
                     Text(
-                        text = stringResource(R.string.chat_page_message_count, conversation.messageNodes.size),
+                        text = stringResource(R.string.chat_page_message_count, messageCount),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -86,6 +86,7 @@ import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
+import java.util.LinkedHashMap
 
 private val flavour by lazy {
     GFMFlavourDescriptor(
@@ -102,6 +103,45 @@ private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MAT
 val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
+
+private data class ParsedMarkdown(
+    val original: String,
+    val preprocessed: String,
+    val astTree: ASTNode,
+)
+
+private object MarkdownParseCache {
+    private const val MAX_ENTRIES = 128
+    private val cache = object : LinkedHashMap<String, ParsedMarkdown>(MAX_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ParsedMarkdown>?): Boolean {
+            return size > MAX_ENTRIES
+        }
+    }
+
+    @Synchronized
+    fun get(content: String): ParsedMarkdown? = cache[content]
+
+    @Synchronized
+    fun put(content: String, parsedMarkdown: ParsedMarkdown) {
+        cache[content] = parsedMarkdown
+    }
+}
+
+private fun parseMarkdown(content: String): ParsedMarkdown {
+    val preprocessed = preProcess(content)
+    val astTree = parser.buildMarkdownTreeFromString(preprocessed)
+    return ParsedMarkdown(
+        original = content,
+        preprocessed = preprocessed,
+        astTree = astTree,
+    )
+}
+
+private fun getOrParseMarkdown(content: String): ParsedMarkdown {
+    return MarkdownParseCache.get(content) ?: parseMarkdown(content).also { parsed ->
+        MarkdownParseCache.put(content, parsed)
+    }
+}
 
 // 预处理markdown内容
 private fun preProcess(content: String): String {
@@ -192,10 +232,8 @@ fun MarkdownBlock(
     onClickCitation: (String) -> Unit = {}
 ) {
     var (data, setData) = remember {
-        val preprocessed = preProcess(content)
-        val astTree = parser.buildMarkdownTreeFromString(preprocessed)
         mutableStateOf(
-            value = preprocessed to astTree,
+            value = getOrParseMarkdown(content),
             policy = referentialEqualityPolicy(),
         )
     }
@@ -205,16 +243,15 @@ fun MarkdownBlock(
     val updatedContent by rememberUpdatedState(content)
     LaunchedEffect(Unit) {
         snapshotFlow { updatedContent }.distinctUntilChanged().mapLatest {
-            val preprocessed = preProcess(it)
-            val astTree = parser.buildMarkdownTreeFromString(preprocessed)
-            preprocessed to astTree
+            getOrParseMarkdown(it)
         }.catch { exception -> exception.printStackTrace() }.flowOn(Dispatchers.Default) // 在后台线程解析AST树
             .collect {
                 setData(it)
             }
     }
 
-    val (preprocessed, astTree) = data
+    val preprocessed = data.preprocessed
+    val astTree = data.astTree
     ProvideTextStyle(style) {
         Column(
             modifier = modifier.padding(start = 4.dp)

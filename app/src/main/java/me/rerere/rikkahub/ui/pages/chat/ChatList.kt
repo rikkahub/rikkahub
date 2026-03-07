@@ -55,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -109,7 +110,9 @@ private const val ScrollBottomKey = "ScrollBottomKey"
 @Composable
 fun ChatList(
     innerPadding: PaddingValues,
-    conversation: Conversation,
+    conversationMeta: ConversationMeta,
+    messageNodes: List<MessageNode>,
+    chatSuggestions: List<String>,
     state: LazyListState,
     loading: Boolean,
     previewMode: Boolean,
@@ -141,16 +144,15 @@ fun ChatList(
         if (target) {
             ChatListPreview(
                 innerPadding = innerPadding,
-                conversation = conversation,
-                settings = settings,
-                hazeState = hazeState,
+                messageNodes = messageNodes,
                 onJumpToMessage = onJumpToMessage,
-                animatedVisibilityScope = this@AnimatedContent,
             )
         } else {
             ChatListNormal(
                 innerPadding = innerPadding,
-                conversation = conversation,
+                conversationMeta = conversationMeta,
+                messageNodes = messageNodes,
+                chatSuggestions = chatSuggestions,
                 state = state,
                 loading = loading,
                 settings = settings,
@@ -166,7 +168,6 @@ fun ChatList(
                 onClickSuggestion = onClickSuggestion,
                 onTranslate = onTranslate,
                 onClearTranslation = onClearTranslation,
-                animatedVisibilityScope = this@AnimatedContent,
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
                 onToggleFavorite = onToggleFavorite,
@@ -178,7 +179,9 @@ fun ChatList(
 @Composable
 private fun ChatListNormal(
     innerPadding: PaddingValues,
-    conversation: Conversation,
+    conversationMeta: ConversationMeta,
+    messageNodes: List<MessageNode>,
+    chatSuggestions: List<String>,
     state: LazyListState,
     loading: Boolean,
     settings: Settings,
@@ -194,24 +197,33 @@ private fun ChatListNormal(
     onClickSuggestion: (String) -> Unit,
     onTranslate: ((UIMessage, java.util.Locale) -> Unit)?,
     onClearTranslation: (UIMessage) -> Unit,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
-    val loadingState by rememberUpdatedState(loading)
     var isRecentScroll by remember { mutableStateOf(false) }
-    val conversationUpdated by rememberUpdatedState(conversation)
-    val density = LocalDensity.current
-
-    fun List<LazyListItemInfo>.isAtBottom(): Boolean {
-        val lastItem = lastOrNull() ?: return false
-        val inputBarHeight = with(density) { innerPadding.calculateBottomPadding().toPx() }
-        val lastPos = lastItem.offset + lastItem.size
-        val inputPos = (state.layoutInfo.viewportEndOffset - inputBarHeight.roundToInt())
-        // println("lastPos = $lastPos, inputPos = $inputPos  | ${lastPos <= inputPos - 8}")
-        return lastPos <= inputPos - 8
+    val lastMessageNode = messageNodes.lastOrNull()
+    val assistant = remember(settings.assistants, conversationMeta.assistantId) {
+        settings.getAssistantById(conversationMeta.assistantId)
+    }
+    val modelsById = remember(settings.providers) {
+        settings.providers.flatMap { provider -> provider.models }.associateBy { model -> model.id }
+    }
+    val conversationForExport = remember(conversationMeta, messageNodes, chatSuggestions) {
+        Conversation(
+            id = conversationMeta.id,
+            assistantId = conversationMeta.assistantId,
+            title = conversationMeta.title,
+            messageNodes = messageNodes,
+            chatSuggestions = chatSuggestions,
+        )
+    }
+    val isAtBottom by remember(state) {
+        derivedStateOf {
+            val lastVisibleKey = state.layoutInfo.visibleItemsInfo.lastOrNull()?.key
+            !state.canScrollForward || lastVisibleKey == ScrollBottomKey
+        }
     }
 
     // 聊天选择
@@ -223,8 +235,8 @@ private fun ChatListNormal(
     ImeLazyListAutoScroller(lazyListState = state)
 
     // 对话大小警告对话框
-    val sizeInfo = rememberConversationSizeInfo(conversation)
-    var showSizeWarningDialog by rememberSaveable(conversation.id) { mutableStateOf(true) }
+    val sizeInfo = rememberConversationSizeInfo(messageNodes)
+    var showSizeWarningDialog by rememberSaveable(conversationMeta.id) { mutableStateOf(true) }
     if (sizeInfo.showWarning && showSizeWarningDialog) {
         ConversationSizeWarningDialog(
             sizeInfo = sizeInfo,
@@ -238,15 +250,9 @@ private fun ChatListNormal(
     ) {
         // 自动滚动到底部
         if (settings.displaySetting.enableAutoScroll) {
-            LaunchedEffect(state) {
-                snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
-                    // println("is bottom = ${visibleItemsInfo.isAtBottom()}, scroll = ${state.isScrollInProgress}, can_scroll = ${state.canScrollForward}, loading = $loading")
-                    if (!state.isScrollInProgress && loadingState) {
-                        if (visibleItemsInfo.isAtBottom()) {
-                            state.requestScrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
-                            // Log.i(TAG, "ChatList: scroll to ${conversationUpdated.messageNodes.lastIndex}")
-                        }
-                    }
+            LaunchedEffect(loading, lastMessageNode, isAtBottom) {
+                if (!state.isScrollInProgress && loading && isAtBottom && messageNodes.isNotEmpty()) {
+                    state.requestScrollToItem(messageNodes.lastIndex + 10)
                 }
             }
         }
@@ -274,8 +280,9 @@ private fun ChatListNormal(
                 .padding(top = innerPadding.calculateTopPadding()),
         ) {
             itemsIndexed(
-                items = conversation.messageNodes,
-                key = { index, item -> item.id },
+                items = messageNodes,
+                key = { _, item -> item.id },
+                contentType = { _, _ -> "message_node" },
             ) { index, node ->
                 Column {
                     ListSelectableItem(
@@ -292,9 +299,9 @@ private fun ChatListNormal(
                     ) {
                         ChatMessage(
                             node = node,
-                            model = node.currentMessage.modelId?.let { settings.findModelById(it) },
-                            assistant = settings.getAssistantById(conversation.assistantId),
-                            loading = loading && index == conversation.messageNodes.lastIndex,
+                            model = node.currentMessage.modelId?.let(modelsById::get),
+                            assistant = assistant,
+                            loading = loading && index == messageNodes.lastIndex,
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)
                             },
@@ -310,8 +317,7 @@ private fun ChatListNormal(
                             onShare = {
                                 selecting = true  // 使用 CoroutineScope 延迟状态更新
                                 selectedItems.clear()
-                                selectedItems.addAll(conversation.messageNodes.map { it.id }
-                                    .subList(0, conversation.messageNodes.indexOf(node) + 1))
+                                selectedItems.addAll(messageNodes.take(index + 1).map { it.id })
                             },
                             onUpdate = {
                                 onUpdateMessage(it)
@@ -324,7 +330,7 @@ private fun ChatListNormal(
                             onClearTranslation = onClearTranslation,
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
-                            lastMessage = index == conversation.messageNodes.lastIndex,
+                            lastMessage = index == messageNodes.lastIndex,
                         )
                     }
                 }
@@ -405,7 +411,7 @@ private fun ChatListNormal(
                                 if (selectedItems.isNotEmpty()) {
                                     selectedItems.clear()
                                 } else {
-                                    selectedItems.addAll(conversation.messageNodes.map { it.id })
+                                    selectedItems.addAll(messageNodes.map { it.id })
                                 }
                             }
                         ) {
@@ -420,7 +426,7 @@ private fun ChatListNormal(
                         FilledIconButton(
                             onClick = {
                                 selecting = false
-                                val messages = conversation.messageNodes.filter { it.id in selectedItems }
+                                val messages = messageNodes.filter { it.id in selectedItems }
                                 if (messages.isNotEmpty()) {
                                     showExportSheet = true
                                 }
@@ -439,8 +445,8 @@ private fun ChatListNormal(
                     showExportSheet = false
                     selectedItems.clear()
                 },
-                conversation = conversation,
-                selectedMessages = conversation.messageNodes.filter { it.id in selectedItems }
+                conversation = conversationForExport,
+                selectedMessages = messageNodes.filter { it.id in selectedItems }
                     .map { it.currentMessage }
             )
 
@@ -455,9 +461,9 @@ private fun ChatListNormal(
             )
 
             // Suggestion
-            if (conversation.chatSuggestions.isNotEmpty() && !captureProgress) {
+            if (chatSuggestions.isNotEmpty() && !captureProgress) {
                 ChatSuggestionsRow(
-                    conversation = conversation,
+                    suggestions = chatSuggestions,
                     onClickSuggestion = onClickSuggestion,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
@@ -534,20 +540,17 @@ private fun buildHighlightedText(
 @Composable
 private fun ChatListPreview(
     innerPadding: PaddingValues,
-    conversation: Conversation,
-    settings: Settings,
-    hazeState: HazeState,
-    animatedVisibilityScope: AnimatedVisibilityScope,
+    messageNodes: List<MessageNode>,
     onJumpToMessage: (Int) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
     // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找
-    val filteredMessages = remember(conversation.messageNodes, searchQuery) {
+    val filteredMessages = remember(messageNodes, searchQuery) {
         if (searchQuery.isBlank()) {
-            conversation.messageNodes.mapIndexed { index, node -> index to node }
+            messageNodes.mapIndexed { index, node -> index to node }
         } else {
-            conversation.messageNodes.mapIndexed { index, node -> index to node }
+            messageNodes.mapIndexed { index, node -> index to node }
                 .filter { (_, node) -> node.currentMessage.toText().contains(searchQuery, ignoreCase = true) }
         }
     }
@@ -598,7 +601,8 @@ private fun ChatListPreview(
         ) {
             itemsIndexed(
                 items = filteredMessages,
-                key = { index, item -> item.second.id },
+                key = { _, item -> item.second.id },
+                contentType = { _, _ -> "message_preview" },
             ) { _, (originalIndex, node) ->
                 val message = node.currentMessage
                 val isUser = message.role == me.rerere.ai.core.MessageRole.USER
@@ -653,7 +657,7 @@ private fun ChatListPreview(
 @Composable
 private fun ChatSuggestionsRow(
     modifier: Modifier = Modifier,
-    conversation: Conversation,
+    suggestions: List<String>,
     onClickSuggestion: (String) -> Unit
 ) {
     LazyRow(
@@ -663,7 +667,11 @@ private fun ChatSuggestionsRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        items(conversation.chatSuggestions) { suggestion ->
+        items(
+            items = suggestions,
+            key = { suggestion -> suggestion },
+            contentType = { "chat_suggestion" }
+        ) { suggestion ->
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))

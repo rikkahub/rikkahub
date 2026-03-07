@@ -129,6 +129,13 @@ private fun ReasoningContent(
     fadeHeight: Float,
 ) {
     val isPreview = expandState == ReasoningCardState.Preview
+    val renderedReasoning = remember(reasoning.reasoning, assistant) {
+        reasoning.reasoning.replaceRegexes(
+            assistant = assistant,
+            scope = AssistantAffectScope.ASSISTANT,
+            visual = true,
+        )
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -165,11 +172,7 @@ private fun ReasoningContent(
     ) {
         SelectionContainer {
             MarkdownBlock(
-                content = reasoning.reasoning.replaceRegexes(
-                    assistant = assistant,
-                    scope = AssistantAffectScope.ASSISTANT,
-                    visual = true,
-                ),
+                content = renderedReasoning,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxSize(),
             )

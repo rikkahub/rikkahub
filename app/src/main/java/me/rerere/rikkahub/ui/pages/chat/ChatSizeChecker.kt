@@ -12,7 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.MessageNode
 
 // 消息节点数量警告阈值
 const val MESSAGE_NODE_WARNING_THRESHOLD = 768
@@ -35,10 +35,10 @@ private val DefaultSizeInfo = ConversationSizeInfo(
 )
 
 @Composable
-fun rememberConversationSizeInfo(conversation: Conversation): ConversationSizeInfo {
-    return remember(conversation.messageNodes) {
-        val nodeCount = conversation.messageNodes.size
-        val lastAssistantInputTokens = conversation.messageNodes.asReversed()
+fun rememberConversationSizeInfo(messageNodes: List<MessageNode>): ConversationSizeInfo {
+    return remember(messageNodes) {
+        val nodeCount = messageNodes.size
+        val lastAssistantInputTokens = messageNodes.asReversed()
             .map { it.currentMessage }
             .firstOrNull { it.role == MessageRole.ASSISTANT }
             ?.usage

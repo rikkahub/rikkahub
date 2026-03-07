@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
@@ -56,6 +58,21 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "ChatVM"
 
+@Immutable
+data class ConversationMeta(
+    val id: Uuid,
+    val assistantId: Uuid,
+    val title: String,
+    val hasMessages: Boolean,
+)
+
+private fun Conversation.toMeta() = ConversationMeta(
+    id = id,
+    assistantId = assistantId,
+    title = title,
+    hasMessages = messageNodes.isNotEmpty(),
+)
+
 class ChatVM(
     id: String,
     private val context: Application,
@@ -69,6 +86,29 @@ class ChatVM(
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
+    val conversationMeta: StateFlow<ConversationMeta> = conversation
+        .map { it.toMeta() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, conversation.value.toMeta())
+    val messageNodes: StateFlow<List<MessageNode>> = conversation
+        .map { it.messageNodes }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, conversation.value.messageNodes)
+    val chatSuggestions: StateFlow<List<String>> = conversation
+        .map { it.chatSuggestions }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, conversation.value.chatSuggestions)
+    val messageCount: StateFlow<Int> = messageNodes
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, conversation.value.messageNodes.size)
+    val lastAssistantMessage: StateFlow<UIMessage?> = conversation
+        .map { currentConversation ->
+            currentConversation.currentMessages.lastOrNull()
+                ?.takeIf { message -> message.role == MessageRole.ASSISTANT }
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            conversation.value.currentMessages.lastOrNull()
+                ?.takeIf { message -> message.role == MessageRole.ASSISTANT }
+        )
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
 
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
@@ -379,6 +419,20 @@ class ChatVM(
     fun updateConversation(newConversation: Conversation) {
         chatService.updateConversationState(_conversationId) {
             newConversation
+        }
+    }
+
+    fun updateMessageNode(newNode: MessageNode) {
+        chatService.updateConversationState(_conversationId) { currentConversation ->
+            currentConversation.copy(
+                messageNodes = currentConversation.messageNodes.map { existingNode ->
+                    if (existingNode.id == newNode.id) {
+                        newNode
+                    } else {
+                        existingNode
+                    }
+                }
+            )
         }
     }
 

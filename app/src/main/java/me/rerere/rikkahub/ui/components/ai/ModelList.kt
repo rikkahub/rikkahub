@@ -59,6 +59,7 @@ import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -207,6 +208,21 @@ fun ModelSelector(
     }
 }
 
+private fun reorderFavoriteModels(
+    allFavoriteModelIds: List<Uuid>,
+    reorderedVisibleFavoriteIds: List<Uuid>,
+    visibleFavoriteIds: Set<Uuid>
+): List<Uuid> {
+    var nextVisibleIndex = 0
+    return allFavoriteModelIds.map { modelId ->
+        if (modelId in visibleFavoriteIds) {
+            reorderedVisibleFavoriteIds[nextVisibleIndex++]
+        } else {
+            modelId
+        }
+    }
+}
+
 @Composable
 private fun ColumnScope.ModelList(
     currentModel: Uuid? = null,
@@ -219,13 +235,66 @@ private fun ColumnScope.ModelList(
     val settingsStore = koinInject<SettingsStore>()
     val settings = settingsStore.settingsFlow
         .collectAsStateWithLifecycle()
+    val currentSettings = settings.value
 
-    val favoriteModels = settings.value.favoriteModels.mapNotNull { modelId ->
-        val model = settings.value.providers.findModelById(modelId) ?: return@mapNotNull null
-        if (model.type != modelType) return@mapNotNull null
-        val provider = model.findProvider(providers = settings.value.providers, checkOverwrite = false) ?: return@mapNotNull null
-        model to provider
+    val favoriteModelIdsFromSettings = remember(currentSettings.favoriteModels, currentSettings.providers, modelType) {
+        currentSettings.favoriteModels.filter { modelId ->
+            currentSettings.providers.findModelById(modelId)?.type == modelType
+        }
     }
+
+    var localFavoriteModelIds by remember(modelType) {
+        mutableStateOf(favoriteModelIdsFromSettings)
+    }
+    var isDraggingFavorites by remember(modelType) { mutableStateOf(false) }
+
+    LaunchedEffect(favoriteModelIdsFromSettings, isDraggingFavorites) {
+        if (!isDraggingFavorites && localFavoriteModelIds != favoriteModelIdsFromSettings) {
+            localFavoriteModelIds = favoriteModelIdsFromSettings
+        }
+    }
+
+    val favoriteModels = remember(localFavoriteModelIds, currentSettings.providers, modelType) {
+        localFavoriteModelIds.mapNotNull { modelId ->
+            val model = currentSettings.providers.findModelById(modelId) ?: return@mapNotNull null
+            if (model.type != modelType) return@mapNotNull null
+            val provider = model.findProvider(
+                providers = currentSettings.providers,
+                checkOverwrite = false
+            ) ?: return@mapNotNull null
+            model to provider
+        }
+    }
+
+    fun persistFavoriteModels(updatedFavoriteModelIds: List<Uuid>) {
+        coroutineScope.launch {
+            settingsStore.update { settings ->
+                settings.copy(favoriteModels = updatedFavoriteModelIds)
+            }
+        }
+    }
+
+    fun updateFavoritesImmediately(updatedFavoriteModelIds: List<Uuid>) {
+        localFavoriteModelIds = updatedFavoriteModelIds.filter { modelId ->
+            currentSettings.providers.findModelById(modelId)?.type == modelType
+        }
+        persistFavoriteModels(updatedFavoriteModelIds)
+    }
+
+    fun commitDraggedFavoriteOrder() {
+        if (localFavoriteModelIds == favoriteModelIdsFromSettings) return
+        val reorderedFavoriteModelIds = reorderFavoriteModels(
+            allFavoriteModelIds = currentSettings.favoriteModels,
+            reorderedVisibleFavoriteIds = localFavoriteModelIds,
+            visibleFavoriteIds = favoriteModelIdsFromSettings.toSet()
+        )
+        persistFavoriteModels(reorderedFavoriteModelIds)
+    }
+
+    val favoriteModelIdSet = remember(localFavoriteModelIds) {
+        localFavoriteModelIds.toSet()
+    }
+
 
     var searchKeywords by remember { mutableStateOf("") }
 
@@ -305,13 +374,8 @@ private fun ColumnScope.ModelList(
         if (fromIndex >= 0 && toIndex >= 0 &&
             fromIndex < favoriteModels.size && toIndex < favoriteModels.size
         ) {
-            val newFavoriteModels = settings.value.favoriteModels.toMutableList().apply {
+            localFavoriteModelIds = localFavoriteModelIds.toMutableList().apply {
                 add(toIndex, removeAt(fromIndex))
-            }
-            coroutineScope.launch {
-                settingsStore.update { oldSettings ->
-                    oldSettings.copy(favoriteModels = newFavoriteModels)
-                }
             }
         }
     }
@@ -396,7 +460,8 @@ private fun ColumnScope.ModelList(
 
             items(
                 items = favoriteModels,
-                key = { "favorite:" + it.first.id.toString() }
+                key = { "favorite:" + it.first.id.toString() },
+                contentType = { "favorite_model" }
             ) { (model, provider) ->
                 ReorderableItem(
                     state = reorderableState,
@@ -416,13 +481,9 @@ private fun ColumnScope.ModelList(
                         tail = {
                             IconButton(
                                 onClick = {
-                                    coroutineScope.launch {
-                                        settingsStore.update { settings ->
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels.filter { it != model.id }
-                                            )
-                                        }
-                                    }
+                                    updateFavoritesImmediately(
+                                        currentSettings.favoriteModels.filter { it != model.id }
+                                    )
                                 }
                             ) {
                                 Icon(
@@ -439,9 +500,12 @@ private fun ColumnScope.ModelList(
                                 contentDescription = null,
                                 modifier = Modifier.longPressDraggableHandle(
                                     onDragStarted = {
+                                        isDraggingFavorites = true
                                         haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
                                     },
                                     onDragStopped = {
+                                        isDraggingFavorites = false
+                                        commitDraggedFavoriteOrder()
                                         haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
                                     }
                                 )
@@ -478,9 +542,10 @@ private fun ColumnScope.ModelList(
 
             items(
                 items = searchFilteredModelsByProvider[providerSetting.id].orEmpty(),
-                key = { it.id }
+                key = { it.id },
+                contentType = { "provider_model" }
             ) { model ->
-                val favorite = settings.value.favoriteModels.contains(model.id)
+                val favorite = model.id in favoriteModelIdSet
                 ModelItem(
                     model = model,
                     onSelect = onSelect,
@@ -493,20 +558,13 @@ private fun ColumnScope.ModelList(
                     tail = {
                         IconButton(
                             onClick = {
-                                coroutineScope.launch {
-                                    settingsStore.update { settings ->
-                                        if (favorite) {
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels.filter { it != model.id }
-                                            )
-
-                                        } else {
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels + model.id
-                                            )
-                                        }
+                                updateFavoritesImmediately(
+                                    if (favorite) {
+                                        currentSettings.favoriteModels.filter { it != model.id }
+                                    } else {
+                                        currentSettings.favoriteModels + model.id
                                     }
-                                }
+                                )
                             }
                         ) {
                             if (favorite) {
@@ -532,24 +590,23 @@ private fun ColumnScope.ModelList(
 
     // 供应商Badge行
     val providerBadgeListState = rememberLazyListState()
-    LaunchedEffect(lazyListState) {
-        // 当LazyColumn滚动时，LazyRow也跟随滚动
+    LaunchedEffect(lazyListState, providerPositions, providers) {
         snapshotFlow { lazyListState.firstVisibleItemIndex }
+            .map { firstVisibleItemIndex ->
+                if (firstVisibleItemIndex <= 0) return@map null
+
+                val currentProvider = providerPositions.entries.findLast { (_, position) ->
+                    firstVisibleItemIndex > position
+                }
+                providers.indexOfFirst { it.id == currentProvider?.key }.takeIf { it >= 0 } ?: 0
+            }
             .distinctUntilChanged()
-            .debounce(100) // 防抖处理
-            .collect { index ->
-                if (index > 0) {
-                    val currentProvider = providerPositions.entries.findLast {
-                        index > it.value
-                    }
-                    val index = providers.indexOfFirst { it.id == currentProvider?.key }
-                    if (index >= 0) {
-                        providerBadgeListState.animateScrollToItem(index)
-                    } else {
-                        providerBadgeListState.requestScrollToItem(0)
-                    }
-                } else {
+            .debounce(100)
+            .collect { providerIndex ->
+                if (providerIndex == null) {
                     providerBadgeListState.requestScrollToItem(0)
+                } else {
+                    providerBadgeListState.animateScrollToItem(providerIndex)
                 }
             }
     }
