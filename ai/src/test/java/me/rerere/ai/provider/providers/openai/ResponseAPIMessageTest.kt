@@ -50,14 +50,18 @@ class ResponseAPIMessageTest {
         return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
     }
 
-    private fun createReasoningParams(thinkingBudget: Int? = null): TextGenerationParams {
+    private fun createReasoningParams(
+        thinkingBudget: Int? = null,
+        openAIReasoningEffort: String = ""
+    ): TextGenerationParams {
         return TextGenerationParams(
             model = Model(
                 modelId = "test-model",
                 displayName = "test-model",
                 abilities = listOf(ModelAbility.REASONING)
             ),
-            thinkingBudget = thinkingBudget
+            thinkingBudget = thinkingBudget,
+            openAIReasoningEffort = openAIReasoningEffort
         )
     }
 
@@ -351,6 +355,24 @@ class ResponseAPIMessageTest {
         val reasoning = requestBody["reasoning"]?.jsonObject
         assertTrue("reasoning should exist", reasoning != null)
         assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `response api should prefer manual reasoning effort override`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(
+                thinkingBudget = 1024,
+                openAIReasoningEffort = "auto"
+            )
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertTrue("reasoning should exist", reasoning != null)
+        assertEquals("auto", reasoning!!["effort"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================

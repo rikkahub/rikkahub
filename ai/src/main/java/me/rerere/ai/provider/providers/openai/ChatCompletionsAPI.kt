@@ -25,6 +25,7 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.resolveOpenAIChatCompletionsReasoningEffort
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -340,9 +341,11 @@ class ChatCompletionsAPI(
 
                     else -> {
                         // OpenAI 官方
-                        // 文档中，completions API 只支持 "low", "medium", "high"
-                        if (level != ReasoningLevel.AUTO) {
-                            put("reasoning_effort", if (level.effort == "none") "low" else level.effort)
+                        resolveOpenAIChatCompletionsReasoningEffort(
+                            thinkingBudget = params.thinkingBudget,
+                            overrideEffort = params.openAIReasoningEffort
+                        )?.let { effort ->
+                            put("reasoning_effort", effort)
                         }
                     }
                 }

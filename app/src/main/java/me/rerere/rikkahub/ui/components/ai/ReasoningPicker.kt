@@ -32,6 +32,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.resolveOpenAIChatCompletionsReasoningEffort
+import me.rerere.ai.core.resolveOpenAIResponsesReasoningEffort
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Idea
 import me.rerere.hugeicons.stroke.Idea01
@@ -47,14 +49,18 @@ fun ReasoningButton(
     onlyIcon: Boolean = false,
     reasoningTokens: Int,
     onUpdateReasoningTokens: (Int) -> Unit,
+    openAIReasoningEffort: String = "",
+    onUpdateOpenAIReasoningEffort: (String) -> Unit = {},
 ) {
     var showPicker by remember { mutableStateOf(false) }
 
     if (showPicker) {
         ReasoningPicker(
             reasoningTokens = reasoningTokens,
+            openAIReasoningEffort = openAIReasoningEffort,
             onDismissRequest = { showPicker = false },
-            onUpdateReasoningTokens = onUpdateReasoningTokens
+            onUpdateReasoningTokens = onUpdateReasoningTokens,
+            onUpdateOpenAIReasoningEffort = onUpdateOpenAIReasoningEffort,
         )
     }
 
@@ -89,10 +95,22 @@ fun ReasoningButton(
 @Composable
 fun ReasoningPicker(
     reasoningTokens: Int,
+    openAIReasoningEffort: String = "",
     onDismissRequest: () -> Unit = {},
     onUpdateReasoningTokens: (Int) -> Unit,
+    onUpdateOpenAIReasoningEffort: (String) -> Unit = {},
 ) {
     val currentLevel = ReasoningLevel.fromBudgetTokens(reasoningTokens)
+    val notSent = stringResource(R.string.assistant_page_openai_reasoning_effort_not_sent)
+    val effectiveChatCompletionsEffort = resolveOpenAIChatCompletionsReasoningEffort(
+        thinkingBudget = reasoningTokens,
+        overrideEffort = openAIReasoningEffort
+    ) ?: notSent
+    val effectiveResponsesEffort = resolveOpenAIResponsesReasoningEffort(
+        thinkingBudget = reasoningTokens,
+        overrideEffort = openAIReasoningEffort
+    ) ?: notSent
+
     ModalBottomSheet(
         onDismissRequest = {
             onDismissRequest()
@@ -206,6 +224,39 @@ fun ReasoningPicker(
                     )
                 }
             }
+
+            Card(
+                modifier = Modifier.imePadding(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(stringResource(id = R.string.assistant_page_openai_reasoning_effort))
+                    Text(
+                        text = stringResource(id = R.string.assistant_page_openai_reasoning_effort_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedTextField(
+                        value = openAIReasoningEffort,
+                        onValueChange = onUpdateOpenAIReasoningEffort,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = {
+                            Text(stringResource(id = R.string.assistant_page_openai_reasoning_effort_hint))
+                        },
+                        supportingText = {
+                            Text(
+                                stringResource(
+                                    id = R.string.assistant_page_openai_reasoning_effort_effective,
+                                    effectiveChatCompletionsEffort,
+                                    effectiveResponsesEffort
+                                )
+                            )
+                        }
+                    )
+                }
+            }
         }
     }
 }
@@ -269,12 +320,17 @@ private fun ReasoningLevelCard(
 private fun ReasoningPickerPreview() {
     MaterialTheme {
         var reasoningTokens by remember { mutableIntStateOf(0) }
+        var openAIReasoningEffort by remember { mutableStateOf("") }
         ReasoningPicker(
             onDismissRequest = {},
             reasoningTokens = reasoningTokens,
             onUpdateReasoningTokens = {
                 reasoningTokens = it
-            }
+            },
+            openAIReasoningEffort = openAIReasoningEffort,
+            onUpdateOpenAIReasoningEffort = {
+                openAIReasoningEffort = it
+            },
         )
     }
 }

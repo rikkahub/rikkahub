@@ -383,6 +383,7 @@ class GenerationHandler(
             maxTokens = assistant.maxTokens,
             tools = tools,
             thinkingBudget = assistant.thinkingBudget,
+            openAIReasoningEffort = assistant.openAIReasoningEffort,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
                 addAll(model.customHeaders)

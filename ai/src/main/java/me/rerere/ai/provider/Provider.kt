@@ -53,6 +53,7 @@ data class TextGenerationParams(
     val thinkingBudget: Int? = null,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
+    val openAIReasoningEffort: String = "",
 )
 
 @Serializable

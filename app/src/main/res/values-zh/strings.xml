@@ -114,6 +114,11 @@
   <string name="assistant_page_tab_memory">记忆</string>
   <string name="assistant_page_tab_prompt">提示词</string>
   <string name="assistant_page_tab_request">自定义请求</string>
+  <string name="assistant_page_openai_reasoning_effort">OpenAI 推理参数</string>
+  <string name="assistant_page_openai_reasoning_effort_desc">覆盖 Chat Completions 的 `reasoning_effort` 和 Responses 的 `reasoning.effort`。</string>
+  <string name="assistant_page_openai_reasoning_effort_hint">例如: high / low / auto</string>
+  <string name="assistant_page_openai_reasoning_effort_effective">留空时跟随思考预算。Chat Completions: %1$s，Responses: %2$s</string>
+  <string name="assistant_page_openai_reasoning_effort_not_sent">不发送</string>
   <string name="assistant_page_tags">标签</string>
   <string name="assistant_page_temperature">温度</string>
   <string name="assistant_page_template_preview">预览:</string>

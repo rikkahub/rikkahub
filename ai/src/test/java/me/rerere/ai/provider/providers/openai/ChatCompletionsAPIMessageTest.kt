@@ -1,11 +1,16 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
@@ -37,6 +42,33 @@ class ChatCompletionsAPIMessageTest {
         )
         method.isAccessible = true
         return method.invoke(api, messages) as JsonArray
+    }
+
+    private fun invokeBuildRequestBody(
+        providerSetting: ProviderSetting.OpenAI,
+        params: TextGenerationParams,
+        stream: Boolean = false
+    ): JsonObject {
+        val method = ChatCompletionsAPI::class.java.declaredMethods.first {
+            it.name == "buildChatCompletionRequest"
+        }
+        method.isAccessible = true
+        return method.invoke(api, listOf(UIMessage.user("hello")), params, providerSetting, stream) as JsonObject
+    }
+
+    private fun createReasoningParams(
+        thinkingBudget: Int? = null,
+        openAIReasoningEffort: String = ""
+    ): TextGenerationParams {
+        return TextGenerationParams(
+            model = Model(
+                modelId = "test-model",
+                displayName = "test-model",
+                abilities = listOf(ModelAbility.REASONING)
+            ),
+            thinkingBudget = thinkingBudget,
+            openAIReasoningEffort = openAIReasoningEffort
+        )
     }
 
     @Test
@@ -344,6 +376,29 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
         assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `chat completions should derive reasoning effort when override is blank`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = createReasoningParams(thinkingBudget = 1024)
+        )
+
+        assertEquals("low", requestBody["reasoning_effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `chat completions should prefer manual reasoning effort override`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = createReasoningParams(
+                thinkingBudget = 32_000,
+                openAIReasoningEffort = "auto"
+            )
+        )
+
+        assertEquals("auto", requestBody["reasoning_effort"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================

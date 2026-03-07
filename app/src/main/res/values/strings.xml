@@ -126,6 +126,11 @@
   <string name="assistant_page_tab_prompt">Prompts</string>
   <string name="assistant_page_tab_request">Custom Request</string>
   <string name="assistant_page_tab_schedule">Scheduled Prompt</string>
+  <string name="assistant_page_openai_reasoning_effort">OpenAI reasoning effort</string>
+  <string name="assistant_page_openai_reasoning_effort_desc">Overrides Chat Completions `reasoning_effort` and Responses `reasoning.effort`.</string>
+  <string name="assistant_page_openai_reasoning_effort_hint">high / low / auto</string>
+  <string name="assistant_page_openai_reasoning_effort_effective">Leave blank to follow thinking budget. Chat Completions: %1$s, Responses: %2$s</string>
+  <string name="assistant_page_openai_reasoning_effort_not_sent">not sent</string>
   <string name="assistant_schedule_add_task">Add Scheduled Task</string>
   <string name="assistant_schedule_summary_title">Scheduled Tasks</string>
   <string name="assistant_schedule_summary_desc">%d tasks enabled</string>

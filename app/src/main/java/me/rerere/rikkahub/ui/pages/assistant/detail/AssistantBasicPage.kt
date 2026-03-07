@@ -411,7 +411,15 @@ internal fun AssistantBasicContent(
                                 thinkingBudget = tokens
                             )
                         )
-                    }
+                    },
+                    openAIReasoningEffort = assistant.openAIReasoningEffort,
+                    onUpdateOpenAIReasoningEffort = { effort ->
+                        onUpdate(
+                            assistant.copy(
+                                openAIReasoningEffort = effort
+                            )
+                        )
+                    },
                 )
             }
             HorizontalDivider()

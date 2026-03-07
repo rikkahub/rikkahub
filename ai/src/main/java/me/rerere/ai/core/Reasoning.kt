@@ -19,3 +19,24 @@ enum class ReasoningLevel(
         }
     }
 }
+
+private fun String?.trimToNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+
+fun resolveOpenAIChatCompletionsReasoningEffort(
+    thinkingBudget: Int?,
+    overrideEffort: String,
+): String? {
+    overrideEffort.trimToNull()?.let { return it }
+    val level = ReasoningLevel.fromBudgetTokens(thinkingBudget)
+    if (level == ReasoningLevel.AUTO) return null
+    return if (level == ReasoningLevel.OFF) "low" else level.effort
+}
+
+fun resolveOpenAIResponsesReasoningEffort(
+    thinkingBudget: Int?,
+    overrideEffort: String,
+): String? {
+    overrideEffort.trimToNull()?.let { return it }
+    val level = ReasoningLevel.fromBudgetTokens(thinkingBudget ?: 0)
+    return if (level == ReasoningLevel.AUTO) null else level.effort
+}

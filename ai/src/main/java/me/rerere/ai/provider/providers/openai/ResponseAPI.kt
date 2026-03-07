@@ -20,8 +20,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.resolveOpenAIResponsesReasoningEffort
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
@@ -204,13 +204,15 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
 
             // reasoning
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
-                val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget ?: 0)
                 put("reasoning", buildJsonObject {
                     if (capabilities.supportsReasoningSummary) {
                         put("summary", "auto")
                     }
-                    if (level != ReasoningLevel.AUTO) {
-                        put("effort", level.effort)
+                    resolveOpenAIResponsesReasoningEffort(
+                        thinkingBudget = params.thinkingBudget,
+                        overrideEffort = params.openAIReasoningEffort
+                    )?.let { effort ->
+                        put("effort", effort)
                     }
                 })
                 if (capabilities.supportEncryptedContent) {
@@ -669,4 +671,3 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
         else -> ResponseProviderCapabilities()
     }
 }
-

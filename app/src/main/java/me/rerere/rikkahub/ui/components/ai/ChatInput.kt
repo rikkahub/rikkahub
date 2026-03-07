@@ -290,6 +290,10 @@ fun ChatInput(
                                     onUpdateReasoningTokens = {
                                         onUpdateAssistant(assistant.copy(thinkingBudget = it))
                                     },
+                                    openAIReasoningEffort = assistant.openAIReasoningEffort,
+                                    onUpdateOpenAIReasoningEffort = {
+                                        onUpdateAssistant(assistant.copy(openAIReasoningEffort = it))
+                                    },
                                     onlyIcon = true,
                                 )
                             }
