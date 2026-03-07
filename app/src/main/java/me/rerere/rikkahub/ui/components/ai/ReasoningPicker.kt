@@ -76,10 +76,13 @@ fun ReasoningButton(
                 modifier = Modifier.size(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = if (level.isEnabled) HugeIcons.Idea01 else HugeIcons.Idea,
-                    contentDescription = null,
-                )
+                when (level) {
+                    ReasoningLevel.OFF -> Icon(HugeIcons.Idea, null)
+                    ReasoningLevel.AUTO -> Icon(HugeIcons.Idea01, null)
+                    ReasoningLevel.LOW -> Icon(ReasoningLow, null)
+                    ReasoningLevel.MEDIUM -> Icon(ReasoningMedium, null)
+                    ReasoningLevel.HIGH -> Icon(ReasoningHigh, null)
+                }
             }
             if (!onlyIcon) Text(stringResource(R.string.setting_provider_page_reasoning))
         }
