@@ -26,11 +26,13 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.ReorderableLazyListState
 import kotlin.math.abs
 
+// 谁负责列表位移动画
 enum class ReorderItemPlacementPolicy {
     LibraryDefault,
     ContentManaged
 }
 
+// 谁负责拖拽松手后的最后一段归位
 enum class ReorderItemReleaseSettlePolicy {
     LibraryDefault,
     AdaptivePreserved
@@ -98,6 +100,8 @@ private fun LazyItemScope.AdaptivePreservedReorderableLazyListItem(
     contentModifier: Modifier,
     content: @Composable ReorderableCollectionItemScope.(isDragging: Boolean, itemModifier: Modifier) -> Unit
 ) {
+    // 拖拽中继续复用库状态
+    // 松手后改成本地 Animatable 接管 settle
     val orientation = state.orientation
     val isDragging by state.isItemDragging(key)
     val previousDraggingItemKey = state.previousDraggingItemKey
@@ -113,6 +117,8 @@ private fun LazyItemScope.AdaptivePreservedReorderableLazyListItem(
         }
     }
 
+    // 只在刚结束拖拽时接管释放偏移
+    // 这样能保留过渡感 也能缩短长距离拖尾
     LaunchedEffect(previousDraggingItemKey, isDragging, itemSize) {
         if (isDragging || previousDraggingItemKey != key) return@LaunchedEffect
 
@@ -194,6 +200,8 @@ private fun adaptiveReleaseSettleProfile(
         Orientation.Horizontal -> itemSize.width
     }.coerceAtLeast(1)
 
+    // 位移越远 stiffness 越高
+    // 短距离接近默认 长距离更快收敛
     val normalizedDistance = (releaseDistancePx / itemMainAxisSizePx.toFloat()).coerceIn(0f, 1f)
     val stiffness = Spring.StiffnessMedium +
         (Spring.StiffnessHigh - Spring.StiffnessMedium) * normalizedDistance

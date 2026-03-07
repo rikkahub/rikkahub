@@ -47,6 +47,7 @@ const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 class RikkaHubApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // 全局打开 Material3 抽屉重绘修复
         ComposeMaterial3Flags.isAnchoredDraggableComponentsInvalidationFixEnabled = true
         startKoin {
             androidLogger()

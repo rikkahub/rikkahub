@@ -86,6 +86,8 @@ class ChatVM(
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
+    // 把对话拆成稳定的小状态流
+    // 流式输出时只让真正依赖的子树重组
     val conversationMeta: StateFlow<ConversationMeta> = conversation
         .map { it.toMeta() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, conversation.value.toMeta())

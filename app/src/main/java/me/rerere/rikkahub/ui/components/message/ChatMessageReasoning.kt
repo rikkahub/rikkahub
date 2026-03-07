@@ -93,6 +93,8 @@ private fun rememberReasoningState(reasoning: UIMessagePart.Reasoning): Pair<Rea
         )
     }
 
+    // 只在 reasoning 继续增长时追到最新
+    // 避免预览区每次重组都触发滚动
     LaunchedEffect(reasoning.reasoning, loading) {
         if (loading) {
             if (!state.expandState.expanded && settings.displaySetting.showThinkingContent)
@@ -108,6 +110,8 @@ private fun rememberReasoningState(reasoning: UIMessagePart.Reasoning): Pair<Rea
         }
     }
 
+    // 计时单独刷新
+    // 正文的 regex 处理和 markdown 解析仍然走各自缓存
     LaunchedEffect(loading) {
         if (loading) {
             while (isActive) {
@@ -129,6 +133,8 @@ private fun ReasoningContent(
     fadeHeight: Float,
 ) {
     val isPreview = expandState == ReasoningCardState.Preview
+    // reasoning 文本单独缓存
+    // 这样计时刷新不会重复做可视化替换
     val renderedReasoning = remember(reasoning.reasoning, assistant) {
         reasoning.reasoning.replaceRegexes(
             assistant = assistant,

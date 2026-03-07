@@ -251,6 +251,8 @@ private fun ColumnScope.ModelList(
         }
     }
 
+    // 顺序和成员分开维护
+    // 拖拽时只改本地顺序 供应商区只看成员集合
     var localFavoriteModelIds by remember(modelType) {
         mutableStateOf(favoriteModelIdsFromSettings)
     }
@@ -259,6 +261,7 @@ private fun ColumnScope.ModelList(
     }
     var isDraggingFavorites by remember(modelType) { mutableStateOf(false) }
 
+    // 非拖拽阶段才让持久化顺序回流覆盖本地临时顺序
     LaunchedEffect(favoriteModelIdsFromSettings, isDraggingFavorites) {
         if (!isDraggingFavorites) {
             if (localFavoriteModelIds != favoriteModelIdsFromSettings) {
@@ -280,6 +283,7 @@ private fun ColumnScope.ModelList(
         }
     }
 
+    // 所有收藏写入都收口到这里
     fun persistFavoriteModels(updatedFavoriteModelIds: List<Uuid>) {
         coroutineScope.launch {
             settingsStore.update { settings ->
@@ -297,6 +301,7 @@ private fun ColumnScope.ModelList(
         persistFavoriteModels(updatedFavoriteModelIds)
     }
 
+    // 松手后再把拖拽后的顺序一次性落盘
     fun commitDraggedFavoriteOrder() {
         if (localFavoriteModelIds == favoriteModelIdsFromSettings) return
         val reorderedFavoriteModelIds = reorderFavoriteModels(
@@ -368,6 +373,8 @@ private fun ColumnScope.ModelList(
     val lazyListState = rememberLazyListState(
         initialFirstVisibleItemIndex = selectedModelPosition
     )
+    // 限制边缘自动滚动速度
+    // 快速拖拽时别让列表冲得过猛
     val reorderScroller = rememberScroller(lazyListState, 2200f)
     val reorderableState = rememberReorderableLazyListState(
         lazyListState = lazyListState,
@@ -397,6 +404,8 @@ private fun ColumnScope.ModelList(
     val haptic = LocalHapticFeedback.current
 
     val favoriteModelCount = favoriteModels.size
+    // 预先算好 provider header 的索引
+    // badge 联动时不用每次都反复扫整列
     val providerPositions = remember(providers, favoriteModelCount, searchFilteredModelsByProvider) {
         var currentIndex = 0
         if (providers.isEmpty()) {
@@ -446,6 +455,8 @@ private fun ColumnScope.ModelList(
 
     LazyColumn(
         state = lazyListState,
+        // 拖拽时关掉普通滚动
+        // 避免和 reorder auto scroll 互相抢手势
         userScrollEnabled = !isDraggingFavorites,
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(8.dp),
@@ -481,6 +492,8 @@ private fun ColumnScope.ModelList(
                 key = { "favorite:" + it.first.id.toString() },
                 contentType = { "favorite_model" }
             ) { (model, provider) ->
+                // 收藏区保留拖拽过渡
+                // 松手后的最后一段归位改成自适应 settle
                 AppReorderableLazyListItem(
                     state = reorderableState,
                     key = "favorite:" + model.id.toString(),
@@ -608,6 +621,8 @@ private fun ColumnScope.ModelList(
 
     // 供应商Badge行
     val providerBadgeListState = rememberLazyListState()
+    // 拖拽收藏时暂停 badge 联动
+    // 避免横向和纵向滚动同时抢动画
     LaunchedEffect(lazyListState, providerPositions, providers, isDraggingFavorites) {
         if (isDraggingFavorites) return@LaunchedEffect
         snapshotFlow { lazyListState.firstVisibleItemIndex }

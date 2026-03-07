@@ -284,6 +284,8 @@ private fun ChatDrawerSheet(
     onPinConversation: (Conversation) -> Unit,
     onMoveToAssistant: (Conversation) -> Unit,
 ) {
+    // 抽屉头部 操作区 会话列表分开组成
+    // 列表滚动时尽量别把整张抽屉一起拖进重组
     val content: @Composable () -> Unit = {
         Column(
             modifier = Modifier.padding(8.dp),

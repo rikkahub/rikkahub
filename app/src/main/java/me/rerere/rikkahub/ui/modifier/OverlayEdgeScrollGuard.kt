@@ -50,6 +50,8 @@ private fun Modifier.overlayEdgeScrollGuard(
 ): Modifier = composed {
     val canScrollBackwardState by rememberUpdatedState(canScrollBackward)
     val canScrollForwardState by rememberUpdatedState(canScrollForward)
+    // 列表到边界后把剩余手势留在内层
+    // 避免外层 sheet 或 drawer 接手时先顿一下
     val connection = remember(orientation) {
         object : NestedScrollConnection {
             override fun onPostScroll(

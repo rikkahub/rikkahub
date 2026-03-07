@@ -99,6 +99,8 @@ private fun rememberRenderedMessageText(
     assistant: Assistant?,
     scope: AssistantAffectScope,
 ): String {
+    // 可视化 regex 替换会被反复命中
+    // 这里按文本和助手配置缓存结果
     return remember(text, assistant, scope) {
         text.replaceRegexes(
             assistant = assistant,

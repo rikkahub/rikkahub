@@ -110,6 +110,8 @@ private data class ParsedMarkdown(
     val astTree: ASTNode,
 )
 
+// 进程内 LRU 缓存
+// 流式更新和重复重组时尽量复用已经建好的 AST
 private object MarkdownParseCache {
     private const val MAX_ENTRIES = 128
     private val cache = object : LinkedHashMap<String, ParsedMarkdown>(MAX_ENTRIES, 0.75f, true) {
@@ -238,8 +240,8 @@ fun MarkdownBlock(
         )
     }
 
-    // 监听内容变化，重新解析AST树
-    // 这里在后台线程解析AST树, 防止频繁更新的时候掉帧
+    // 内容变化后在后台线程解析
+    // 主线程这里只接收已经准备好的 AST
     val updatedContent by rememberUpdatedState(content)
     LaunchedEffect(Unit) {
         snapshotFlow { updatedContent }.distinctUntilChanged().mapLatest {

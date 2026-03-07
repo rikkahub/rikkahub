@@ -40,12 +40,15 @@ internal fun MacrobenchmarkScope.launchAndRunChatJourney(device: UiDevice) {
     device.waitForIdle()
 }
 
+// 覆盖聊天侧抽屉首次展开
 private fun MacrobenchmarkScope.openChatDrawer(device: UiDevice) {
     device.wait(Until.hasObject(By.desc(MESSAGES_LABEL)), UI_WAIT_TIMEOUT_MS)
     device.findObject(By.desc(MESSAGES_LABEL))?.click()
     device.waitForIdle()
 }
 
+// 刻意扫到顶和到底
+// 复现抽屉边界滚动的顿挫
 private fun MacrobenchmarkScope.scrollChatDrawer(device: UiDevice) {
     val drawerBounds = Rect(
         0,
@@ -80,6 +83,7 @@ private fun MacrobenchmarkScope.scrollAssistantPicker(device: UiDevice) {
     swipeWithin(device, sheetBounds, startYRatio = 0.18f, endYRatio = 0.9f)
 }
 
+// 兼容显式语义按钮和底部图标两种入口
 private fun MacrobenchmarkScope.openModelSelector(device: UiDevice) {
     device.wait(Until.hasObject(By.desc(MESSAGES_LABEL)), UI_WAIT_TIMEOUT_MS)
     val explicitSelector = device.findObject(By.desc(targetString("setting_model_page_chat_model")))
@@ -112,6 +116,7 @@ private fun MacrobenchmarkScope.scrollModelSelector(device: UiDevice) {
     swipeWithin(device, sheetBounds, startYRatio = 0.16f, endYRatio = 0.92f)
 }
 
+// 覆盖收藏模型拖拽和松手归位
 private fun MacrobenchmarkScope.dragFavoriteModelsIfPossible(device: UiDevice) {
     val favoritesLabel = targetString("model_list_favorite")
     if (!device.wait(Until.hasObject(By.text(favoritesLabel)), UI_WAIT_TIMEOUT_MS)) {

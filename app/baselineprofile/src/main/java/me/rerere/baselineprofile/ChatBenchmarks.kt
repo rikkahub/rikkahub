@@ -28,6 +28,7 @@ class ChatBenchmarks {
     fun chatFlowsCompilationBaselineProfiles() =
         benchmark(CompilationMode.Partial(BaselineProfileMode.Require))
 
+    // 同时量裸性能和 baseline profile 命中后的性能
     private fun benchmark(compilationMode: CompilationMode) {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         rule.measureRepeated(

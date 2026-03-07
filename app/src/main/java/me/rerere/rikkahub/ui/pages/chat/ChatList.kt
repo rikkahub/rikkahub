@@ -219,6 +219,8 @@ private fun ChatListNormal(
             chatSuggestions = chatSuggestions,
         )
     }
+    // 只盯最后一个可见 key
+    // 比持续扫描整段可见项更轻
     val isAtBottom by remember(state) {
         derivedStateOf {
             val lastVisibleKey = state.layoutInfo.visibleItemsInfo.lastOrNull()?.key
@@ -250,6 +252,8 @@ private fun ChatListNormal(
     ) {
         // 自动滚动到底部
         if (settings.displaySetting.enableAutoScroll) {
+            // 只有用户已经锚定底部时才跟随新消息
+            // requestScrollToItem 比流式期间反复动画滚动更稳
             LaunchedEffect(loading, lastMessageNode, isAtBottom) {
                 if (!state.isScrollInProgress && loading && isAtBottom && messageNodes.isNotEmpty()) {
                     state.requestScrollToItem(messageNodes.lastIndex + 10)

@@ -54,6 +54,7 @@ class BaselineProfileGenerator {
 
             // Start default activity for your app
             pressHome()
+            // baseline profile 现在顺带覆盖聊天关键交互
             launchAndRunChatJourney(device)
         }
     }

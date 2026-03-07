@@ -145,6 +145,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val chatListState = rememberLazyListState()
+    // 普通进入聊天页时只做一次首屏落底
     LaunchedEffect(vm, nodeId, messageNodes.size) {
         if (nodeId == null && !vm.chatListInitialized && messageNodes.isNotEmpty()) {
             chatListState.scrollToItem(messageNodes.size)
@@ -152,6 +153,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
+    // 从指定节点跳入时优先定位目标消息
     LaunchedEffect(nodeId, messageNodes) {
         if (nodeId != null && messageNodes.isNotEmpty() && !vm.chatListInitialized) {
             val index = messageNodes.indexOfFirst { it.id == nodeId }
