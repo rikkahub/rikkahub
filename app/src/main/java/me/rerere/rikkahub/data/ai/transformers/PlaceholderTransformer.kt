@@ -13,6 +13,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.utils.formatLastKnownLocationLngLat
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import java.time.LocalDate
@@ -86,6 +87,10 @@ object DefaultPlaceholderProvider : PlaceholderProvider {
 
         placeholder("timezone", { Text(stringResource(R.string.placeholder_timezone)) }) {
             TimeZone.getDefault().displayName
+        }
+
+        placeholder("location", { Text(stringResource(R.string.placeholder_location)) }) {
+            it.context.formatLastKnownLocationLngLat()
         }
 
         placeholder("system_version", { Text(stringResource(R.string.placeholder_system_version)) }) {

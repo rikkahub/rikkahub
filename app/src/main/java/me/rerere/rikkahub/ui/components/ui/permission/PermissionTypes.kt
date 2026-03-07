@@ -60,6 +60,18 @@ val PermissionCamera = PermissionInfo(
     required = true
 )
 
+val PermissionLocationCoarse = PermissionInfo(
+    permission = Manifest.permission.ACCESS_COARSE_LOCATION,
+    displayName = { Text(stringResource(R.string.permission_location_approximate)) },
+    usage = { Text(stringResource(R.string.permission_location_approximate_desc)) },
+)
+
+val PermissionLocationFine = PermissionInfo(
+    permission = Manifest.permission.ACCESS_FINE_LOCATION,
+    displayName = { Text(stringResource(R.string.permission_location_precise)) },
+    usage = { Text(stringResource(R.string.permission_location_precise_desc)) },
+)
+
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 val PermissionNotification = PermissionInfo(
     permission = Manifest.permission.POST_NOTIFICATIONS,

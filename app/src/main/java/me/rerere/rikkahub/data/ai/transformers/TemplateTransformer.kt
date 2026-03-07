@@ -5,6 +5,7 @@ import io.pebbletemplates.pebble.loader.Loader
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.utils.formatLastKnownLocationLngLat
 import me.rerere.rikkahub.utils.toLocalDate
 import me.rerere.rikkahub.utils.toLocalTime
 import java.io.Reader
@@ -21,6 +22,7 @@ class TemplateTransformer(
         messages: List<UIMessage>,
     ): List<UIMessage> {
         val template = engine.getTemplate(ctx.assistant.id.toString())
+        val location = ctx.context.formatLastKnownLocationLngLat()
         return messages.map { message ->
             message.copy(
                 parts = message.parts.map { part ->
@@ -33,6 +35,7 @@ class TemplateTransformer(
                                     "role" to message.role.name.lowercase(),
                                     "time" to Instant.now().toLocalTime(),
                                     "date" to Instant.now().toLocalDate(),
+                                    "location" to location,
                                 )
                             )
                             part.copy(
