@@ -18,6 +18,10 @@ data class ConversationEntity(
     val createAt: Long,
     @ColumnInfo("update_at")
     val updateAt: Long,
+    @ColumnInfo("replacement_history", defaultValue = "[]")
+    val replacementHistory: String = "[]",
+    @ColumnInfo("compression_revisions", defaultValue = "[]")
+    val compressionRevisions: String = "[]",
     @ColumnInfo("suggestions", defaultValue = "[]")
     val chatSuggestions: String,
     @ColumnInfo("is_pinned", defaultValue = "0")

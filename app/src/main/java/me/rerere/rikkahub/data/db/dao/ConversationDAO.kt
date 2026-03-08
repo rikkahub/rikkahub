@@ -5,7 +5,6 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
-import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.repository.LightConversationEntity
@@ -54,8 +53,29 @@ interface ConversationDAO {
     @Insert
     suspend fun insert(conversation: ConversationEntity)
 
-    @Update
-    suspend fun update(conversation: ConversationEntity)
+    @Query(
+        """
+        UPDATE conversationentity
+        SET assistant_id = :assistantId,
+            title = :title,
+            nodes = :nodes,
+            create_at = :createAt,
+            update_at = :updateAt,
+            suggestions = :chatSuggestions,
+            is_pinned = :isPinned
+        WHERE id = :id
+        """
+    )
+    suspend fun update(
+        id: String,
+        assistantId: String,
+        title: String,
+        nodes: String,
+        createAt: Long,
+        updateAt: Long,
+        chatSuggestions: String,
+        isPinned: Boolean,
+    )
 
     @Delete
     suspend fun delete(conversation: ConversationEntity)

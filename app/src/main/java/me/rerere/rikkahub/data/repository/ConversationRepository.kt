@@ -213,9 +213,17 @@ class ConversationRepository(
     }
 
     suspend fun updateConversation(conversation: Conversation) {
+        val entity = conversationToConversationEntity(conversation)
         database.withTransaction {
             conversationDAO.update(
-                conversationToConversationEntity(conversation)
+                id = entity.id,
+                assistantId = entity.assistantId,
+                title = entity.title,
+                nodes = entity.nodes,
+                createAt = entity.createAt,
+                updateAt = entity.updateAt,
+                chatSuggestions = entity.chatSuggestions,
+                isPinned = entity.isPinned,
             )
             // 删除旧的节点，插入新的节点
             messageNodeDAO.deleteByConversation(conversation.id.toString())
