@@ -1,11 +1,11 @@
 import * as React from "react";
-import { Brain, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import Markdown from "~/components/markdown/markdown";
 import type { ReasoningPart as UIReasoningPart } from "~/types";
 import Think from "~/assets/think.svg?react";
-import { serverNow } from "~/lib/utils";
+import { extractThinkingTitle, serverNow } from "~/lib/utils";
 
 import { useSettingsStore } from "~/stores";
 
@@ -46,6 +46,8 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
     ReasoningCardState.Collapsed,
   );
   const contentRef = React.useRef<HTMLDivElement>(null);
+  const thinkingTitle = React.useMemo(() => extractThinkingTitle(reasoning.reasoning), [reasoning.reasoning]);
+  const showThinkingTitle = loading && thinkingTitle != null;
 
   React.useEffect(() => {
     if (loading) {
@@ -111,13 +113,15 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
         }
         label={
           <span className="text-foreground text-xs font-medium">
-            {duration !== null
-              ? t("message_parts.thinking_seconds", { seconds: duration.toFixed(1) })
-              : t("message_parts.deep_thinking")}
+            {showThinkingTitle
+              ? thinkingTitle
+              : duration !== null
+                ? t("message_parts.thinking_seconds", { seconds: duration.toFixed(1) })
+                : t("message_parts.deep_thinking")}
           </span>
         }
         extra={
-          loading && duration !== null
+          showThinkingTitle && duration !== null
             ? <span className="text-muted-foreground text-xs">{duration.toFixed(1)}s</span>
             : undefined
         }
