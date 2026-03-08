@@ -61,7 +61,7 @@ ktor = "3.4.0"
 sqlite-vector = "0.9.92"
 jmdns = "3.6.3"
 slf4j = "2.0.17"
-sqlite-android = "-SNAPSHOT"
+sqlite-android = "80cedc8888"
 
 [libraries]
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }
