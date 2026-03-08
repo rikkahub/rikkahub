@@ -115,6 +115,7 @@
   <string name="assistant_page_template_preview">預覽:</string>
   <string name="assistant_page_template_variable_date">日期</string>
   <string name="assistant_page_template_variable_message">內容</string>
+  <string name="assistant_page_template_variable_location">定位</string>
   <string name="assistant_page_template_variable_role">角色</string>
   <string name="assistant_page_template_variable_time">時間</string>
   <string name="assistant_page_template_variables_label">變數:</string>
@@ -322,6 +323,10 @@
   <string name="permission_desc_require_permission">為了提供更優質的使用體驗，應用程式需要下列權限：</string>
   <string name="permission_diaog_title">權限請求</string>
   <string name="permission_go_to_settings">前往設定</string>
+  <string name="permission_location_approximate">定位 近似</string>
+  <string name="permission_location_approximate_desc">用於在你使用 {{location}} 時把近似定位注入到提示詞中</string>
+  <string name="permission_location_precise">定位 精確</string>
+  <string name="permission_location_precise_desc">用於在你使用 {{location}} 時把精確定位注入到提示詞中</string>
   <string name="permission_notification">通知</string>
   <string name="permission_notification_desc">傳送通知</string>
   <string name="permission_permanently_denied">永久拒絕</string>
@@ -339,6 +344,7 @@
   <string name="placeholder_model_id">模型ID</string>
   <string name="placeholder_model_name">模型名稱</string>
   <string name="placeholder_nickname">用戶暱稱</string>
+  <string name="placeholder_location">定位</string>
   <string name="placeholder_system_version">系統版本</string>
   <string name="placeholder_timezone">時區</string>
   <string name="placeholder_user">用戶</string>
@@ -411,6 +417,12 @@
   <string name="setting_mcp_page_name_desc">MCP伺服器的顯示名稱</string>
   <string name="setting_mcp_page_name_placeholder">例如：My MCP Server</string>
   <string name="setting_mcp_page_no_mcp_servers_found">找不到 MCP 伺服器</string>
+  <string name="assistant_page_prompt_location_action">授權定位權限</string>
+  <string name="assistant_page_prompt_location_desc">為提示詞變數提供定位座標\n系統提示詞：{{location}}\n訊息模板：{{ location }}\n輸出：lng,lat</string>
+  <string name="assistant_page_prompt_location_status_approximate">狀態：已授權 近似定位</string>
+  <string name="assistant_page_prompt_location_status_denied">狀態：未授權</string>
+  <string name="assistant_page_prompt_location_status_precise">狀態：已授權 精確定位</string>
+  <string name="assistant_page_prompt_location_title">提示詞定位變數</string>
   <string name="setting_mcp_page_save">保存</string>
   <string name="setting_mcp_page_server_url">伺服器地址</string>
   <string name="setting_mcp_page_sse_url_desc">SSE傳輸伺服器的URL地址</string>
@@ -910,4 +922,3 @@
   <string name="update_card_close">關閉</string>
   <string name="update_card_downloading">正在下載，請查看狀態列以瞭解進度</string>
 </resources>
-
