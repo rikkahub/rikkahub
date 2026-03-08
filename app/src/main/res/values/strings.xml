@@ -791,6 +791,8 @@
   <string name="setting_display_page_live_update_notification_desc">Show real-time notification updates during message generation (Android 15+)</string>
   <string name="setting_display_page_enable_auto_scroll_title">Auto Scroll</string>
   <string name="setting_display_page_enable_auto_scroll_desc">Automatically scroll to the bottom when AI is generating content</string>
+  <string name="setting_display_page_use_app_icon_style_loading_indicator_title">Use App Icon-Style Loading Indicator</string>
+  <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">Use the animated app icon instead of the default circular loading indicator</string>
   <string name="setting_files_page_title">File Management</string>
   <string name="setting_files_page_delete_file_title">Delete File</string>
   <string name="setting_files_page_delete_action">Delete</string>
@@ -910,4 +912,3 @@
   <string name="update_card_close">Close</string>
   <string name="update_card_downloading">Downloading, please check status bar for progress</string>
 </resources>
-

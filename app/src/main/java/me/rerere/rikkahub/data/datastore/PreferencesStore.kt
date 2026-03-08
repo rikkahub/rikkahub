@@ -490,6 +490,7 @@ data class Settings(
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
+    val useAppIconStyleLoadingIndicator: Boolean = true,
     val showUserAvatar: Boolean = true,
     val showAssistantBubble: Boolean = false,
     val showModelIcon: Boolean = true,

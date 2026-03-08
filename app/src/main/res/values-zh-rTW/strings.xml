@@ -909,5 +909,7 @@
   <string name="update_card_new_version_found">發現新版本 %s</string>
   <string name="update_card_close">關閉</string>
   <string name="update_card_downloading">正在下載，請查看狀態列以瞭解進度</string>
+  <string name="setting_display_page_use_app_icon_style_loading_indicator_title">使用 APP 圖示風格的載入指示器</string>
+  <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">使用應用程式圖示動畫取代預設的圓形載入指示器</string>
 </resources>
 
