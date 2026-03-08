@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.components.richtext
 
-import android.graphics.Rect
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.LocalTextStyle
@@ -15,15 +14,37 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.TextUnit
 import ru.noties.jlatexmath.JLatexMathDrawable
+import kotlin.math.ceil
 
-fun assumeLatexSize(latex: String, fontSize: Float): Rect {
+internal data class LatexSize(
+    val widthPx: Int,
+    val heightPx: Int
+)
+
+internal fun assumeLatexSize(latex: String, fontSize: Float): LatexSize? {
     return runCatching {
-        JLatexMathDrawable.builder(latex)
+        JLatexMathDrawable.builder(processLatex(latex))
             .textSize(fontSize)
             .padding(0)
             .build()
-            .bounds
-    }.getOrElse { Rect(0, 0, 0, 0) }
+    }.mapCatching { drawable ->
+        resolveLatexSize(drawable)
+    }.getOrElse { null }
+}
+
+private fun resolveLatexSize(drawable: JLatexMathDrawable): LatexSize? {
+    val icon = drawable.icon()
+    val insets = icon.insets
+    // 用真实尺寸统一测量和绘制口径
+    val widthPx = ceil(icon.trueIconWidth.toDouble()).toInt() + insets.left + insets.right
+    val heightPx = ceil(icon.trueIconHeight.toDouble()).toInt() + insets.top + insets.bottom
+    if (widthPx <= 0 || heightPx <= 0) {
+        return null
+    }
+    return LatexSize(
+        widthPx = widthPx,
+        heightPx = heightPx
+    )
 }
 
 @Composable
@@ -40,11 +61,11 @@ fun LatexText(
     )
     val density = LocalDensity.current
 
-    val drawable = remember(latex, fontSize, style) {
+    val drawable = remember(latex, fontSize, style.color, style.background) {
         runCatching {
             with(density) {
                 getLatexDrawable(
-                    latex = processLatex(latex),
+                    latex = latex,
                     fontSize = fontSize.toPx(),
                     color = style.color.toArgb(),
                     background = style.background.toArgb()
@@ -54,14 +75,17 @@ fun LatexText(
             it.printStackTrace()
         }.getOrNull()
     }
+    val latexSize = remember(drawable) {
+        drawable?.let(::resolveLatexSize)
+    }
 
-    if (drawable != null) {
+    if (drawable != null && latexSize != null) {
         with(density) {
             Canvas(
                 modifier = modifier
                     .size(
-                        width = drawable.bounds.width().toDp(),
-                        height = drawable.bounds.height().toDp()
+                        width = latexSize.widthPx.toDp(),
+                        height = latexSize.heightPx.toDp()
                     )
             ) {
                 drawable.draw(drawContext.canvas.nativeCanvas)
