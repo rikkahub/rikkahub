@@ -60,12 +60,63 @@ export interface ChatInputProps {
 
 const IMAGE_UPLOAD_ACCEPT = "image/*";
 
-async function isAllowedUploadFile(file: globalThis.File): Promise<boolean> {
+type UploadFileInspection = {
+  allowed: boolean;
+  normalizedMime: string | null;
+};
+
+function isLikelyTextContent(sample: Uint8Array): boolean {
+  if (sample.length === 0) return false;
+  let printable = 0;
+
+  for (const value of sample) {
+    if (
+      value === 0x09 ||
+      value === 0x0a ||
+      value === 0x0d ||
+      (value >= 0x20 && value <= 0x7e)
+    ) {
+      printable += 1;
+    }
+  }
+
+  return printable / sample.length >= 0.8;
+}
+
+function normalizeUploadFileType(
+  file: globalThis.File,
+  mime: string | null,
+): globalThis.File {
+  if (!mime || file.type === mime) {
+    return file;
+  }
+
+  return new globalThis.File([file], file.name, {
+    type: mime,
+    lastModified: file.lastModified,
+  });
+}
+
+async function inspectUploadFile(
+  file: globalThis.File,
+): Promise<UploadFileInspection> {
   const buffer = await file.slice(0, 4100).arrayBuffer();
   const detected = await fileTypeFromBuffer(buffer);
 
   // 无法识别 magic bytes → 文本文件 → 允许
-  if (!detected) return true;
+  if (!detected) {
+    if (isLikelyTextContent(new Uint8Array(buffer))) {
+      return {
+        allowed: true,
+        normalizedMime: "text/plain",
+      };
+    }
+
+    return {
+      allowed: true,
+      normalizedMime: file.type || null,
+    };
+  }
 
   // 识别为图片 / 视频 / 音频 → 允许
   if (
@@ -73,11 +124,17 @@ async function isAllowedUploadFile(file: globalThis.File): Promise<boolean> {
     detected.mime.startsWith("video/") ||
     detected.mime.startsWith("audio/")
   ) {
-    return true;
+    return {
+      allowed: true,
+      normalizedMime: detected.mime,
+    };
   }
 
   // 其他可识别的二进制格式（exe、zip 等）→ 拒绝
-  return false;
+  return {
+    allowed: false,
+    normalizedMime: null,
+  };
 }
 
 function toMessagePart(
@@ -248,9 +305,14 @@ function ChatInputInner({
 
       const allFiles = Array.from(fileList);
       const results = await Promise.all(
-        allFiles.map(async (f) => ({ file: f, allowed: await isAllowedUploadFile(f) })),
+        allFiles.map(async (f) => ({
+          file: f,
+          ...(await inspectUploadFile(f)),
+        })),
       );
-      const uploadableFiles = results.filter((r) => r.allowed).map((r) => r.file);
+      const uploadableFiles = results
+        .filter((r) => r.allowed)
+        .map((r) => normalizeUploadFileType(r.file, r.normalizedMime));
       const skippedFiles = results.filter((r) => !r.allowed).map((r) => r.file);
 
       if (skippedFiles.length > 0) {
@@ -409,11 +471,14 @@ function ChatInputInner({
             .filter((item) => item.kind === "file")
             .map((item) => item.getAsFile())
             .filter((file): file is globalThis.File => file !== null)
-            .map(async (file) => ({ file, allowed: await isAllowedUploadFile(file) })),
+            .map(async (file) => ({
+              file,
+              ...(await inspectUploadFile(file)),
+            })),
         )
       )
         .filter((r) => r.allowed)
-        .map((r) => r.file);
+        .map((r) => normalizeUploadFileType(r.file, r.normalizedMime));
 
       if (uploadableFiles.length === 0) {
         return;
