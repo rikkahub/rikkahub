@@ -113,10 +113,17 @@ export const MessageParts = React.memo(({
         if (block.type === "thinking") {
           if (block.steps.length === 0) return null;
 
+          const isReasoningOnlyBlock = block.steps.every((step) => step.type === "reasoning");
+          const hasLoadingReasoning = block.steps.some(
+            (step) => step.type === "reasoning" && step.reasoning.finishedAt == null,
+          );
+          const enableAdaptiveWidth = isReasoningOnlyBlock && !hasLoadingReasoning;
+
           return (
             <ChainOfThought
               key={`thinking-${blockIndex}`}
               className="my-1"
+              collapsedAdaptiveWidth={enableAdaptiveWidth}
               collapseLabel={t("message_parts.collapse_thinking")}
               showMoreLabel={(hiddenCount) =>
                 t("message_parts.expand_thinking_steps", { count: hiddenCount })
@@ -129,6 +136,7 @@ export const MessageParts = React.memo(({
                     <ReasoningStepPart
                       key={stepKey}
                       reasoning={step.reasoning}
+                      collapsedAdaptiveWidth={enableAdaptiveWidth}
                       isFirst={isFirst}
                       isLast={isLast}
                     />

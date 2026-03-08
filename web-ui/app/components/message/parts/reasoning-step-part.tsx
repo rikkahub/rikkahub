@@ -13,6 +13,7 @@ import { ControlledChainOfThoughtStep } from "../chain-of-thought";
 
 interface ReasoningStepPartProps {
   reasoning: UIReasoningPart;
+  collapsedAdaptiveWidth?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
 }
@@ -38,7 +39,7 @@ function formatDuration(createdAt?: string, finishedAt?: string | null): number 
   return Math.round(seconds * 10) / 10;
 }
 
-export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepPartProps) {
+export function ReasoningStepPart({ reasoning, collapsedAdaptiveWidth = false, isFirst, isLast }: ReasoningStepPartProps) {
   const loading = reasoning.finishedAt == null;
   const { t } = useTranslation("message");
   const displaySetting = useSettingsStore((state) => state.settings?.displaySetting);
@@ -102,6 +103,7 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
       <ControlledChainOfThoughtStep
         expanded={expandState === ReasoningCardState.Expanded}
         onExpandedChange={onExpandedChange}
+        collapsedAdaptiveWidth={collapsedAdaptiveWidth}
         isFirst={isFirst}
         isLast={isLast}
         icon={
