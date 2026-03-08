@@ -1,17 +1,6 @@
 package me.rerere.rikkahub.ui.pages.chat
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.MaskTheater01
-import me.rerere.hugeicons.stroke.InLove
-import me.rerere.hugeicons.stroke.Clock01
-import me.rerere.hugeicons.stroke.Image02
-import me.rerere.hugeicons.stroke.LanguageCircle
-import me.rerere.hugeicons.stroke.PencilEdit01
-import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Settings03
-import me.rerere.hugeicons.stroke.Sparkles
-import me.rerere.hugeicons.stroke.Award01
-import me.rerere.hugeicons.stroke.ChartColumn
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,11 +32,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -55,11 +46,38 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.rikkahub.ui.context.Navigator
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.paging.insertSeparators
+import androidx.paging.map
 import androidx.paging.compose.collectAsLazyPagingItems
+import java.time.ZoneId
+import kotlin.uuid.Uuid
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Award01
+import me.rerere.hugeicons.stroke.ChartColumn
+import me.rerere.hugeicons.stroke.Clock01
+import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.InLove
+import me.rerere.hugeicons.stroke.LanguageCircle
 import me.rerere.hugeicons.stroke.LookTop
+import me.rerere.hugeicons.stroke.MaskTheater01
+import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -68,21 +86,22 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
+import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
 import me.rerere.rikkahub.ui.components.ui.Greeting
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
-import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
+import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.openUrl
+import me.rerere.rikkahub.utils.toChatDateLabel
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
-import kotlin.uuid.Uuid
 
 @Composable
 fun ChatDrawerContent(
@@ -96,8 +115,26 @@ fun ChatDrawerContent(
     val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
 
-    val conversations = vm.conversations.collectAsLazyPagingItems()
-    val conversationListState = rememberLazyListState()
+    val conversations = remember(settings.assistantId) {
+        ChatDrawerState.getFlow(settings.assistantId, repo, context.applicationContext)
+    }.collectAsLazyPagingItems()
+
+    val scrollPosition by ChatDrawerState.scrollPosition.collectAsStateWithLifecycle()
+
+    val conversationListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = scrollPosition.index,
+        initialFirstVisibleItemScrollOffset = scrollPosition.offset
+    )
+
+    LaunchedEffect(conversationListState) {
+        snapshotFlow {
+            conversationListState.firstVisibleItemIndex to conversationListState.firstVisibleItemScrollOffset
+        }
+            .distinctUntilChanged()
+            .collectLatest { (index, offset) ->
+                ChatDrawerState.setScrollPosition(index, offset)
+            }
+    }
 
     val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
         initialValue = emptyMap(),
@@ -579,5 +616,125 @@ private fun AssistantItem(
                 }
             }
         }
+    }
+}
+
+/**
+ * Singleton to persist drawer state (scroll position and data flow)
+ * independent of ChatVM lifecycle.
+ *
+ * Note: This singleton uses StateFlow for thread-safe scroll position management
+ * and caches the PagingData flow to avoid recreating it when ChatVM is recreated.
+ *
+ * Resource Management:
+ * - The scope is shared across all assistant switches; cachedIn handles lifecycle internally
+ * - Use clearCache() to reset the cache and scroll position when needed
+ */
+private object ChatDrawerState {
+    data class ScrollPosition(val index: Int, val offset: Int)
+
+    private val _scrollPosition = MutableStateFlow(ScrollPosition(0, 0))
+    val scrollPosition: StateFlow<ScrollPosition> = _scrollPosition.asStateFlow()
+
+    private var cachedAssistantId: Uuid? = null
+    private var cachedFlow: Flow<PagingData<ConversationListItem>>? = null
+    private var scopeJob = SupervisorJob()
+    private val scope get() = CoroutineScope(scopeJob + Dispatchers.Main)
+
+    /**
+     * Thread-safe method to set scroll position (atomic update)
+     * Note: StateFlow.value assignment is inherently thread-safe
+     */
+    fun setScrollPosition(index: Int, offset: Int) {
+        _scrollPosition.value = ScrollPosition(index, offset)
+    }
+
+    /**
+     * Get or create a cached PagingData flow for the given assistantId.
+     * This avoids recreating the flow when ChatVM is recreated, preserving
+     * scroll position and loaded data.
+     *
+     * @param assistantId The assistant ID to get conversations for
+     * @param repo The conversation repository
+     * @param context Application context (to avoid memory leaks)
+     * @return A Flow of PagingData containing conversation list items
+     */
+    @Synchronized
+    fun getFlow(
+        assistantId: Uuid,
+        repo: ConversationRepository,
+        applicationContext: Context
+    ): Flow<PagingData<ConversationListItem>> {
+        if (assistantId == cachedAssistantId && cachedFlow != null) {
+            return cachedFlow!!
+        }
+
+        scopeJob.cancel()
+        scopeJob = SupervisorJob()
+
+        val flow = repo.getConversationsOfAssistantPaging(assistantId)
+            .map { pagingData ->
+                pagingData
+                    .map { ConversationListItem.Item(it) }
+                    .insertSeparators { before: ConversationListItem.Item?, after: ConversationListItem.Item? ->
+                        insertSeparators(before, after, applicationContext)
+                    }
+            }
+            .cachedIn(scope)
+
+        cachedAssistantId = assistantId
+        cachedFlow = flow
+        setScrollPosition(0, 0)
+
+        return flow
+    }
+
+    /**
+     * Clear the cached flow. Call this when the drawer is no longer needed
+     * to free resources and prevent memory leaks.
+     */
+    @Synchronized
+    fun clearCache() {
+        setScrollPosition(0, 0)
+
+        cachedAssistantId = null
+        cachedFlow = null
+        scopeJob.cancel()
+        scopeJob = SupervisorJob()
+    }
+
+    private fun createDateHeader(item: ConversationListItem.Item, context: Context): ConversationListItem.DateHeader {
+        val date = item.conversation.updateAt.atZone(ZoneId.systemDefault()).toLocalDate()
+        return ConversationListItem.DateHeader(date = date, label = date.toChatDateLabel(context))
+    }
+
+    private fun insertSeparators(
+        before: ConversationListItem.Item?,
+        after: ConversationListItem.Item?,
+        context: Context
+    ): ConversationListItem? {
+        if (after == null) return null
+
+        if (before == null) {
+            return if (after.conversation.isPinned) {
+                ConversationListItem.PinnedHeader
+            } else {
+                createDateHeader(after, context)
+            }
+        }
+
+        if (before.conversation.isPinned && !after.conversation.isPinned) {
+            return createDateHeader(after, context)
+        }
+
+        if (!before.conversation.isPinned && !after.conversation.isPinned) {
+            val beforeDate = before.conversation.updateAt.atZone(ZoneId.systemDefault()).toLocalDate()
+            val afterDate = after.conversation.updateAt.atZone(ZoneId.systemDefault()).toLocalDate()
+            if (beforeDate != afterDate) {
+                return createDateHeader(after, context)
+            }
+        }
+
+        return null
     }
 }
