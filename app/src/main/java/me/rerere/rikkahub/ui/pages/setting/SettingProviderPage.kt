@@ -71,6 +71,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.ProviderAvatarIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
@@ -524,8 +525,8 @@ private fun ProviderItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AutoAIIcon(
-                    name = provider.name,
+                ProviderAvatarIcon(
+                    provider = provider,
                     modifier = Modifier.size(36.dp)
                 )
                 Spacer(modifier = Modifier.weight(1f))

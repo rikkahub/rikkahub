@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import me.rerere.rikkahub.data.model.Avatar
 import kotlin.uuid.Uuid
 
 @Serializable
@@ -18,6 +19,7 @@ sealed class ProviderSetting {
     abstract val id: Uuid
     abstract val enabled: Boolean
     abstract val name: String
+    abstract val avatar: Avatar
     abstract val models: List<Model>
     abstract val balanceOption: BalanceOption
 
@@ -33,6 +35,7 @@ sealed class ProviderSetting {
         id: Uuid = this.id,
         enabled: Boolean = this.enabled,
         name: String = this.name,
+        avatar: Avatar = this.avatar,
         models: List<Model> = this.models,
         balanceOption: BalanceOption = this.balanceOption,
         builtIn: Boolean = this.builtIn,
@@ -46,6 +49,7 @@ sealed class ProviderSetting {
         override var id: Uuid = Uuid.random(),
         override var enabled: Boolean = true,
         override var name: String = "OpenAI",
+        override var avatar: Avatar = Avatar.Dummy,
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         @Transient override val builtIn: Boolean = false,
@@ -82,6 +86,7 @@ sealed class ProviderSetting {
             id: Uuid,
             enabled: Boolean,
             name: String,
+            avatar: Avatar,
             models: List<Model>,
             balanceOption: BalanceOption,
             builtIn: Boolean,
@@ -92,6 +97,7 @@ sealed class ProviderSetting {
                 id = id,
                 enabled = enabled,
                 name = name,
+                avatar = avatar,
                 models = models,
                 builtIn = builtIn,
                 description = description,
@@ -107,6 +113,7 @@ sealed class ProviderSetting {
         override var id: Uuid = Uuid.random(),
         override var enabled: Boolean = true,
         override var name: String = "Google",
+        override var avatar: Avatar = Avatar.Dummy,
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         @Transient override val builtIn: Boolean = false,
@@ -146,6 +153,7 @@ sealed class ProviderSetting {
             id: Uuid,
             enabled: Boolean,
             name: String,
+            avatar: Avatar,
             models: List<Model>,
             balanceOption: BalanceOption,
             builtIn: Boolean,
@@ -156,6 +164,7 @@ sealed class ProviderSetting {
                 id = id,
                 enabled = enabled,
                 name = name,
+                avatar = avatar,
                 models = models,
                 builtIn = builtIn,
                 description = description,
@@ -171,6 +180,7 @@ sealed class ProviderSetting {
         override var id: Uuid = Uuid.random(),
         override var enabled: Boolean = true,
         override var name: String = "Claude",
+        override var avatar: Avatar = Avatar.Dummy,
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         @Transient override val builtIn: Boolean = false,
@@ -206,6 +216,7 @@ sealed class ProviderSetting {
             id: Uuid,
             enabled: Boolean,
             name: String,
+            avatar: Avatar,
             models: List<Model>,
             balanceOption: BalanceOption,
             builtIn: Boolean,
@@ -216,6 +227,7 @@ sealed class ProviderSetting {
                 id = id,
                 enabled = enabled,
                 name = name,
+                avatar = avatar,
                 models = models,
                 balanceOption = balanceOption,
                 builtIn = builtIn,

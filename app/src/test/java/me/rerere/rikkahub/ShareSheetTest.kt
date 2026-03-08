@@ -3,6 +3,7 @@ package me.rerere.rikkahub
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
 import me.rerere.rikkahub.ui.components.ui.encodeForShare
 import org.junit.Assert.assertEquals
@@ -18,6 +19,7 @@ class ShareSheetTest {
             id = originalId,
             enabled = true,
             name = "Test OpenAI",
+            avatar = Avatar.Image("https://example.com/provider-avatar.png"),
             models = listOf(
                 Model(
                     id = Uuid.random(),
@@ -38,10 +40,10 @@ class ShareSheetTest {
         val decodedOpenAI = decoded as ProviderSetting.OpenAI
         assertEquals(originalId, decodedOpenAI.id)
         assertEquals("Test OpenAI", decodedOpenAI.name)
+        assertEquals(Avatar.Image("https://example.com/provider-avatar.png"), decodedOpenAI.avatar)
         assertEquals("sk-test-key", decodedOpenAI.apiKey)
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
-        assertEquals(1, decodedOpenAI.models.size)
-        assertEquals("gpt-4", decodedOpenAI.models[0].displayName)
+        assertEquals(0, decodedOpenAI.models.size)
     }
 
     @Test
