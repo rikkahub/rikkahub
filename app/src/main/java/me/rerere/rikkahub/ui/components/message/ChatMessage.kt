@@ -176,7 +176,8 @@ fun ChatMessage(
             message.translation?.let { translation ->
                 CollapsibleTranslationText(
                     content = translation,
-                    onClickCitation = {}
+                    onClickCitation = {},
+                    messageDepthFromEnd = messageDepthFromEnd,
                 )
             }
         }
@@ -374,6 +375,7 @@ private fun MessagePartsBlock(
                                                     phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                                     messageDepthFromEnd = messageDepthFromEnd,
                                                 ),
+                                                messageDepthFromEnd = messageDepthFromEnd,
                                                 onClickCitation = handleClickCitation
                                             )
                                         }
@@ -394,6 +396,7 @@ private fun MessagePartsBlock(
                                                     phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                                     messageDepthFromEnd = messageDepthFromEnd,
                                                 ),
+                                                messageDepthFromEnd = messageDepthFromEnd,
                                                 onClickCitation = handleClickCitation,
                                             )
                                         }
@@ -406,6 +409,7 @@ private fun MessagePartsBlock(
                                             phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                             messageDepthFromEnd = messageDepthFromEnd,
                                         ),
+                                        messageDepthFromEnd = messageDepthFromEnd,
                                         onClickCitation = handleClickCitation,
                                         modifier = Modifier.animateContentSize()
                                     )

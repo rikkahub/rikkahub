@@ -72,6 +72,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.rikkahub.data.datastore.shouldRenderCodeBlock
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -271,6 +272,7 @@ fun MarkdownBlock(
     content: String,
     modifier: Modifier = Modifier,
     style: TextStyle = LocalTextStyle.current,
+    messageDepthFromEnd: Int? = null,
     onClickCitation: (String) -> Unit = {}
 ) {
     var (data, setData) = remember {
@@ -303,7 +305,10 @@ fun MarkdownBlock(
         ) {
             astTree.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = preprocessed, onClickCitation = onClickCitation
+                    node = child,
+                    content = preprocessed,
+                    onClickCitation = onClickCitation,
+                    messageDepthFromEnd = messageDepthFromEnd,
                 )
             }
         }
@@ -350,14 +355,19 @@ private fun MarkdownNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    listLevel: Int = 0
+    listLevel: Int = 0,
+    messageDepthFromEnd: Int? = null,
 ) {
     when (node.type) {
         // 文件根节点
         MarkdownElementTypes.MARKDOWN_FILE -> {
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    modifier = modifier,
+                    onClickCitation = onClickCitation,
+                    messageDepthFromEnd = messageDepthFromEnd,
                 )
             }
         }
@@ -365,7 +375,11 @@ private fun MarkdownNode(
         // 段落
         MarkdownElementTypes.PARAGRAPH -> {
             Paragraph(
-                node = node, content = content, modifier = modifier, onClickCitation = onClickCitation
+                node = node,
+                content = content,
+                modifier = modifier,
+                onClickCitation = onClickCitation,
+                messageDepthFromEnd = messageDepthFromEnd,
             )
         }
 
@@ -399,6 +413,7 @@ private fun MarkdownNode(
                                 onClickCitation = onClickCitation,
                                 modifier = modifier.padding(vertical = headingPadding),
                                 trim = true,
+                                messageDepthFromEnd = messageDepthFromEnd,
                             )
                         }
                     }
@@ -413,7 +428,8 @@ private fun MarkdownNode(
                 content = content,
                 modifier = modifier.padding(vertical = 4.dp),
                 onClickCitation = onClickCitation,
-                level = listLevel
+                level = listLevel,
+                messageDepthFromEnd = messageDepthFromEnd,
             )
         }
 
@@ -423,7 +439,8 @@ private fun MarkdownNode(
                 content = content,
                 modifier = modifier.padding(vertical = 4.dp),
                 onClickCitation = onClickCitation,
-                level = listLevel
+                level = listLevel,
+                messageDepthFromEnd = messageDepthFromEnd,
             )
         }
 
@@ -471,7 +488,10 @@ private fun MarkdownNode(
                         .padding(8.dp)) {
                     node.children.fastForEach { child ->
                         MarkdownNode(
-                            node = child, content = content, onClickCitation = onClickCitation
+                            node = child,
+                            content = content,
+                            onClickCitation = onClickCitation,
+                            messageDepthFromEnd = messageDepthFromEnd,
                         )
                     }
                 }
@@ -501,7 +521,11 @@ private fun MarkdownNode(
             ProvideTextStyle(TextStyle(fontStyle = FontStyle.Italic)) {
                 node.children.fastForEach { child ->
                     MarkdownNode(
-                        node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                        node = child,
+                        content = content,
+                        modifier = modifier,
+                        onClickCitation = onClickCitation,
+                        messageDepthFromEnd = messageDepthFromEnd,
                     )
                 }
             }
@@ -511,7 +535,11 @@ private fun MarkdownNode(
             ProvideTextStyle(TextStyle(fontWeight = FontWeight.SemiBold)) {
                 node.children.fastForEach { child ->
                     MarkdownNode(
-                        node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                        node = child,
+                        content = content,
+                        modifier = modifier,
+                        onClickCitation = onClickCitation,
+                        messageDepthFromEnd = messageDepthFromEnd,
                     )
                 }
             }
@@ -615,8 +643,15 @@ private fun MarkdownNode(
                 node.findChildOfTypeRecursive(MarkdownTokenTypes.FENCE_LANG)?.getTextInNode(content) ?: "plaintext"
             val hasEnd = node.findChildOfTypeRecursive(MarkdownTokenTypes.CODE_FENCE_END) != null
             val displaySetting = LocalSettings.current.displaySetting
-            val renderTarget = remember(language, code, hasEnd, displaySetting.enableCodeBlockRichRender) {
-                if (hasEnd && displaySetting.enableCodeBlockRichRender) {
+            val shouldRenderCodeBlock = displaySetting.shouldRenderCodeBlock(messageDepthFromEnd)
+            val renderTarget = remember(
+                language,
+                code,
+                hasEnd,
+                shouldRenderCodeBlock,
+                displaySetting.enableCodeBlockRichRender,
+            ) {
+                if (hasEnd && shouldRenderCodeBlock && displaySetting.enableCodeBlockRichRender) {
                     CodeBlockRenderResolver.resolve(language = language, code = code)
                 } else {
                     null
@@ -651,7 +686,7 @@ private fun MarkdownNode(
                     modifier = Modifier
                         .padding(bottom = 4.dp)
                         .fillMaxWidth(),
-                    completeCodeBlock = hasEnd
+                    completeCodeBlock = hasEnd,
                 )
             }
         }
@@ -676,7 +711,11 @@ private fun MarkdownNode(
             // 递归处理其他节点的子节点
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    modifier = modifier,
+                    onClickCitation = onClickCitation,
+                    messageDepthFromEnd = messageDepthFromEnd,
                 )
             }
         }
@@ -689,7 +728,8 @@ private fun UnorderedListNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    level: Int = 0
+    level: Int = 0,
+    messageDepthFromEnd: Int? = null,
 ) {
     val bulletStyle = when (level % 3) {
         0 -> "• "
@@ -707,7 +747,8 @@ private fun UnorderedListNode(
                     content = content,
                     bulletText = bulletStyle,
                     onClickCitation = onClickCitation,
-                    level = level
+                    level = level,
+                    messageDepthFromEnd = messageDepthFromEnd,
                 )
             }
         }
@@ -720,7 +761,8 @@ private fun OrderedListNode(
     content: String,
     modifier: Modifier = Modifier,
     onClickCitation: (String) -> Unit = {},
-    level: Int = 0
+    level: Int = 0,
+    messageDepthFromEnd: Int? = null,
 ) {
     Column(modifier.padding(start = (level * 8).dp)) {
         var index = 1
@@ -733,7 +775,8 @@ private fun OrderedListNode(
                     content = content,
                     bulletText = numberText,
                     onClickCitation = onClickCitation,
-                    level = level
+                    level = level,
+                    messageDepthFromEnd = messageDepthFromEnd,
                 )
                 index++
             }
@@ -743,7 +786,12 @@ private fun OrderedListNode(
 
 @Composable
 private fun ListItemNode(
-    node: ASTNode, content: String, bulletText: String, onClickCitation: (String) -> Unit = {}, level: Int
+    node: ASTNode,
+    content: String,
+    bulletText: String,
+    onClickCitation: (String) -> Unit = {},
+    level: Int,
+    messageDepthFromEnd: Int? = null,
 ) {
     Column {
         // 分离列表项的直接内容和嵌套列表
@@ -766,6 +814,7 @@ private fun ListItemNode(
                             content = content,
                             onClickCitation = onClickCitation,
                             listLevel = level,
+                            messageDepthFromEnd = messageDepthFromEnd,
                         )
                     }
                 }
@@ -774,7 +823,11 @@ private fun ListItemNode(
         // nestedLists 渲染处理
         nestedLists.fastForEach { nestedList ->
             MarkdownNode(
-                node = nestedList, content = content, onClickCitation = onClickCitation, listLevel = level + 1 // 增加层级
+                node = nestedList,
+                content = content,
+                onClickCitation = onClickCitation,
+                listLevel = level + 1,
+                messageDepthFromEnd = messageDepthFromEnd,
             )
         }
     }
@@ -805,13 +858,17 @@ private fun Paragraph(
     trim: Boolean = false,
     onClickCitation: (String) -> Unit = {},
     modifier: Modifier,
+    messageDepthFromEnd: Int? = null,
 ) {
     // dumpAst(node, content)
     if (node.findChildOfTypeRecursive(MarkdownElementTypes.IMAGE, GFMElementTypes.BLOCK_MATH) != null) {
         FlowRow(modifier = modifier) {
             node.children.fastForEach { child ->
                 MarkdownNode(
-                    node = child, content = content, onClickCitation = onClickCitation
+                    node = child,
+                    content = content,
+                    onClickCitation = onClickCitation,
+                    messageDepthFromEnd = messageDepthFromEnd,
                 )
             }
         }

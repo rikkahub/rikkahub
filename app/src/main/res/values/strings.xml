@@ -431,6 +431,8 @@
   <string name="setting_display_page_code_block_auto_wrap_title">Code Block Auto Wrap</string>
   <string name="setting_display_page_code_block_rich_render_title">Render HTML/SVG Code Blocks</string>
   <string name="setting_display_page_code_block_rich_render_desc">Render html/svg/xml-with-svg code blocks directly instead of showing raw code</string>
+  <string name="setting_display_page_code_block_render_depth_title">Only Rich Render Recent Code Blocks</string>
+  <string name="setting_display_page_code_block_render_depth_desc">Only apply HTML/SVG rich rendering to code blocks within the most recent N messages, inclusive. Older messages still use normal syntax-highlighted code blocks. 0 means no limit.</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">Create a new conversation when the app starts</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">New chat on launch</string>
   <string name="setting_display_page_developer_mode">Developer Mode</string>
@@ -784,6 +786,7 @@
   <string name="prompt_page_scan_depth">Scan Depth (Messages)</string>
   <string name="setting_page_prompts_title">Prompt Injections</string>
   <string name="setting_page_prompts_desc">Configure message templates and lorebooks</string>
+  <string name="setting_common_no_limit">No limit</string>
   <string name="chat_page_prompt_injections">Prompt Injections</string>
   <string name="injection_selector_unnamed">Unnamed</string>
   <string name="injection_selector_unnamed_lorebook">Unnamed Lorebook</string>
@@ -1101,4 +1104,3 @@
   <string name="update_card_close">Close</string>
   <string name="update_card_downloading">Downloading, please check status bar for progress</string>
 </resources>
-

@@ -174,6 +174,7 @@ private fun ReasoningContent(
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxSize(),
+                messageDepthFromEnd = messageDepthFromEnd,
             )
         }
     }

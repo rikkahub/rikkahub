@@ -172,7 +172,8 @@ fun LanguageSelectionDialog(
 @Composable
 fun CollapsibleTranslationText(
     content: String,
-    onClickCitation: (String) -> Unit
+    onClickCitation: (String) -> Unit,
+    messageDepthFromEnd: Int? = null,
 ) {
     if (content.isNotBlank()) {
         var isCollapsed by remember { mutableStateOf(false) }
@@ -279,6 +280,7 @@ fun CollapsibleTranslationText(
                     // Show normal translation content
                     MarkdownBlock(
                         content = content,
+                        messageDepthFromEnd = messageDepthFromEnd,
                         onClickCitation = onClickCitation,
                         modifier = Modifier
                             .padding(12.dp)

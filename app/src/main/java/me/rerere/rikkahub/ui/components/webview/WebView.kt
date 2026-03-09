@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
@@ -42,18 +43,19 @@ private fun WebContent.Data.signature(): Int {
     return result
 }
 
-internal class MyWebChromeClient(private val state: WebViewState) : WebChromeClient() {
+internal class MyWebChromeClient(private val state: () -> WebViewState) : WebChromeClient() {
     override fun onProgressChanged(view: WebView?, newProgress: Int) {
-        state.loadingProgress = newProgress / 100f
+        state().loadingProgress = newProgress / 100f
     }
 
     override fun onReceivedTitle(view: WebView?, title: String?) {
         super.onReceivedTitle(view, title)
-        state.pageTitle = title
+        state().pageTitle = title
     }
 
     override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-        state.pushConsoleMessage(consoleMessage)
+        val currentState = state()
+        currentState.pushConsoleMessage(consoleMessage)
         if (consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.ERROR || consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.WARNING) {
             Log.e(
                 TAG,
@@ -64,21 +66,39 @@ internal class MyWebChromeClient(private val state: WebViewState) : WebChromeCli
     }
 }
 
-internal class MyWebViewClient(private val state: WebViewState) : WebViewClient() {
+internal class MyWebViewClient(private val state: () -> WebViewState) : WebViewClient() {
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
-        state.isLoading = true
-        state.currentUrl = url // Update current URL
+        val currentState = state()
+        currentState.isLoading = true
+        currentState.currentUrl = url // Update current URL
     }
 
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
-        state.isLoading = false
-        state.loadingProgress = 0f // Reset progress when finished
-        state.pageTitle = view?.title // Update title
-        state.canGoBack = view?.canGoBack() == true
-        state.canGoForward = view?.canGoForward() == true
+        val currentState = state()
+        currentState.isLoading = false
+        currentState.loadingProgress = 0f // Reset progress when finished
+        currentState.pageTitle = view?.title // Update title
+        currentState.canGoBack = view?.canGoBack() == true
+        currentState.canGoForward = view?.canGoForward() == true
     }
+}
+
+private fun WebView.syncJavascriptInterfaces(state: WebViewState) {
+    val installedInterfaces = state.attachedInterfaces
+    (installedInterfaces.keys - state.interfaces.keys).forEach { name ->
+        removeJavascriptInterface(name)
+    }
+    state.interfaces.forEach { (name, obj) ->
+        if (installedInterfaces[name] !== obj) {
+            if (name in installedInterfaces) {
+                removeJavascriptInterface(name)
+            }
+            addJavascriptInterface(obj, name)
+        }
+    }
+    state.attachedInterfaces = state.interfaces
 }
 
 @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
@@ -90,9 +110,9 @@ fun WebView(
     onCreated: (WebView) -> Unit = {},
     onUpdated: (WebView) -> Unit = {},
 ) {
-    // Remember the clients based on the state
-    val webChromeClient = remember { MyWebChromeClient(state) }
-    val webViewClient = remember { MyWebViewClient(state) }
+    val currentState = rememberUpdatedState(state)
+    val webChromeClient = remember { MyWebChromeClient { currentState.value } }
+    val webViewClient = remember { MyWebViewClient { currentState.value } }
     val androidViewModifier = Modifier
         .fillMaxWidth()
         .focusProperties {
@@ -132,18 +152,17 @@ fun WebView(
                     this.webChromeClient = webChromeClient
                     this.webViewClient = webViewClient
 
-                    state.interfaces.forEach { (name, obj) ->
-                        addJavascriptInterface(obj, name)
-                    }
+                    syncJavascriptInterfaces(state)
                 }
             },
             modifier = androidViewModifier, // Make WebView fill the width
             onReset = {
                 it.clearFocus()
                 it.stopLoading()
-                state.interfaces.forEach { (name, _) ->
+                state.attachedInterfaces.keys.forEach { name ->
                     it.removeJavascriptInterface(name)
                 }
+                state.attachedInterfaces = emptyMap()
                 if (state.webView === it) {
                     state.webView = null
                 }
@@ -153,9 +172,10 @@ fun WebView(
             onRelease = {
                 it.clearFocus()
                 it.stopLoading()
-                state.interfaces.forEach { (name, _) ->
+                state.attachedInterfaces.keys.forEach { name ->
                     it.removeJavascriptInterface(name)
                 }
+                state.attachedInterfaces = emptyMap()
                 if (state.webView === it) {
                     state.webView = null
                 }
@@ -165,13 +185,10 @@ fun WebView(
             },
             update = { webView ->
                 state.webView = webView
-                state.interfaces.forEach { (name, obj) ->
-                    webView.addJavascriptInterface(obj, name)
-                }
+                webView.syncJavascriptInterfaces(state)
                 Log.d(TAG, "AndroidView: Updating WebView")
-                // Ensure clients are updated if state changes (though unlikely here)
-                // webView.webChromeClient = webChromeClient
-                // webView.webViewClient = webViewClient
+                webView.webChromeClient = webChromeClient
+                webView.webViewClient = webViewClient
 
                 // Update settings that might change
                 webView.settings.javaScriptEnabled = state.javaScriptEnabled
@@ -269,6 +286,7 @@ class WebViewState(
     internal var forceReload: Boolean by mutableStateOf(false) // Internal state to force URL reload if needed
     internal var lastLoadedUrlSignature: Int? = null
     internal var lastLoadedDataSignature: Int? = null
+    internal var attachedInterfaces: Map<String, Any> = emptyMap()
 
     // --- Loading State ---
     var isLoading: Boolean by mutableStateOf(false)

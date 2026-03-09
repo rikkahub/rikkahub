@@ -43,6 +43,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,8 +59,9 @@ import androidx.compose.ui.window.DialogWindowProvider
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowExpandDiagonal01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.rikkahub.ui.components.webview.WebContent
 import me.rerere.rikkahub.ui.components.webview.WebView
-import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
+import me.rerere.rikkahub.ui.components.webview.WebViewState
 import me.rerere.rikkahub.utils.toCssHex
 
 private const val MIN_PREVIEW_HEIGHT_DP = 10
@@ -68,6 +70,9 @@ private const val INITIAL_PREVIEW_HEIGHT_DP = 180
 
 private const val EXPANDED_PREVIEW_ANIMATION_MS = 280
 private const val EXPANDED_PREVIEW_BLUR_RADIUS = 72
+private const val RENDERED_CODE_BLOCK_BASE_URL = "https://rikkahub.local"
+private const val RENDERED_CODE_BLOCK_MIME_TYPE = "text/html"
+private const val RENDERED_CODE_BLOCK_ENCODING = "utf-8"
 
 private class CodeBlockRenderBridge(
     private val onHeightChanged: (Int) -> Unit,
@@ -90,27 +95,50 @@ private class CodeBlockRenderBridge(
 
 @Composable
 private fun rememberRenderedCodeBlockWebViewState(
-    html: String,
+    initialHtml: String,
     interfaces: Map<String, Any> = emptyMap(),
-) = rememberWebViewState(
-    data = html,
-    baseUrl = "https://rikkahub.local",
-    mimeType = "text/html",
-    encoding = "utf-8",
-    interfaces = interfaces,
-    settings = {
-        builtInZoomControls = true
-        displayZoomControls = false
-        loadWithOverviewMode = true
-        useWideViewPort = true
-        javaScriptCanOpenWindowsAutomatically = true
-        mediaPlaybackRequiresUserGesture = false
+): WebViewState = remember(interfaces) {
+    WebViewState(
+        initialContent = WebContent.Data(
+            data = initialHtml,
+            baseUrl = RENDERED_CODE_BLOCK_BASE_URL,
+            mimeType = RENDERED_CODE_BLOCK_MIME_TYPE,
+            encoding = RENDERED_CODE_BLOCK_ENCODING,
+        ),
+        interfaces = interfaces,
+        settings = {
+            builtInZoomControls = true
+            displayZoomControls = false
+            loadWithOverviewMode = true
+            useWideViewPort = true
+            javaScriptCanOpenWindowsAutomatically = true
+            mediaPlaybackRequiresUserGesture = false
+        }
+    )
+}
+
+private fun WebViewState.loadRenderedCodeBlockHtml(html: String) {
+    val currentContent = content as? WebContent.Data
+    if (
+        currentContent?.data == html &&
+        currentContent.baseUrl == RENDERED_CODE_BLOCK_BASE_URL &&
+        currentContent.mimeType == RENDERED_CODE_BLOCK_MIME_TYPE &&
+        currentContent.encoding == RENDERED_CODE_BLOCK_ENCODING
+    ) {
+        return
     }
-)
+
+    loadData(
+        data = html,
+        baseUrl = RENDERED_CODE_BLOCK_BASE_URL,
+        mimeType = RENDERED_CODE_BLOCK_MIME_TYPE,
+        encoding = RENDERED_CODE_BLOCK_ENCODING,
+    )
+}
 
 @Composable
 private fun ExpandedRenderedCodeBlockDialog(
-    html: String,
+    state: WebViewState,
     target: CodeBlockRenderTarget,
     onDismissed: () -> Unit,
 ) {
@@ -119,7 +147,6 @@ private fun ExpandedRenderedCodeBlockDialog(
     val density = LocalDensity.current
     val scrimInteractionSource = remember { MutableInteractionSource() }
     val cardInteractionSource = remember { MutableInteractionSource() }
-    val expandedState = rememberRenderedCodeBlockWebViewState(html = html)
 
     val scrimAlpha by animateFloatAsState(
         targetValue = if (visible) 0.28f else 0f,
@@ -247,7 +274,7 @@ private fun ExpandedRenderedCodeBlockDialog(
                             .padding(14.dp),
                     ) {
                         WebView(
-                            state = expandedState,
+                            state = state,
                             allowFocus = true,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -309,22 +336,35 @@ internal fun WebRenderedCodeBlock(
             scrollMode = CodeBlockRenderScrollMode.AUTO_HEIGHT,
         )
     }
-    val expandedHtml = remember(target, code, backgroundColor, textColor) {
-        CodeBlockRenderResolver.buildHtmlForWebView(
+    var expandedHtmlCache by remember(target, code, backgroundColor, textColor) { mutableStateOf<String?>(null) }
+    var contentHeightDp by remember(renderSignature) { mutableIntStateOf(INITIAL_PREVIEW_HEIGHT_DP) }
+    var showExpandedPreview by remember(renderSignature) { mutableStateOf(false) }
+    val expandedPreviewVisible = rememberUpdatedState(showExpandedPreview)
+    val renderBridge = remember(renderSignature) {
+        CodeBlockRenderBridge { nextHeight ->
+            if (!expandedPreviewVisible.value && nextHeight != contentHeightDp) {
+                contentHeightDp = nextHeight
+            }
+        }
+    }
+    val webViewInterfaces = remember(renderBridge) {
+        mapOf(CODE_BLOCK_HEIGHT_BRIDGE_NAME to renderBridge)
+    }
+    val webViewState = rememberRenderedCodeBlockWebViewState(
+        initialHtml = inlineHtml,
+        interfaces = webViewInterfaces,
+    )
+
+    fun resolveExpandedHtml(): String {
+        val cachedHtml = expandedHtmlCache
+        if (cachedHtml != null) return cachedHtml
+        return CodeBlockRenderResolver.buildHtmlForWebView(
             target = target,
             code = code,
             backgroundColor = backgroundColor,
             textColor = textColor,
             scrollMode = CodeBlockRenderScrollMode.SCROLLABLE,
-        )
-    }
-    var contentHeightDp by remember(renderSignature) { mutableIntStateOf(INITIAL_PREVIEW_HEIGHT_DP) }
-    val renderBridge = remember(renderSignature) {
-        CodeBlockRenderBridge { nextHeight ->
-            if (nextHeight != contentHeightDp) {
-                contentHeightDp = nextHeight
-            }
-        }
+        ).also { expandedHtmlCache = it }
     }
 
     val animatedHeight by animateDpAsState(
@@ -332,55 +372,57 @@ internal fun WebRenderedCodeBlock(
         animationSpec = tween(durationMillis = 300),
         label = "codeBlockHeight",
     )
-    var showExpandedPreview by remember(renderSignature) { mutableStateOf(false) }
+    val activeHtml = if (showExpandedPreview) resolveExpandedHtml() else inlineHtml
 
-    val webViewState = rememberRenderedCodeBlockWebViewState(
-        html = inlineHtml,
-        interfaces = mapOf(CODE_BLOCK_HEIGHT_BRIDGE_NAME to renderBridge),
-    )
+    LaunchedEffect(activeHtml) {
+        webViewState.loadRenderedCodeBlockHtml(activeHtml)
+    }
 
     key(renderSignature) {
         Box(
-            modifier = modifier
+            modifier = Modifier
+                .then(modifier)
                 .clip(RoundedCornerShape(12.dp))
                 .fillMaxWidth()
                 .height(animatedHeight),
         ) {
-            WebView(
-                state = webViewState,
-                allowFocus = false,
-                modifier = Modifier.fillMaxSize(),
-                onCreated = { webView ->
-                    webView.setOnTouchListener { view, event ->
-                        when (event?.actionMasked) {
-                            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                                view.parent?.requestDisallowInterceptTouchEvent(true)
-                            }
+            if (!showExpandedPreview) {
+                WebView(
+                    state = webViewState,
+                    allowFocus = false,
+                    modifier = Modifier.fillMaxSize(),
+                    onCreated = { webView ->
+                        webView.setOnTouchListener { view, event ->
+                            when (event?.actionMasked) {
+                                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                                }
 
-                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                                view.parent?.requestDisallowInterceptTouchEvent(false)
+                                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                                }
                             }
+                            false
                         }
-                        false
                     }
-                }
-            )
+                )
 
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(10.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
-                shadowElevation = 10.dp,
-            ) {
-                IconButton(
-                    onClick = {
-                        showExpandedPreview = true
-                    },
-                    modifier = Modifier.size(36.dp),
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+                    shadowElevation = 10.dp,
                 ) {
-                    Icon(HugeIcons.ArrowExpandDiagonal01, contentDescription = "Expand preview")
+                    IconButton(
+                        onClick = {
+                            showExpandedPreview = true
+                        },
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(HugeIcons.ArrowExpandDiagonal01, contentDescription = "Expand preview")
+                    }
                 }
             }
         }
@@ -388,7 +430,7 @@ internal fun WebRenderedCodeBlock(
 
     if (showExpandedPreview) {
         ExpandedRenderedCodeBlockDialog(
-            html = expandedHtml,
+            state = webViewState,
             target = target,
             onDismissed = {
                 showExpandedPreview = false

@@ -641,6 +641,7 @@ data class DisplaySetting(
     val codeBlockAutoCollapse: Boolean = false,
     val showLineNumbers: Boolean = false,
     val enableCodeBlockRichRender: Boolean = true,
+    val codeBlockRenderMaxDepth: Int = 0,
     val ttsOnlyReadQuoted: Boolean = false,
     val autoPlayTTSAfterGeneration: Boolean = false,
     val pasteLongTextAsFile: Boolean = false,
@@ -650,6 +651,12 @@ data class DisplaySetting(
     val enableLatexRendering: Boolean = true,
     val enableBlurEffect: Boolean = false,
 )
+
+fun DisplaySetting.shouldRenderCodeBlock(messageDepthFromEnd: Int?): Boolean {
+    val effectiveMaxDepth = codeBlockRenderMaxDepth.takeIf { it > 0 } ?: return true
+    val depth = messageDepthFromEnd ?: return true
+    return depth <= effectiveMaxDepth
+}
 
 @Serializable
 data class WebDavConfig(

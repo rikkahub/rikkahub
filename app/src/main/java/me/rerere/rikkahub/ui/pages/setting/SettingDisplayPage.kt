@@ -48,6 +48,8 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 
+private const val MAX_CODE_BLOCK_RENDER_DEPTH = 100
+
 @Composable
 fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -423,6 +425,48 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             )
                         },
                     )
+                }
+            }
+
+            item {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.surfaceBright)
+                ) {
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_code_block_render_depth_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_code_block_render_depth_desc)) },
+                        colors = CustomColors.listItemColors,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Slider(
+                            value = displaySetting.codeBlockRenderMaxDepth
+                                .coerceIn(0, MAX_CODE_BLOCK_RENDER_DEPTH)
+                                .toFloat(),
+                            onValueChange = {
+                                updateDisplaySetting(displaySetting.copy(codeBlockRenderMaxDepth = it.toInt()))
+                            },
+                            valueRange = 0f..MAX_CODE_BLOCK_RENDER_DEPTH.toFloat(),
+                            steps = MAX_CODE_BLOCK_RENDER_DEPTH - 1,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = if (displaySetting.codeBlockRenderMaxDepth > 0) {
+                                displaySetting.codeBlockRenderMaxDepth.toString()
+                            } else {
+                                stringResource(R.string.setting_common_no_limit)
+                            },
+                        )
+                    }
                 }
             }
 
