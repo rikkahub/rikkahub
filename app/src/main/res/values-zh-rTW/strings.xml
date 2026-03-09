@@ -1071,5 +1071,9 @@
   <string name="update_card_downloading">正在下載，請查看狀態列以瞭解進度</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_title">使用 APP 圖示風格的載入指示器</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">使用應用程式圖示動畫取代預設的圓形載入指示器</string>
+  <string name="setting_termux_page_pty_desc">適用於將 tty 設為 true 且啟用 write_stdin 的 termux_exec。</string>
+  <string name="setting_termux_page_pty_yield_time_title">初始等待時間 (毫秒)</string>
+  <string name="setting_termux_page_pty_max_output_chars_title">最大輸出字元數</string>
+  <string name="setting_termux_page_pty_title">互動工作階段調整</string>
 </resources>
 

@@ -917,6 +917,10 @@
   <string name="setting_termux_page_all_files_access_action">Open settings</string>
   <string name="setting_termux_page_timeout_title">Timeout (ms)</string>
   <string name="setting_termux_page_timeout_desc">Timeout for termux_exec and termux_python. Minimum 1000ms. Default 120000ms (2 minutes).</string>
+  <string name="setting_termux_page_pty_title">Interactive Session Tuning</string>
+  <string name="setting_termux_page_pty_desc">Applies to termux_exec with tty=true and write_stdin.</string>
+  <string name="setting_termux_page_pty_yield_time_title">Initial wait (ms)</string>
+  <string name="setting_termux_page_pty_max_output_chars_title">Max output chars</string>
   <string name="setting_termux_page_setup_title">Setup checklist</string>
   <string name="setting_termux_page_setup_step_1">1) Install Termux (com.termux)</string>
   <string name="setting_termux_page_setup_step_2">2) Open Termux and run this command:</string>
@@ -1097,3 +1101,4 @@
   <string name="update_card_close">Close</string>
   <string name="update_card_downloading">Downloading, please check status bar for progress</string>
 </resources>
+

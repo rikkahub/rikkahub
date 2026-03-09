@@ -1066,5 +1066,9 @@
   <string name="update_card_downloading">Идёт загрузка, следите за прогрессом в строке состояния</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_title">Использовать индикатор загрузки в стиле значка приложения</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">Использовать анимированный значок приложения вместо стандартного круглого индикатора загрузки</string>
+  <string name="setting_termux_page_pty_yield_time_title">Начальное ожидание (мс)</string>
+  <string name="setting_termux_page_pty_max_output_chars_title">Макс. символов вывода</string>
+  <string name="setting_termux_page_pty_desc">Применяется к termux_exec с tty=true и write_stdin.</string>
+  <string name="setting_termux_page_pty_title">Настройка интерактивного сеанса</string>
 </resources>
 

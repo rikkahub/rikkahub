@@ -80,6 +80,12 @@ fun SettingTermuxPage() {
     var timeoutText by remember(settings.termuxTimeoutMs) {
         mutableStateOf(settings.termuxTimeoutMs.toString())
     }
+    var ptyYieldTimeText by remember(settings.termuxPtyYieldTimeMs) {
+        mutableStateOf(settings.termuxPtyYieldTimeMs.toString())
+    }
+    var ptyMaxOutputCharsText by remember(settings.termuxPtyMaxOutputChars) {
+        mutableStateOf(settings.termuxPtyMaxOutputChars.toString())
+    }
     var approvalBlacklistText by remember(settings.termuxApprovalBlacklist) {
         mutableStateOf(settings.termuxApprovalBlacklist)
     }
@@ -391,6 +397,62 @@ fun SettingTermuxPage() {
                                 singleLine = true,
                                 isError = timeoutText.toLongOrNull()?.let { it < 1_000L } ?: true,
                             )
+                        },
+                    )
+                }
+            }
+
+            item("ptyTuning") {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
+                ) {
+                    FormItem(
+                        modifier = Modifier.padding(12.dp),
+                        label = { Text(stringResource(R.string.setting_termux_page_pty_title)) },
+                        description = { Text(stringResource(R.string.setting_termux_page_pty_desc)) },
+                        content = {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                OutlinedTextField(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    value = ptyYieldTimeText,
+                                    onValueChange = { value ->
+                                        ptyYieldTimeText = value.filter { it.isDigit() }
+                                        val ptyYieldTimeMs = ptyYieldTimeText.toLongOrNull()
+                                        if (ptyYieldTimeMs != null && ptyYieldTimeMs >= 0L) {
+                                            scope.launch {
+                                                settingsStore.update { it.copy(termuxPtyYieldTimeMs = ptyYieldTimeMs) }
+                                            }
+                                        }
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    isError = ptyYieldTimeText.toLongOrNull()?.let { it < 0L } ?: true,
+                                    label = { Text(stringResource(R.string.setting_termux_page_pty_yield_time_title)) },
+                                )
+                                OutlinedTextField(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    value = ptyMaxOutputCharsText,
+                                    onValueChange = { value ->
+                                        ptyMaxOutputCharsText = value.filter { it.isDigit() }
+                                        val ptyMaxOutputChars = ptyMaxOutputCharsText.toIntOrNull()
+                                        if (ptyMaxOutputChars != null && ptyMaxOutputChars >= 256) {
+                                            scope.launch {
+                                                settingsStore.update {
+                                                    it.copy(termuxPtyMaxOutputChars = ptyMaxOutputChars)
+                                                }
+                                            }
+                                        }
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    isError = ptyMaxOutputCharsText.toIntOrNull()?.let { it < 256 } ?: true,
+                                    label = {
+                                        Text(stringResource(R.string.setting_termux_page_pty_max_output_chars_title))
+                                    },
+                                )
+                            }
                         },
                     )
                 }

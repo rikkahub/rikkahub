@@ -1073,5 +1073,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="update_card_downloading">ダウンロード中です。進捗はステータスバーでご確認ください</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_title">アプリアイコン風の読み込みインジケーターを使用</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">デフォルトの円形読み込みインジケーターの代わりに、アプリアイコンのアニメーションを使用します</string>
+  <string name="setting_termux_page_pty_desc">tty=true および write_stdin を指定した termux_exec に適用されます。</string>
+  <string name="setting_termux_page_pty_yield_time_title">初期待機 (ms)</string>
+  <string name="setting_termux_page_pty_max_output_chars_title">最大出力文字数</string>
+  <string name="setting_termux_page_pty_title">対話型セッションの調整</string>
 </resources>
 
