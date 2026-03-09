@@ -1,10 +1,13 @@
 name: Release Build
 
 on:
+  push:
+    branches:
+      - "**"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}
@@ -18,21 +21,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Compute next tag
-        id: tag
-        run: |
-          set -euo pipefail
-          git fetch --tags --force
-          latest="$(git tag -l 'v0.0.*' | grep -E '^v0[.]0[.][0-9]+$' | sort -V | tail -n 1 || true)"
-          if [[ -z "${latest}" ]]; then
-            next="v0.0.1"
-          else
-            patch="${latest##*.}"
-            next="v0.0.$((10#$patch + 1))"
-          fi
-          echo "next_tag=${next}" >> "$GITHUB_OUTPUT"
-          echo "Next tag: ${next}"
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -81,20 +69,3 @@ jobs:
         with:
           name: artifacts
           path: app/build/outputs/apk/release/*.apk
-
-      - name: Create GitHub Release
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="${{ steps.tag.outputs.next_tag }}"
-          apk_dir="app/build/outputs/apk/release"
-          echo "APK directory contents:"
-          ls -la "${apk_dir}"
-          apk_count="$(ls -1 ${apk_dir}/*.apk | wc -l | tr -d ' ')"
-          echo "Found ${apk_count} APK(s)."
-          gh release create "${tag}" ${apk_dir}/*.apk \
-            --title "${tag}" \
-            --generate-notes \
-            --target "${GITHUB_SHA}"
