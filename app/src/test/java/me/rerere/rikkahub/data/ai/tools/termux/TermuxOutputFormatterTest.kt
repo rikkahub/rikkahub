@@ -24,4 +24,18 @@ class TermuxOutputFormatterTest {
 
         assertEquals("hello\nwarn\nfailed", output)
     }
+
+    @Test
+    fun `statusSummary should include timeout exit code and internal error`() {
+        val output = TermuxOutputFormatter.statusSummary(
+            TermuxResult(
+                exitCode = 23,
+                errCode = 7,
+                errMsg = "boom",
+                timedOut = true,
+            )
+        )
+
+        assertEquals("Timed out\nExit code: 23\nErr code: 7\nboom", output)
+    }
 }

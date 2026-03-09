@@ -8,6 +8,48 @@ import org.junit.Test
 
 class TermuxApprovalBlacklistMatcherTest {
     @Test
+    fun `shouldForceApproval should match write stdin payload`() {
+        val tool = UIMessagePart.Tool(
+            toolCallId = "1",
+            toolName = "write_stdin",
+            input = """{"session_id":"session-1","chars":"rm -rf /tmp/demo\n"}"""
+        )
+
+        assertTrue(
+            TermuxApprovalBlacklistMatcher.shouldForceApproval(
+                tool = tool,
+                blacklistRules = listOf("rm -rf")
+            )
+        )
+    }
+
+    @Test
+    fun `shouldForceApproval should match buffered write stdin payload across calls`() {
+        TermuxPtyInputBufferRegistry.clearForTests()
+        TermuxPtyInputBufferRegistry.registerSession("session-2")
+        TermuxPtyInputBufferRegistry.commitInput(
+            sessionId = "session-2",
+            chars = "rm",
+            keepSession = true,
+        )
+
+        val tool = UIMessagePart.Tool(
+            toolCallId = "1",
+            toolName = "write_stdin",
+            input = """{"session_id":"session-2","chars":" -rf /tmp/demo\n"}"""
+        )
+
+        assertTrue(
+            TermuxApprovalBlacklistMatcher.shouldForceApproval(
+                tool = tool,
+                blacklistRules = listOf("rm -rf")
+            )
+        )
+
+        TermuxPtyInputBufferRegistry.clearForTests()
+    }
+
+    @Test
     fun `parseBlacklistRules should split by line and comma`() {
         val rules = TermuxApprovalBlacklistMatcher.parseBlacklistRules(
             """

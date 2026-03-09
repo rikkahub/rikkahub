@@ -32,7 +32,7 @@ class TermuxPtySessionManager(
         rows: Int = TERMUX_PTY_DEFAULT_ROWS,
     ): TermuxPtyServerResponse {
         ensureServerRunning()
-        return postJson(
+        val response = postJson(
             path = "/sessions",
             payload = TermuxPtyStartRequest(
                 command = command,
@@ -43,6 +43,8 @@ class TermuxPtySessionManager(
                 rows = rows.coerceAtLeast(5),
             )
         )
+        response.sessionId?.let(TermuxPtyInputBufferRegistry::registerSession)
+        return response
     }
 
     suspend fun writeStdin(
@@ -52,7 +54,7 @@ class TermuxPtySessionManager(
         maxOutputChars: Int,
     ): TermuxPtyServerResponse {
         ensureServerRunning()
-        return postJson(
+        val response = postJson(
             path = "/sessions/$sessionId/stdin",
             payload = TermuxPtyWriteRequest(
                 chars = chars,
@@ -60,6 +62,13 @@ class TermuxPtySessionManager(
                 maxOutputChars = maxOutputChars.coerceAtLeast(256),
             )
         )
+        val keepSession = response.sessionId != null || response.running
+        TermuxPtyInputBufferRegistry.commitInput(
+            sessionId = sessionId,
+            chars = chars,
+            keepSession = keepSession,
+        )
+        return response
     }
 
     private suspend fun ensureServerRunning() {
@@ -176,6 +185,7 @@ class TermuxPtySessionManager(
             appendLine("STATE_DIR=\"${'$'}HOME/.rikkahub\"")
             appendLine("SCRIPT_PATH=\"${'$'}STATE_DIR/pty_session_server.py\"")
             appendLine("PID_FILE=\"${'$'}STATE_DIR/pty_session_server.pid\"")
+            appendLine("TOKEN_FILE=\"${'$'}STATE_DIR/pty_session_server.token\"")
             appendLine("PORT=$port")
             appendLine("TOKEN='$safeToken'")
             appendLine()
@@ -186,25 +196,80 @@ class TermuxPtySessionManager(
             appendLine("  exit 127")
             appendLine("fi")
             appendLine()
+            appendLine("is_pty_server_cmdline() {")
+            appendLine("  _cmdline=\"${'$'}1\"")
+            appendLine("  _script=\"${'$'}2\"")
+            appendLine("  _port=\"${'$'}3\"")
+            appendLine("  _padded=\" ${'$'}{_cmdline} \"")
+            appendLine("  case \"${'$'}_padded\" in")
+            appendLine("    *\" python3 -u ${'$'}_script --port ${'$'}_port \"*\" --token \"*)")
+            appendLine("      return 0")
+            appendLine("      ;;")
+            appendLine("    *)")
+            appendLine("      return 1")
+            appendLine("      ;;")
+            appendLine("  esac")
+            appendLine("}")
+            appendLine()
+            appendLine("is_pty_server_pid() {")
+            appendLine("  _pid=\"${'$'}1\"")
+            appendLine("  _token=\"${'$'}2\"")
+            appendLine("  [ -n \"${'$'}_pid\" ] || return 1")
+            appendLine("  [ -r \"/proc/${'$'}_pid/cmdline\" ] || return 1")
+            appendLine("  _cmdline=\"${'$'}(cat \"/proc/${'$'}_pid/cmdline\" 2>/dev/null | tr '\\0' ' ')\"")
+            appendLine("  [ -n \"${'$'}_cmdline\" ] || return 1")
+            appendLine("  is_pty_server_cmdline \"${'$'}_cmdline\" \"${'$'}SCRIPT_PATH\" \"${'$'}PORT\" || return 1")
+            appendLine("  if [ -n \"${'$'}_token\" ] && [ -r \"/proc/${'$'}_pid/environ\" ]; then")
+            appendLine("    if tr '\\0' '\\n' < \"/proc/${'$'}_pid/environ\" 2>/dev/null | grep -Fxq \"RIKKAHUB_PTY_SERVER_TOKEN=${'$'}_token\"; then")
+            appendLine("      return 0")
+            appendLine("    fi")
+            appendLine("  fi")
+            appendLine("  return 1")
+            appendLine("}")
+            appendLine()
+            appendLine("kill_pid() {")
+            appendLine("  _pid=\"${'$'}1\"")
+            appendLine("  if [ -z \"${'$'}_pid\" ]; then")
+            appendLine("    return 0")
+            appendLine("  fi")
+            appendLine("  if ! kill -0 \"${'$'}_pid\" 2>/dev/null; then")
+            appendLine("    return 0")
+            appendLine("  fi")
+            appendLine("  kill \"${'$'}_pid\" 2>/dev/null || true")
+            appendLine("  sleep 0.2")
+            appendLine("  if kill -0 \"${'$'}_pid\" 2>/dev/null; then")
+            appendLine("    kill -9 \"${'$'}_pid\" 2>/dev/null || true")
+            appendLine("    sleep 0.2")
+            appendLine("  fi")
+            appendLine("  if kill -0 \"${'$'}_pid\" 2>/dev/null; then")
+            appendLine("    return 1")
+            appendLine("  fi")
+            appendLine("  return 0")
+            appendLine("}")
+            appendLine()
             appendLine("cat > \"${'$'}SCRIPT_PATH\" <<'PY'")
             appendLine(termuxPtyServerScript().trim())
             appendLine("PY")
             appendLine()
             appendLine("if [ -f \"${'$'}PID_FILE\" ]; then")
             appendLine("  OLD_PID=\"$(cat \"${'$'}PID_FILE\" 2>/dev/null || true)\"")
+            appendLine("  OLD_TOKEN=\"$(cat \"${'$'}TOKEN_FILE\" 2>/dev/null || true)\"")
             appendLine("  if [ -n \"${'$'}OLD_PID\" ] && kill -0 \"${'$'}OLD_PID\" 2>/dev/null; then")
-            appendLine("    kill \"${'$'}OLD_PID\" 2>/dev/null || true")
-            appendLine("    sleep 0.2")
-            appendLine("    if kill -0 \"${'$'}OLD_PID\" 2>/dev/null; then")
-            appendLine("      kill -9 \"${'$'}OLD_PID\" 2>/dev/null || true")
-            appendLine("      sleep 0.2")
+            appendLine("    if is_pty_server_pid \"${'$'}OLD_PID\" \"${'$'}OLD_TOKEN\"; then")
+            appendLine("      if ! kill_pid \"${'$'}OLD_PID\"; then")
+            appendLine("        echo \"FAILED_TO_STOP_OLD_PTY_SERVER ${'$'}OLD_PID\" >&2")
+            appendLine("        exit 1")
+            appendLine("      fi")
+            appendLine("    else")
+            appendLine("      echo \"STALE_PTY_SERVER_PID ${'$'}OLD_PID\" >&2")
             appendLine("    fi")
             appendLine("  fi")
-            appendLine("  rm -f \"${'$'}PID_FILE\"")
+            appendLine("  rm -f \"${'$'}PID_FILE\" \"${'$'}TOKEN_FILE\"")
             appendLine("fi")
             appendLine()
-            appendLine("nohup python3 -u \"${'$'}SCRIPT_PATH\" --port \"${'$'}PORT\" --token \"${'$'}TOKEN\" >/dev/null 2>&1 < /dev/null &")
+            appendLine("RIKKAHUB_PTY_SERVER_TOKEN=\"${'$'}TOKEN\" nohup python3 -u \"${'$'}SCRIPT_PATH\" --port \"${'$'}PORT\" --token \"${'$'}TOKEN\" >/dev/null 2>&1 < /dev/null &")
             appendLine("echo \"${'$'}!\" > \"${'$'}PID_FILE\"")
+            appendLine("echo \"${'$'}TOKEN\" > \"${'$'}TOKEN_FILE\"")
             appendLine()
             appendLine("python3 - \"${'$'}PORT\" \"${'$'}TOKEN\" <<'PY'")
             appendLine("import json")

@@ -25,4 +25,25 @@ class TermuxResultTest {
 
         assertTrue(result.hasInternalError())
     }
+
+    @Test
+    fun `isSuccessful should reject non zero exit code`() {
+        val result = TermuxResult(exitCode = 1)
+
+        assertFalse(result.isSuccessful())
+    }
+
+    @Test
+    fun `isSuccessful should reject timeout`() {
+        val result = TermuxResult(timedOut = true)
+
+        assertFalse(result.isSuccessful())
+    }
+
+    @Test
+    fun `isSuccessful should accept clean completion`() {
+        val result = TermuxResult(exitCode = 0)
+
+        assertTrue(result.isSuccessful())
+    }
 }

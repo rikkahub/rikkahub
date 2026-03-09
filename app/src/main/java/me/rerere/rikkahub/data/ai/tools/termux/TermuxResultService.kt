@@ -16,8 +16,11 @@ class TermuxResultService : Service() {
             return START_NOT_STICKY
         }
 
-        val executionId = intent.getIntExtra(EXTRA_EXECUTION_ID, -1)
-        if (executionId == -1) {
+        val executionId = intent.getStringExtra(EXTRA_EXECUTION_ID)
+            ?: intent.getIntExtra(EXTRA_EXECUTION_ID, -1)
+                .takeIf { it != -1 }
+                ?.toString()
+        if (executionId.isNullOrBlank()) {
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -60,4 +63,3 @@ class TermuxResultService : Service() {
         const val EXTRA_EXECUTION_ID = "execution_id"
     }
 }
-

@@ -1,7 +1,10 @@
 package me.rerere.rikkahub.data.ai.tools.termux
 
+import kotlinx.serialization.Serializable
+
 const val TERMUX_RESULT_OK = -1
 
+@Serializable
 data class TermuxResult(
     val stdout: String = "",
     val stderr: String = "",
@@ -15,4 +18,11 @@ data class TermuxResult(
 
 fun TermuxResult.hasInternalError(): Boolean {
     return errCode != null && errCode != TERMUX_RESULT_OK
+}
+
+fun TermuxResult.isSuccessful(): Boolean {
+    if (timedOut) return false
+    if (hasInternalError()) return false
+    if (!errMsg.isNullOrBlank()) return false
+    return exitCode == null || exitCode == 0
 }
