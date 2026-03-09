@@ -678,6 +678,10 @@
   }
 }
 
+[data-theme="claude"] [data-message-bubble] {
+  font-family: var(--font-serif);
+}
+
 /* Keep the utility class for compatibility with existing usage. */
 .styled-scrollbar {
   scrollbar-width: thin;
