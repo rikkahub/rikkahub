@@ -5,21 +5,31 @@ import com.whl.quickjs.wrapper.QuickJSContext
 import com.whl.quickjs.wrapper.QuickJSObject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxOutputFormatter
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtySessionManager
+import me.rerere.rikkahub.data.ai.tools.termux.TERMUX_PTY_DEFAULT_MAX_OUTPUT_CHARS
+import me.rerere.rikkahub.data.ai.tools.termux.TERMUX_PTY_DEFAULT_YIELD_TIME_MS
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtyToolResponse
+import me.rerere.rikkahub.data.ai.tools.termux.encode
+import me.rerere.rikkahub.data.ai.tools.termux.toToolResponse
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -63,8 +73,10 @@ sealed class LocalToolOption {
 
 class LocalTools(
     private val context: Context,
+    private val json: Json,
     private val settingsStore: SettingsStore,
     private val termuxCommandManager: TermuxCommandManager,
+    private val termuxPtySessionManager: TermuxPtySessionManager,
     private val eventBus: AppEventBus,
 ) {
     val javascriptTool by lazy {
@@ -311,13 +323,20 @@ class LocalTools(
         needsApproval: Boolean,
         settingsStore: SettingsStore,
         termuxCommandManager: TermuxCommandManager,
+        termuxPtySessionManager: TermuxPtySessionManager,
         assistant: Assistant,
     ): Tool {
         val workdir = settingsStore.settingsFlow.value.termuxWorkdir
         return Tool(
             name = "termux_exec",
             description = buildToolDescription(
-                baseDescription = "Run a shell command in local Termux. Current workspace path: $workdir. Return stdout plus stderr as plain text.",
+                baseDescription = """
+                    Run a shell command in local Termux. Current workspace path: $workdir.
+                    Default mode is non-interactive and returns stdout/stderr as plain text.
+                    Set tty=true for interactive or long-running commands that need a PTY.
+                    In tty mode the tool returns JSON with output, running, exit_code, optional session_id, and truncated.
+                    If session_id is returned, continue the command with write_stdin using that session_id.
+                """.trimIndent().replace("\n", " "),
                 assistant = assistant,
                 toolName = "termux_exec",
             ),
@@ -329,6 +348,18 @@ class LocalTools(
                             put("type", "string")
                             put("description", "Shell command to execute")
                         })
+                        put("tty", buildJsonObject {
+                            put("type", "boolean")
+                            put("description", "Set to true to run inside a PTY and allow continuation with write_stdin")
+                        })
+                        put("yield_time_ms", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "When tty=true, wait this many milliseconds before returning the first output chunk")
+                        })
+                        put("max_output_chars", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "When tty=true, cap each returned output chunk to this many characters")
+                        })
                     },
                     required = listOf("command"),
                 )
@@ -338,6 +369,41 @@ class LocalTools(
                 val command = params["command"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
                     ?: error("command is required")
                 val settings = settingsStore.settingsFlow.value
+                val tty = params["tty"]?.jsonPrimitive?.booleanOrNull == true
+                val yieldTimeMs = params["yield_time_ms"]?.jsonPrimitive?.longOrNull
+                    ?.coerceAtLeast(0L)
+                    ?: TERMUX_PTY_DEFAULT_YIELD_TIME_MS
+                val maxOutputChars = params["max_output_chars"]?.jsonPrimitive?.intOrNull
+                    ?.coerceAtLeast(256)
+                    ?: TERMUX_PTY_DEFAULT_MAX_OUTPUT_CHARS
+
+                if (tty) {
+                    val response = runCatching {
+                        termuxPtySessionManager.startSession(
+                            command = command,
+                            workdir = settings.termuxWorkdir,
+                            yieldTimeMs = yieldTimeMs,
+                            maxOutputChars = maxOutputChars,
+                        )
+                    }.getOrElse { e ->
+                        return@execute listOf(
+                            UIMessagePart.Text(
+                                TermuxPtyToolResponse(
+                                    error = buildString {
+                                        append(e.message ?: e.javaClass.name)
+                                        append("\n")
+                                        append(
+                                            "Ensure Termux is installed; set allow-external-apps=true in " +
+                                                "~/.termux/termux.properties; grant com.termux.permission.RUN_COMMAND to this app; " +
+                                                "install python in Termux (pkg install python)."
+                                        )
+                                    }
+                                ).encode(json)
+                            )
+                        )
+                    }
+                    return@execute listOf(UIMessagePart.Text(response.toToolResponse().encode(json)))
+                }
 
                 val result = runCatching {
                     termuxCommandManager.run(
@@ -369,6 +435,80 @@ class LocalTools(
                     errMsg = result.errMsg,
                 )
                 listOf(UIMessagePart.Text(output))
+            }
+        )
+    }
+
+    private fun termuxWriteStdinTool(
+        needsApproval: Boolean,
+        assistant: Assistant,
+    ): Tool {
+        return Tool(
+            name = "write_stdin",
+            description = buildToolDescription(
+                baseDescription = """
+                    Continue a Termux PTY session previously started by termux_exec with tty=true.
+                    Provide session_id and chars to send. chars may be empty to only poll for more output.
+                    Returns JSON with output, running, exit_code, optional session_id, and truncated.
+                    If session_id becomes null and running is false, the session is finished.
+                """.trimIndent().replace("\n", " "),
+                assistant = assistant,
+                toolName = "write_stdin",
+            ),
+            needsApproval = needsApproval,
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("session_id", buildJsonObject {
+                            put("type", "string")
+                            put("description", "The session_id returned by termux_exec in tty mode")
+                        })
+                        put("chars", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Characters to send to the PTY. May be empty to poll for more output")
+                        })
+                        put("yield_time_ms", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "Wait this many milliseconds for additional output before returning")
+                        })
+                        put("max_output_chars", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "Cap each returned output chunk to this many characters")
+                        })
+                    },
+                    required = listOf("session_id"),
+                )
+            },
+            execute = execute@{ input ->
+                val params = input.jsonObject
+                val sessionId = params["session_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                    ?: error("session_id is required")
+                val chars = params["chars"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val yieldTimeMs = params["yield_time_ms"]?.jsonPrimitive?.longOrNull
+                    ?.coerceAtLeast(0L)
+                    ?: TERMUX_PTY_DEFAULT_YIELD_TIME_MS
+                val maxOutputChars = params["max_output_chars"]?.jsonPrimitive?.intOrNull
+                    ?.coerceAtLeast(256)
+                    ?: TERMUX_PTY_DEFAULT_MAX_OUTPUT_CHARS
+
+                val response = runCatching {
+                    termuxPtySessionManager.writeStdin(
+                        sessionId = sessionId,
+                        chars = chars,
+                        yieldTimeMs = yieldTimeMs,
+                        maxOutputChars = maxOutputChars,
+                    )
+                }.getOrElse { e ->
+                    return@execute listOf(
+                        UIMessagePart.Text(
+                            TermuxPtyToolResponse(
+                                error = e.message ?: e.javaClass.name,
+                            ).encode(json)
+                        )
+                    )
+                }
+
+                listOf(UIMessagePart.Text(response.toToolResponse().encode(json)))
             }
         )
     }
@@ -442,32 +582,40 @@ class LocalTools(
     ): List<Tool> {
         val termuxNeedsApproval = overrideTermuxNeedsApproval ?: settingsStore.settingsFlow.value.termuxNeedsApproval
         val enabled = options.toSet()
-        return LocalToolCatalog.options.mapNotNull { option ->
-            if (!enabled.contains(option)) return@mapNotNull null
-            when (option) {
-                LocalToolOption.JavascriptEngine -> javascriptTool.withAssistantPrompt(assistant)
-                LocalToolOption.TimeInfo -> timeTool.withAssistantPrompt(assistant)
-                LocalToolOption.Clipboard -> clipboardTool.withAssistantPrompt(assistant)
-                LocalToolOption.TermuxExec -> {
-                    termuxExecTool(
-                        needsApproval = termuxNeedsApproval,
-                        settingsStore = settingsStore,
-                        termuxCommandManager = termuxCommandManager,
-                        assistant = assistant,
-                    )
-                }
+        return buildList {
+            LocalToolCatalog.options.forEach { option ->
+                if (!enabled.contains(option)) return@forEach
+                when (option) {
+                    LocalToolOption.JavascriptEngine -> add(javascriptTool.withAssistantPrompt(assistant))
+                    LocalToolOption.TimeInfo -> add(timeTool.withAssistantPrompt(assistant))
+                    LocalToolOption.Clipboard -> add(clipboardTool.withAssistantPrompt(assistant))
+                    LocalToolOption.TermuxExec -> {
+                        add(
+                            termuxExecTool(
+                                needsApproval = termuxNeedsApproval,
+                                settingsStore = settingsStore,
+                                termuxCommandManager = termuxCommandManager,
+                                termuxPtySessionManager = termuxPtySessionManager,
+                                assistant = assistant,
+                            )
+                        )
+                        add(termuxWriteStdinTool(needsApproval = termuxNeedsApproval, assistant = assistant))
+                    }
 
-                LocalToolOption.TermuxPython -> {
-                    termuxPythonTool(
-                        needsApproval = termuxNeedsApproval,
-                        settingsStore = settingsStore,
-                        termuxCommandManager = termuxCommandManager,
-                        assistant = assistant,
-                    )
-                }
+                    LocalToolOption.TermuxPython -> {
+                        add(
+                            termuxPythonTool(
+                                needsApproval = termuxNeedsApproval,
+                                settingsStore = settingsStore,
+                                termuxCommandManager = termuxCommandManager,
+                                assistant = assistant,
+                            )
+                        )
+                    }
 
-                LocalToolOption.Tts -> ttsTool.withAssistantPrompt(assistant)
-                LocalToolOption.AskUser -> askUserTool.withAssistantPrompt(assistant)
+                    LocalToolOption.Tts -> add(ttsTool.withAssistantPrompt(assistant))
+                    LocalToolOption.AskUser -> add(askUserTool.withAssistantPrompt(assistant))
+                }
             }
         }
     }

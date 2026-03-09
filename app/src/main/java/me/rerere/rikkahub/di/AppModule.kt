@@ -10,6 +10,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtySessionManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxWorkdirServerManager
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatService
@@ -44,11 +45,19 @@ val appModule = module {
     }
 
     single {
+        TermuxPtySessionManager(
+            json = get(),
+            okHttpClient = get(),
+            termuxCommandManager = get(),
+        )
+    }
+
+    single {
         AppEventBus()
     }
 
     single {
-        LocalTools(get(), get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get(), get())
     }
 
     single {
