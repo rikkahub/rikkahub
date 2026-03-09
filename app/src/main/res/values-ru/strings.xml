@@ -1070,5 +1070,37 @@
   <string name="setting_termux_page_pty_max_output_chars_title">Макс. символов вывода</string>
   <string name="setting_termux_page_pty_desc">Применяется к termux_exec с tty=true и write_stdin.</string>
   <string name="setting_termux_page_pty_title">Настройка интерактивного сеанса</string>
+  <string name="assistant_page_local_tools_clipboard_desc">Чтение и запись простого текста из буфера обмена устройства</string>
+  <string name="assistant_page_local_tools_clipboard_title">Буфер обмена</string>
+  <string name="assistant_page_openai_reasoning_effort">Усилие рассуждений OpenAI</string>
+  <string name="assistant_page_openai_reasoning_effort_desc">Переопределяет параметры Chat Completions `reasoning_effort` и Responses `reasoning.effort`.</string>
+  <string name="assistant_page_openai_reasoning_effort_hint">high / low / auto</string>
+  <string name="assistant_page_openai_reasoning_effort_effective">Оставьте пустым, чтобы использовать лимит размышлений. Chat Completions: %1$s, Responses: %2$s</string>
+  <string name="assistant_page_openai_reasoning_effort_not_sent">не отправляется</string>
+  <string name="chat_message_tool_get_time">Получить информацию о времени</string>
+  <string name="chat_message_tool_clipboard_read">Прочитать буфер обмена</string>
+  <string name="chat_message_tool_clipboard_write">Записать в буфер обмена</string>
+  <string name="chat_page_clear_all_errors">Очистить всё</string>
+  <string name="chat_page_dismiss_error">Закрыть ошибку</string>
+  <string name="setting_termux_page_run_command_permission_title">Разрешение на выполнение команд</string>
+  <string name="setting_termux_page_run_command_permission_desc">Предоставьте этому приложению разрешение com.termux.permission.RUN_COMMAND, чтобы инструменты Termux могли выполнять команды напрямую.</string>
+  <string name="setting_termux_page_run_command_permission_usage">Требуется для вызова com.termux.app.RunCommandService из этого приложения.</string>
+  <string name="setting_termux_page_run_command_permission_granted">Статус: разрешено</string>
+  <string name="setting_termux_page_run_command_permission_not_granted">Статус: не разрешено</string>
+  <string name="setting_termux_page_run_command_permission_action">Разрешить</string>
+  <string name="setting_termux_page_open_termux">Открыть Termux</string>
+  <string name="setting_termux_page_open_termux_failed">Termux не установлен.</string>
+  <string name="error_title_send_message">Не удалось отправить сообщение</string>
+  <string name="error_title_regenerate_message">Не удалось пересоздать сообщение</string>
+  <string name="error_title_tool_approval">Не удалось обработать вызов инструмента</string>
+  <string name="error_title_tool_unavailable">Инструмент недоступен</string>
+  <string name="error_title_generation">Не удалось сгенерировать сообщение</string>
+  <string name="error_title_generate_title">Не удалось автоматически сгенерировать заголовок</string>
+  <string name="error_title_translate_message">Не удалось перевести сообщение</string>
+  <string name="error_title_compress_conversation">Не удалось сжать беседу</string>
+  <string name="error_title_operation">Не удалось выполнить операцию</string>
+  <string name="save">Сохранить</string>
+  <string name="reset">Сброс</string>
+  <string name="enabled">Включено</string>
 </resources>
 

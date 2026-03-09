@@ -1077,5 +1077,30 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_termux_page_pty_yield_time_title">初期待機 (ms)</string>
   <string name="setting_termux_page_pty_max_output_chars_title">最大出力文字数</string>
   <string name="setting_termux_page_pty_title">対話型セッションの調整</string>
+  <string name="assistant_page_openai_reasoning_effort">OpenAI の推論負荷</string>
+  <string name="assistant_page_openai_reasoning_effort_desc">Chat Completions の `reasoning_effort` と Responses の `reasoning.effort` を上書きします。</string>
+  <string name="assistant_page_openai_reasoning_effort_hint">high / low / auto</string>
+  <string name="assistant_page_openai_reasoning_effort_effective">空欄のままにすると thinking budget に従います。Chat Completions: %1$s, Responses: %2$s</string>
+  <string name="assistant_page_openai_reasoning_effort_not_sent">未送信</string>
+  <string name="setting_termux_page_run_command_permission_title">コマンド実行権限</string>
+  <string name="setting_termux_page_run_command_permission_desc">Termux のツールがコマンドを直接実行できるように、このアプリに com.termux.permission.RUN_COMMAND を付与します。</string>
+  <string name="setting_termux_page_run_command_permission_usage">このアプリから com.termux.app.RunCommandService を呼び出すには必須です。</string>
+  <string name="setting_termux_page_run_command_permission_granted">状態: 付与済み</string>
+  <string name="setting_termux_page_run_command_permission_not_granted">状態: 未付与</string>
+  <string name="setting_termux_page_run_command_permission_action">許可する</string>
+  <string name="setting_termux_page_open_termux">Termux を開く</string>
+  <string name="setting_termux_page_open_termux_failed">Termux がインストールされていません。</string>
+  <string name="error_title_send_message">メッセージの送信に失敗しました</string>
+  <string name="error_title_regenerate_message">メッセージの再生成に失敗しました</string>
+  <string name="error_title_tool_approval">ツール呼び出しの処理に失敗しました</string>
+  <string name="error_title_tool_unavailable">ツールを利用できません</string>
+  <string name="error_title_generation">メッセージの生成に失敗しました</string>
+  <string name="error_title_generate_title">自動タイトルの生成に失敗しました</string>
+  <string name="error_title_translate_message">メッセージの翻訳に失敗しました</string>
+  <string name="error_title_compress_conversation">会話の圧縮に失敗しました</string>
+  <string name="error_title_operation">操作に失敗しました</string>
+  <string name="save">保存</string>
+  <string name="reset">リセット</string>
+  <string name="enabled">有効</string>
 </resources>
 

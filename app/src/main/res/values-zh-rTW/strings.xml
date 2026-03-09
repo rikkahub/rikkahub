@@ -1075,5 +1075,30 @@
   <string name="setting_termux_page_pty_yield_time_title">初始等待時間 (毫秒)</string>
   <string name="setting_termux_page_pty_max_output_chars_title">最大輸出字元數</string>
   <string name="setting_termux_page_pty_title">互動工作階段調整</string>
+  <string name="assistant_page_openai_reasoning_effort">OpenAI 推理強度</string>
+  <string name="assistant_page_openai_reasoning_effort_desc">會覆寫 Chat Completions 的 `reasoning_effort` 與 Responses 的 `reasoning.effort`。</string>
+  <string name="assistant_page_openai_reasoning_effort_hint">high / low / auto</string>
+  <string name="assistant_page_openai_reasoning_effort_effective">留空以遵循思考預算。Chat Completions：%1$s，Responses：%2$s</string>
+  <string name="assistant_page_openai_reasoning_effort_not_sent">未傳送</string>
+  <string name="setting_termux_page_run_command_permission_title">執行指令權限</string>
+  <string name="setting_termux_page_run_command_permission_desc">將 com.termux.permission.RUN_COMMAND 授予此應用程式，以便 Termux 工具可以直接執行指令。</string>
+  <string name="setting_termux_page_run_command_permission_usage">從此應用程式呼叫 com.termux.app.RunCommandService 時所必需。</string>
+  <string name="setting_termux_page_run_command_permission_granted">狀態：已授予</string>
+  <string name="setting_termux_page_run_command_permission_not_granted">狀態：未授予</string>
+  <string name="setting_termux_page_run_command_permission_action">授予</string>
+  <string name="setting_termux_page_open_termux">開啟 Termux</string>
+  <string name="setting_termux_page_open_termux_failed">尚未安裝 Termux。</string>
+  <string name="error_title_send_message">訊息傳送失敗</string>
+  <string name="error_title_regenerate_message">重新產生訊息失敗</string>
+  <string name="error_title_tool_approval">工具呼叫處理失敗</string>
+  <string name="error_title_tool_unavailable">工具不可用</string>
+  <string name="error_title_generation">訊息產生失敗</string>
+  <string name="error_title_generate_title">自動產生標題失敗</string>
+  <string name="error_title_translate_message">訊息翻譯失敗</string>
+  <string name="error_title_compress_conversation">對話壓縮失敗</string>
+  <string name="error_title_operation">操作失敗</string>
+  <string name="save">儲存</string>
+  <string name="reset">重設</string>
+  <string name="enabled">已啟用</string>
 </resources>
 
