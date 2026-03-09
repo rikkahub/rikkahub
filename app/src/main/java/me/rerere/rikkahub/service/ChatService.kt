@@ -907,7 +907,8 @@ class ChatService(
                     ),
                 ),
                 params = TextGenerationParams(
-                    model = model, temperature = 0.3f, thinkingBudget = 0
+                    model = model,
+                    thinkingBudget = 0,
                 ),
             )
 
@@ -952,7 +953,6 @@ class ChatService(
                 ),
                 params = TextGenerationParams(
                     model = model,
-                    temperature = 1.0f,
                     thinkingBudget = 0,
                 ),
             )
