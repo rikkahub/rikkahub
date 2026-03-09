@@ -374,7 +374,7 @@ class LocalTools(
                                         append(e.message ?: e.javaClass.name)
                                         append("\n")
                                         append(
-                                            "Ensure Termux is installed; set allow-external-apps=true in " +
+                                            "Setup checklist if this still fails: install Termux; set allow-external-apps=true in " +
                                                 "~/.termux/termux.properties; grant com.termux.permission.RUN_COMMAND to this app; " +
                                                 "install python in Termux (pkg install python)."
                                         )
@@ -402,7 +402,7 @@ class LocalTools(
                         append(e.message ?: e.javaClass.name)
                         append("\n")
                         append(
-                            "Ensure Termux is installed; set allow-external-apps=true in " +
+                            "Setup checklist if this still fails: install Termux; set allow-external-apps=true in " +
                                 "~/.termux/termux.properties; grant com.termux.permission.RUN_COMMAND to this app " +
                                 "in system settings."
                         )
@@ -526,7 +526,7 @@ class LocalTools(
                     val message = buildString {
                         append(e.message ?: e.javaClass.name)
                         append("\n")
-                        append("Ensure Termux is installed and Python is installed in Termux (pkg install python).")
+                        append("Setup checklist if this still fails: install Termux and install python in Termux (pkg install python).")
                     }
                     return@execute listOf(UIMessagePart.Text(message))
                 }

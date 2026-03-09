@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.tools.termux
 
+const val TERMUX_RESULT_OK = -1
+
 data class TermuxResult(
     val stdout: String = "",
     val stderr: String = "",
@@ -11,3 +13,6 @@ data class TermuxResult(
     val timedOut: Boolean = false,
 )
 
+fun TermuxResult.hasInternalError(): Boolean {
+    return errCode != null && errCode != TERMUX_RESULT_OK
+}

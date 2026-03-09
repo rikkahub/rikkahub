@@ -62,6 +62,7 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxOutputFormatter
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxResult
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
+import me.rerere.rikkahub.data.ai.tools.termux.hasInternalError
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTemplateInjectionTransformer
@@ -396,7 +397,7 @@ class ChatService(
                     append(e.message ?: e.javaClass.name)
                     append("\n")
                     append(
-                        "请确认已安装 Termux，并在 Termux 中开启 allow-external-apps，" +
+                        "如果仍然是配置问题，请确认已安装 Termux，并在 Termux 中开启 allow-external-apps，" +
                             "同时授予本应用 com.termux.permission.RUN_COMMAND 权限。"
                     )
                 }
@@ -434,7 +435,7 @@ class ChatService(
         val fallback = buildList {
             result.errMsg?.takeIf { it.isNotBlank() }?.let(::add)
             result.exitCode?.takeIf { it != 0 }?.let { add("Exit code: $it") }
-            result.errCode?.takeIf { it != 0 }?.let { add("Err code: $it") }
+            result.errCode?.takeIf { result.hasInternalError() }?.let { add("Err code: $it") }
             if (result.timedOut) add("状态: 超时")
         }
         if (fallback.isNotEmpty()) {

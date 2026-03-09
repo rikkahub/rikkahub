@@ -80,7 +80,7 @@ class TermuxPtySessionManager(
                 )
             )
 
-            if (result.exitCode != 0 || result.errCode != null || result.timedOut) {
+            if (result.exitCode != 0 || result.hasInternalError() || result.timedOut) {
                 val message = TermuxOutputFormatter.merge(
                     stdout = result.stdout,
                     stderr = result.stderr,
@@ -92,7 +92,7 @@ class TermuxPtySessionManager(
                             if (isNotBlank()) append('\n')
                             append("Exit code: $it")
                         }
-                        result.errCode?.let {
+                        result.errCode?.takeIf { result.hasInternalError() }?.let {
                             if (isNotBlank()) append('\n')
                             append("Err code: $it")
                         }
