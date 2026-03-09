@@ -60,24 +60,26 @@ export interface ChatInputProps {
 
 const IMAGE_UPLOAD_ACCEPT = "image/*";
 
-async function isAllowedUploadFile(file: globalThis.File): Promise<boolean> {
+async function detectUploadFile(
+  file: globalThis.File,
+): Promise<{ allowed: boolean; mimeType: string }> {
   const buffer = await file.slice(0, 4100).arrayBuffer();
   const detected = await fileTypeFromBuffer(buffer);
 
-  // 无法识别 magic bytes → 文本文件 → 允许
-  if (!detected) return true;
+  // 无法识别 magic bytes → 文本文件 → 允许，强制 text/plain 防止 OS MIME 映射污染（如 .ts → video/mp2t）
+  if (!detected) return { allowed: true, mimeType: "text/plain" };
 
-  // 识别为图片 / 视频 / 音频 → 允许
+  // 识别为图片 / 视频 / 音频 → 允许，使用 magic bytes 检测到的 MIME
   if (
     detected.mime.startsWith("image/") ||
     detected.mime.startsWith("video/") ||
     detected.mime.startsWith("audio/")
   ) {
-    return true;
+    return { allowed: true, mimeType: detected.mime };
   }
 
   // 其他可识别的二进制格式（exe、zip 等）→ 拒绝
-  return false;
+  return { allowed: false, mimeType: detected.mime };
 }
 
 function toMessagePart(
@@ -248,10 +250,10 @@ function ChatInputInner({
 
       const allFiles = Array.from(fileList);
       const results = await Promise.all(
-        allFiles.map(async (f) => ({ file: f, allowed: await isAllowedUploadFile(f) })),
+        allFiles.map(async (f) => ({ file: f, ...(await detectUploadFile(f)) })),
       );
-      const uploadableFiles = results.filter((r) => r.allowed).map((r) => r.file);
-      const skippedFiles = results.filter((r) => !r.allowed).map((r) => r.file);
+      const uploadableFiles = results.filter((r) => r.allowed);
+      const skippedFiles = results.filter((r) => !r.allowed);
 
       if (skippedFiles.length > 0) {
         toast.warning(
@@ -264,8 +266,13 @@ function ChatInputInner({
       }
 
       const formData = new FormData();
-      uploadableFiles.forEach((file) => {
-        formData.append("files", file, file.name);
+      uploadableFiles.forEach(({ file, mimeType }) => {
+        // 用 magic bytes 检测结果覆盖浏览器的 file.type，修正跨平台 MIME 歧义
+        const safeFile =
+          file.type !== mimeType
+            ? new globalThis.File([file], file.name, { type: mimeType })
+            : file;
+        formData.append("files", safeFile, safeFile.name);
       });
 
       setUploading(true);
@@ -403,24 +410,17 @@ function ChatInputInner({
         }
       }
 
-      const uploadableFiles = (
-        await Promise.all(
-          Array.from(event.clipboardData.items)
-            .filter((item) => item.kind === "file")
-            .map((item) => item.getAsFile())
-            .filter((file): file is globalThis.File => file !== null)
-            .map(async (file) => ({ file, allowed: await isAllowedUploadFile(file) })),
-        )
-      )
-        .filter((r) => r.allowed)
-        .map((r) => r.file);
+      const files = Array.from(event.clipboardData.items)
+        .filter((item) => item.kind === "file")
+        .map((item) => item.getAsFile())
+        .filter((file): file is globalThis.File => file !== null);
 
-      if (uploadableFiles.length === 0) {
+      if (files.length === 0) {
         return;
       }
 
       event.preventDefault();
-      void uploadFiles(uploadableFiles);
+      void uploadFiles(files);
     },
     [canUpload, pasteLongTextAsFile, pasteLongTextThreshold, t, uploadFiles],
   );
