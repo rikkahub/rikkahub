@@ -321,7 +321,23 @@ class ChatCompletionsAPI(
                     "api.siliconflow.cn" -> {
                         // https://docs.siliconflow.cn/cn/userguide/capabilities/reasoning#3-1-api-%E5%8F%82%E6%95%B0
                         val modelId = params.model.modelId
-                        if (modelId.contains("DeepSeek-") || modelId.contains("GLM-") || modelId.contains("Qwen3-")) {
+                        val siliconflowThinkingModels = setOf(
+                            "Pro/moonshotai/Kimi-K2.5",
+                            "Pro/zai-org/GLM-5",
+                            "Pro/zai-org/GLM-4.7",
+                            "deepseek-ai/DeepSeek-V3.2",
+                            "Pro/deepseek-ai/DeepSeek-V3.2",
+                            "zai-org/GLM-4.6",
+                            "Qwen/Qwen3-8B",
+                            "Qwen/Qwen3-14B",
+                            "Qwen/Qwen3-32B",
+                            "Qwen/Qwen3-30B-A3B",
+                            "tencent/Hunyuan-A13B-Instruct",
+                            "zai-org/GLM-4.5V",
+                            "deepseek-ai/DeepSeek-V3.1-Terminus",
+                            "Pro/deepseek-ai/DeepSeek-V3.1-Terminus",
+                        )
+                        if (modelId in siliconflowThinkingModels) {
                             put("enable_thinking", level.isEnabled)
                         }
                     }
