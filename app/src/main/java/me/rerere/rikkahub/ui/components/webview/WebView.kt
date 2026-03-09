@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.components.webview
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.util.Log
+import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
@@ -20,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.viewinterop.AndroidView
 
 private const val TAG = "WebView"
@@ -84,12 +86,18 @@ internal class MyWebViewClient(private val state: WebViewState) : WebViewClient(
 fun WebView(
     state: WebViewState,
     modifier: Modifier = Modifier,
+    allowFocus: Boolean = false,
     onCreated: (WebView) -> Unit = {},
     onUpdated: (WebView) -> Unit = {},
 ) {
     // Remember the clients based on the state
     val webChromeClient = remember { MyWebChromeClient(state) }
     val webViewClient = remember { MyWebViewClient(state) }
+    val androidViewModifier = Modifier
+        .fillMaxWidth()
+        .focusProperties {
+            canFocus = allowFocus
+        }
 
     Box(
         modifier = modifier
@@ -103,6 +111,13 @@ fun WebView(
                     )
                     // Keep WebView composable-friendly and avoid default white flash/background.
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    isFocusable = allowFocus
+                    isFocusableInTouchMode = allowFocus
+                    descendantFocusability = if (allowFocus) {
+                        ViewGroup.FOCUS_AFTER_DESCENDANTS
+                    } else {
+                        ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                    }
 
                     state.webView = this // Assign the WebView instance to the state
 
@@ -122,13 +137,31 @@ fun WebView(
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth(), // Make WebView fill the width
+            modifier = androidViewModifier, // Make WebView fill the width
             onReset = {
+                it.clearFocus()
+                it.stopLoading()
                 state.interfaces.forEach { (name, _) ->
                     it.removeJavascriptInterface(name)
                 }
+                if (state.webView === it) {
+                    state.webView = null
+                }
                 state.clearLoadSignatures()
                 Log.d(TAG, "AndroidView: Resetting WebView")
+            },
+            onRelease = {
+                it.clearFocus()
+                it.stopLoading()
+                state.interfaces.forEach { (name, _) ->
+                    it.removeJavascriptInterface(name)
+                }
+                if (state.webView === it) {
+                    state.webView = null
+                }
+                state.clearLoadSignatures()
+                it.destroy()
+                Log.d(TAG, "AndroidView: Releasing WebView")
             },
             update = { webView ->
                 state.webView = webView
@@ -142,6 +175,16 @@ fun WebView(
 
                 // Update settings that might change
                 webView.settings.javaScriptEnabled = state.javaScriptEnabled
+                webView.isFocusable = allowFocus
+                webView.isFocusableInTouchMode = allowFocus
+                webView.descendantFocusability = if (allowFocus) {
+                    ViewGroup.FOCUS_AFTER_DESCENDANTS
+                } else {
+                    ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                }
+                if (!allowFocus && webView.hasFocus()) {
+                    webView.clearFocus()
+                }
 
                 when (val content = state.content) {
                     is WebContent.Url -> {

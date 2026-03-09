@@ -136,6 +136,7 @@ fun WebViewPage(url: String, content: String) {
     ) {
         WebView(
             state = state,
+            allowFocus = true,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(it),
