@@ -271,6 +271,12 @@ class ChatVM(
 
     fun handleCompressContext(additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int): Job {
         return viewModelScope.launch {
+            settingsStore.update { settings ->
+                settings.copy(
+                    compressTargetTokens = targetTokens.coerceAtLeast(1),
+                    compressKeepRecentMessages = keepRecentMessages.coerceAtLeast(0),
+                )
+            }
             chatService.compressConversation(
                 _conversationId,
                 conversation.value,

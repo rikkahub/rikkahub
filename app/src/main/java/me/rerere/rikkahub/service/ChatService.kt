@@ -986,6 +986,9 @@ class ChatService(
         targetTokens: Int,
         keepRecentMessages: Int = 32
     ): Result<Unit> = runCatching {
+        require(targetTokens > 0) { "targetTokens must be greater than 0" }
+        require(keepRecentMessages >= 0) { "keepRecentMessages must be at least 0" }
+
         val settings = settingsStore.settingsFlow.first()
         val model = settings.findModelById(settings.compressModelId)
             ?: settings.getCurrentChatModel()
