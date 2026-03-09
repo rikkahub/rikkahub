@@ -485,6 +485,20 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             },
                         )
                         item(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_use_app_icon_style_loading_indicator_title)) },
+                            supportingContent = {
+                                Text(stringResource(R.string.setting_display_page_use_app_icon_style_loading_indicator_desc))
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = displaySetting.useAppIconStyleLoadingIndicator,
+                                    onCheckedChange = {
+                                        updateDisplaySetting(displaySetting.copy(useAppIconStyleLoadingIndicator = it))
+                                    }
+                                )
+                            },
+                        )
+                        item(
                             headlineContent = { Text(stringResource(R.string.setting_display_page_enable_blur_effect_title)) },
                             supportingContent = { Text(stringResource(R.string.setting_display_page_enable_blur_effect_desc)) },
                             trailingContent = {

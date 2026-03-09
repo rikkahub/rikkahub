@@ -32,7 +32,7 @@ fun String.stripMarkdown(): String {
         .trim()
 }
 
-fun String.extractGeminiThinkingTitle(): String? {
+fun String.extractThinkingTitle(): String? {
     // 按行分割文本
     val lines = this.lines()
 
@@ -46,7 +46,7 @@ fun String.extractGeminiThinkingTitle(): String? {
 
         if (match != null) {
             // 返回加粗标记内的文本内容
-            return match.groupValues[1].trim()
+            return match.groupValues[1].trim().takeUnless { it.isBlank() }
         }
     }
 

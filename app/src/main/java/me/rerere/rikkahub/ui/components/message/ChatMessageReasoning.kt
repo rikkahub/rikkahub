@@ -38,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import me.rerere.ai.provider.Model
-import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Idea01
@@ -51,7 +50,7 @@ import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.modifier.shimmer
-import me.rerere.rikkahub.utils.extractGeminiThinkingTitle
+import me.rerere.rikkahub.utils.extractThinkingTitle
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -190,6 +189,8 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
     messageDepthFromEnd: Int? = null,
 ) {
     val (state, loading) = rememberReasoningState(reasoning)
+    val thinkingTitle = reasoning.reasoning.extractThinkingTitle()
+    val showThinkingTitle = loading && thinkingTitle != null
 
     ControlledChainOfThoughtStep(
         expanded = state.expandState == ReasoningCardState.Expanded,
@@ -203,8 +204,8 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
             )
         },
         label = {
-            if (loading && model != null && ModelRegistry.GEMINI_SERIES.match(model.modelId)) {
-                GeminiReasoningTitle(reasoning = reasoning)
+            if (showThinkingTitle) {
+                ReasoningTitle(title = thinkingTitle!!)
             } else {
                 Text(
                     text = stringResource(
@@ -218,7 +219,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
             }
         },
         extra = {
-            if (loading && state.duration > 0.seconds) {
+            if (showThinkingTitle && state.duration > 0.seconds) {
                 Text(
                     text = state.duration.toString(DurationUnit.SECONDS, 1),
                     style = MaterialTheme.typography.labelSmall,
@@ -244,25 +245,22 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
 
 
 @Composable
-private fun GeminiReasoningTitle(reasoning: UIMessagePart.Reasoning) {
-    val title = reasoning.reasoning.extractGeminiThinkingTitle()
-    if (title != null) {
-        AnimatedContent(
-            targetState = title,
-            transitionSpec = {
-                (slideInVertically { height -> height } + fadeIn()).togetherWith(
-                    slideOutVertically { height -> -height } + fadeOut()
-                )
-            }
-        ) {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier
-                    .padding(horizontal = 4.dp)
-                    .shimmer(true),
+private fun ReasoningTitle(title: String) {
+    AnimatedContent(
+        targetState = title,
+        transitionSpec = {
+            (slideInVertically { height -> height } + fadeIn()).togetherWith(
+                slideOutVertically { height -> -height } + fadeOut()
             )
         }
+    ) {
+        Text(
+            text = it,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier
+                .padding(horizontal = 4.dp)
+                .shimmer(true),
+        )
     }
 }

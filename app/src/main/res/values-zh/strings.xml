@@ -821,6 +821,8 @@
   <string name="chat_message_tool_clipboard_write">写入剪贴板</string>
   <string name="setting_display_page_enable_auto_scroll_title">自动滚动</string>
   <string name="setting_display_page_enable_auto_scroll_desc">AI生成内容时自动滚动到底部</string>
+  <string name="setting_display_page_use_app_icon_style_loading_indicator_title">使用APP图标风格的加载指示器</string>
+  <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">使用应用图标动画替代默认的圆形加载指示器</string>
   <string name="setting_files_page_title">文件管理</string>
   <string name="setting_files_page_delete_file_title">删除文件</string>
   <string name="setting_files_page_delete_action">删除</string>

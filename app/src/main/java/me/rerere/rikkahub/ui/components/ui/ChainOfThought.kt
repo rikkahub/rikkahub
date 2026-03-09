@@ -90,7 +90,9 @@ fun <T> ChainOfThought(
             Column(
                 modifier = Modifier
                     .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .animateContentSize(),
+                    .animateContentSize(
+                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()
+                    ),
             ) {
                 val visibleSteps = if (expanded || !canCollapse) {
                     steps

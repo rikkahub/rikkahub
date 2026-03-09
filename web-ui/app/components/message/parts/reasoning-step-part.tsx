@@ -1,16 +1,17 @@
 import * as React from "react";
-import { Brain, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import Markdown from "~/components/markdown/markdown";
 import type { ReasoningPart as UIReasoningPart } from "~/types";
 import Think from "~/assets/think.svg?react";
-import { serverNow } from "~/lib/utils";
+import { extractThinkingTitle, serverNow } from "~/lib/utils";
 
 import { ControlledChainOfThoughtStep } from "../chain-of-thought";
 
 interface ReasoningStepPartProps {
   reasoning: UIReasoningPart;
+  collapsedAdaptiveWidth?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
 }
@@ -36,13 +37,15 @@ function formatDuration(createdAt?: string, finishedAt?: string | null): number 
   return Math.round(seconds * 10) / 10;
 }
 
-export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepPartProps) {
+export function ReasoningStepPart({ reasoning, collapsedAdaptiveWidth = false, isFirst, isLast }: ReasoningStepPartProps) {
   const loading = reasoning.finishedAt == null;
   const { t } = useTranslation("message");
   const [expandState, setExpandState] = React.useState<ReasoningCardState>(
     ReasoningCardState.Collapsed,
   );
   const contentRef = React.useRef<HTMLDivElement>(null);
+  const thinkingTitle = React.useMemo(() => extractThinkingTitle(reasoning.reasoning), [reasoning.reasoning]);
+  const showThinkingTitle = loading && thinkingTitle != null;
 
   React.useEffect(() => {
     if (loading) {
@@ -92,6 +95,7 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
       <ControlledChainOfThoughtStep
         expanded={expandState === ReasoningCardState.Expanded}
         onExpandedChange={onExpandedChange}
+        collapsedAdaptiveWidth={collapsedAdaptiveWidth}
         isFirst={isFirst}
         isLast={isLast}
         icon={
@@ -103,13 +107,15 @@ export function ReasoningStepPart({ reasoning, isFirst, isLast }: ReasoningStepP
         }
         label={
           <span className="text-foreground text-xs font-medium">
-            {duration !== null
-              ? t("message_parts.thinking_seconds", { seconds: duration.toFixed(1) })
-              : t("message_parts.deep_thinking")}
+            {showThinkingTitle
+              ? thinkingTitle
+              : duration !== null
+                ? t("message_parts.thinking_seconds", { seconds: duration.toFixed(1) })
+                : t("message_parts.deep_thinking")}
           </span>
         }
         extra={
-          loading && duration !== null
+          showThinkingTitle && duration !== null
             ? <span className="text-muted-foreground text-xs">{duration.toFixed(1)}s</span>
             : undefined
         }

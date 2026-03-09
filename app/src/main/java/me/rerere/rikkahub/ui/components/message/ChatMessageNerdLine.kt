@@ -19,9 +19,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.ui.UIMessage
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.ArrowDown01
-import me.rerere.hugeicons.stroke.ArrowUp01
-import me.rerere.hugeicons.stroke.Clock01
+import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Download04
 import me.rerere.hugeicons.stroke.Upload02
 import me.rerere.hugeicons.stroke.Zap
@@ -107,7 +105,7 @@ fun ChatMessageNerdLine(
                         StatsItem(
                             icon = {
                                 Icon(
-                                    imageVector = HugeIcons.Clock01,
+                                    imageVector = HugeIcons.Clock02,
                                     contentDescription = "Duration",
                                     modifier = Modifier.size(12.dp)
                                 )
