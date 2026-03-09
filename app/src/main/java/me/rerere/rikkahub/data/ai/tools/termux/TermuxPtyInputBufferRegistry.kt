@@ -48,9 +48,76 @@ internal object TermuxPtyInputBufferRegistry {
     }
 
     private fun tailAfterLastCommandBoundary(value: String): String {
-        val lastBoundaryIndex = maxOf(value.lastIndexOf('\n'), value.lastIndexOf('\r'))
+        val lastBoundaryIndex = findLastCommittedBoundary(value)
         if (lastBoundaryIndex == -1) return value
         return value.substring(lastBoundaryIndex + 1)
+    }
+
+    private fun findLastCommittedBoundary(value: String): Int {
+        var lastBoundaryIndex = -1
+        var currentLineStart = 0
+        var inSingleQuotes = false
+        var inDoubleQuotes = false
+        var inBackticks = false
+        var escaped = false
+
+        value.forEachIndexed { index, char ->
+            when {
+                char == '\r' || char == '\n' -> {
+                    val continuesCurrentCommand = escaped ||
+                        inSingleQuotes ||
+                        inDoubleQuotes ||
+                        inBackticks ||
+                        lineEndsWithContinuationOperator(
+                            value = value,
+                            lineStart = currentLineStart,
+                            lineEndExclusive = index,
+                        )
+                    escaped = false
+                    if (!continuesCurrentCommand) {
+                        lastBoundaryIndex = index
+                    }
+                    currentLineStart = index + 1
+                }
+                escaped -> {
+                    escaped = false
+                }
+                char == '\\' && !inSingleQuotes -> {
+                    escaped = true
+                }
+                char == '\'' && !inDoubleQuotes && !inBackticks -> {
+                    inSingleQuotes = !inSingleQuotes
+                }
+                char == '"' && !inSingleQuotes && !inBackticks -> {
+                    inDoubleQuotes = !inDoubleQuotes
+                }
+                char == '`' && !inSingleQuotes && !inDoubleQuotes -> {
+                    inBackticks = !inBackticks
+                }
+            }
+        }
+
+        return lastBoundaryIndex
+    }
+
+    private fun lineEndsWithContinuationOperator(
+        value: String,
+        lineStart: Int,
+        lineEndExclusive: Int,
+    ): Boolean {
+        var endIndex = lineEndExclusive - 1
+        while (endIndex >= lineStart && (value[endIndex] == ' ' || value[endIndex] == '\t')) {
+            endIndex--
+        }
+        if (endIndex < lineStart) return false
+
+        return when (value[endIndex]) {
+            '|' -> true
+            '&' -> endIndex > lineStart && value[endIndex - 1] == '&'
+            '(',
+            '{' -> true
+            else -> false
+        }
     }
 
     private fun limitBuffer(value: String): String {

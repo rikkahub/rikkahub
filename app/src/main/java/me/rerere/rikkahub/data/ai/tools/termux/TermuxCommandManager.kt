@@ -35,10 +35,12 @@ class TermuxCommandManager(
     }
 
     fun complete(executionId: String, result: TermuxResult) {
-        if (executionStore.readPending(executionId) != null) {
-            executionStore.markCompleted(executionId, result)
+        val deferred = pending.remove(executionId)
+        completeDeferredBeforePersist(deferred = deferred, result = result) {
+            if (executionStore.readPending(executionId) != null) {
+                executionStore.markCompleted(executionId, result)
+            }
         }
-        pending.remove(executionId)?.complete(result)
     }
 
     private suspend fun runInternal(request: TermuxRunCommandRequest): TermuxResult {
@@ -351,4 +353,13 @@ class TermuxCommandManager(
         private const val TERMUX_HOME_PATH = "/data/data/com.termux/files/home"
         private const val TERMINATION_TIMEOUT_MS = 10_000L
     }
+}
+
+internal fun completeDeferredBeforePersist(
+    deferred: CompletableDeferred<TermuxResult>?,
+    result: TermuxResult,
+    persistCompletion: () -> Unit,
+) {
+    deferred?.complete(result)
+    persistCompletion()
 }
