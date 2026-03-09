@@ -63,6 +63,43 @@ class CodeBlockRenderResolverTest {
     }
 
     @Test
+    fun resolve_common_mime_aliases() {
+        val htmlTarget = CodeBlockRenderResolver.resolve(
+            language = "text/html",
+            code = "<div>Hello</div>"
+        )
+        val svgTarget = CodeBlockRenderResolver.resolve(
+            language = "image/svg+xml",
+            code = "<svg></svg>"
+        )
+        val xmlTarget = CodeBlockRenderResolver.resolve(
+            language = "application/xml",
+            code = "<svg></svg>"
+        )
+
+        assertEquals("html", htmlTarget?.normalizedLanguage)
+        assertEquals(CodeBlockRenderType.HTML, htmlTarget?.renderType)
+        assertEquals("svg", svgTarget?.normalizedLanguage)
+        assertEquals(CodeBlockRenderType.SVG, svgTarget?.renderType)
+        assertEquals("xml", xmlTarget?.normalizedLanguage)
+        assertEquals(CodeBlockRenderType.SVG, xmlTarget?.renderType)
+    }
+
+    @Test
+    fun resolve_xml_requires_svg_root_tag() {
+        val target = CodeBlockRenderResolver.resolve(
+            language = "xml",
+            code = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!-- Example text mentioning <svg> should not trigger rich render -->
+                <note><![CDATA[<svg width="16" height="16"></svg>]]></note>
+            """.trimIndent()
+        )
+
+        assertNull(target)
+    }
+
+    @Test
     fun build_html_for_html_code_is_wrapped_and_keeps_payload() {
         val target = CodeBlockRenderTarget(
             normalizedLanguage = "html",
@@ -161,5 +198,48 @@ class CodeBlockRenderResolverTest {
 
         assertTrue(html.contains("height:100vh"))
         assertFalse(html.contains("height:var(--TH-viewport-height)"))
+    }
+
+    @Test
+    fun build_html_for_complete_document_does_not_wrap_again() {
+        val target = CodeBlockRenderTarget(
+            normalizedLanguage = "html",
+            renderType = CodeBlockRenderType.HTML
+        )
+        val code = """
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="utf-8">
+              <base href="https://example.com/assets/">
+            </head>
+            <body>
+              <main>hello</main>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val html = CodeBlockRenderResolver.buildHtmlForWebView(target, code)
+
+        assertEquals(1, Regex("""<!DOCTYPE html>""", RegexOption.IGNORE_CASE).findAll(html).count())
+        assertEquals(1, Regex("""<html\b""", RegexOption.IGNORE_CASE).findAll(html).count())
+        assertTrue(html.contains("""<base href="https://example.com/assets/">"""))
+        assertTrue(html.contains(CODE_BLOCK_HEIGHT_BRIDGE_NAME))
+    }
+
+    @Test
+    fun build_html_scrollable_mode_enables_vertical_scroll() {
+        val target = CodeBlockRenderTarget(
+            normalizedLanguage = "html",
+            renderType = CodeBlockRenderType.HTML
+        )
+
+        val html = CodeBlockRenderResolver.buildHtmlForWebView(
+            target = target,
+            code = "<div>hello</div>",
+            scrollMode = CodeBlockRenderScrollMode.SCROLLABLE,
+        )
+
+        assertTrue(html.contains("overflow-y:auto!important"))
     }
 }

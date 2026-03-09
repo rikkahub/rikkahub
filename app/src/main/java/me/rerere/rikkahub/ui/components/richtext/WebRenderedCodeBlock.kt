@@ -301,11 +301,21 @@ internal fun WebRenderedCodeBlock(
     }
     val backgroundColor = MaterialTheme.colorScheme.surface.toCssHex()
     val textColor = MaterialTheme.colorScheme.onSurface.toCssHex()
-    val html = remember(target, code, backgroundColor, textColor) {
+    val inlineHtml = remember(target, code, backgroundColor, textColor) {
         CodeBlockRenderResolver.buildHtmlForWebView(
             target, code,
             backgroundColor = backgroundColor,
             textColor = textColor,
+            scrollMode = CodeBlockRenderScrollMode.AUTO_HEIGHT,
+        )
+    }
+    val expandedHtml = remember(target, code, backgroundColor, textColor) {
+        CodeBlockRenderResolver.buildHtmlForWebView(
+            target = target,
+            code = code,
+            backgroundColor = backgroundColor,
+            textColor = textColor,
+            scrollMode = CodeBlockRenderScrollMode.SCROLLABLE,
         )
     }
     var contentHeightDp by remember(renderSignature) { mutableIntStateOf(INITIAL_PREVIEW_HEIGHT_DP) }
@@ -325,7 +335,7 @@ internal fun WebRenderedCodeBlock(
     var showExpandedPreview by remember(renderSignature) { mutableStateOf(false) }
 
     val webViewState = rememberRenderedCodeBlockWebViewState(
-        html = html,
+        html = inlineHtml,
         interfaces = mapOf(CODE_BLOCK_HEIGHT_BRIDGE_NAME to renderBridge),
     )
 
@@ -378,7 +388,7 @@ internal fun WebRenderedCodeBlock(
 
     if (showExpandedPreview) {
         ExpandedRenderedCodeBlockDialog(
-            html = html,
+            html = expandedHtml,
             target = target,
             onDismissed = {
                 showExpandedPreview = false

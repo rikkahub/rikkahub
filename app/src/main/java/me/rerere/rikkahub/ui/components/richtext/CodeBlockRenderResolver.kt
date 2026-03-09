@@ -2,7 +2,15 @@ package me.rerere.rikkahub.ui.components.richtext
 
 import java.math.BigDecimal
 
-private val SVG_TAG_REGEX = Regex("""<\s*svg\b""", RegexOption.IGNORE_CASE)
+private val HTML_ROOT_TAG_REGEX = Regex("""^<\s*html\b""", RegexOption.IGNORE_CASE)
+private val HTML_OPEN_TAG_REGEX = Regex("""<\s*html\b[^>]*>""", RegexOption.IGNORE_CASE)
+private val HEAD_OPEN_TAG_REGEX = Regex("""<\s*head\b[^>]*>""", RegexOption.IGNORE_CASE)
+private val HEAD_CLOSE_TAG_REGEX = Regex("""</\s*head\s*>""", RegexOption.IGNORE_CASE)
+private val VIEWPORT_META_REGEX =
+    Regex("""<meta\b[^>]*name\s*=\s*(["'])viewport\1[^>]*>""", RegexOption.IGNORE_CASE)
+private val XML_LEADING_MISC_REGEX =
+    Regex("""^\uFEFF?(?:\s|<\?xml[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[\s\S]*?>|<\?[\s\S]*?\?>)*""", RegexOption.IGNORE_CASE)
+private val XML_ROOT_TAG_REGEX = Regex("""^<\s*([A-Za-z_][A-Za-z0-9_.:-]*)\b""")
 private val CSS_MIN_HEIGHT_REGEX =
     Regex("""(min-height\s*:\s*)([^;{}]*?\d+(?:\.\d+)?vh)(?=\s*[;}])""", RegexOption.IGNORE_CASE)
 private val INLINE_MIN_HEIGHT_REGEX =
@@ -18,6 +26,11 @@ private val JS_SET_PROPERTY_MIN_HEIGHT_REGEX =
 private val VH_VALUE_REGEX = Regex("""(\d+(?:\.\d+)?)vh\b""", RegexOption.IGNORE_CASE)
 
 internal const val CODE_BLOCK_HEIGHT_BRIDGE_NAME = "RikkaHubCodeBlockBridge"
+
+internal enum class CodeBlockRenderScrollMode {
+    AUTO_HEIGHT,
+    SCROLLABLE,
+}
 
 internal enum class CodeBlockRenderType {
     HTML,
@@ -55,13 +68,21 @@ internal object CodeBlockRenderResolver {
         code: String,
         backgroundColor: String = "#ffffff",
         textColor: String = "#000000",
+        scrollMode: CodeBlockRenderScrollMode = CodeBlockRenderScrollMode.AUTO_HEIGHT,
     ): String {
         return when (target.renderType) {
-            CodeBlockRenderType.HTML,
-            CodeBlockRenderType.SVG -> createRenderShell(
-                replaceVhInContent(code),
+            CodeBlockRenderType.HTML -> buildHtmlDocument(
+                content = replaceVhInContent(code),
                 backgroundColor = backgroundColor,
                 textColor = textColor,
+                scrollMode = scrollMode,
+            )
+
+            CodeBlockRenderType.SVG -> createRenderShell(
+                content = replaceVhInContent(code),
+                backgroundColor = backgroundColor,
+                textColor = textColor,
+                scrollMode = scrollMode,
             )
         }
     }
@@ -73,15 +94,19 @@ internal object CodeBlockRenderResolver {
             .split(Regex("\\s+"))
             .firstOrNull()
             .orEmpty()
-            .takeWhile { ch -> ch.isLetterOrDigit() || ch == '+' || ch == '-' || ch == '_' || ch == '.' }
+            .takeWhile { ch ->
+                ch.isLetterOrDigit() || ch == '+' || ch == '-' || ch == '_' || ch == '.' || ch == '/'
+            }
         return when (firstToken) {
-            "htm", "xhtml" -> "html"
+            "htm", "xhtml", "text/html", "application/xhtml+xml" -> "html"
+            "image/svg+xml" -> "svg"
+            "application/xml", "text/xml" -> "xml"
             else -> firstToken
         }
     }
 
     private fun containsSvgMarkup(code: String): Boolean {
-        return SVG_TAG_REGEX.containsMatchIn(code)
+        return extractXmlRootTagName(code) == "svg"
     }
 
     private fun replaceVhInContent(content: String): String {
@@ -147,29 +172,162 @@ internal object CodeBlockRenderResolver {
         return BigDecimal.valueOf(this).stripTrailingZeros().toPlainString()
     }
 
-    /**
-     * Borrowed style direction from JS-Slash-Runner's render iframe shell:
-     * - full html document
-     * - viewport meta
-     * - base reset styles
-     * Keep code payload untouched and inject directly into body.
-     */
+    private fun buildHtmlDocument(
+        content: String,
+        backgroundColor: String,
+        textColor: String,
+        scrollMode: CodeBlockRenderScrollMode,
+    ): String {
+        return if (looksLikeFullHtmlDocument(content)) {
+            injectRenderSupportIntoHtmlDocument(content, scrollMode)
+        } else {
+            createRenderShell(
+                content = content,
+                backgroundColor = backgroundColor,
+                textColor = textColor,
+                scrollMode = scrollMode,
+            )
+        }
+    }
+
+    private fun looksLikeFullHtmlDocument(content: String): Boolean {
+        val leadingMisc = XML_LEADING_MISC_REGEX.find(content)?.value.orEmpty()
+        return HTML_ROOT_TAG_REGEX.containsMatchIn(content.substring(leadingMisc.length))
+    }
+
+    private fun injectRenderSupportIntoHtmlDocument(
+        content: String,
+        scrollMode: CodeBlockRenderScrollMode,
+    ): String {
+        val headInjection = buildHeadInjection(
+            backgroundColor = null,
+            textColor = null,
+            scrollMode = scrollMode,
+            preserveDocumentStyles = true,
+            includeViewportMeta = !VIEWPORT_META_REGEX.containsMatchIn(content),
+        )
+
+        val headCloseTag = HEAD_CLOSE_TAG_REGEX.find(content)
+        if (headCloseTag != null) {
+            return insertBefore(content, headCloseTag.range.first, headInjection)
+        }
+
+        val headOpenTag = HEAD_OPEN_TAG_REGEX.find(content)
+        if (headOpenTag != null) {
+            return insertAfter(content, headOpenTag.range.last + 1, headInjection)
+        }
+
+        val htmlOpenTag = HTML_OPEN_TAG_REGEX.find(content)
+        if (htmlOpenTag != null) {
+            return insertAfter(content, htmlOpenTag.range.last + 1, "<head>$headInjection</head>")
+        }
+
+        return createRenderShell(
+            content = content,
+            backgroundColor = "#ffffff",
+            textColor = "#000000",
+            scrollMode = scrollMode,
+        )
+    }
+
     private fun createRenderShell(
         content: String,
         backgroundColor: String = "#ffffff",
         textColor: String = "#000000",
+        scrollMode: CodeBlockRenderScrollMode,
     ): String {
+        val headInjection = buildHeadInjection(
+            backgroundColor = backgroundColor,
+            textColor = textColor,
+            scrollMode = scrollMode,
+            preserveDocumentStyles = false,
+            includeViewportMeta = true,
+        )
         return """
             <!DOCTYPE html>
             <html>
             <head>
             <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            $headInjection
+            </head>
+            <body>
+            $content
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
+    private fun buildHeadInjection(
+        backgroundColor: String?,
+        textColor: String?,
+        scrollMode: CodeBlockRenderScrollMode,
+        preserveDocumentStyles: Boolean,
+        includeViewportMeta: Boolean,
+    ): String {
+        val style = if (preserveDocumentStyles) {
+            createExistingDocumentStyle(scrollMode)
+        } else {
+            createFragmentShellStyle(
+                backgroundColor = backgroundColor ?: "#ffffff",
+                textColor = textColor ?: "#000000",
+                scrollMode = scrollMode,
+            )
+        }
+
+        val viewportMeta = if (includeViewportMeta) {
+            """<meta name="viewport" content="width=device-width, initial-scale=1.0">"""
+        } else {
+            ""
+        }
+
+        return buildString {
+            append(viewportMeta)
+            append(style)
+            append(createBridgeScript())
+        }
+    }
+
+    private fun createFragmentShellStyle(
+        backgroundColor: String,
+        textColor: String,
+        scrollMode: CodeBlockRenderScrollMode,
+    ): String {
+        val overflowY = when (scrollMode) {
+            CodeBlockRenderScrollMode.AUTO_HEIGHT -> "hidden"
+            CodeBlockRenderScrollMode.SCROLLABLE -> "auto"
+        }
+        return """
             <style>
             :root{--TH-viewport-height:100vh;}
             *,*::before,*::after{box-sizing:border-box;}
-            html,body{margin:0!important;padding:0;overflow:hidden!important;max-width:100%!important;background-color:$backgroundColor;color:$textColor;}
+            html,body{
+              margin:0!important;
+              padding:0;
+              overflow-x:hidden!important;
+              overflow-y:$overflowY!important;
+              max-width:100%!important;
+              background-color:$backgroundColor;
+              color:$textColor;
+            }
             </style>
+        """.trimIndent()
+    }
+
+    private fun createExistingDocumentStyle(scrollMode: CodeBlockRenderScrollMode): String {
+        val overflowRule = when (scrollMode) {
+            CodeBlockRenderScrollMode.AUTO_HEIGHT -> "overflow-x:hidden!important;"
+            CodeBlockRenderScrollMode.SCROLLABLE -> "overflow-x:hidden!important;overflow-y:auto!important;"
+        }
+        return """
+            <style>
+            :root{--TH-viewport-height:100vh;}
+            html,body{$overflowRule}
+            </style>
+        """.trimIndent()
+    }
+
+    private fun createBridgeScript(): String {
+        return """
             <script>
             (function() {
               function updateViewportHeight() {
@@ -262,11 +420,39 @@ internal object CodeBlockRenderResolver {
               });
             })();
             </script>
-            </head>
-            <body>
-            $content
-            </body>
-            </html>
         """.trimIndent()
+    }
+
+    private fun extractXmlRootTagName(code: String): String? {
+        val leadingMisc = XML_LEADING_MISC_REGEX.find(code)?.value.orEmpty()
+        val remaining = code.substring(leadingMisc.length)
+        val match = XML_ROOT_TAG_REGEX.find(remaining) ?: return null
+        return match.groupValues[1]
+            .substringAfterLast(':')
+            .lowercase()
+    }
+
+    private fun insertBefore(
+        content: String,
+        index: Int,
+        insertion: String,
+    ): String {
+        return buildString(content.length + insertion.length) {
+            append(content, 0, index)
+            append(insertion)
+            append(content, index, content.length)
+        }
+    }
+
+    private fun insertAfter(
+        content: String,
+        index: Int,
+        insertion: String,
+    ): String {
+        return buildString(content.length + insertion.length) {
+            append(content, 0, index)
+            append(insertion)
+            append(content, index, content.length)
+        }
     }
 }
