@@ -82,6 +82,73 @@ class TermuxPtySessionManagerTest {
         }
     }
 
+    @Test
+    fun `bootstrap script should replace orphan server when pid file is missing`() {
+        assumeTrue(canRunCommand("bash"))
+        assumeTrue(canRunCommand("python3"))
+
+        val tempHome = Files.createTempDirectory("termux-pty-bootstrap-orphan").toFile()
+        val stateDir = File(tempHome, ".rikkahub").apply { mkdirs() }
+        val pidFile = File(stateDir, "pty_session_server.pid")
+        val tokenFile = File(stateDir, "pty_session_server.token")
+        val scriptFile = File(stateDir, "pty_session_server.py")
+        val legacyToken = "legacy-token"
+        val newToken = "fresh-token"
+        val port = reservePort()
+        var legacyPid: Long? = null
+
+        try {
+            val sessionManager = allocateSessionManager()
+            scriptFile.writeText(sessionManager.termuxPtyServerScriptForTest())
+
+            legacyPid = startDetachedPythonServer(
+                homeDir = tempHome,
+                scriptFile = scriptFile,
+                port = port,
+                token = legacyToken,
+            )
+
+            assertTrue(waitForHealth(port = port, token = legacyToken))
+            assertFalse(pidFile.exists())
+            assertFalse(tokenFile.exists())
+
+            val bootstrap = ProcessBuilder("bash", "-s")
+                .directory(tempHome)
+                .apply {
+                    environment()["HOME"] = tempHome.absolutePath
+                }
+                .start()
+            bootstrap.outputStream.bufferedWriter().use { writer ->
+                writer.write(
+                    sessionManager.buildBootstrapScriptForTest(
+                        port = port,
+                        token = newToken,
+                    )
+                )
+            }
+
+            assertTrue("bootstrap script timed out", bootstrap.waitFor(20, TimeUnit.SECONDS))
+            val stdout = bootstrap.inputStream.bufferedReader().readText()
+            val stderr = bootstrap.errorStream.bufferedReader().readText()
+            assertEquals(
+                "bootstrap failed\nstdout:\n$stdout\nstderr:\n$stderr",
+                0,
+                bootstrap.exitValue(),
+            )
+
+            assertTrue(waitForPidExit(legacyPid))
+            val newPid = pidFile.readText().trim().toLong()
+            assertNotEquals(legacyPid, newPid)
+            assertEquals(newToken, tokenFile.readText().trim())
+            assertTrue(waitForHealth(port = port, token = newToken))
+            assertFalse(isHealthy(port = port, token = legacyToken))
+        } finally {
+            legacyPid?.let(::killPid)
+            readPid(pidFile)?.let { killPid(it) }
+            tempHome.deleteRecursively()
+        }
+    }
+
     private fun allocateSessionManager(): TermuxPtySessionManager {
         val field = Unsafe::class.java.getDeclaredField("theUnsafe")
         field.isAccessible = true
