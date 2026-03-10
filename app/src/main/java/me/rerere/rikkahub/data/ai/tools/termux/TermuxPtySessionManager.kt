@@ -890,20 +890,27 @@ class TermuxPtySessionManager(
                     with self.condition:
                         self.last_access = time.time()
 
-                def read(self, yield_time_ms, max_output_chars):
+                def read(self, yield_time_ms, max_output_chars, wait_for_yield_window=False):
                     timeout_seconds = max(yield_time_ms, 0) / 1000.0
                     end_time = time.time() + timeout_seconds
                     with self.condition:
                         self.last_access = time.time()
-                        while (
-                            not self.pending_output
-                            and self.running
-                            and timeout_seconds > 0
-                        ):
-                            remaining = end_time - time.time()
-                            if remaining <= 0:
-                                break
-                            self.condition.wait(remaining)
+                        if wait_for_yield_window and timeout_seconds > 0:
+                            while True:
+                                remaining = end_time - time.time()
+                                if remaining <= 0:
+                                    break
+                                self.condition.wait(remaining)
+                        else:
+                            while (
+                                not self.pending_output
+                                and self.running
+                                and timeout_seconds > 0
+                            ):
+                                remaining = end_time - time.time()
+                                if remaining <= 0:
+                                    break
+                                self.condition.wait(remaining)
                         output = self.pending_output[:max_output_chars]
                         self.pending_output = self.pending_output[max_output_chars:]
                         overflowed = self.output_overflowed
@@ -1094,7 +1101,11 @@ class TermuxPtySessionManager(
                         return
 
                     session = registry.create(command=command, workdir=workdir, cols=cols, rows=rows)
-                    response = session.read(yield_time_ms=yield_time_ms, max_output_chars=max_output_chars)
+                    response = session.read(
+                        yield_time_ms=yield_time_ms,
+                        max_output_chars=max_output_chars,
+                        wait_for_yield_window=True,
+                    )
                     keep_session = response.pop("keep_session")
                     response["session_id"] = session.id if keep_session else None
                     registry.maybe_remove(session.id, keep_session)
@@ -1123,7 +1134,11 @@ class TermuxPtySessionManager(
                         )
                         return
 
-                    response = session.read(yield_time_ms=yield_time_ms, max_output_chars=max_output_chars)
+                    response = session.read(
+                        yield_time_ms=yield_time_ms,
+                        max_output_chars=max_output_chars,
+                        wait_for_yield_window=bool(chars),
+                    )
                     keep_session = response.pop("keep_session")
                     response["session_id"] = session.id if keep_session else None
                     registry.maybe_remove(session.id, keep_session)

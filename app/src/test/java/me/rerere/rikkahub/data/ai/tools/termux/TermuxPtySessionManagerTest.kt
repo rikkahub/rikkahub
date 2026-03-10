@@ -6,6 +6,9 @@ import java.net.ServerSocket
 import java.net.URL
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -149,6 +152,103 @@ class TermuxPtySessionManagerTest {
         }
     }
 
+    @Test
+    fun `write should include post input output even when stale startup output is pending`() {
+        assumeTrue(canRunCommand("bash"))
+        assumeTrue(canRunCommand("python3"))
+
+        val localBashPath = resolveCommandPath("bash")
+        assumeTrue("bash path could not be resolved", localBashPath != null)
+
+        val tempHome = Files.createTempDirectory("termux-pty-stale-output").toFile()
+        val stateDir = File(tempHome, ".rikkahub").apply { mkdirs() }
+        val scriptFile = File(stateDir, "pty_session_server.py")
+        val port = reservePort()
+        val token = "test-token"
+        var serverProcess: Process? = null
+
+        try {
+            val sessionManager = allocateSessionManager()
+            scriptFile.writeText(
+                sessionManager.termuxPtyServerScriptForTest().replace(
+                    oldValue = "\"/data/data/com.termux/files/usr/bin/bash\"",
+                    newValue = "\"$localBashPath\"",
+                )
+            )
+
+            serverProcess = ProcessBuilder(
+                "python3",
+                "-u",
+                scriptFile.absolutePath,
+                "--port",
+                port.toString(),
+                "--token",
+                token,
+            )
+                .directory(tempHome)
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["HOME"] = tempHome.absolutePath
+                }
+                .start()
+
+            assertTrue("patched PTY server never became healthy", waitForHealth(port = port, token = token))
+
+            val startResponse = postJson<TermuxPtyStartRequest, TermuxPtyServerResponse>(
+                port = port,
+                token = token,
+                path = "/sessions",
+                payload = TermuxPtyStartRequest(
+                    command = delayedPromptEchoCommand(),
+                    workdir = tempHome.absolutePath,
+                    yieldTimeMs = 50L,
+                    maxOutputChars = 12_000,
+                )
+            )
+            val sessionId = checkNotNull(startResponse.sessionId) { "session_id missing from start response: $startResponse" }
+            assertTrue("expected initial burst in startup output, got: ${startResponse.output}", startResponse.output.contains("boot"))
+
+            Thread.sleep(350)
+
+            val sessions = getJson<TermuxPtySessionListResponse>(
+                port = port,
+                token = token,
+                path = "/sessions",
+            )
+            val sessionInfo = sessions.sessions.firstOrNull { it.id == sessionId }
+            checkNotNull(sessionInfo) { "session $sessionId was not listed" }
+            assertTrue(
+                "expected stale startup output to remain buffered before write, session=$sessionInfo",
+                sessionInfo.pendingOutputChars > 0,
+            )
+
+            val writeResponse = postJson<TermuxPtyWriteRequest, TermuxPtyServerResponse>(
+                port = port,
+                token = token,
+                path = "/sessions/$sessionId/stdin",
+                payload = TermuxPtyWriteRequest(
+                    chars = "hello from test\n",
+                    yieldTimeMs = 350L,
+                    maxOutputChars = 12_000,
+                )
+            )
+
+            assertTrue(
+                "write response should include post-write output, got: ${writeResponse.output}",
+                writeResponse.output.contains("got:hello from test"),
+            )
+        } finally {
+            serverProcess?.let { process ->
+                process.destroy()
+                if (!process.waitFor(1, TimeUnit.SECONDS)) {
+                    process.destroyForcibly()
+                    process.waitFor(5, TimeUnit.SECONDS)
+                }
+            }
+            tempHome.deleteRecursively()
+        }
+    }
+
     private fun allocateSessionManager(): TermuxPtySessionManager {
         val field = Unsafe::class.java.getDeclaredField("theUnsafe")
         field.isAccessible = true
@@ -208,6 +308,23 @@ class TermuxPtySessionManagerTest {
         }.getOrDefault(false)
     }
 
+    private fun resolveCommandPath(command: String): String? {
+        val process = runCatching {
+            ProcessBuilder("bash", "-lc", "command -v '$command'")
+                .redirectErrorStream(true)
+                .start()
+        }.getOrNull() ?: return null
+        if (!process.waitFor(5, TimeUnit.SECONDS) || process.exitValue() != 0) return null
+        return process.inputStream.bufferedReader().readText().trim().ifBlank { null }
+    }
+
+    private fun delayedPromptEchoCommand(): String {
+        return """
+            stty -echo
+            python3 -u -c "import sys,time; print('boot', flush=True); time.sleep(0.2); print('prompt> ', end='', flush=True); line=sys.stdin.readline(); time.sleep(0.2); print('got:' + line.strip(), flush=True)"
+        """.trimIndent()
+    }
+
     private fun waitForHealth(
         port: Int,
         token: String,
@@ -230,6 +347,57 @@ class TermuxPtySessionManagerTest {
             connection.setRequestProperty("X-RikkaHub-Token", token)
             connection.responseCode == 200
         }.getOrDefault(false)
+    }
+
+    private inline fun <reified P : Any, reified T : Any> postJson(
+        port: Int,
+        token: String,
+        path: String,
+        payload: P,
+    ): T {
+        val connection = openConnection(port = port, token = token, path = path, method = "POST")
+        connection.doOutput = true
+        connection.outputStream.bufferedWriter().use { writer ->
+            writer.write(JsonInstant.encodeToString(payload))
+        }
+        return decodeJsonResponse(connection)
+    }
+
+    private inline fun <reified T : Any> getJson(
+        port: Int,
+        token: String,
+        path: String,
+    ): T {
+        val connection = openConnection(port = port, token = token, path = path, method = "GET")
+        return decodeJsonResponse(connection)
+    }
+
+    private fun openConnection(
+        port: Int,
+        token: String,
+        path: String,
+        method: String,
+    ): HttpURLConnection {
+        return (URL("http://127.0.0.1:$port$path").openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = 2_000
+            readTimeout = 2_000
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("X-RikkaHub-Token", token)
+        }
+    }
+
+    private inline fun <reified T : Any> decodeJsonResponse(connection: HttpURLConnection): T {
+        try {
+            val body = (if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader()
+                ?.readText()
+                .orEmpty()
+            assertTrue("HTTP ${connection.responseCode} for ${connection.url}\n$body", connection.responseCode in 200..299)
+            return JsonInstant.decodeFromString(body)
+        } finally {
+            connection.disconnect()
+        }
     }
 
     private fun waitForPidExit(
