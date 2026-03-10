@@ -76,6 +76,38 @@ class TermuxApprovalBlacklistMatcherTest {
     }
 
     @Test
+    fun `shouldForceApproval should respect backspace corrected command`() {
+        val tool = UIMessagePart.Tool(
+            toolCallId = "1",
+            toolName = "write_stdin",
+            input = """{"session_id":"session-4","chars":"rmx\b -rf /tmp/demo\n"}"""
+        )
+
+        assertTrue(
+            TermuxApprovalBlacklistMatcher.shouldForceApproval(
+                tool = tool,
+                blacklistRules = listOf("rm -rf")
+            )
+        )
+    }
+
+    @Test
+    fun `shouldForceApproval should fall back to approval for unsupported terminal control input`() {
+        val tool = UIMessagePart.Tool(
+            toolCallId = "1",
+            toolName = "write_stdin",
+            input = """{"session_id":"session-5","chars":"safe-command\u001b[D"}"""
+        )
+
+        assertTrue(
+            TermuxApprovalBlacklistMatcher.shouldForceApproval(
+                tool = tool,
+                blacklistRules = listOf("rm -rf")
+            )
+        )
+    }
+
+    @Test
     fun `parseBlacklistRules should split by line and comma`() {
         val rules = TermuxApprovalBlacklistMatcher.parseBlacklistRules(
             """

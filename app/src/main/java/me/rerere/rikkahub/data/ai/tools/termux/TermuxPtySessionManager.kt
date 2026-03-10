@@ -13,15 +13,19 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.UUID
+import me.rerere.rikkahub.data.datastore.SettingsStore
 
 class TermuxPtySessionManager(
     private val json: Json,
     private val okHttpClient: OkHttpClient,
     private val termuxCommandManager: TermuxCommandManager,
+    private val settingsStore: SettingsStore,
 ) {
     private val ensureServerMutex = Mutex()
     @Volatile
     private var serverToken: String? = null
+    @Volatile
+    private var serverPort: Int? = null
 
     suspend fun startSession(
         command: String,
@@ -31,8 +35,9 @@ class TermuxPtySessionManager(
         cols: Int = TERMUX_PTY_DEFAULT_COLUMNS,
         rows: Int = TERMUX_PTY_DEFAULT_ROWS,
     ): TermuxPtyServerResponse {
-        ensureServerRunning()
+        val port = ensureServerRunning()
         val response = postJson(
+            port = port,
             path = "/sessions",
             payload = TermuxPtyStartRequest(
                 command = command,
@@ -53,8 +58,9 @@ class TermuxPtySessionManager(
         yieldTimeMs: Long,
         maxOutputChars: Int,
     ): TermuxPtyServerResponse {
-        ensureServerRunning()
+        val port = ensureServerRunning()
         val response = postJson(
+            port = port,
             path = "/sessions/$sessionId/stdin",
             payload = TermuxPtyWriteRequest(
                 chars = chars,
@@ -71,21 +77,117 @@ class TermuxPtySessionManager(
         return response
     }
 
-    private suspend fun ensureServerRunning() {
+    suspend fun listSessions(): TermuxPtySessionListResponse {
+        val port = currentPort()
+        val token = resolveServerToken(port) ?: return TermuxPtySessionListResponse(running = false)
+        return runCatching {
+            getJson<TermuxPtySessionListResponse>(
+                port = port,
+                token = token,
+                path = "/sessions",
+            )
+        }.getOrElse { e ->
+            TermuxPtySessionListResponse(
+                running = false,
+                error = e.message ?: e.javaClass.name,
+            )
+        }
+    }
+
+    suspend fun closeSession(sessionId: String): TermuxPtyActionResponse {
+        val port = currentPort()
+        val token = resolveServerToken(port) ?: return TermuxPtyActionResponse(
+            success = false,
+            running = false,
+            error = "PTY session server is not running.",
+        )
+        val response = runCatching {
+            deleteJson<TermuxPtyActionResponse>(
+                port = port,
+                token = token,
+                path = "/sessions/$sessionId",
+            )
+        }.getOrElse { e ->
+            TermuxPtyActionResponse(
+                success = false,
+                running = false,
+                error = e.message ?: e.javaClass.name,
+            )
+        }
+        if (response.success) {
+            TermuxPtyInputBufferRegistry.removeSession(sessionId)
+        }
+        return response
+    }
+
+    suspend fun closeSessions(sessionIds: Collection<String>) {
+        sessionIds.toSet().forEach { sessionId ->
+            runCatching { closeSession(sessionId) }
+        }
+    }
+
+    suspend fun closeAllSessions(): TermuxPtyActionResponse {
+        val port = currentPort()
+        val token = resolveServerToken(port) ?: return TermuxPtyActionResponse(
+            success = false,
+            running = false,
+            error = "PTY session server is not running.",
+        )
+        val response = runCatching {
+            deleteJson<TermuxPtyActionResponse>(
+                port = port,
+                token = token,
+                path = "/sessions",
+            )
+        }.getOrElse { e ->
+            TermuxPtyActionResponse(
+                success = false,
+                running = false,
+                error = e.message ?: e.javaClass.name,
+            )
+        }
+        if (response.success) {
+            TermuxPtyInputBufferRegistry.clearAllSessions()
+        }
+        return response
+    }
+
+    suspend fun stopServer() {
+        runCatching {
+            termuxCommandManager.run(
+                TermuxRunCommandRequest(
+                    commandPath = TERMUX_BASH_PATH,
+                    arguments = listOf("-lc", buildStopServerScript()),
+                    workdir = TERMUX_HOME_PATH,
+                    background = false,
+                    timeoutMs = 10_000L,
+                    label = "RikkaHub stop PTY session server",
+                    description = "Stop interactive shell session server",
+                    trackLifecycle = false,
+                )
+            )
+        }
+        serverToken = null
+        serverPort = null
+    }
+
+    private suspend fun ensureServerRunning(): Int {
         ensureServerMutex.withLock {
-            val existingToken = serverToken
-            if (existingToken != null && ping(existingToken)) return
+            val port = currentPort()
+            val existingToken = resolveServerToken(port)
+            if (existingToken != null) return port
 
             val token = UUID.randomUUID().toString()
             val result = termuxCommandManager.run(
                 TermuxRunCommandRequest(
                     commandPath = TERMUX_BASH_PATH,
                     workdir = TERMUX_HOME_PATH,
-                    stdin = buildBootstrapScript(port = TERMUX_PTY_SERVER_PORT, token = token),
+                    stdin = buildBootstrapScript(port = port, token = token),
                     background = true,
                     timeoutMs = 20_000L,
                     label = "RikkaHub PTY session server",
                     description = "Start interactive shell session server",
+                    trackLifecycle = false,
                 )
             )
 
@@ -110,7 +212,7 @@ class TermuxPtySessionManager(
                 error(message.ifBlank { "Failed to start PTY session server in Termux." })
             }
 
-            if (!ping(token)) {
+            if (!ping(port = port, token = token)) {
                 val output = TermuxOutputFormatter.merge(
                     stdout = result.stdout,
                     stderr = result.stderr,
@@ -124,14 +226,52 @@ class TermuxPtySessionManager(
                 )
             }
             serverToken = token
+            serverPort = port
+            return port
         }
     }
 
-    private suspend fun ping(token: String): Boolean {
+    private suspend fun resolveServerToken(port: Int): String? {
+        val existingToken = serverToken
+        if (existingToken != null && serverPort == port && ping(port = port, token = existingToken)) {
+            return existingToken
+        }
+
+        val recoveredToken = recoverPersistedToken()?.takeIf { ping(port = port, token = it) } ?: return null
+        serverToken = recoveredToken
+        serverPort = port
+        return recoveredToken
+    }
+
+    private suspend fun recoverPersistedToken(): String? {
+        val result = runCatching {
+            termuxCommandManager.run(
+                TermuxRunCommandRequest(
+                    commandPath = TERMUX_BASH_PATH,
+                    arguments = listOf("-lc", buildRecoverTokenScript()),
+                    workdir = TERMUX_HOME_PATH,
+                    background = false,
+                    timeoutMs = 5_000L,
+                    label = "RikkaHub inspect PTY session server",
+                    description = "Read interactive shell session server token",
+                    trackLifecycle = false,
+                )
+            )
+        }.getOrNull() ?: return null
+        if (!result.isSuccessful()) return null
+        return result.stdout.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() }
+    }
+
+    private suspend fun ping(
+        port: Int,
+        token: String,
+    ): Boolean {
         return withContext(Dispatchers.IO) {
             runCatching {
                 val request = Request.Builder()
-                    .url(baseUrl(path = "/health"))
+                    .url(baseUrl(port = port, path = "/health"))
                     .header(TOKEN_HEADER, token)
                     .get()
                     .build()
@@ -143,35 +283,98 @@ class TermuxPtySessionManager(
     }
 
     private suspend inline fun <reified T : Any> postJson(
+        port: Int,
         path: String,
         payload: T,
     ): TermuxPtyServerResponse {
         val token = serverToken ?: error("PTY session server token is missing")
+        return postJson(
+            port = port,
+            token = token,
+            path = path,
+            payload = payload,
+        )
+    }
+
+    private suspend inline fun <reified T : Any> postJson(
+        port: Int,
+        token: String,
+        path: String,
+        payload: T,
+    ): TermuxPtyServerResponse {
         return withContext(Dispatchers.IO) {
             val requestBody = json.encodeToString(payload)
                 .toRequestBody(JSON_MEDIA_TYPE)
             val request = Request.Builder()
-                .url(baseUrl(path))
+                .url(baseUrl(port = port, path = path))
                 .header(TOKEN_HEADER, token)
                 .post(requestBody)
                 .build()
             okHttpClient.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    val parsed = body.takeIf { it.isNotBlank() }?.let {
-                        runCatching { json.decodeFromString<TermuxPtyServerResponse>(it) }.getOrNull()
-                    }
-                    throw IOException(
-                        parsed?.error ?: "PTY server request failed with HTTP ${response.code}"
-                    )
-                }
-                json.decodeFromString(body)
+                decodeResponse(response = response, path = path)
             }
         }
     }
 
-    private fun baseUrl(path: String): String {
-        return "http://127.0.0.1:$TERMUX_PTY_SERVER_PORT$path"
+    private suspend inline fun <reified T : Any> getJson(
+        port: Int,
+        token: String,
+        path: String,
+    ): T {
+        return withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(baseUrl(port = port, path = path))
+                .header(TOKEN_HEADER, token)
+                .get()
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                decodeResponse(response = response, path = path)
+            }
+        }
+    }
+
+    private suspend inline fun <reified T : Any> deleteJson(
+        port: Int,
+        token: String,
+        path: String,
+    ): T {
+        return withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(baseUrl(port = port, path = path))
+                .header(TOKEN_HEADER, token)
+                .delete()
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                decodeResponse(response = response, path = path)
+            }
+        }
+    }
+
+    private inline fun <reified T : Any> decodeResponse(
+        response: okhttp3.Response,
+        path: String,
+    ): T {
+        val body = response.body?.string().orEmpty()
+        if (!response.isSuccessful) {
+            val parsed = body.takeIf { it.isNotBlank() }?.let {
+                runCatching { json.decodeFromString<TermuxPtyServerResponse>(it) }.getOrNull()
+            }
+            throw IOException(
+                parsed?.error ?: "PTY server request failed for $path with HTTP ${response.code}"
+            )
+        }
+        return json.decodeFromString(body)
+    }
+
+    private fun currentPort(): Int {
+        return settingsStore.settingsFlow.value.termuxPtyServerPort
+    }
+
+    private fun baseUrl(
+        port: Int,
+        path: String,
+    ): String {
+        return "http://127.0.0.1:$port$path"
     }
 
     private fun buildBootstrapScript(
@@ -373,6 +576,55 @@ class TermuxPtySessionManager(
         }
     }
 
+    private fun buildRecoverTokenScript(): String {
+        return """
+            set -eu
+
+            STATE_DIR="${'$'}HOME/.rikkahub"
+            PID_FILE="${'$'}STATE_DIR/pty_session_server.pid"
+            TOKEN_FILE="${'$'}STATE_DIR/pty_session_server.token"
+
+            [ -r "${'$'}PID_FILE" ] || exit 0
+            [ -r "${'$'}TOKEN_FILE" ] || exit 0
+
+            PID="$(cat "${'$'}PID_FILE" 2>/dev/null || true)"
+            [ -n "${'$'}PID" ] || exit 0
+            kill -0 "${'$'}PID" 2>/dev/null || exit 0
+
+            cat "${'$'}TOKEN_FILE" 2>/dev/null || true
+        """.trimIndent()
+    }
+
+    private fun buildStopServerScript(): String {
+        return """
+            set -eu
+
+            STATE_DIR="${'$'}HOME/.rikkahub"
+            PID_FILE="${'$'}STATE_DIR/pty_session_server.pid"
+            TOKEN_FILE="${'$'}STATE_DIR/pty_session_server.token"
+
+            kill_pid() {
+              _pid="${'$'}1"
+              [ -n "${'$'}_pid" ] || return 0
+              if ! kill -0 "${'$'}_pid" 2>/dev/null; then
+                return 0
+              fi
+              kill "${'$'}_pid" 2>/dev/null || true
+              sleep 0.2
+              if kill -0 "${'$'}_pid" 2>/dev/null; then
+                kill -9 "${'$'}_pid" 2>/dev/null || true
+                sleep 0.2
+              fi
+              return 0
+            }
+
+            PID="$(cat "${'$'}PID_FILE" 2>/dev/null || true)"
+            kill_pid "${'$'}PID"
+            rm -f "${'$'}PID_FILE" "${'$'}TOKEN_FILE"
+            echo "PTY session server stopped."
+        """.trimIndent()
+    }
+
     private fun termuxPtyServerScript(): String {
         return """
             #!/usr/bin/env python3
@@ -425,7 +677,9 @@ class TermuxPtySessionManager(
                     self.running = True
                     self.exit_code = None
                     self.pending_output = ""
-                    self.last_access = time.time()
+                    now = time.time()
+                    self.created_at = now
+                    self.last_access = now
                     self.lock = threading.Lock()
                     self.condition = threading.Condition(self.lock)
                     self._start()
@@ -551,6 +805,20 @@ class TermuxPtySessionManager(
                     except Exception:
                         pass
 
+                def to_info(self):
+                    with self.condition:
+                        return {
+                            "id": self.id,
+                            "command": self.command,
+                            "workdir": self.workdir,
+                            "pid": self.pid,
+                            "running": self.running,
+                            "exit_code": self.exit_code,
+                            "created_at_ms": int(self.created_at * 1000),
+                            "last_access_ms": int(self.last_access * 1000),
+                            "pending_output_chars": len(self.pending_output),
+                        }
+
             class SessionRegistry:
                 def __init__(self):
                     self._sessions = {}
@@ -571,6 +839,26 @@ class TermuxPtySessionManager(
                         return
                     with self._lock:
                         self._sessions.pop(session_id, None)
+
+                def list_all(self):
+                    with self._lock:
+                        return [session.to_info() for session in self._sessions.values()]
+
+                def close_session(self, session_id):
+                    with self._lock:
+                        session = self._sessions.pop(session_id, None)
+                    if session is None:
+                        return False
+                    session.close()
+                    return True
+
+                def close_all(self):
+                    with self._lock:
+                        sessions = list(self._sessions.values())
+                        self._sessions.clear()
+                    for session in sessions:
+                        session.close()
+                    return len(sessions)
 
                 def sweep(self):
                     now = time.time()
@@ -597,6 +885,9 @@ class TermuxPtySessionManager(
                     if self.path == "/health":
                         self._respond(200, {"ok": True})
                         return
+                    if self.path == "/sessions":
+                        self._respond(200, {"sessions": registry.list_all(), "running": True})
+                        return
                     self._respond(404, {"error": "Not found", "running": False})
 
                 def do_POST(self):
@@ -620,6 +911,24 @@ class TermuxPtySessionManager(
                     parts = self.path.strip("/").split("/")
                     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "stdin":
                         self._handle_write(parts[1], payload)
+                        return
+
+                    self._respond(404, {"error": "Not found", "running": False})
+
+                def do_DELETE(self):
+                    if not self._authorize():
+                        return
+                    if self.path == "/sessions":
+                        closed = registry.close_all()
+                        self._respond(200, {"success": True, "running": False, "closed": closed})
+                        return
+
+                    parts = self.path.strip("/").split("/")
+                    if len(parts) == 2 and parts[0] == "sessions":
+                        if registry.close_session(parts[1]):
+                            self._respond(200, {"success": True, "running": False})
+                        else:
+                            self._respond(404, {"success": False, "running": False, "error": "Session not found"})
                         return
 
                     self._respond(404, {"error": "Not found", "running": False})

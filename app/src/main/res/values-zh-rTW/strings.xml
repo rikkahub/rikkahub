@@ -1100,5 +1100,25 @@
   <string name="save">儲存</string>
   <string name="reset">重設</string>
   <string name="enabled">已啟用</string>
+  <string name="setting_termux_page_current_address">目前位址：%1$s</string>
+  <string name="setting_termux_page_pty_server_port_title">PTY 連接埠</string>
+  <string name="setting_termux_page_pty_refresh_sessions">重新整理工作階段</string>
+  <string name="setting_termux_page_pty_close_all_sessions">全部關閉</string>
+  <string name="setting_termux_page_pty_loading_sessions">正在載入 PTY 工作階段...</string>
+  <string name="setting_termux_page_pty_no_sessions">目前沒有作用中的 PTY 工作階段。</string>
+  <string name="setting_termux_page_pty_server_not_running">PTY 伺服器未執行。</string>
+  <string name="setting_termux_page_pty_session_id">ID：%1$s</string>
+  <string name="setting_termux_page_pty_session_workdir">目錄：%1$s</string>
+  <string name="setting_termux_page_pty_session_status_running">執行中</string>
+  <string name="setting_termux_page_pty_session_status_finished">已結束</string>
+  <string name="setting_termux_page_pty_session_pid">PID：%1$d</string>
+  <string name="setting_termux_page_pty_session_exit_code">結束代碼：%1$d</string>
+  <string name="setting_termux_page_pty_session_buffered_output">緩衝輸出：%1$d</string>
+  <string name="setting_termux_page_pty_session_last_active">上次使用：%1$s</string>
+  <string name="setting_termux_page_pty_close_session">關閉工作階段</string>
+  <string name="chat_page_termux_command_mode_attachments_disabled">附件在指令模式中已停用</string>
+  <string name="chat_page_termux_command_mode_content_desc">Termux 命令模式</string>
+  <string name="chat_page_termux_command_mode_title">命令模式</string>
+  <string name="chat_page_termux_command_mode_supporting">/termux</string>
 </resources>
 

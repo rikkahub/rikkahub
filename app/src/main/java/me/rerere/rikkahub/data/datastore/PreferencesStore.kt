@@ -30,6 +30,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.LEARNING_MODE_PROMPT
 import me.rerere.rikkahub.data.ai.tools.termux.DEFAULT_TIMEOUT_MS
 import me.rerere.rikkahub.data.ai.tools.termux.TERMUX_PTY_DEFAULT_MAX_OUTPUT_CHARS
+import me.rerere.rikkahub.data.ai.tools.termux.TERMUX_PTY_DEFAULT_SERVER_PORT
 import me.rerere.rikkahub.data.ai.tools.termux.TERMUX_PTY_DEFAULT_YIELD_TIME_MS
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
@@ -127,6 +128,7 @@ class SettingsStore(
         val TERMUX_WORKDIR_SERVER_ENABLED = booleanPreferencesKey("termux_workdir_server_enabled")
         val TERMUX_WORKDIR_SERVER_PORT = intPreferencesKey("termux_workdir_server_port")
         val TERMUX_COMMAND_MODE_ENABLED = booleanPreferencesKey("termux_command_mode_enabled")
+        val TERMUX_PTY_SERVER_PORT = intPreferencesKey("termux_pty_server_port")
         val TERMUX_PTY_YIELD_TIME_MS = longPreferencesKey("termux_pty_yield_time_ms")
         val TERMUX_PTY_MAX_OUTPUT_CHARS = intPreferencesKey("termux_pty_max_output_chars")
 
@@ -233,6 +235,8 @@ class SettingsStore(
                 termuxWorkdirServerEnabled = preferences[TERMUX_WORKDIR_SERVER_ENABLED] == true,
                 termuxWorkdirServerPort = preferences[TERMUX_WORKDIR_SERVER_PORT] ?: 9090,
                 termuxCommandModeEnabled = preferences[TERMUX_COMMAND_MODE_ENABLED] == true,
+                termuxPtyServerPort =
+                    (preferences[TERMUX_PTY_SERVER_PORT] ?: TERMUX_PTY_DEFAULT_SERVER_PORT).coerceIn(1024, 65535),
                 termuxPtyYieldTimeMs = (preferences[TERMUX_PTY_YIELD_TIME_MS] ?: TERMUX_PTY_DEFAULT_YIELD_TIME_MS)
                     .coerceAtLeast(0L),
                 termuxPtyMaxOutputChars =
@@ -453,6 +457,7 @@ class SettingsStore(
             preferences[TERMUX_WORKDIR_SERVER_ENABLED] = settings.termuxWorkdirServerEnabled
             preferences[TERMUX_WORKDIR_SERVER_PORT] = settings.termuxWorkdirServerPort
             preferences[TERMUX_COMMAND_MODE_ENABLED] = settings.termuxCommandModeEnabled
+            preferences[TERMUX_PTY_SERVER_PORT] = settings.termuxPtyServerPort.coerceIn(1024, 65535)
             preferences[TERMUX_PTY_YIELD_TIME_MS] = settings.termuxPtyYieldTimeMs.coerceAtLeast(0L)
             preferences[TERMUX_PTY_MAX_OUTPUT_CHARS] = settings.termuxPtyMaxOutputChars.coerceAtLeast(256)
             preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
@@ -591,6 +596,7 @@ data class Settings(
     val termuxWorkdirServerEnabled: Boolean = false,
     val termuxWorkdirServerPort: Int = 9090,
     val termuxCommandModeEnabled: Boolean = false,
+    val termuxPtyServerPort: Int = TERMUX_PTY_DEFAULT_SERVER_PORT,
     val termuxPtyYieldTimeMs: Long = TERMUX_PTY_DEFAULT_YIELD_TIME_MS,
     val termuxPtyMaxOutputChars: Int = TERMUX_PTY_DEFAULT_MAX_OUTPUT_CHARS,
     val webDavConfig: WebDavConfig = WebDavConfig(),

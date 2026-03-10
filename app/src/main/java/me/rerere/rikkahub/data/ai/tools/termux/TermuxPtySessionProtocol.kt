@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 
-internal const val TERMUX_PTY_SERVER_PORT = 9071
+internal const val TERMUX_PTY_DEFAULT_SERVER_PORT = 9071
 internal const val TERMUX_PTY_DEFAULT_YIELD_TIME_MS = 250L
 internal const val TERMUX_PTY_DEFAULT_MAX_OUTPUT_CHARS = 12_000
 internal const val TERMUX_PTY_DEFAULT_COLUMNS = 120
@@ -54,6 +54,37 @@ data class TermuxPtyServerResponse(
     val exitCode: Int? = null,
     val error: String? = null,
     val truncated: Boolean = false,
+)
+
+@Serializable
+data class TermuxPtySessionInfo(
+    val id: String,
+    val command: String,
+    val workdir: String,
+    val pid: Int? = null,
+    val running: Boolean = false,
+    @SerialName("exit_code")
+    val exitCode: Int? = null,
+    @SerialName("created_at_ms")
+    val createdAtMs: Long = 0L,
+    @SerialName("last_access_ms")
+    val lastAccessMs: Long = 0L,
+    @SerialName("pending_output_chars")
+    val pendingOutputChars: Int = 0,
+)
+
+@Serializable
+data class TermuxPtySessionListResponse(
+    val sessions: List<TermuxPtySessionInfo> = emptyList(),
+    val running: Boolean = true,
+    val error: String? = null,
+)
+
+@Serializable
+data class TermuxPtyActionResponse(
+    val success: Boolean = true,
+    val running: Boolean = false,
+    val error: String? = null,
 )
 
 internal fun TermuxPtyServerResponse.toToolResponse(): TermuxPtyToolResponse {

@@ -10,6 +10,7 @@ private const val TERMUX_PYTHON_TOOL_NAME = "termux_python"
 private const val WRITE_STDIN_TOOL_NAME = "write_stdin"
 
 object TermuxApprovalBlacklistMatcher {
+    private const val FALLBACK_FORCE_APPROVAL_CANDIDATE = "__fallback_force_approval__"
     private val ruleSeparatorRegex = Regex("[,，\\r\\n]+")
     private val whitespaceRegex = Regex("\\s+")
     private const val commandBoundaryRegexPart = "[\\s;&|()'\"`{}\\[\\],]"
@@ -26,6 +27,7 @@ object TermuxApprovalBlacklistMatcher {
 
         val commandCandidates = extractCommandCandidates(tool)
         if (commandCandidates.isEmpty()) return false
+        if (commandCandidates.contains(FALLBACK_FORCE_APPROVAL_CANDIDATE)) return true
 
         return blacklistRules.any { rule ->
             commandCandidates.any { command -> matchesRule(command, rule) }
@@ -67,12 +69,15 @@ object TermuxApprovalBlacklistMatcher {
         val sessionId = params["session_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             ?: return emptyList()
         val chars = params["chars"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        val bufferedInput = TermuxPtyInputBufferRegistry.previewInput(
+        val preview = TermuxPtyInputBufferRegistry.previewInputState(
             sessionId = sessionId,
             chars = chars,
         )
-        if (bufferedInput.isBlank()) return emptyList()
-        return buildMatchCandidates(bufferedInput)
+        if (preview.requiresFallbackApproval) {
+            return listOf(FALLBACK_FORCE_APPROVAL_CANDIDATE)
+        }
+        if (preview.text.isBlank()) return emptyList()
+        return buildMatchCandidates(preview.text)
     }
 
     private fun buildMatchCandidates(rawCommand: String): List<String> {

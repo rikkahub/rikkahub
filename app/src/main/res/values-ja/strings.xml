@@ -1102,5 +1102,25 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="save">保存</string>
   <string name="reset">リセット</string>
   <string name="enabled">有効</string>
+  <string name="setting_termux_page_current_address">現在のアドレス: %1$s</string>
+  <string name="setting_termux_page_pty_server_port_title">PTYポート</string>
+  <string name="setting_termux_page_pty_refresh_sessions">セッションを更新</string>
+  <string name="setting_termux_page_pty_close_all_sessions">すべて閉じる</string>
+  <string name="setting_termux_page_pty_loading_sessions">PTY セッションを読み込み中...</string>
+  <string name="setting_termux_page_pty_no_sessions">有効な PTY セッションがありません。</string>
+  <string name="setting_termux_page_pty_server_not_running">PTY サーバーが実行されていません。</string>
+  <string name="setting_termux_page_pty_session_id">ID: %1$s</string>
+  <string name="setting_termux_page_pty_session_workdir">ディレクトリ: %1$s</string>
+  <string name="setting_termux_page_pty_session_status_running">実行中</string>
+  <string name="setting_termux_page_pty_session_status_finished">完了</string>
+  <string name="setting_termux_page_pty_session_pid">PID：%1$d</string>
+  <string name="setting_termux_page_pty_session_exit_code">終了コード: %1$d</string>
+  <string name="setting_termux_page_pty_session_buffered_output">バッファ出力: %1$d</string>
+  <string name="setting_termux_page_pty_session_last_active">最終アクティブ: %1$s</string>
+  <string name="setting_termux_page_pty_close_session">セッションを閉じる</string>
+  <string name="chat_page_termux_command_mode_attachments_disabled">コマンドモードでは添付ファイルは無効です</string>
+  <string name="chat_page_termux_command_mode_content_desc">Termux コマンドモード</string>
+  <string name="chat_page_termux_command_mode_title">コマンドモード</string>
+  <string name="chat_page_termux_command_mode_supporting">/termux</string>
 </resources>
 

@@ -49,6 +49,7 @@ val appModule = module {
             json = get(),
             okHttpClient = get(),
             termuxCommandManager = get(),
+            settingsStore = get(),
         )
     }
 
@@ -104,6 +105,7 @@ val appModule = module {
             providerManager = get(),
             localTools = get(),
             termuxCommandManager = get(),
+            termuxPtySessionManager = get(),
             mcpManager = get(),
             filesManager = get()
         )

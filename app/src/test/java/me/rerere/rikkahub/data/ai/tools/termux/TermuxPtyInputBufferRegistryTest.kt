@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.ai.tools.termux
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TermuxPtyInputBufferRegistryTest {
@@ -44,6 +46,41 @@ class TermuxPtyInputBufferRegistryTest {
                 chars = "pwd",
             )
         )
+
+        TermuxPtyInputBufferRegistry.clearForTests()
+    }
+
+    @Test
+    fun `previewInputState should apply backspace edits`() {
+        TermuxPtyInputBufferRegistry.clearForTests()
+        TermuxPtyInputBufferRegistry.registerSession("session-3")
+
+        TermuxPtyInputBufferRegistry.commitInput(
+            sessionId = "session-3",
+            chars = "rmx\b -rf /tmp/demo",
+            keepSession = true,
+        )
+
+        assertEquals(
+            "rm -rf /tmp/demo",
+            TermuxPtyInputBufferRegistry.previewInputState("session-3", "").text,
+        )
+
+        TermuxPtyInputBufferRegistry.clearForTests()
+    }
+
+    @Test
+    fun `previewInputState should flag unsupported terminal editing as fallback approval`() {
+        TermuxPtyInputBufferRegistry.clearForTests()
+        TermuxPtyInputBufferRegistry.registerSession("session-4")
+
+        val preview = TermuxPtyInputBufferRegistry.previewInputState(
+            sessionId = "session-4",
+            chars = "rm -rf /tmp/demo\u001b[D",
+        )
+
+        assertTrue(preview.requiresFallbackApproval)
+        assertFalse(preview.text.isBlank())
 
         TermuxPtyInputBufferRegistry.clearForTests()
     }

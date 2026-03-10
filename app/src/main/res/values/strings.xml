@@ -1103,4 +1103,24 @@
   <string name="update_card_new_version_found">New version found %s</string>
   <string name="update_card_close">Close</string>
   <string name="update_card_downloading">Downloading, please check status bar for progress</string>
+  <string name="setting_termux_page_current_address">Current address: %1$s</string>
+  <string name="setting_termux_page_pty_server_port_title">PTY Port</string>
+  <string name="setting_termux_page_pty_refresh_sessions">Refresh Sessions</string>
+  <string name="setting_termux_page_pty_close_all_sessions">Close All</string>
+  <string name="setting_termux_page_pty_loading_sessions">Loading PTY sessions...</string>
+  <string name="setting_termux_page_pty_no_sessions">No active PTY sessions.</string>
+  <string name="setting_termux_page_pty_server_not_running">PTY server is not running.</string>
+  <string name="setting_termux_page_pty_session_id">ID: %1$s</string>
+  <string name="setting_termux_page_pty_session_workdir">Directory: %1$s</string>
+  <string name="setting_termux_page_pty_session_status_running">Running</string>
+  <string name="setting_termux_page_pty_session_status_finished">Finished</string>
+  <string name="setting_termux_page_pty_session_pid">PID: %1$d</string>
+  <string name="setting_termux_page_pty_session_exit_code">Exit code: %1$d</string>
+  <string name="setting_termux_page_pty_session_buffered_output">Buffered output: %1$d</string>
+  <string name="setting_termux_page_pty_session_last_active">Last active: %1$s</string>
+  <string name="setting_termux_page_pty_close_session">Close Session</string>
+  <string name="chat_page_termux_command_mode_attachments_disabled">Attachments are disabled in command mode</string>
+  <string name="chat_page_termux_command_mode_content_desc">Termux Command Mode</string>
+  <string name="chat_page_termux_command_mode_title">Command Mode</string>
+  <string name="chat_page_termux_command_mode_supporting">/termux</string>
 </resources>

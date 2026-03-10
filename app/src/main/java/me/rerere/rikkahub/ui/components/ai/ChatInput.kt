@@ -782,6 +782,7 @@ private fun FilesPicker(
 ) {
     val settings = LocalSettings.current
     val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
+    val attachmentsEnabled = !(termuxCommandModeEnabled && !state.isEditing())
 
     Column(
         modifier = Modifier
@@ -795,31 +796,35 @@ private fun FilesPicker(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            TakePicButton {
-                state.addImages(it)
-                onDismiss()
-            }
-
-            ImagePickButton {
-                state.addImages(it)
-                onDismiss()
-            }
-
-            if (provider != null && provider is ProviderSetting.Google) {
-                VideoPickButton {
-                    state.addVideos(it)
+            if (attachmentsEnabled) {
+                TakePicButton {
+                    state.addImages(it)
                     onDismiss()
                 }
 
-                AudioPickButton {
-                    state.addAudios(it)
+                ImagePickButton {
+                    state.addImages(it)
                     onDismiss()
                 }
-            }
 
-            FilePickButton {
-                state.addFiles(it)
-                onDismiss()
+                if (provider != null && provider is ProviderSetting.Google) {
+                    VideoPickButton {
+                        state.addVideos(it)
+                        onDismiss()
+                    }
+
+                    AudioPickButton {
+                        state.addAudios(it)
+                        onDismiss()
+                    }
+                }
+
+                FilePickButton {
+                    state.addFiles(it)
+                    onDismiss()
+                }
+            } else {
+                Text(stringResource(R.string.chat_page_termux_command_mode_attachments_disabled))
             }
         }
 
@@ -887,14 +892,14 @@ private fun FilesPicker(
             leadingContent = {
                 Icon(
                     imageVector = HugeIcons.Package01,
-                    contentDescription = "Termux Command Mode",
+                    contentDescription = stringResource(R.string.chat_page_termux_command_mode_content_desc),
                 )
             },
             headlineContent = {
-                Text("指令模式")
+                Text(stringResource(R.string.chat_page_termux_command_mode_title))
             },
             supportingContent = {
-                Text("/termux")
+                Text(stringResource(R.string.chat_page_termux_command_mode_supporting))
             },
             trailingContent = {
                 Switch(

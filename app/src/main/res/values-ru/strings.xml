@@ -1102,5 +1102,25 @@
   <string name="save">Сохранить</string>
   <string name="reset">Сброс</string>
   <string name="enabled">Включено</string>
+  <string name="setting_termux_page_current_address">Текущий адрес: %1$s</string>
+  <string name="setting_termux_page_pty_server_port_title">Порт PTY</string>
+  <string name="setting_termux_page_pty_refresh_sessions">Обновить сеансы</string>
+  <string name="setting_termux_page_pty_close_all_sessions">Закрыть все</string>
+  <string name="setting_termux_page_pty_loading_sessions">Загрузка сеансов PTY...</string>
+  <string name="setting_termux_page_pty_no_sessions">Нет активных сеансов PTY.</string>
+  <string name="setting_termux_page_pty_server_not_running">Сервер PTY не запущен.</string>
+  <string name="setting_termux_page_pty_session_id">ID: %1$s</string>
+  <string name="setting_termux_page_pty_session_workdir">Каталог: %1$s</string>
+  <string name="setting_termux_page_pty_session_status_running">Работает</string>
+  <string name="setting_termux_page_pty_session_status_finished">Завершено</string>
+  <string name="setting_termux_page_pty_session_pid">PID: %1$d</string>
+  <string name="setting_termux_page_pty_session_exit_code">Код выхода: %1$d</string>
+  <string name="setting_termux_page_pty_session_buffered_output">Буферизованный вывод: %1$d</string>
+  <string name="setting_termux_page_pty_session_last_active">Последняя активность: %1$s</string>
+  <string name="setting_termux_page_pty_close_session">Закрыть сеанс</string>
+  <string name="chat_page_termux_command_mode_attachments_disabled">В режиме команд вложения отключены</string>
+  <string name="chat_page_termux_command_mode_content_desc">Командный режим Termux</string>
+  <string name="chat_page_termux_command_mode_title">Командный режим</string>
+  <string name="chat_page_termux_command_mode_supporting">/termux</string>
 </resources>
 

@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
@@ -59,6 +60,8 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxDirectCommandParseResult
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxDirectCommandParser
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxOutputFormatter
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtySessionManager
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtyToolResponse
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxResult
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
@@ -95,6 +98,7 @@ import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.sendNotification
+import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -148,6 +152,7 @@ class ChatService(
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
     private val termuxCommandManager: TermuxCommandManager,
+    private val termuxPtySessionManager: TermuxPtySessionManager,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
 ) {
@@ -442,6 +447,20 @@ class ChatService(
         return "命令执行完成，但没有输出。"
     }
 
+    private fun extractPtySessionIds(messages: List<UIMessage>): Set<String> {
+        val currentMessage = messages.lastOrNull() ?: return emptySet()
+        return currentMessage.getTools().asSequence()
+            .flatMap { tool -> tool.output.asSequence() }
+            .mapNotNull { part ->
+                val text = (part as? UIMessagePart.Text)?.text ?: return@mapNotNull null
+                runCatching {
+                    JsonInstant.decodeFromString<TermuxPtyToolResponse>(text)
+                }.getOrNull()?.sessionId
+            }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
+
     private fun preprocessUserInputParts(
         parts: List<UIMessagePart>,
         messageDepthFromEnd: Int = 1,
@@ -711,6 +730,7 @@ class ChatService(
         val model = assistant.chatModelId?.let { settings.findModelById(it) } ?: settings.getCurrentChatModel() ?: return
         val mcpTools = mcpManager.getAvailableToolsForServers(assistant.mcpServers)
 
+        val ptySessionsOpenedThisRun = linkedSetOf<String>()
         runCatching {
             // reset suggestions
             updateConversation(conversationId, conversation.copy(chatSuggestions = emptyList()))
@@ -774,9 +794,15 @@ class ChatService(
                         )
                     }
                 },
-            ).onCompletion {
+            ).onCompletion { cause ->
                 // 取消 Live Update 通知
                 cancelLiveUpdateNotification(conversationId)
+
+                if (cause is CancellationException && ptySessionsOpenedThisRun.isNotEmpty()) {
+                    withContext(NonCancellable) {
+                        termuxPtySessionManager.closeSessions(ptySessionsOpenedThisRun)
+                    }
+                }
 
                 // 可能被取消了，或者意外结束，兜底更新
                 val updatedConversation = getConversationFlow(conversationId).value.copy(
@@ -794,6 +820,7 @@ class ChatService(
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
+                        ptySessionsOpenedThisRun += extractPtySessionIds(chunk.messages)
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunk.messages)
                         updateConversation(conversationId, updatedConversation)
