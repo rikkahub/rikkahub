@@ -778,6 +778,7 @@ class TermuxPtySessionManager(
                     self.exit_code = None
                     self.pending_output = ""
                     self.output_overflowed = False
+                    self.output_generation = 0
                     now = time.time()
                     self.created_at = now
                     self.last_access = now
@@ -816,6 +817,7 @@ class TermuxPtySessionManager(
                     if not text:
                         return
                     self.pending_output += text
+                    self.output_generation += 1
                     if len(self.pending_output) > MAX_PENDING_OUTPUT_CHARS:
                         self.pending_output = self.pending_output[-MAX_PENDING_OUTPUT_CHARS:]
                         self.output_overflowed = True
@@ -892,12 +894,27 @@ class TermuxPtySessionManager(
 
                 def read(self, yield_time_ms, max_output_chars, wait_for_yield_window=False):
                     timeout_seconds = max(yield_time_ms, 0) / 1000.0
-                    end_time = time.time() + timeout_seconds
+                    if wait_for_yield_window and timeout_seconds > 0:
+                        total_wait_seconds = min(max(timeout_seconds * 4.0, 1.0), 2.0)
+                    else:
+                        total_wait_seconds = timeout_seconds
+                    deadline = time.time() + total_wait_seconds
                     with self.condition:
                         self.last_access = time.time()
                         if wait_for_yield_window and timeout_seconds > 0:
+                            last_seen_generation = self.output_generation
+                            last_new_output_at = None
                             while True:
-                                remaining = end_time - time.time()
+                                now = time.time()
+                                if self.output_generation != last_seen_generation:
+                                    last_seen_generation = self.output_generation
+                                    last_new_output_at = now
+                                if last_new_output_at is None and not self.running:
+                                    break
+                                if last_new_output_at is not None:
+                                    remaining = min(deadline, last_new_output_at + timeout_seconds) - now
+                                else:
+                                    remaining = deadline - now
                                 if remaining <= 0:
                                     break
                                 self.condition.wait(remaining)
@@ -907,7 +924,7 @@ class TermuxPtySessionManager(
                                 and self.running
                                 and timeout_seconds > 0
                             ):
-                                remaining = end_time - time.time()
+                                remaining = deadline - time.time()
                                 if remaining <= 0:
                                     break
                                 self.condition.wait(remaining)

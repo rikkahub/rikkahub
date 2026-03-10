@@ -26,6 +26,19 @@ class TermuxPtySessionProtocolTest {
     }
 
     @Test
+    fun `toToolResponse should normalize interactive terminal output`() {
+        val response = TermuxPtyServerResponse(
+            output = "\u001B[1;35m>>> \u001B[0mprint('x')\r\nx\r\n",
+            sessionId = "session-123",
+            running = true,
+        )
+
+        val toolResponse = response.toToolResponse()
+
+        assertEquals(">>> print('x')\nx\n", toolResponse.output)
+    }
+
+    @Test
     fun `encode should use snake case fields`() {
         val payload = TermuxPtyToolResponse(
             output = "chunk",

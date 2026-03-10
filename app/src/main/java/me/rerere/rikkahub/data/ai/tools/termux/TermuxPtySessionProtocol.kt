@@ -89,7 +89,7 @@ data class TermuxPtyActionResponse(
 
 internal fun TermuxPtyServerResponse.toToolResponse(): TermuxPtyToolResponse {
     return TermuxPtyToolResponse(
-        output = output,
+        output = TermuxOutputFormatter.normalizeTerminalOutput(output),
         sessionId = sessionId,
         running = running,
         exitCode = exitCode,

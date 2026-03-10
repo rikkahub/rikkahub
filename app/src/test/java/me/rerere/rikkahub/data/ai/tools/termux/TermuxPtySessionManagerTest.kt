@@ -153,6 +153,88 @@ class TermuxPtySessionManagerTest {
     }
 
     @Test
+    fun `start should wait long enough to capture delayed startup output`() {
+        assumeTrue(canRunCommand("bash"))
+        assumeTrue(canRunCommand("python3"))
+
+        val localBashPath = resolveCommandPath("bash")
+        assumeTrue("bash path could not be resolved", localBashPath != null)
+
+        val tempHome = Files.createTempDirectory("termux-pty-delayed-start").toFile()
+        val stateDir = File(tempHome, ".rikkahub").apply { mkdirs() }
+        val scriptFile = File(stateDir, "pty_session_server.py")
+        val port = reservePort()
+        val token = "test-token"
+        var serverProcess: Process? = null
+
+        try {
+            val sessionManager = allocateSessionManager()
+            scriptFile.writeText(
+                sessionManager.termuxPtyServerScriptForTest().replace(
+                    oldValue = "\"/data/data/com.termux/files/usr/bin/bash\"",
+                    newValue = "\"$localBashPath\"",
+                )
+            )
+
+            serverProcess = ProcessBuilder(
+                "python3",
+                "-u",
+                scriptFile.absolutePath,
+                "--port",
+                port.toString(),
+                "--token",
+                token,
+            )
+                .directory(tempHome)
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["HOME"] = tempHome.absolutePath
+                }
+                .start()
+
+            assertTrue("patched PTY server never became healthy", waitForHealth(port = port, token = token))
+
+            val startResponse = postJson<TermuxPtyStartRequest, TermuxPtyServerResponse>(
+                port = port,
+                token = token,
+                path = "/sessions",
+                payload = TermuxPtyStartRequest(
+                    command = delayedStartupCommand(),
+                    workdir = tempHome.absolutePath,
+                    yieldTimeMs = 50L,
+                    maxOutputChars = 12_000,
+                )
+            )
+
+            assertTrue(
+                "expected delayed startup output in initial response, got: ${startResponse.output}",
+                startResponse.output.contains("boot"),
+            )
+            assertTrue(
+                "expected prompt in initial response, got: ${startResponse.output}",
+                startResponse.output.contains("prompt> "),
+            )
+
+            startResponse.sessionId?.let { sessionId ->
+                deleteJson<TermuxPtyActionResponse>(
+                    port = port,
+                    token = token,
+                    path = "/sessions/$sessionId",
+                )
+            }
+        } finally {
+            serverProcess?.let { process ->
+                process.destroy()
+                if (!process.waitFor(1, TimeUnit.SECONDS)) {
+                    process.destroyForcibly()
+                    process.waitFor(5, TimeUnit.SECONDS)
+                }
+            }
+            tempHome.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `write should include post input output even when stale startup output is pending`() {
         assumeTrue(canRunCommand("bash"))
         assumeTrue(canRunCommand("python3"))
@@ -325,6 +407,13 @@ class TermuxPtySessionManagerTest {
         """.trimIndent()
     }
 
+    private fun delayedStartupCommand(): String {
+        return """
+            stty -echo
+            python3 -u -c "import time; time.sleep(0.35); print('boot', flush=True); print('prompt> ', end='', flush=True); time.sleep(1.0)"
+        """.trimIndent()
+    }
+
     private fun waitForHealth(
         port: Int,
         token: String,
@@ -369,6 +458,15 @@ class TermuxPtySessionManagerTest {
         path: String,
     ): T {
         val connection = openConnection(port = port, token = token, path = path, method = "GET")
+        return decodeJsonResponse(connection)
+    }
+
+    private inline fun <reified T : Any> deleteJson(
+        port: Int,
+        token: String,
+        path: String,
+    ): T {
+        val connection = openConnection(port = port, token = token, path = path, method = "DELETE")
         return decodeJsonResponse(connection)
     }
 
