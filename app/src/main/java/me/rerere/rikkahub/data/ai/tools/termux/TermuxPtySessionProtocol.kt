@@ -10,6 +10,7 @@ internal const val TERMUX_PTY_DEFAULT_YIELD_TIME_MS = 250L
 internal const val TERMUX_PTY_DEFAULT_MAX_OUTPUT_CHARS = 12_000
 internal const val TERMUX_PTY_DEFAULT_COLUMNS = 120
 internal const val TERMUX_PTY_DEFAULT_ROWS = 40
+internal const val TERMUX_PTY_SERVER_VERSION = 2
 
 @Serializable
 internal data class TermuxPtyStartRequest(
@@ -88,6 +89,12 @@ data class TermuxPtyActionResponse(
     val running: Boolean = false,
     val closed: Int? = null,
     val error: String? = null,
+)
+
+@Serializable
+internal data class TermuxPtyHealthResponse(
+    val ok: Boolean = false,
+    val version: Int? = null,
 )
 
 internal fun TermuxPtyServerResponse.toToolResponse(): TermuxPtyToolResponse {

@@ -213,7 +213,7 @@ class TermuxPtySessionManager(
                 error(message.ifBlank { "Failed to start PTY session server in Termux." })
             }
 
-            if (!ping(port = port, token = token)) {
+            if (!hasCompatibleServer(port = port, token = token)) {
                 val output = TermuxOutputFormatter.merge(
                     stdout = result.stdout,
                     stderr = result.stderr,
@@ -234,11 +234,11 @@ class TermuxPtySessionManager(
 
     private suspend fun resolveServerToken(port: Int): String? {
         val existingToken = serverToken
-        if (existingToken != null && serverPort == port && ping(port = port, token = existingToken)) {
+        if (existingToken != null && serverPort == port && hasCompatibleServer(port = port, token = existingToken)) {
             return existingToken
         }
 
-        val recoveredToken = recoverPersistedToken()?.takeIf { ping(port = port, token = it) } ?: return null
+        val recoveredToken = recoverPersistedToken()?.takeIf { hasCompatibleServer(port = port, token = it) } ?: return null
         serverToken = recoveredToken
         serverPort = port
         return recoveredToken
@@ -286,7 +286,7 @@ class TermuxPtySessionManager(
             .firstOrNull { it.isNotBlank() } == "running"
     }
 
-    private suspend fun ping(
+    private suspend fun hasCompatibleServer(
         port: Int,
         token: String,
     ): Boolean {
@@ -298,7 +298,11 @@ class TermuxPtySessionManager(
                     .get()
                     .build()
                 okHttpClient.newCall(request).execute().use { response ->
-                    response.isSuccessful
+                    if (!response.isSuccessful) return@use false
+                    val payload = json.decodeFromString<TermuxPtyHealthResponse>(
+                        response.body.string()
+                    )
+                    payload.ok && payload.version == TERMUX_PTY_SERVER_VERSION
                 }
             }.getOrDefault(false)
         }
@@ -749,6 +753,7 @@ class TermuxPtySessionManager(
             SESSION_TTL_SECONDS = 1800
             SESSION_SWEEP_INTERVAL_SECONDS = 60
             MAX_PENDING_OUTPUT_CHARS = 120000
+            SERVER_VERSION = ${TERMUX_PTY_SERVER_VERSION}
 
             def decode_exit_code(status):
                 if hasattr(os, "waitstatus_to_exitcode"):
@@ -1046,7 +1051,7 @@ class TermuxPtySessionManager(
                     if not self._authorize():
                         return
                     if self.path == "/health":
-                        self._respond(200, {"ok": True})
+                        self._respond(200, {"ok": True, "version": SERVER_VERSION})
                         return
                     if self.path == "/sessions":
                         self._respond(200, {"sessions": registry.list_all(), "running": True})

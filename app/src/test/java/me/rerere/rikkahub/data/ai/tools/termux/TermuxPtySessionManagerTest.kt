@@ -153,6 +153,68 @@ class TermuxPtySessionManagerTest {
     }
 
     @Test
+    fun `health endpoint should expose PTY server version`() {
+        assumeTrue(canRunCommand("bash"))
+        assumeTrue(canRunCommand("python3"))
+
+        val localBashPath = resolveCommandPath("bash")
+        assumeTrue("bash path could not be resolved", localBashPath != null)
+
+        val tempHome = Files.createTempDirectory("termux-pty-health-version").toFile()
+        val stateDir = File(tempHome, ".rikkahub").apply { mkdirs() }
+        val scriptFile = File(stateDir, "pty_session_server.py")
+        val port = reservePort()
+        val token = "test-token"
+        var serverProcess: Process? = null
+
+        try {
+            val sessionManager = allocateSessionManager()
+            scriptFile.writeText(
+                sessionManager.termuxPtyServerScriptForTest().replace(
+                    oldValue = "\"/data/data/com.termux/files/usr/bin/bash\"",
+                    newValue = "\"$localBashPath\"",
+                )
+            )
+
+            serverProcess = ProcessBuilder(
+                "python3",
+                "-u",
+                scriptFile.absolutePath,
+                "--port",
+                port.toString(),
+                "--token",
+                token,
+            )
+                .directory(tempHome)
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["HOME"] = tempHome.absolutePath
+                }
+                .start()
+
+            assertTrue("patched PTY server never became healthy", waitForHealth(port = port, token = token))
+
+            val health = getJson<TermuxPtyHealthResponse>(
+                port = port,
+                token = token,
+                path = "/health",
+            )
+
+            assertTrue("expected health endpoint ok=true", health.ok)
+            assertEquals(TERMUX_PTY_SERVER_VERSION, health.version)
+        } finally {
+            serverProcess?.let { process ->
+                process.destroy()
+                if (!process.waitFor(1, TimeUnit.SECONDS)) {
+                    process.destroyForcibly()
+                    process.waitFor(5, TimeUnit.SECONDS)
+                }
+            }
+            tempHome.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `start should wait long enough to capture delayed startup output`() {
         assumeTrue(canRunCommand("bash"))
         assumeTrue(canRunCommand("python3"))
