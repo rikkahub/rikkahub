@@ -921,7 +921,7 @@
   <string name="setting_termux_page_timeout_title">Timeout (ms)</string>
   <string name="setting_termux_page_timeout_desc">Timeout for termux_exec and termux_python. Minimum 1000ms. Default 120000ms (2 minutes).</string>
   <string name="setting_termux_page_pty_title">Interactive Session Tuning</string>
-  <string name="setting_termux_page_pty_desc">Applies to termux_exec with tty=true and write_stdin.</string>
+  <string name="setting_termux_page_pty_desc">Applies to termux_exec with tty=true and write_stdin. PTY uses the Python standard library, so no pip package is required.</string>
   <string name="setting_termux_page_pty_yield_time_title">Initial wait (ms)</string>
   <string name="setting_termux_page_pty_max_output_chars_title">Max output chars</string>
   <string name="setting_termux_page_setup_title">Setup checklist</string>
@@ -930,7 +930,7 @@
   <string name="setting_termux_page_open_termux">Open Termux</string>
   <string name="setting_termux_page_open_termux_failed">Termux is not installed.</string>
   <string name="setting_termux_page_setup_step_3">3) Tap “Grant” above to authorize com.termux.permission.RUN_COMMAND</string>
-  <string name="setting_termux_page_setup_step_4">4) For termux_python: install Python in Termux (pkg install python)</string>
+  <string name="setting_termux_page_setup_step_4">4) For termux_python or interactive tty=true sessions: install Python in Termux (pkg install python). PTY does not require any extra pip package.</string>
   <string name="setting_termux_page_open_app_settings">Open App Settings</string>
   <string name="setting_display_page_enable_latex_rendering_title">Enable LaTeX Rendering</string>
   <string name="setting_display_page_enable_latex_rendering_desc">Render mathematical expressions and formulas using LaTeX syntax</string>
@@ -1109,7 +1109,7 @@
   <string name="setting_termux_page_pty_close_all_sessions">Close All</string>
   <string name="setting_termux_page_pty_loading_sessions">Loading PTY sessions...</string>
   <string name="setting_termux_page_pty_no_sessions">No active PTY sessions.</string>
-  <string name="setting_termux_page_pty_server_not_running">PTY server is not running.</string>
+  <string name="setting_termux_page_pty_server_not_running">No active PTY server detected. It starts on demand when tty=true is used.</string>
   <string name="setting_termux_page_pty_session_id">ID: %1$s</string>
   <string name="setting_termux_page_pty_session_workdir">Directory: %1$s</string>
   <string name="setting_termux_page_pty_session_status_running">Running</string>

@@ -4,17 +4,24 @@ import java.util.concurrent.ConcurrentHashMap
 
 internal object TermuxPtyInputBufferRegistry {
     private const val MAX_BUFFER_CHARS = 4_096
-    private data class SessionBufferState(
+    internal data class SessionBufferState(
         val buffer: String = "",
         val requiresFallbackApproval: Boolean = false,
     )
 
+    internal class PreviewCursor internal constructor() {
+        internal val sessionBuffers = mutableMapOf<String, SessionBufferState>()
+    }
+
     data class PreviewState(
         val text: String,
         val requiresFallbackApproval: Boolean,
+        val hasKnownState: Boolean,
     )
 
     private val sessionBuffers = ConcurrentHashMap<String, SessionBufferState>()
+
+    fun createPreviewCursor(): PreviewCursor = PreviewCursor()
 
     fun registerSession(sessionId: String) {
         sessionBuffers.putIfAbsent(sessionId, SessionBufferState())
@@ -30,22 +37,28 @@ internal object TermuxPtyInputBufferRegistry {
     fun previewInputState(
         sessionId: String,
         chars: String,
+        cursor: PreviewCursor? = null,
     ): PreviewState {
+        val (current, hasKnownState) = resolveState(
+            sessionId = sessionId,
+            cursor = cursor,
+        )
         if (chars.isEmpty()) {
-            val current = sessionBuffers[sessionId] ?: SessionBufferState()
             return PreviewState(
                 text = current.buffer,
                 requiresFallbackApproval = current.requiresFallbackApproval,
+                hasKnownState = hasKnownState,
             )
         }
         val state = applyInput(
-            current = sessionBuffers[sessionId] ?: SessionBufferState(),
+            current = current,
             chars = chars,
             commitMode = false,
         )
         return PreviewState(
             text = state.buffer,
-            requiresFallbackApproval = state.requiresFallbackApproval,
+            requiresFallbackApproval = state.requiresFallbackApproval || !hasKnownState,
+            hasKnownState = hasKnownState,
         )
     }
 
@@ -66,6 +79,27 @@ internal object TermuxPtyInputBufferRegistry {
         )
     }
 
+    fun commitPreview(
+        sessionId: String,
+        chars: String,
+        cursor: PreviewCursor,
+        keepSession: Boolean,
+    ) {
+        if (!keepSession) {
+            cursor.sessionBuffers.remove(sessionId)
+            return
+        }
+        if (chars.isEmpty()) return
+        val current = cursor.sessionBuffers[sessionId]
+            ?: sessionBuffers[sessionId]
+            ?: SessionBufferState()
+        cursor.sessionBuffers[sessionId] = applyInput(
+            current = current,
+            chars = chars,
+            commitMode = true,
+        )
+    }
+
     fun removeSession(sessionId: String) {
         sessionBuffers.remove(sessionId)
     }
@@ -76,6 +110,15 @@ internal object TermuxPtyInputBufferRegistry {
 
     fun clearForTests() {
         clearAllSessions()
+    }
+
+    private fun resolveState(
+        sessionId: String,
+        cursor: PreviewCursor?,
+    ): Pair<SessionBufferState, Boolean> {
+        cursor?.sessionBuffers?.get(sessionId)?.let { return it to true }
+        sessionBuffers[sessionId]?.let { return it to true }
+        return SessionBufferState() to false
     }
 
     private fun applyInput(

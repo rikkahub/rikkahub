@@ -79,7 +79,18 @@ class TermuxPtySessionManager(
 
     suspend fun listSessions(): TermuxPtySessionListResponse {
         val port = currentPort()
-        val token = resolveServerToken(port) ?: return TermuxPtySessionListResponse(running = false)
+        val token = resolveServerToken(port)
+        if (token == null) {
+            val running = isServerProcessRunning(port)
+            return TermuxPtySessionListResponse(
+                running = running,
+                error = if (running) {
+                    "PTY session server is running, but its auth token could not be recovered yet."
+                } else {
+                    null
+                },
+            )
+        }
         return runCatching {
             getJson<TermuxPtySessionListResponse>(
                 port = port,
@@ -87,8 +98,9 @@ class TermuxPtySessionManager(
                 path = "/sessions",
             )
         }.getOrElse { e ->
+            val running = isServerProcessRunning(port)
             TermuxPtySessionListResponse(
-                running = false,
+                running = running,
                 error = e.message ?: e.javaClass.name,
             )
         }
@@ -262,6 +274,27 @@ class TermuxPtySessionManager(
         return result.stdout.lineSequence()
             .map { it.trim() }
             .firstOrNull { it.isNotBlank() }
+    }
+
+    private suspend fun isServerProcessRunning(port: Int): Boolean {
+        val result = runCatching {
+            termuxCommandManager.run(
+                TermuxRunCommandRequest(
+                    commandPath = TERMUX_BASH_PATH,
+                    arguments = listOf("-lc", buildProbeServerScript(port)),
+                    workdir = TERMUX_HOME_PATH,
+                    background = false,
+                    timeoutMs = 5_000L,
+                    label = "RikkaHub inspect PTY session server process",
+                    description = "Check interactive shell session server process",
+                    trackLifecycle = false,
+                )
+            )
+        }.getOrNull() ?: return false
+        if (!result.isSuccessful()) return false
+        return result.stdout.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() } == "running"
     }
 
     private suspend fun ping(
@@ -625,10 +658,89 @@ class TermuxPtySessionManager(
         """.trimIndent()
     }
 
+    private fun buildProbeServerScript(port: Int): String {
+        return """
+            set -eu
+
+            STATE_DIR="${'$'}HOME/.rikkahub"
+            SCRIPT_PATH="${'$'}STATE_DIR/pty_session_server.py"
+            PID_FILE="${'$'}STATE_DIR/pty_session_server.pid"
+            PORT="$port"
+
+            is_pty_server_cmdline() {
+              _cmdline="${'$'}1"
+              _script="${'$'}2"
+              _port="${'$'}3"
+              _padded=" ${'$'}{_cmdline} "
+              case "${'$'}_padded" in
+                *" python3 -u ${'$'}_script --port ${'$'}_port --token "*|*" python3 -u ${'$'}_script --port ${'$'}_port "*" --token "*)
+                  return 0
+                  ;;
+                *)
+                  return 1
+                  ;;
+              esac
+            }
+
+            is_pty_server_pid() {
+              _pid="${'$'}1"
+              [ -n "${'$'}_pid" ] || return 1
+              [ -r "/proc/${'$'}_pid/cmdline" ] || return 1
+              _cmdline="${'$'}(cat "/proc/${'$'}_pid/cmdline" 2>/dev/null | tr '\0' ' ')"
+              [ -n "${'$'}_cmdline" ] || return 1
+              is_pty_server_cmdline "${'$'}_cmdline" "${'$'}SCRIPT_PATH" "${'$'}PORT"
+            }
+
+            find_running_pty_server_pid_by_proc() {
+              for _p in /proc/[0-9]*; do
+                _pid="${'$'}{_p#/proc/}"
+                [ -r "${'$'}_p/cmdline" ] || continue
+                _cmdline="${'$'}(cat "${'$'}_p/cmdline" 2>/dev/null | tr '\0' ' ')"
+                [ -n "${'$'}_cmdline" ] || continue
+                if is_pty_server_cmdline "${'$'}_cmdline" "${'$'}SCRIPT_PATH" "${'$'}PORT"; then
+                  echo "${'$'}_pid"
+                  return 0
+                fi
+              done
+              return 1
+            }
+
+            find_running_pty_server_pid_by_ps() {
+              while read -r _user _pid _ppid _c _stime _tty _time _cmdline; do
+                [ "${'$'}_pid" = "PID" ] && continue
+                [ -n "${'$'}_cmdline" ] || continue
+                if is_pty_server_cmdline " ${'$'}{_cmdline} " "${'$'}SCRIPT_PATH" "${'$'}PORT"; then
+                  echo "${'$'}_pid"
+                  return 0
+                fi
+              done < <(ps -ef 2>/dev/null)
+              return 1
+            }
+
+            PID="$(cat "${'$'}PID_FILE" 2>/dev/null || true)"
+            if [ -n "${'$'}PID" ] && kill -0 "${'$'}PID" 2>/dev/null && is_pty_server_pid "${'$'}PID"; then
+              echo "running"
+              exit 0
+            fi
+
+            ORPHAN_PID="${'$'}(find_running_pty_server_pid_by_proc 2>/dev/null || true)"
+            if [ -z "${'$'}ORPHAN_PID" ]; then
+              ORPHAN_PID="${'$'}(find_running_pty_server_pid_by_ps 2>/dev/null || true)"
+            fi
+
+            if [ -n "${'$'}ORPHAN_PID" ]; then
+              echo "running"
+            else
+              echo "stopped"
+            fi
+        """.trimIndent()
+    }
+
     private fun termuxPtyServerScript(): String {
         return """
             #!/usr/bin/env python3
             import argparse
+            import codecs
             import errno
             import fcntl
             import json
@@ -682,6 +794,7 @@ class TermuxPtySessionManager(
                     self.last_access = now
                     self.lock = threading.Lock()
                     self.condition = threading.Condition(self.lock)
+                    self.decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
                     self._start()
 
                 def _start(self):
@@ -689,8 +802,15 @@ class TermuxPtySessionManager(
                     if pid == 0:
                         try:
                             os.chdir(self.workdir)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            os.write(
+                                2,
+                                "Failed to change directory to {}: {}\n".format(
+                                    self.workdir,
+                                    exc,
+                                ).encode("utf-8", errors="replace"),
+                            )
+                            os._exit(1)
                         env = os.environ.copy()
                         env.setdefault("TERM", DEFAULT_TERM)
                         env["COLUMNS"] = str(self.cols)
@@ -717,7 +837,7 @@ class TermuxPtySessionManager(
                             data = os.read(self.master_fd, 4096)
                             if not data:
                                 break
-                            text = data.decode("utf-8", errors="replace")
+                            text = self.decoder.decode(data)
                             with self.condition:
                                 self.pending_output += text
                                 self.last_access = time.time()
@@ -729,6 +849,11 @@ class TermuxPtySessionManager(
                                 self.pending_output += "\n[PTY read error] {}\n".format(exc)
                                 self.condition.notify_all()
                             break
+                    tail = self.decoder.decode(b"", final=True)
+                    if tail:
+                        with self.condition:
+                            self.pending_output += tail
+                            self.condition.notify_all()
                     with self.condition:
                         self.condition.notify_all()
 
@@ -747,11 +872,24 @@ class TermuxPtySessionManager(
                 def write(self, chars):
                     if not chars:
                         return
-                    encoded = chars.encode("utf-8")
-                    with self.condition:
-                        if not self.running:
-                            raise RuntimeError("Session is no longer running")
-                    os.write(self.master_fd, encoded)
+                    pending = memoryview(chars.encode("utf-8"))
+                    while pending:
+                        with self.condition:
+                            if not self.running:
+                                raise RuntimeError("Session is no longer running")
+                        try:
+                            written = os.write(self.master_fd, pending)
+                            if written <= 0:
+                                raise RuntimeError("Failed to write to PTY session")
+                            pending = pending[written:]
+                        except BlockingIOError:
+                            _, ready, _ = select.select([], [self.master_fd], [], 1.0)
+                            if not ready:
+                                continue
+                        except InterruptedError:
+                            continue
+                        except OSError as exc:
+                            raise RuntimeError(str(exc) or "Failed to write to PTY session")
                     with self.condition:
                         self.last_access = time.time()
 

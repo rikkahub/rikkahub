@@ -375,7 +375,8 @@ class LocalTools(
                                         append(
                                             "Setup checklist if this still fails: install Termux; set allow-external-apps=true in " +
                                                 "~/.termux/termux.properties; grant com.termux.permission.RUN_COMMAND to this app; " +
-                                                "install python in Termux (pkg install python)."
+                                                "install python in Termux (pkg install python). PTY uses Python's standard library; " +
+                                                "no pip package is required."
                                         )
                                     }
                                 ).encode(json)

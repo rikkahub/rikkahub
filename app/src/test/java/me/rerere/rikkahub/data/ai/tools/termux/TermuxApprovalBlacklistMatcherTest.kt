@@ -108,6 +108,24 @@ class TermuxApprovalBlacklistMatcherTest {
     }
 
     @Test
+    fun `shouldForceApproval should fall back when session state is unknown even without blacklist`() {
+        TermuxPtyInputBufferRegistry.clearForTests()
+
+        val tool = UIMessagePart.Tool(
+            toolCallId = "1",
+            toolName = "write_stdin",
+            input = """{"session_id":"missing-session","chars":"echo hi\n"}"""
+        )
+
+        assertTrue(
+            TermuxApprovalBlacklistMatcher.shouldForceApproval(
+                tool = tool,
+                blacklistRules = emptyList(),
+            )
+        )
+    }
+
+    @Test
     fun `parseBlacklistRules should split by line and comma`() {
         val rules = TermuxApprovalBlacklistMatcher.parseBlacklistRules(
             """

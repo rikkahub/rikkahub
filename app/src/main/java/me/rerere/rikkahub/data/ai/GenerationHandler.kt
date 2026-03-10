@@ -29,6 +29,7 @@ import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxApprovalBlacklistMatcher
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtyInputBufferRegistry
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
@@ -48,6 +49,11 @@ import java.util.Locale
 import kotlin.time.Clock
 
 private const val TAG = "GenerationHandler"
+
+internal data class ToolApprovalPassResult(
+    val tools: List<UIMessagePart.Tool>,
+    val hasPendingApproval: Boolean,
+)
 
 @Serializable
 sealed interface GenerationChunk {
@@ -175,32 +181,15 @@ class GenerationHandler(
                 }
 
                 // Check for tools that need approval
-                var hasPendingApproval = false
                 val blacklistRules = TermuxApprovalBlacklistMatcher.parseBlacklistRules(
                     settings.termuxApprovalBlacklist
                 )
-                val updatedTools = tools.map { tool ->
-                    val toolDef = toolsInternal.find { it.name == tool.toolName }
-                    val forceApproval = TermuxApprovalBlacklistMatcher.shouldForceApproval(
-                        tool = tool,
-                        blacklistRules = blacklistRules
-                    )
-                    when {
-                        // Tool needs approval and state is Auto -> set to Pending
-                        (toolDef?.needsApproval == true || forceApproval) &&
-                            tool.approvalState is ToolApprovalState.Auto -> {
-                            hasPendingApproval = true
-                            tool.copy(approvalState = ToolApprovalState.Pending)
-                        }
-                        // State is Pending -> keep waiting
-                        tool.approvalState is ToolApprovalState.Pending -> {
-                            hasPendingApproval = true
-                            tool
-                        }
-
-                        else -> tool
-                    }
-                }
+                val approvalPass = evaluatePendingToolApprovals(
+                    tools = tools,
+                    toolsInternal = toolsInternal,
+                    blacklistRules = blacklistRules,
+                )
+                val updatedTools = approvalPass.tools
 
                 // If any tools were updated to Pending, update the message and break
                 if (updatedTools != tools) {
@@ -217,7 +206,7 @@ class GenerationHandler(
                 }
 
                 // If there are pending approvals, break and wait for user
-                if (hasPendingApproval) {
+                if (approvalPass.hasPendingApproval) {
                     Log.i(TAG, "generateText: waiting for tool approval")
                     break
                 }
@@ -520,4 +509,57 @@ class GenerationHandler(
             }
         }
     }.flowOn(Dispatchers.IO)
+}
+
+internal fun evaluatePendingToolApprovals(
+    tools: List<UIMessagePart.Tool>,
+    toolsInternal: List<Tool>,
+    blacklistRules: List<String>,
+): ToolApprovalPassResult {
+    var hasPendingApproval = false
+    var approvalGateLocked = false
+    val previewCursor = TermuxPtyInputBufferRegistry.createPreviewCursor()
+
+    val updatedTools = tools.map { tool ->
+        if (approvalGateLocked) {
+            return@map tool
+        }
+
+        val toolDef = toolsInternal.find { it.name == tool.toolName }
+        val forceApproval = TermuxApprovalBlacklistMatcher.shouldForceApproval(
+            tool = tool,
+            blacklistRules = blacklistRules,
+            previewCursor = previewCursor,
+        )
+
+        when {
+            (toolDef?.needsApproval == true || forceApproval) &&
+                tool.approvalState is ToolApprovalState.Auto -> {
+                hasPendingApproval = true
+                approvalGateLocked = true
+                tool.copy(approvalState = ToolApprovalState.Pending)
+            }
+
+            tool.approvalState is ToolApprovalState.Pending -> {
+                hasPendingApproval = true
+                approvalGateLocked = true
+                tool
+            }
+
+            else -> {
+                if (tool.approvalState is ToolApprovalState.Auto) {
+                    TermuxApprovalBlacklistMatcher.advanceApprovalPreview(
+                        tool = tool,
+                        previewCursor = previewCursor,
+                    )
+                }
+                tool
+            }
+        }
+    }
+
+    return ToolApprovalPassResult(
+        tools = updatedTools,
+        hasPendingApproval = hasPendingApproval,
+    )
 }
