@@ -22,6 +22,9 @@ interface ScheduledTaskRunDAO {
     @Query("SELECT * FROM scheduled_task_run WHERE id = :id LIMIT 1")
     suspend fun getRunById(id: String): ScheduledTaskRunEntity?
 
+    @Query("DELETE FROM scheduled_task_run WHERE id = :id")
+    suspend fun deleteRunById(id: String)
+
     @Query(
         "SELECT * FROM scheduled_task_run " +
             "WHERE status IN ('SUCCESS', 'FAILED') " +
@@ -29,6 +32,9 @@ interface ScheduledTaskRunDAO {
             "LIMIT :limit"
     )
     fun getRecentFinishedRuns(limit: Int): Flow<List<ScheduledTaskRunEntity>>
+
+    @Query("DELETE FROM scheduled_task_run WHERE status IN ('SUCCESS', 'FAILED')")
+    suspend fun deleteAllFinishedRuns()
 
     @Query(
         "DELETE FROM scheduled_task_run " +

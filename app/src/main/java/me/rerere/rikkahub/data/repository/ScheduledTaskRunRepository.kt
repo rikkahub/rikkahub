@@ -25,6 +25,14 @@ class ScheduledTaskRunRepository(
         return dao.getRunById(id.toString())?.toModel()
     }
 
+    suspend fun deleteRun(id: Uuid) {
+        dao.deleteRunById(id.toString())
+    }
+
+    suspend fun deleteAllFinishedRuns() {
+        dao.deleteAllFinishedRuns()
+    }
+
     suspend fun insertRun(run: ScheduledTaskRun) {
         dao.insert(run.toEntity())
     }

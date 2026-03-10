@@ -1030,6 +1030,11 @@
   <string name="setting_scheduled_tasks_search_fallback">Search</string>
   <string name="scheduled_task_runs_title">Scheduled Task Runs</string>
   <string name="scheduled_task_runs_empty">No finished task runs yet.</string>
+  <string name="scheduled_task_runs_delete_all">Delete all task runs</string>
+  <string name="scheduled_task_runs_delete_all_title">Delete all task runs?</string>
+  <string name="scheduled_task_runs_delete_all_confirmation">This will permanently delete all finished task run records.</string>
+  <string name="scheduled_task_runs_delete_one_title">Delete this task run?</string>
+  <string name="scheduled_task_runs_delete_one_confirmation">This record will be permanently deleted.</string>
   <string name="scheduled_task_run_detail_title">Task Run Detail</string>
   <string name="scheduled_task_run_invalid_id">Invalid run id.</string>
   <string name="scheduled_task_run_not_found">Run not found.</string>
