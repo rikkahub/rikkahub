@@ -4,12 +4,12 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class GenerationHandlerTermuxApprovalTest {
     @Test
-    fun `evaluatePendingToolApprovals should only inspect current write stdin payload`() {
+    fun `evaluatePendingToolApprovals should not force approval for write stdin payload`() {
         val tools = listOf(
             UIMessagePart.Tool(
                 toolCallId = "call-1",
@@ -29,8 +29,8 @@ class GenerationHandlerTermuxApprovalTest {
             blacklistRules = listOf("rm"),
         )
 
-        assertTrue(result.hasPendingApproval)
-        assertEquals(ToolApprovalState.Pending, result.tools[0].approvalState)
+        assertFalse(result.hasPendingApproval)
+        assertEquals(ToolApprovalState.Auto, result.tools[0].approvalState)
         assertEquals(ToolApprovalState.Auto, result.tools[1].approvalState)
     }
 

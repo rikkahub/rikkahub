@@ -7,7 +7,6 @@ import me.rerere.ai.ui.UIMessagePart
 
 private const val TERMUX_EXEC_TOOL_NAME = "termux_exec"
 private const val TERMUX_PYTHON_TOOL_NAME = "termux_python"
-private const val WRITE_STDIN_TOOL_NAME = "write_stdin"
 
 object TermuxApprovalBlacklistMatcher {
     private val ruleSeparatorRegex = Regex("[,，\\r\\n]+")
@@ -18,11 +17,7 @@ object TermuxApprovalBlacklistMatcher {
         tool: UIMessagePart.Tool,
         blacklistRules: List<String>,
     ): Boolean {
-        if (
-            tool.toolName != TERMUX_EXEC_TOOL_NAME &&
-            tool.toolName != TERMUX_PYTHON_TOOL_NAME &&
-            tool.toolName != WRITE_STDIN_TOOL_NAME
-        ) {
+        if (tool.toolName != TERMUX_EXEC_TOOL_NAME && tool.toolName != TERMUX_PYTHON_TOOL_NAME) {
             return false
         }
 
@@ -50,7 +45,6 @@ object TermuxApprovalBlacklistMatcher {
         return when (tool.toolName) {
             TERMUX_EXEC_TOOL_NAME -> extractTermuxExecCandidates(tool)
             TERMUX_PYTHON_TOOL_NAME -> extractTermuxPythonCandidates(tool)
-            WRITE_STDIN_TOOL_NAME -> extractWriteStdinCandidates(tool)
             else -> emptyList()
         }
     }
@@ -67,22 +61,6 @@ object TermuxApprovalBlacklistMatcher {
         val code = params["code"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             ?: return emptyList()
         return buildMatchCandidates(code)
-    }
-
-    private fun extractWriteStdinCandidates(tool: UIMessagePart.Tool): List<String> {
-        val input = extractWriteStdinInput(tool) ?: return emptyList()
-        if (input.chars.isBlank()) return emptyList()
-        return buildMatchCandidates(input.chars)
-    }
-
-    private fun extractWriteStdinInput(tool: UIMessagePart.Tool): WriteStdinInput? {
-        val params = tool.inputAsJson().jsonObject
-        val sessionId = params["session_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-            ?: return null
-        return WriteStdinInput(
-            sessionId = sessionId,
-            chars = params["chars"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-        )
     }
 
     private fun buildMatchCandidates(rawCommand: String): List<String> {
@@ -118,9 +96,4 @@ object TermuxApprovalBlacklistMatcher {
     private fun normalizeWhitespace(value: String): String {
         return value.trim().replace(whitespaceRegex, " ")
     }
-
-    private data class WriteStdinInput(
-        val sessionId: String,
-        val chars: String,
-    )
 }
