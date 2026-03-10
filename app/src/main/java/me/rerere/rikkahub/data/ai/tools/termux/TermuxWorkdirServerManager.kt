@@ -39,7 +39,7 @@ class TermuxWorkdirServerManager(
                         commandPath = TERMUX_BASH_PATH,
                         arguments = listOf("-lc", script),
                         workdir = TERMUX_HOME_PATH,
-                        background = settingsStore.settingsFlow.value.termuxRunInBackground,
+                        background = true,
                         timeoutMs = 10_000L,
                         label = "RikkaHub workdir http server",
                     )
@@ -84,7 +84,7 @@ class TermuxWorkdirServerManager(
                         commandPath = TERMUX_BASH_PATH,
                         arguments = listOf("-lc", buildStopScript(expectedPort = expectedPort)),
                         workdir = TERMUX_HOME_PATH,
-                        background = settingsStore.settingsFlow.value.termuxRunInBackground,
+                        background = true,
                         timeoutMs = 30_000L,
                         label = "RikkaHub stop workdir http server",
                     )
@@ -117,7 +117,7 @@ class TermuxWorkdirServerManager(
                         commandPath = TERMUX_BASH_PATH,
                         arguments = listOf("-lc", buildStopScript(expectedPort = oldPort)),
                         workdir = TERMUX_HOME_PATH,
-                        background = settingsStore.settingsFlow.value.termuxRunInBackground,
+                        background = true,
                         timeoutMs = 30_000L,
                         label = "RikkaHub stop workdir http server",
                     )
@@ -131,7 +131,7 @@ class TermuxWorkdirServerManager(
                         commandPath = TERMUX_BASH_PATH,
                         arguments = listOf("-lc", buildStartScript(port = port, workdir = workdir)),
                         workdir = TERMUX_HOME_PATH,
-                        background = settingsStore.settingsFlow.value.termuxRunInBackground,
+                        background = true,
                         timeoutMs = 30_000L,
                         label = "RikkaHub workdir http server",
                     )

@@ -182,7 +182,7 @@ class TermuxCommandManager(
                     commandPath = TERMUX_BASH_PATH,
                     arguments = listOf("-lc", buildTerminateScript(executionId)),
                     workdir = TERMUX_HOME_PATH,
-                    background = false,
+                    background = true,
                     timeoutMs = TERMINATION_TIMEOUT_MS,
                     label = "RikkaHub terminate termux command",
                     description = "Terminate tracked Termux execution",
