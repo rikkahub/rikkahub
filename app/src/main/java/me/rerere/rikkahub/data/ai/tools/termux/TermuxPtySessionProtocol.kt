@@ -10,6 +10,10 @@ internal const val TERMUX_PTY_DEFAULT_YIELD_TIME_MS = 250L
 internal const val TERMUX_PTY_DEFAULT_MAX_OUTPUT_CHARS = 12_000
 internal const val TERMUX_PTY_DEFAULT_COLUMNS = 120
 internal const val TERMUX_PTY_DEFAULT_ROWS = 40
+/**
+ * Bump this when the embedded PTY Python server changes in a way that makes an already-running
+ * old server process incompatible with the newly shipped app logic or response parsing.
+ */
 internal const val TERMUX_PTY_SERVER_VERSION = 2
 
 @Serializable
