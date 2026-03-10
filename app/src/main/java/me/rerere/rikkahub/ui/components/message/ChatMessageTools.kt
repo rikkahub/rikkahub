@@ -135,6 +135,8 @@ private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
 private fun JsonElement?.getStringContent(key: String): String? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.contentOrNull
 
+internal fun UIMessagePart.Tool.canOpenPreviewSheet(): Boolean = toolName != ToolNames.ASK_USER
+
 @Composable
 fun ChainOfThoughtScope.ChatMessageToolStep(
     tool: UIMessagePart.Tool,
@@ -269,7 +271,8 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         } else {
             null
         },
-        onClick = if (content != null || isPending || images.isNotEmpty()) {
+        // Keep tool details inspectable even while the call is still running.
+        onClick = if (tool.canOpenPreviewSheet()) {
             { showResult = true }
         } else {
             null
