@@ -30,7 +30,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -102,12 +101,14 @@ fun SettingTermuxPage() {
     var ptySessionsLoading by remember { mutableStateOf(false) }
     var ptySessionError by remember { mutableStateOf<String?>(null) }
     var ptyServerRunning by remember { mutableStateOf(false) }
+    var ptySessionsChecked by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val toaster = LocalToaster.current
     val copiedText = stringResource(R.string.copied)
     val openTermuxFailedText = stringResource(R.string.setting_termux_page_open_termux_failed)
+    val ptyRefreshHintText = stringResource(R.string.setting_termux_page_pty_refresh_hint)
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val termuxRunCommandPermissionState = rememberPermissionState(
@@ -123,27 +124,34 @@ fun SettingTermuxPage() {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_START || event == Lifecycle.Event.ON_RESUME) {
                 allFilesAccessGranted = isAllFilesAccessGranted()
-                scope.launch {
-                    ptySessionsLoading = true
-                    val state = termuxPtySessionManager.listSessions()
-                    ptySessions = state.sessions
-                    ptyServerRunning = state.running
-                    ptySessionError = state.error
-                    ptySessionsLoading = false
-                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(settings.termuxPtyServerPort) {
-        ptySessionsLoading = true
-        val state = termuxPtySessionManager.listSessions()
-        ptySessions = state.sessions
-        ptyServerRunning = state.running
-        ptySessionError = state.error
-        ptySessionsLoading = false
+    fun refreshPtySessions() {
+        scope.launch {
+            ptySessionsLoading = true
+            val state = termuxPtySessionManager.listSessions()
+            ptySessions = state.sessions
+            ptyServerRunning = state.running
+            ptySessionError = state.error
+            ptySessionsChecked = true
+            ptySessionsLoading = false
+        }
+    }
+
+    fun clearPtySessionSnapshot() {
+        ptySessions = emptyList()
+        ptySessionError = null
+        ptyServerRunning = false
+        ptySessionsChecked = false
+    }
+
+    DisposableEffect(settings.termuxPtyServerPort) {
+        clearPtySessionSnapshot()
+        onDispose { }
     }
 
     Scaffold(
@@ -465,6 +473,7 @@ fun SettingTermuxPage() {
                                                 settingsStore.update {
                                                     it.copy(termuxPtyServerPort = ptyServerPort)
                                                 }
+                                                clearPtySessionSnapshot()
                                             }
                                         }
                                     },
@@ -517,14 +526,7 @@ fun SettingTermuxPage() {
                                 ) {
                                     TextButton(
                                         onClick = {
-                                            scope.launch {
-                                                ptySessionsLoading = true
-                                                val state = termuxPtySessionManager.listSessions()
-                                                ptySessions = state.sessions
-                                                ptyServerRunning = state.running
-                                                ptySessionError = state.error
-                                                ptySessionsLoading = false
-                                            }
+                                            refreshPtySessions()
                                         },
                                         enabled = !ptySessionsLoading,
                                     ) {
@@ -566,7 +568,9 @@ fun SettingTermuxPage() {
                                         color = MaterialTheme.colorScheme.error,
                                     )
                                 }
-                                if (ptySessions.isEmpty()) {
+                                if (!ptySessionsChecked) {
+                                    Text(ptyRefreshHintText)
+                                } else if (ptySessions.isEmpty()) {
                                     Text(
                                         if (ptyServerRunning) {
                                             stringResource(R.string.setting_termux_page_pty_no_sessions)
