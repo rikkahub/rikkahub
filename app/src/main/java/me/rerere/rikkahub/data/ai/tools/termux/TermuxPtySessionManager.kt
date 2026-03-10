@@ -76,6 +76,7 @@ class TermuxPtySessionManager(
         if (token == null) {
             val running = isServerProcessRunning(port)
             return TermuxPtySessionListResponse(
+                success = !running,
                 running = running,
                 error = if (running) {
                     "PTY session server is running, but its auth token could not be recovered yet."
@@ -93,6 +94,7 @@ class TermuxPtySessionManager(
         }.getOrElse { e ->
             val running = isServerProcessRunning(port)
             TermuxPtySessionListResponse(
+                success = false,
                 running = running,
                 error = e.message ?: e.javaClass.name,
             )

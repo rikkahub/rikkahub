@@ -30,4 +30,15 @@ class TermuxCommandToolResponseTest {
         assertTrue(payload.contains("\"success\":false"))
         assertTrue(payload.contains("\"output\":\"partial output\""))
     }
+
+    @Test
+    fun `toCommandErrorToolResponse should encode structured setup errors`() {
+        val payload = IllegalStateException("Termux unavailable")
+            .toCommandErrorToolResponse("Install Termux first")
+            .encode(JsonInstant)
+
+        assertTrue(payload.contains("\"success\":false"))
+        assertTrue(payload.contains("Termux unavailable"))
+        assertTrue(payload.contains("Install Termux first"))
+    }
 }

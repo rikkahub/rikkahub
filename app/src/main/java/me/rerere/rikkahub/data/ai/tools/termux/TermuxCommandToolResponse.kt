@@ -30,6 +30,22 @@ internal fun TermuxResult.toToolResponse(): TermuxCommandToolResponse {
     )
 }
 
+internal fun Throwable.toCommandErrorToolResponse(
+    setupHint: String? = null,
+): TermuxCommandToolResponse {
+    val message = buildString {
+        append(this@toCommandErrorToolResponse.message ?: this@toCommandErrorToolResponse.javaClass.name)
+        setupHint?.trim()?.takeIf { it.isNotBlank() }?.let {
+            append('\n')
+            append(it)
+        }
+    }
+    return TermuxCommandToolResponse(
+        success = false,
+        error = message,
+    )
+}
+
 fun TermuxCommandToolResponse.encode(json: Json): String {
     return json.encodeToString(this)
 }

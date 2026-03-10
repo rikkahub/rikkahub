@@ -23,6 +23,7 @@ class TermuxPtySessionProtocolTest {
         assertEquals("session-123", toolResponse.sessionId)
         assertEquals(true, toolResponse.running)
         assertEquals(true, toolResponse.truncated)
+        assertEquals(true, toolResponse.success)
     }
 
     @Test
@@ -39,6 +40,21 @@ class TermuxPtySessionProtocolTest {
     }
 
     @Test
+    fun `toToolResponse should mark non zero exits as unsuccessful`() {
+        val response = TermuxPtyServerResponse(
+            output = "boom",
+            sessionId = null,
+            running = false,
+            exitCode = 2,
+        )
+
+        val toolResponse = response.toToolResponse()
+
+        assertEquals(false, toolResponse.success)
+        assertEquals(2, toolResponse.exitCode)
+    }
+
+    @Test
     fun `encode should use snake case fields`() {
         val payload = TermuxPtyToolResponse(
             output = "chunk",
@@ -52,5 +68,16 @@ class TermuxPtySessionProtocolTest {
         assertTrue(payload.contains("\"session_id\":\"session-456\""))
         assertTrue(payload.contains("\"exit_code\":130"))
         assertTrue(payload.contains("\"output\":\"chunk\""))
+    }
+
+    @Test
+    fun `action response should preserve close all count`() {
+        val payload = TermuxPtyActionResponse(
+            success = true,
+            running = false,
+            closed = 3,
+        ).encode(JsonInstant)
+
+        assertTrue(payload.contains("\"closed\":3"))
     }
 }

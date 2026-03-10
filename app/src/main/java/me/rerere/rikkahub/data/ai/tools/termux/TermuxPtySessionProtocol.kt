@@ -42,6 +42,7 @@ data class TermuxPtyToolResponse(
     val exitCode: Int? = null,
     val error: String? = null,
     val truncated: Boolean = false,
+    val success: Boolean = true,
 )
 
 @Serializable
@@ -76,6 +77,7 @@ data class TermuxPtySessionInfo(
 @Serializable
 data class TermuxPtySessionListResponse(
     val sessions: List<TermuxPtySessionInfo> = emptyList(),
+    val success: Boolean = true,
     val running: Boolean = true,
     val error: String? = null,
 )
@@ -84,6 +86,7 @@ data class TermuxPtySessionListResponse(
 data class TermuxPtyActionResponse(
     val success: Boolean = true,
     val running: Boolean = false,
+    val closed: Int? = null,
     val error: String? = null,
 )
 
@@ -95,9 +98,34 @@ internal fun TermuxPtyServerResponse.toToolResponse(): TermuxPtyToolResponse {
         exitCode = exitCode,
         error = error,
         truncated = truncated,
+        success = error.isNullOrBlank() && (exitCode == null || exitCode == 0),
+    )
+}
+
+internal fun Throwable.toPtyErrorToolResponse(
+    setupHint: String? = null,
+): TermuxPtyToolResponse {
+    val message = buildString {
+        append(this@toPtyErrorToolResponse.message ?: this@toPtyErrorToolResponse.javaClass.name)
+        setupHint?.trim()?.takeIf { it.isNotBlank() }?.let {
+            append('\n')
+            append(it)
+        }
+    }
+    return TermuxPtyToolResponse(
+        error = message,
+        success = false,
     )
 }
 
 fun TermuxPtyToolResponse.encode(json: Json): String {
+    return json.encodeToString(this)
+}
+
+fun TermuxPtySessionListResponse.encode(json: Json): String {
+    return json.encodeToString(this)
+}
+
+fun TermuxPtyActionResponse.encode(json: Json): String {
     return json.encodeToString(this)
 }
