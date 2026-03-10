@@ -29,7 +29,6 @@ import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxApprovalBlacklistMatcher
-import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtyInputBufferRegistry
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
@@ -518,7 +517,6 @@ internal fun evaluatePendingToolApprovals(
 ): ToolApprovalPassResult {
     var hasPendingApproval = false
     var approvalGateLocked = false
-    val previewCursor = TermuxPtyInputBufferRegistry.createPreviewCursor()
 
     val updatedTools = tools.map { tool ->
         if (approvalGateLocked) {
@@ -529,7 +527,6 @@ internal fun evaluatePendingToolApprovals(
         val forceApproval = TermuxApprovalBlacklistMatcher.shouldForceApproval(
             tool = tool,
             blacklistRules = blacklistRules,
-            previewCursor = previewCursor,
         )
 
         when {
@@ -546,15 +543,7 @@ internal fun evaluatePendingToolApprovals(
                 tool
             }
 
-            else -> {
-                if (tool.approvalState is ToolApprovalState.Auto) {
-                    TermuxApprovalBlacklistMatcher.advanceApprovalPreview(
-                        tool = tool,
-                        previewCursor = previewCursor,
-                    )
-                }
-                tool
-            }
+            else -> tool
         }
     }
 

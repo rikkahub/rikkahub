@@ -48,7 +48,6 @@ class TermuxPtySessionManager(
                 rows = rows.coerceAtLeast(5),
             )
         )
-        response.sessionId?.let(TermuxPtyInputBufferRegistry::registerSession)
         return response
     }
 
@@ -67,12 +66,6 @@ class TermuxPtySessionManager(
                 yieldTimeMs = yieldTimeMs.coerceAtLeast(0L),
                 maxOutputChars = maxOutputChars.coerceAtLeast(256),
             )
-        )
-        val keepSession = response.sessionId != null || response.running
-        TermuxPtyInputBufferRegistry.commitInput(
-            sessionId = sessionId,
-            chars = chars,
-            keepSession = keepSession,
         )
         return response
     }
@@ -126,9 +119,6 @@ class TermuxPtySessionManager(
                 error = e.message ?: e.javaClass.name,
             )
         }
-        if (response.success) {
-            TermuxPtyInputBufferRegistry.removeSession(sessionId)
-        }
         return response
     }
 
@@ -157,9 +147,6 @@ class TermuxPtySessionManager(
                 running = false,
                 error = e.message ?: e.javaClass.name,
             )
-        }
-        if (response.success) {
-            TermuxPtyInputBufferRegistry.clearAllSessions()
         }
         return response
     }
@@ -759,6 +746,7 @@ class TermuxPtySessionManager(
             DEFAULT_TERM = "xterm-256color"
             SESSION_TTL_SECONDS = 1800
             SESSION_SWEEP_INTERVAL_SECONDS = 60
+            MAX_PENDING_OUTPUT_CHARS = 120000
 
             def decode_exit_code(status):
                 if hasattr(os, "waitstatus_to_exitcode"):
@@ -789,6 +777,7 @@ class TermuxPtySessionManager(
                     self.running = True
                     self.exit_code = None
                     self.pending_output = ""
+                    self.output_overflowed = False
                     now = time.time()
                     self.created_at = now
                     self.last_access = now
@@ -823,6 +812,14 @@ class TermuxPtySessionManager(
                     threading.Thread(target=self._reader_loop, daemon=True).start()
                     threading.Thread(target=self._waiter_loop, daemon=True).start()
 
+                def _append_output(self, text):
+                    if not text:
+                        return
+                    self.pending_output += text
+                    if len(self.pending_output) > MAX_PENDING_OUTPUT_CHARS:
+                        self.pending_output = self.pending_output[-MAX_PENDING_OUTPUT_CHARS:]
+                        self.output_overflowed = True
+
                 def _reader_loop(self):
                     while True:
                         try:
@@ -839,20 +836,20 @@ class TermuxPtySessionManager(
                                 break
                             text = self.decoder.decode(data)
                             with self.condition:
-                                self.pending_output += text
+                                self._append_output(text)
                                 self.last_access = time.time()
                                 self.condition.notify_all()
                         except OSError as exc:
                             if exc.errno in (errno.EIO, errno.EBADF):
                                 break
                             with self.condition:
-                                self.pending_output += "\n[PTY read error] {}\n".format(exc)
+                                self._append_output("\n[PTY read error] {}\n".format(exc))
                                 self.condition.notify_all()
                             break
                     tail = self.decoder.decode(b"", final=True)
                     if tail:
                         with self.condition:
-                            self.pending_output += tail
+                            self._append_output(tail)
                             self.condition.notify_all()
                     with self.condition:
                         self.condition.notify_all()
@@ -909,7 +906,9 @@ class TermuxPtySessionManager(
                             self.condition.wait(remaining)
                         output = self.pending_output[:max_output_chars]
                         self.pending_output = self.pending_output[max_output_chars:]
-                        truncated = bool(self.pending_output)
+                        overflowed = self.output_overflowed
+                        self.output_overflowed = False
+                        truncated = bool(self.pending_output) or overflowed
                         has_more = bool(self.pending_output)
                         running = self.running
                         exit_code = self.exit_code

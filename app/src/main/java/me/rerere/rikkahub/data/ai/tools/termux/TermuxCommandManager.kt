@@ -125,7 +125,7 @@ class TermuxCommandManager(
                 }
             }
             val terminationMessage = if (request.trackLifecycle) {
-                withContext(NonCancellable) {
+                clearTrackedExecutionStateAfterTermination(executionId = executionId) {
                     terminateTrackedExecution(
                         executionId = executionId,
                         reason = "timed out",
@@ -143,7 +143,7 @@ class TermuxCommandManager(
             )
         } catch (e: CancellationException) {
             if (request.trackLifecycle) {
-                withContext(NonCancellable) {
+                clearTrackedExecutionStateAfterTermination(executionId = executionId) {
                     terminateTrackedExecution(
                         executionId = executionId,
                         reason = "was cancelled",
@@ -204,6 +204,17 @@ class TermuxCommandManager(
         }.ifBlank {
             "Failed to terminate underlying Termux process after it $reason."
         }
+    }
+
+    private suspend fun clearTrackedExecutionStateAfterTermination(
+        executionId: String,
+        terminate: suspend () -> String?,
+    ): String? = withContext(NonCancellable) {
+        clearExecutionStoreAfterTermination(
+            executionStore = executionStore,
+            executionId = executionId,
+            terminate = terminate,
+        )
     }
 
     private fun buildExecutionWrapperScript(executionId: String): String {
@@ -362,4 +373,16 @@ internal fun completeDeferredBeforePersist(
 ) {
     deferred?.complete(result)
     persistCompletion()
+}
+
+internal suspend fun clearExecutionStoreAfterTermination(
+    executionStore: TermuxExecutionStore,
+    executionId: String,
+    terminate: suspend () -> String?,
+): String? {
+    return try {
+        terminate()
+    } finally {
+        executionStore.clearAll(executionId)
+    }
 }
