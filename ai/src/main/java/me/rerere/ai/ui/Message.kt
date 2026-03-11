@@ -93,8 +93,10 @@ data class UIMessage(
 
                     is UIMessagePart.Tool -> {
                         if (deltaPart.toolCallId.isBlank()) {
-                            // No ID yet - append to the last Tool if it also has no ID
-                            val lastTool = acc.lastOrNull { it is UIMessagePart.Tool } as? UIMessagePart.Tool
+                            // 空 id 只允许并到还没执行的匿名 tool
+                            val lastTool = acc.lastOrNull {
+                                it is UIMessagePart.Tool && !it.isExecuted && it.toolCallId.isBlank()
+                            } as? UIMessagePart.Tool
                             if (lastTool != null) {
                                 acc.map { part ->
                                     if (part === lastTool) part.merge(deltaPart) else part
@@ -103,7 +105,7 @@ data class UIMessage(
                                 acc + deltaPart.copy()
                             }
                         } else {
-                            // Has ID - find and update by ID, or insert new
+                            // 有 id 时始终按 id 归并
                             val existsPart = acc.find {
                                 it is UIMessagePart.Tool && it.toolCallId == deltaPart.toolCallId
                             } as? UIMessagePart.Tool

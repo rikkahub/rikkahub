@@ -175,6 +175,56 @@ class MessageTest {
         assertTrue(message.isValidToUpload())
     }
 
+    @Test
+    fun `blank tool delta should not merge into executed tool`() {
+        val initialMessages = listOf(
+            UIMessage.user("resume"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Tool(
+                        toolCallId = "call-1",
+                        toolName = "write-note",
+                        input = """{"path":"old.md","content":"done"}""",
+                        output = listOf(UIMessagePart.Text("ok"))
+                    )
+                )
+            )
+        )
+        val blankToolDelta = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Tool(
+                    toolCallId = "",
+                    toolName = "",
+                    input = "{\"path\":\"new.md\"",
+                )
+            )
+        )
+
+        val chunk = MessageChunk(
+            id = "msg-1",
+            model = "claude-test",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = blankToolDelta,
+                    message = null,
+                    finishReason = null
+                )
+            )
+        )
+
+        val result = initialMessages.handleMessageChunk(chunk)
+        val tools = result.last().getTools()
+
+        assertEquals(2, tools.size)
+        assertEquals("""{"path":"old.md","content":"done"}""", tools[0].input)
+        assertTrue(tools[0].isExecuted)
+        assertEquals("{\"path\":\"new.md\"", tools[1].input)
+        assertFalse(tools[1].isExecuted)
+    }
+
     // ==================== migrateToolMessages Tests ====================
 
     @Test
