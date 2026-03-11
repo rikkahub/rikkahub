@@ -33,6 +33,9 @@
   <string name="assistant_page_background_opacity">背景透明度</string>
   <string name="assistant_page_background_opacity_desc">调整聊天背景图显示透明度</string>
   <string name="assistant_page_background_opacity_value">透明度：%1$d%%</string>
+  <string name="assistant_page_background_blur">背景模糊度</string>
+  <string name="assistant_page_background_blur_desc">调整聊天背景的高斯模糊强度。Android 12 及以上生效。</string>
+  <string name="assistant_page_background_blur_value">模糊度：%1$d</string>
   <string name="assistant_page_background_set">已设置背景图片</string>
   <string name="assistant_page_balanced">平衡</string>
   <string name="assistant_page_body_key">Body Key</string>

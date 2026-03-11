@@ -468,6 +468,7 @@ internal fun AssistantBasicContent(
                 modifier = Modifier.padding(8.dp),
                 background = assistant.background,
                 backgroundOpacity = assistant.backgroundOpacity,
+                backgroundBlur = assistant.backgroundBlur,
                 onUpdate = { background ->
                     onUpdate(
                         assistant.copy(
@@ -479,6 +480,7 @@ internal fun AssistantBasicContent(
 
             if (assistant.background != null) {
                 val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
+                val backgroundBlur = assistant.backgroundBlur.coerceIn(0f, 40f)
                 HorizontalDivider()
                 FormItem(
                     modifier = Modifier.padding(8.dp),
@@ -506,6 +508,39 @@ internal fun AssistantBasicContent(
                         text = stringResource(
                             R.string.assistant_page_background_opacity_value,
                             (backgroundOpacity * 100).roundToInt()
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
+                    )
+                }
+
+                HorizontalDivider()
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = {
+                        Text(stringResource(R.string.assistant_page_background_blur))
+                    },
+                    description = {
+                        Text(stringResource(R.string.assistant_page_background_blur_desc))
+                    }
+                ) {
+                    Slider(
+                        value = backgroundBlur,
+                        onValueChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    backgroundBlur = it.toFixed(1).toFloatOrNull()?.coerceIn(0f, 40f) ?: 0f
+                                )
+                            )
+                        },
+                        valueRange = 0f..40f,
+                        steps = 19,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.assistant_page_background_blur_value,
+                            backgroundBlur.roundToInt()
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),

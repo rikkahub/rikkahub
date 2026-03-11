@@ -6,9 +6,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -19,6 +22,7 @@ fun AssistantBackground(setting: Settings) {
     if (assistant.background != null) {
         val backgroundColor = MaterialTheme.colorScheme.background
         val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
+        val backgroundBlur = assistant.backgroundBlur.coerceIn(0f, 40f)
         Box {
             AsyncImage(
                 model = assistant.background,
@@ -26,6 +30,10 @@ fun AssistantBackground(setting: Settings) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
+                    .blur(
+                        radius = backgroundBlur.dp,
+                        edgeTreatment = BlurredEdgeTreatment.Rectangle
+                    )
                     .alpha(backgroundOpacity)
             )
 

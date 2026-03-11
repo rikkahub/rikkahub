@@ -34,6 +34,9 @@
   <string name="assistant_page_background_opacity">Background Opacity</string>
   <string name="assistant_page_background_opacity_desc">Adjust chat background image visibility</string>
   <string name="assistant_page_background_opacity_value">Opacity: %1$d%%</string>
+  <string name="assistant_page_background_blur">Background Blur</string>
+  <string name="assistant_page_background_blur_desc">Adjust Gaussian blur strength for the chat background. Effective on Android 12 and above.</string>
+  <string name="assistant_page_background_blur_value">Blur: %1$d</string>
   <string name="assistant_page_background_set">Background image set</string>
   <string name="assistant_page_balanced">Balanced</string>
   <string name="assistant_page_body_key">Body Key</string>
