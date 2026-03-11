@@ -10,23 +10,13 @@ data class TermuxCommandToolResponse(
     val output: String = "",
     @SerialName("exit_code")
     val exitCode: Int? = null,
-    @SerialName("err_code")
-    val errCode: Int? = null,
-    @SerialName("timed_out")
-    val timedOut: Boolean = false,
-    val error: String? = null,
-    val success: Boolean = true,
 )
 
 internal fun TermuxResult.toToolResponse(): TermuxCommandToolResponse {
-    val error = TermuxOutputFormatter.statusSummary(this).takeIf { it.isNotBlank() }
+    val status = TermuxOutputFormatter.statusSummary(this).takeIf { it.isNotBlank() }
     return TermuxCommandToolResponse(
-        output = TermuxOutputFormatter.merge(stdout = stdout, stderr = stderr),
+        output = TermuxOutputFormatter.merge(stdout = stdout, stderr = stderr, errMsg = status),
         exitCode = exitCode,
-        errCode = errCode,
-        timedOut = timedOut,
-        error = error,
-        success = isSuccessful(),
     )
 }
 
@@ -41,8 +31,7 @@ internal fun Throwable.toCommandErrorToolResponse(
         }
     }
     return TermuxCommandToolResponse(
-        success = false,
-        error = message,
+        output = message,
     )
 }
 

@@ -335,7 +335,8 @@ class LocalTools(
         val baseDescription = if (ptyInteractiveEnabled) {
             """
                 Run a shell command in local Termux. Current workspace path: $workdir.
-                Use default mode for one-shot commands. Non-tty responses are JSON with output and status fields.
+                Use default mode for one-shot commands. Non-tty responses are JSON with output and exit_code fields.
+                The output field already merges stdout, stderr, and diagnostic text like timeout/setup errors.
                 Set tty=true only for interactive or long-running commands.
                 If the response includes session_id, continue with write_stdin.
                 Optional overrides: timeout_ms for non-tty; yield_time_ms, max_output_chars, cols, rows for tty.
@@ -343,7 +344,8 @@ class LocalTools(
         } else {
             """
                 Run a shell command in local Termux. Current workspace path: $workdir.
-                Returns JSON with output and status fields.
+                Returns JSON with output and exit_code fields.
+                The output field already merges stdout, stderr, and diagnostic text like timeout/setup errors.
                 Optional overrides: timeout_ms.
             """.trimIndent().replace("\n", " ")
         }
@@ -643,7 +645,8 @@ class LocalTools(
             name = "termux_python",
             description = buildToolDescription(
                 baseDescription = """
-                    Run Python code in local Termux and return JSON with output and execution status.
+                    Run Python code in local Termux and return JSON with output and exit_code.
+                    The output field already merges stdout, stderr, and diagnostic text like timeout/setup errors.
                     Optional overrides: timeout_ms.
                 """.trimIndent().replace("\n", " "),
                 assistant = assistant,
