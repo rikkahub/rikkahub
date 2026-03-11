@@ -78,6 +78,20 @@ async function detectUploadFile(
     return { allowed: true, mimeType: detected.mime };
   }
 
+  // 允许常见文档格式
+  const ALLOWED_DOCUMENT_MIMES = new Set([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ]);
+  if (ALLOWED_DOCUMENT_MIMES.has(detected.mime)) {
+    return { allowed: true, mimeType: detected.mime };
+  }
+
   // 其他可识别的二进制格式（exe、zip 等）→ 拒绝
   return { allowed: false, mimeType: detected.mime };
 }
