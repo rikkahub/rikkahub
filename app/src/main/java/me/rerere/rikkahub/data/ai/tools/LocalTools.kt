@@ -325,22 +325,32 @@ class LocalTools(
 
     private fun termuxExecTool(
         needsApproval: Boolean,
+        ptyInteractiveEnabled: Boolean,
         settingsStore: SettingsStore,
         termuxCommandManager: TermuxCommandManager,
         termuxPtySessionManager: TermuxPtySessionManager,
         assistant: Assistant,
     ): Tool {
         val workdir = settingsStore.settingsFlow.value.termuxWorkdir
+        val baseDescription = if (ptyInteractiveEnabled) {
+            """
+                Run a shell command in local Termux. Current workspace path: $workdir.
+                Use default mode for one-shot commands. Non-tty responses are JSON with output and status fields.
+                Set tty=true only for interactive or long-running commands.
+                If the response includes session_id, continue with write_stdin.
+                Optional overrides: timeout_ms for non-tty; yield_time_ms, max_output_chars, cols, rows for tty.
+            """.trimIndent().replace("\n", " ")
+        } else {
+            """
+                Run a shell command in local Termux. Current workspace path: $workdir.
+                Returns JSON with output and status fields.
+                Optional overrides: timeout_ms.
+            """.trimIndent().replace("\n", " ")
+        }
         return Tool(
             name = "termux_exec",
             description = buildToolDescription(
-                baseDescription = """
-                    Run a shell command in local Termux. Current workspace path: $workdir.
-                    Use default mode for one-shot commands. Non-tty responses are JSON with output and status fields.
-                    Set tty=true only for interactive or long-running commands.
-                    If the response includes session_id, continue with write_stdin.
-                    Optional overrides: timeout_ms for non-tty; yield_time_ms, max_output_chars, cols, rows for tty.
-                """.trimIndent().replace("\n", " "),
+                baseDescription = baseDescription,
                 assistant = assistant,
                 toolName = "termux_exec",
             ),
@@ -352,30 +362,39 @@ class LocalTools(
                             put("type", "string")
                             put("description", "Shell command to execute")
                         })
-                        put("tty", buildJsonObject {
-                            put("type", "boolean")
-                            put("description", "Set to true only for interactive or long-running commands")
-                        })
                         put("timeout_ms", buildJsonObject {
                             put("type", "integer")
-                            put("description", "Optional timeout override for non-tty commands")
+                            put(
+                                "description",
+                                if (ptyInteractiveEnabled) {
+                                    "Optional timeout override for non-tty commands"
+                                } else {
+                                    "Optional timeout override"
+                                }
+                            )
                         })
-                        put("yield_time_ms", buildJsonObject {
-                            put("type", "integer")
-                            put("description", "Optional PTY yield window override when tty=true")
-                        })
-                        put("max_output_chars", buildJsonObject {
-                            put("type", "integer")
-                            put("description", "Optional PTY output chunk size override when tty=true")
-                        })
-                        put("cols", buildJsonObject {
-                            put("type", "integer")
-                            put("description", "Optional terminal column count when tty=true")
-                        })
-                        put("rows", buildJsonObject {
-                            put("type", "integer")
-                            put("description", "Optional terminal row count when tty=true")
-                        })
+                        if (ptyInteractiveEnabled) {
+                            put("tty", buildJsonObject {
+                                put("type", "boolean")
+                                put("description", "Set to true only for interactive or long-running commands")
+                            })
+                            put("yield_time_ms", buildJsonObject {
+                                put("type", "integer")
+                                put("description", "Optional PTY yield window override when tty=true")
+                            })
+                            put("max_output_chars", buildJsonObject {
+                                put("type", "integer")
+                                put("description", "Optional PTY output chunk size override when tty=true")
+                            })
+                            put("cols", buildJsonObject {
+                                put("type", "integer")
+                                put("description", "Optional terminal column count when tty=true")
+                            })
+                            put("rows", buildJsonObject {
+                                put("type", "integer")
+                                put("description", "Optional terminal row count when tty=true")
+                            })
+                        }
                     },
                     required = listOf("command"),
                 )
@@ -386,6 +405,16 @@ class LocalTools(
                     ?: error("command is required")
                 val settings = settingsStore.settingsFlow.value
                 val tty = params["tty"]?.jsonPrimitive?.booleanOrNull == true
+
+                if (tty && !settings.termuxPtyInteractiveEnabled) {
+                    return@execute listOf(
+                        UIMessagePart.Text(
+                            IllegalStateException("PTY interactive commands are disabled in Termux settings.")
+                                .toCommandErrorToolResponse()
+                                .encode(json)
+                        )
+                    )
+                }
 
                 if (tty) {
                     val yieldTimeMs = (params.optionalLong("yield_time_ms") ?: settings.termuxPtyYieldTimeMs)
@@ -673,7 +702,9 @@ class LocalTools(
         assistant: Assistant,
         overrideTermuxNeedsApproval: Boolean? = null,
     ): List<Tool> {
-        val termuxNeedsApproval = overrideTermuxNeedsApproval ?: settingsStore.settingsFlow.value.termuxNeedsApproval
+        val settings = settingsStore.settingsFlow.value
+        val termuxNeedsApproval = overrideTermuxNeedsApproval ?: settings.termuxNeedsApproval
+        val termuxPtyInteractiveEnabled = settings.termuxPtyInteractiveEnabled
         val enabled = options.toSet()
         return buildList {
             LocalToolCatalog.options.forEach { option ->
@@ -686,30 +717,33 @@ class LocalTools(
                         add(
                             termuxExecTool(
                                 needsApproval = termuxNeedsApproval,
+                                ptyInteractiveEnabled = termuxPtyInteractiveEnabled,
                                 settingsStore = settingsStore,
                                 termuxCommandManager = termuxCommandManager,
                                 termuxPtySessionManager = termuxPtySessionManager,
                                 assistant = assistant,
                             )
                         )
-                        add(
-                            termuxWriteStdinTool(
-                                needsApproval = termuxNeedsApproval,
-                                settingsStore = settingsStore,
-                                assistant = assistant,
+                        if (termuxPtyInteractiveEnabled) {
+                            add(
+                                termuxWriteStdinTool(
+                                    needsApproval = termuxNeedsApproval,
+                                    settingsStore = settingsStore,
+                                    assistant = assistant,
+                                )
                             )
-                        )
-                        add(
-                            termuxListPtySessionsTool(
-                                assistant = assistant,
+                            add(
+                                termuxListPtySessionsTool(
+                                    assistant = assistant,
+                                )
                             )
-                        )
-                        add(
-                            termuxClosePtySessionTool(
-                                needsApproval = termuxNeedsApproval,
-                                assistant = assistant,
+                            add(
+                                termuxClosePtySessionTool(
+                                    needsApproval = termuxNeedsApproval,
+                                    assistant = assistant,
+                                )
                             )
-                        )
+                        }
                     }
 
                     LocalToolOption.TermuxPython -> {

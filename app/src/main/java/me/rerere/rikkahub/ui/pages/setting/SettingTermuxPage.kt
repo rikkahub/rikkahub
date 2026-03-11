@@ -454,218 +454,242 @@ fun SettingTermuxPage() {
                     FormItem(
                         modifier = Modifier.padding(12.dp),
                         label = { Text(stringResource(R.string.setting_termux_page_pty_title)) },
-                        description = { Text(stringResource(R.string.setting_termux_page_pty_desc)) },
+                        description = {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(stringResource(R.string.setting_termux_page_pty_desc))
+                                if (!settings.termuxPtyInteractiveEnabled) {
+                                    Text(stringResource(R.string.setting_termux_page_pty_disabled_hint))
+                                }
+                            }
+                        },
+                        tail = {
+                            Switch(
+                                checked = settings.termuxPtyInteractiveEnabled,
+                                onCheckedChange = { enabled ->
+                                    scope.launch {
+                                        settingsStore.update {
+                                            it.copy(termuxPtyInteractiveEnabled = enabled)
+                                        }
+                                    }
+                                    if (!enabled) {
+                                        clearPtySessionSnapshot()
+                                    }
+                                },
+                            )
+                        },
                         content = {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                OutlinedTextField(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    value = ptyServerPortText,
-                                    onValueChange = { value ->
-                                        ptyServerPortText = value.filter { it.isDigit() }
-                                        val ptyServerPort = ptyServerPortText.toIntOrNull()
-                                        if (
-                                            ptyServerPort != null &&
-                                            ptyServerPort in 1024..65535 &&
-                                            ptyServerPort != settings.termuxPtyServerPort
-                                        ) {
-                                            scope.launch {
-                                                termuxPtySessionManager.stopServer()
-                                                settingsStore.update {
-                                                    it.copy(termuxPtyServerPort = ptyServerPort)
-                                                }
-                                                clearPtySessionSnapshot()
-                                            }
-                                        }
-                                    },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    singleLine = true,
-                                    isError = ptyServerPortText.toIntOrNull()?.let { it !in 1024..65535 } ?: true,
-                                    label = { Text(stringResource(R.string.setting_termux_page_pty_server_port_title)) },
-                                )
-                                OutlinedTextField(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    value = ptyYieldTimeText,
-                                    onValueChange = { value ->
-                                        ptyYieldTimeText = value.filter { it.isDigit() }
-                                        val ptyYieldTimeMs = ptyYieldTimeText.toLongOrNull()
-                                        if (ptyYieldTimeMs != null && ptyYieldTimeMs >= 0L) {
-                                            scope.launch {
-                                                settingsStore.update { it.copy(termuxPtyYieldTimeMs = ptyYieldTimeMs) }
-                                            }
-                                        }
-                                    },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    singleLine = true,
-                                    isError = ptyYieldTimeText.toLongOrNull()?.let { it < 0L } ?: true,
-                                    label = { Text(stringResource(R.string.setting_termux_page_pty_yield_time_title)) },
-                                )
-                                OutlinedTextField(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    value = ptyMaxOutputCharsText,
-                                    onValueChange = { value ->
-                                        ptyMaxOutputCharsText = value.filter { it.isDigit() }
-                                        val ptyMaxOutputChars = ptyMaxOutputCharsText.toIntOrNull()
-                                        if (ptyMaxOutputChars != null && ptyMaxOutputChars >= 256) {
-                                            scope.launch {
-                                                settingsStore.update {
-                                                    it.copy(termuxPtyMaxOutputChars = ptyMaxOutputChars)
-                                                }
-                                            }
-                                        }
-                                    },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    singleLine = true,
-                                    isError = ptyMaxOutputCharsText.toIntOrNull()?.let { it < 256 } ?: true,
-                                    label = {
-                                        Text(stringResource(R.string.setting_termux_page_pty_max_output_chars_title))
-                                    },
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    TextButton(
-                                        onClick = {
-                                            refreshPtySessions()
-                                        },
-                                        enabled = !ptySessionsLoading,
-                                    ) {
-                                        Text(stringResource(R.string.setting_termux_page_pty_refresh_sessions))
-                                    }
-                                    TextButton(
-                                        onClick = {
-                                            scope.launch {
-                                                ptySessionsLoading = true
-                                                val result = termuxPtySessionManager.closeAllSessions()
-                                                ptySessionError = result.error
-                                                val state = termuxPtySessionManager.listSessions()
-                                                ptySessions = state.sessions
-                                                ptyServerRunning = state.running
-                                                ptySessionError = state.error ?: ptySessionError
-                                                ptySessionsLoading = false
-                                            }
-                                        },
-                                        enabled = !ptySessionsLoading && ptySessions.isNotEmpty(),
-                                    ) {
-                                        Text(stringResource(R.string.setting_termux_page_pty_close_all_sessions))
-                                    }
-                                }
-                                if (ptySessionsLoading) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        CircularProgressIndicator(modifier = Modifier.padding(top = 4.dp))
-                                        Text(stringResource(R.string.setting_termux_page_pty_loading_sessions))
-                                    }
-                                }
-                                Text(
-                                    stringResource(
-                                        R.string.setting_termux_page_current_address,
-                                        "http://127.0.0.1:${settings.termuxPtyServerPort}/"
-                                    )
-                                )
-                                if (!ptySessionError.isNullOrBlank()) {
-                                    Text(
-                                        text = ptySessionError!!,
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                }
-                                if (!ptySessionsChecked) {
-                                    Text(ptyRefreshHintText)
-                                } else if (ptySessions.isEmpty()) {
-                                    Text(
-                                        if (ptyServerRunning) {
-                                            stringResource(R.string.setting_termux_page_pty_no_sessions)
-                                        } else {
-                                            stringResource(R.string.setting_termux_page_pty_server_not_running)
-                                        }
-                                    )
-                                } else {
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        ptySessions.forEach { sessionInfo ->
-                                            Card(
-                                                colors = CardDefaults.cardColors(
-                                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                                ),
+                            if (settings.termuxPtyInteractiveEnabled) {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    OutlinedTextField(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        value = ptyServerPortText,
+                                        onValueChange = { value ->
+                                            ptyServerPortText = value.filter { it.isDigit() }
+                                            val ptyServerPort = ptyServerPortText.toIntOrNull()
+                                            if (
+                                                ptyServerPort != null &&
+                                                ptyServerPort in 1024..65535 &&
+                                                ptyServerPort != settings.termuxPtyServerPort
                                             ) {
-                                                Column(
-                                                    modifier = Modifier.padding(12.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                scope.launch {
+                                                    termuxPtySessionManager.stopServer()
+                                                    settingsStore.update {
+                                                        it.copy(termuxPtyServerPort = ptyServerPort)
+                                                    }
+                                                    clearPtySessionSnapshot()
+                                                }
+                                            }
+                                        },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        isError = ptyServerPortText.toIntOrNull()?.let { it !in 1024..65535 } ?: true,
+                                        label = { Text(stringResource(R.string.setting_termux_page_pty_server_port_title)) },
+                                    )
+                                    OutlinedTextField(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        value = ptyYieldTimeText,
+                                        onValueChange = { value ->
+                                            ptyYieldTimeText = value.filter { it.isDigit() }
+                                            val ptyYieldTimeMs = ptyYieldTimeText.toLongOrNull()
+                                            if (ptyYieldTimeMs != null && ptyYieldTimeMs >= 0L) {
+                                                scope.launch {
+                                                    settingsStore.update { it.copy(termuxPtyYieldTimeMs = ptyYieldTimeMs) }
+                                                }
+                                            }
+                                        },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        isError = ptyYieldTimeText.toLongOrNull()?.let { it < 0L } ?: true,
+                                        label = { Text(stringResource(R.string.setting_termux_page_pty_yield_time_title)) },
+                                    )
+                                    OutlinedTextField(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        value = ptyMaxOutputCharsText,
+                                        onValueChange = { value ->
+                                            ptyMaxOutputCharsText = value.filter { it.isDigit() }
+                                            val ptyMaxOutputChars = ptyMaxOutputCharsText.toIntOrNull()
+                                            if (ptyMaxOutputChars != null && ptyMaxOutputChars >= 256) {
+                                                scope.launch {
+                                                    settingsStore.update {
+                                                        it.copy(termuxPtyMaxOutputChars = ptyMaxOutputChars)
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        isError = ptyMaxOutputCharsText.toIntOrNull()?.let { it < 256 } ?: true,
+                                        label = {
+                                            Text(stringResource(R.string.setting_termux_page_pty_max_output_chars_title))
+                                        },
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        TextButton(
+                                            onClick = {
+                                                refreshPtySessions()
+                                            },
+                                            enabled = !ptySessionsLoading,
+                                        ) {
+                                            Text(stringResource(R.string.setting_termux_page_pty_refresh_sessions))
+                                        }
+                                        TextButton(
+                                            onClick = {
+                                                scope.launch {
+                                                    ptySessionsLoading = true
+                                                    val result = termuxPtySessionManager.closeAllSessions()
+                                                    ptySessionError = result.error
+                                                    val state = termuxPtySessionManager.listSessions()
+                                                    ptySessions = state.sessions
+                                                    ptyServerRunning = state.running
+                                                    ptySessionError = state.error ?: ptySessionError
+                                                    ptySessionsLoading = false
+                                                }
+                                            },
+                                            enabled = !ptySessionsLoading && ptySessions.isNotEmpty(),
+                                        ) {
+                                            Text(stringResource(R.string.setting_termux_page_pty_close_all_sessions))
+                                        }
+                                    }
+                                    if (ptySessionsLoading) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            CircularProgressIndicator(modifier = Modifier.padding(top = 4.dp))
+                                            Text(stringResource(R.string.setting_termux_page_pty_loading_sessions))
+                                        }
+                                    }
+                                    Text(
+                                        stringResource(
+                                            R.string.setting_termux_page_current_address,
+                                            "http://127.0.0.1:${settings.termuxPtyServerPort}/"
+                                        )
+                                    )
+                                    if (!ptySessionError.isNullOrBlank()) {
+                                        Text(
+                                            text = ptySessionError!!,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                    if (!ptySessionsChecked) {
+                                        Text(ptyRefreshHintText)
+                                    } else if (ptySessions.isEmpty()) {
+                                        Text(
+                                            if (ptyServerRunning) {
+                                                stringResource(R.string.setting_termux_page_pty_no_sessions)
+                                            } else {
+                                                stringResource(R.string.setting_termux_page_pty_server_not_running)
+                                            }
+                                        )
+                                    } else {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            ptySessions.forEach { sessionInfo ->
+                                                Card(
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                    ),
                                                 ) {
-                                                    Text(
-                                                        text = sessionInfo.command,
-                                                        style = MaterialTheme.typography.titleSmall,
-                                                    )
-                                                    Text(
-                                                        text = stringResource(
-                                                            R.string.setting_termux_page_pty_session_id,
-                                                            sessionInfo.id
-                                                        ),
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                    )
-                                                    Text(
-                                                        text = stringResource(
-                                                            R.string.setting_termux_page_pty_session_workdir,
-                                                            sessionInfo.workdir
-                                                        ),
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                    )
-                                                    Text(
-                                                        text = if (sessionInfo.running) {
-                                                            stringResource(R.string.setting_termux_page_pty_session_status_running)
-                                                        } else {
-                                                            stringResource(R.string.setting_termux_page_pty_session_status_finished)
-                                                        },
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                    )
-                                                    sessionInfo.pid?.let { pid ->
-                                                        Text(
-                                                            text = stringResource(
-                                                                R.string.setting_termux_page_pty_session_pid,
-                                                                pid
-                                                            ),
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                        )
-                                                    }
-                                                    sessionInfo.exitCode?.let { exitCode ->
-                                                        Text(
-                                                            text = stringResource(
-                                                                R.string.setting_termux_page_pty_session_exit_code,
-                                                                exitCode
-                                                            ),
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                        )
-                                                    }
-                                                    if (sessionInfo.pendingOutputChars > 0) {
-                                                        Text(
-                                                            text = stringResource(
-                                                                R.string.setting_termux_page_pty_session_buffered_output,
-                                                                sessionInfo.pendingOutputChars
-                                                            ),
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                        )
-                                                    }
-                                                    Text(
-                                                        text = stringResource(
-                                                            R.string.setting_termux_page_pty_session_last_active,
-                                                            formatRelativeTime(sessionInfo.lastAccessMs)
-                                                        ),
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                    )
-                                                    TextButton(
-                                                        onClick = {
-                                                            scope.launch {
-                                                                ptySessionsLoading = true
-                                                                val result = termuxPtySessionManager.closeSession(sessionInfo.id)
-                                                                ptySessionError = result.error
-                                                                val state = termuxPtySessionManager.listSessions()
-                                                                ptySessions = state.sessions
-                                                                ptyServerRunning = state.running
-                                                                ptySessionError = state.error ?: ptySessionError
-                                                                ptySessionsLoading = false
-                                                            }
-                                                        },
-                                                        enabled = !ptySessionsLoading,
+                                                    Column(
+                                                        modifier = Modifier.padding(12.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(6.dp),
                                                     ) {
-                                                        Text(stringResource(R.string.setting_termux_page_pty_close_session))
+                                                        Text(
+                                                            text = sessionInfo.command,
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                        )
+                                                        Text(
+                                                            text = stringResource(
+                                                                R.string.setting_termux_page_pty_session_id,
+                                                                sessionInfo.id
+                                                            ),
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                        )
+                                                        Text(
+                                                            text = stringResource(
+                                                                R.string.setting_termux_page_pty_session_workdir,
+                                                                sessionInfo.workdir
+                                                            ),
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                        )
+                                                        Text(
+                                                            text = if (sessionInfo.running) {
+                                                                stringResource(R.string.setting_termux_page_pty_session_status_running)
+                                                            } else {
+                                                                stringResource(R.string.setting_termux_page_pty_session_status_finished)
+                                                            },
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                        )
+                                                        sessionInfo.pid?.let { pid ->
+                                                            Text(
+                                                                text = stringResource(
+                                                                    R.string.setting_termux_page_pty_session_pid,
+                                                                    pid
+                                                                ),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                            )
+                                                        }
+                                                        sessionInfo.exitCode?.let { exitCode ->
+                                                            Text(
+                                                                text = stringResource(
+                                                                    R.string.setting_termux_page_pty_session_exit_code,
+                                                                    exitCode
+                                                                ),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                            )
+                                                        }
+                                                        if (sessionInfo.pendingOutputChars > 0) {
+                                                            Text(
+                                                                text = stringResource(
+                                                                    R.string.setting_termux_page_pty_session_buffered_output,
+                                                                    sessionInfo.pendingOutputChars
+                                                                ),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                            )
+                                                        }
+                                                        Text(
+                                                            text = stringResource(
+                                                                R.string.setting_termux_page_pty_session_last_active,
+                                                                formatRelativeTime(sessionInfo.lastAccessMs)
+                                                            ),
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                        )
+                                                        TextButton(
+                                                            onClick = {
+                                                                scope.launch {
+                                                                    ptySessionsLoading = true
+                                                                    val result = termuxPtySessionManager.closeSession(sessionInfo.id)
+                                                                    ptySessionError = result.error
+                                                                    val state = termuxPtySessionManager.listSessions()
+                                                                    ptySessions = state.sessions
+                                                                    ptyServerRunning = state.running
+                                                                    ptySessionError = state.error ?: ptySessionError
+                                                                    ptySessionsLoading = false
+                                                                }
+                                                            },
+                                                            enabled = !ptySessionsLoading,
+                                                        ) {
+                                                            Text(stringResource(R.string.setting_termux_page_pty_close_session))
+                                                        }
                                                     }
                                                 }
                                             }

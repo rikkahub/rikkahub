@@ -1117,6 +1117,7 @@
   <string name="setting_termux_page_pty_close_all_sessions">Close All</string>
   <string name="setting_termux_page_pty_loading_sessions">Loading PTY sessions...</string>
   <string name="setting_termux_page_pty_refresh_hint">Tap Refresh Sessions to query Termux. Opening this page no longer auto-launches Termux.</string>
+  <string name="setting_termux_page_pty_disabled_hint">When disabled, termux_exec only exposes command and timeout_ms, and PTY tools are not sent.</string>
   <string name="setting_termux_page_pty_no_sessions">No active PTY sessions.</string>
   <string name="setting_termux_page_pty_server_not_running">No active PTY server detected. It starts on demand when tty=true is used.</string>
   <string name="setting_termux_page_pty_session_id">ID: %1$s</string>
