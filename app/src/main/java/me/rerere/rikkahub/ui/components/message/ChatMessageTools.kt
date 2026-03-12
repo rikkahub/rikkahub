@@ -753,13 +753,11 @@ private fun ChainOfThoughtScope.AskUserToolStep(
             ) {
                 questions.forEach { q ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (questions.size > 1) {
-                            Text(
-                                text = q.question,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
+                        Text(
+                            text = q.question,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
 
                         if (isPending && onToolAnswer != null) {
                             // Show options as chips
