@@ -54,6 +54,22 @@ internal sealed interface SkillFrontmatterParseResult {
     data class Error(val reason: String) : SkillFrontmatterParseResult
 }
 
+internal data class SkillDirectoryDescriptor(
+    val directoryName: String,
+    val path: String,
+    val hasSkillFile: Boolean,
+)
+
+internal data class SkillCatalogDiscoveryResult(
+    val entries: List<SkillCatalogEntry>,
+    val invalidEntries: List<SkillInvalidEntry>,
+)
+
+internal sealed interface SkillDirectoryInspectionResult {
+    data class Valid(val entry: SkillCatalogEntry) : SkillDirectoryInspectionResult
+    data class Invalid(val entry: SkillInvalidEntry) : SkillDirectoryInspectionResult
+}
+
 class SkillsRepository(
     private val appScope: AppScope,
     private val settingsStore: SettingsStore,
@@ -83,11 +99,9 @@ class SkillsRepository(
     suspend fun refresh(workdir: String = settingsStore.settingsFlow.value.termuxWorkdir) {
         refreshMutex.withLock {
             val rootPath = buildSkillsRootPath(workdir)
-            _state.value = _state.value.copy(
+            _state.value = _state.value.toRefreshingCatalogState(
                 workdir = workdir,
                 rootPath = rootPath,
-                isLoading = true,
-                error = null,
             )
             _state.value = runCatching {
                 discover(workdir = workdir, rootPath = rootPath)
@@ -111,52 +125,23 @@ class SkillsRepository(
         rootPath: String,
     ): SkillsCatalogState {
         val listed = listSkillDirectories(rootPath)
-        val validEntries = arrayListOf<SkillCatalogEntry>()
-        val invalidEntries = arrayListOf<SkillInvalidEntry>()
-
-        listed.forEach { directory ->
-            if (!directory.hasSkillFile) {
-                invalidEntries += SkillInvalidEntry(
-                    directoryName = directory.directoryName,
-                    path = directory.path,
-                    reason = "Missing SKILL.md",
-                )
-                return@forEach
-            }
-
-            val markdown = readSkillFile(directory.path)
-            when (val parsed = parseSkillFrontmatter(markdown)) {
-                is SkillFrontmatterParseResult.Success -> {
-                    validEntries += SkillCatalogEntry(
-                        directoryName = directory.directoryName,
-                        path = directory.path,
-                        name = parsed.frontmatter.name,
-                        description = parsed.frontmatter.description,
-                    )
-                }
-
-                is SkillFrontmatterParseResult.Error -> {
-                    invalidEntries += SkillInvalidEntry(
-                        directoryName = directory.directoryName,
-                        path = directory.path,
-                        reason = parsed.reason,
-                    )
-                }
-            }
-        }
+        val discovery = discoverCatalogEntries(
+            directories = listed,
+            readSkillFile = ::readSkillFile,
+        )
 
         return SkillsCatalogState(
             workdir = workdir,
             rootPath = rootPath,
-            entries = validEntries.sortedBy { it.directoryName },
-            invalidEntries = invalidEntries.sortedBy { it.directoryName },
+            entries = discovery.entries.sortedBy { it.directoryName },
+            invalidEntries = discovery.invalidEntries.sortedBy { it.directoryName },
             isLoading = false,
             error = null,
             refreshedAt = System.currentTimeMillis(),
         )
     }
 
-    private suspend fun listSkillDirectories(rootPath: String): List<DiscoveredSkillDirectory> {
+    private suspend fun listSkillDirectories(rootPath: String): List<SkillDirectoryDescriptor> {
         val script = buildListScript(rootPath)
         val result = termuxCommandManager.run(
             TermuxRunCommandRequest(
@@ -178,7 +163,7 @@ class SkillsRepository(
             .mapNotNull { line ->
                 val parts = line.split('\t')
                 if (parts.size < 3) return@mapNotNull null
-                DiscoveredSkillDirectory(
+                SkillDirectoryDescriptor(
                     directoryName = parts[0],
                     path = parts[1],
                     hasSkillFile = parts[2] == "1",
@@ -295,12 +280,6 @@ internal fun parseSkillFrontmatter(markdown: String): SkillFrontmatterParseResul
     )
 }
 
-private data class DiscoveredSkillDirectory(
-    val directoryName: String,
-    val path: String,
-    val hasSkillFile: Boolean,
-)
-
 private fun String.escapeForSingleQuotedShell(): String = replace("'", "'\"'\"'")
 
 private fun String.trimMatchingQuotes(): String {
@@ -308,4 +287,99 @@ private fun String.trimMatchingQuotes(): String {
         return substring(1, lastIndex)
     }
     return this
+}
+
+internal fun SkillsCatalogState.toRefreshingCatalogState(
+    workdir: String,
+    rootPath: String,
+): SkillsCatalogState {
+    return copy(
+        workdir = workdir,
+        rootPath = rootPath,
+        entries = emptyList(),
+        invalidEntries = emptyList(),
+        isLoading = true,
+        error = null,
+    )
+}
+
+internal suspend fun discoverCatalogEntries(
+    directories: List<SkillDirectoryDescriptor>,
+    readSkillFile: suspend (String) -> String,
+): SkillCatalogDiscoveryResult {
+    val validEntries = arrayListOf<SkillCatalogEntry>()
+    val invalidEntries = arrayListOf<SkillInvalidEntry>()
+
+    directories.forEach { directory ->
+        when (
+            val result = inspectSkillDirectory(
+                directoryName = directory.directoryName,
+                path = directory.path,
+                hasSkillFile = directory.hasSkillFile,
+                readSkillFile = readSkillFile,
+            )
+        ) {
+            is SkillDirectoryInspectionResult.Valid -> validEntries += result.entry
+            is SkillDirectoryInspectionResult.Invalid -> invalidEntries += result.entry
+        }
+    }
+
+    return SkillCatalogDiscoveryResult(
+        entries = validEntries,
+        invalidEntries = invalidEntries,
+    )
+}
+
+internal suspend fun inspectSkillDirectory(
+    directoryName: String,
+    path: String,
+    hasSkillFile: Boolean,
+    readSkillFile: suspend (String) -> String,
+): SkillDirectoryInspectionResult {
+    if (!hasSkillFile) {
+        return SkillDirectoryInspectionResult.Invalid(
+            SkillInvalidEntry(
+                directoryName = directoryName,
+                path = path,
+                reason = "Missing SKILL.md",
+            )
+        )
+    }
+
+    val markdown = runCatching { readSkillFile(path) }.getOrElse { error ->
+        return SkillDirectoryInspectionResult.Invalid(
+            SkillInvalidEntry(
+                directoryName = directoryName,
+                path = path,
+                reason = buildSkillReadFailureReason(error),
+            )
+        )
+    }
+
+    return when (val parsed = parseSkillFrontmatter(markdown)) {
+        is SkillFrontmatterParseResult.Success -> {
+            SkillDirectoryInspectionResult.Valid(
+                SkillCatalogEntry(
+                    directoryName = directoryName,
+                    path = path,
+                    name = parsed.frontmatter.name,
+                    description = parsed.frontmatter.description,
+                )
+            )
+        }
+
+        is SkillFrontmatterParseResult.Error -> {
+            SkillDirectoryInspectionResult.Invalid(
+                SkillInvalidEntry(
+                    directoryName = directoryName,
+                    path = path,
+                    reason = parsed.reason,
+                )
+            )
+        }
+    }
+}
+
+internal fun buildSkillReadFailureReason(error: Throwable): String {
+    return "Failed to read SKILL.md: ${error.message ?: error.javaClass.name}"
 }
