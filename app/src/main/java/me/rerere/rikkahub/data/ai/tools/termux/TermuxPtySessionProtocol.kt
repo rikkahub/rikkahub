@@ -46,8 +46,6 @@ data class TermuxPtyToolResponse(
     @SerialName("exit_code")
     val exitCode: Int? = null,
     val error: String? = null,
-    val truncated: Boolean = false,
-    val success: Boolean = true,
 )
 
 @Serializable
@@ -101,15 +99,31 @@ internal data class TermuxPtyHealthResponse(
     val version: Int? = null,
 )
 
+private fun mergePtyOutput(
+    output: String,
+    diagnostic: String?,
+): String {
+    if (diagnostic.isNullOrBlank()) return output
+    if (output.isBlank()) return diagnostic
+    return buildString {
+        append(output)
+        if (!output.endsWith('\n')) append('\n')
+        append(diagnostic)
+    }
+}
+
 internal fun TermuxPtyServerResponse.toToolResponse(): TermuxPtyToolResponse {
+    val normalizedOutput = TermuxOutputFormatter.normalizeTerminalOutput(output)
+    val truncationNotice = if (truncated) "[output truncated]" else null
     return TermuxPtyToolResponse(
-        output = TermuxOutputFormatter.normalizeTerminalOutput(output),
+        output = mergePtyOutput(
+            output = normalizedOutput,
+            diagnostic = truncationNotice,
+        ),
         sessionId = sessionId,
         running = running,
         exitCode = exitCode,
         error = error,
-        truncated = truncated,
-        success = error.isNullOrBlank() && (exitCode == null || exitCode == 0),
     )
 }
 
@@ -125,7 +139,6 @@ internal fun Throwable.toPtyErrorToolResponse(
     }
     return TermuxPtyToolResponse(
         error = message,
-        success = false,
     )
 }
 

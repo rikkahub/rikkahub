@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai.tools.termux
 
 import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -19,11 +20,10 @@ class TermuxPtySessionProtocolTest {
 
         val toolResponse = response.toToolResponse()
 
-        assertEquals("hello", toolResponse.output)
+        assertEquals("hello\n[output truncated]", toolResponse.output)
         assertEquals("session-123", toolResponse.sessionId)
         assertEquals(true, toolResponse.running)
-        assertEquals(true, toolResponse.truncated)
-        assertEquals(true, toolResponse.success)
+        assertEquals(null, toolResponse.error)
     }
 
     @Test
@@ -40,7 +40,7 @@ class TermuxPtySessionProtocolTest {
     }
 
     @Test
-    fun `toToolResponse should mark non zero exits as unsuccessful`() {
+    fun `toToolResponse should preserve exit code without success flag`() {
         val response = TermuxPtyServerResponse(
             output = "boom",
             sessionId = null,
@@ -50,7 +50,6 @@ class TermuxPtySessionProtocolTest {
 
         val toolResponse = response.toToolResponse()
 
-        assertEquals(false, toolResponse.success)
         assertEquals(2, toolResponse.exitCode)
     }
 
@@ -62,12 +61,14 @@ class TermuxPtySessionProtocolTest {
             running = false,
             exitCode = 130,
             error = "interrupted",
-            truncated = false,
         ).encode(JsonInstant)
 
         assertTrue(payload.contains("\"session_id\":\"session-456\""))
         assertTrue(payload.contains("\"exit_code\":130"))
         assertTrue(payload.contains("\"output\":\"chunk\""))
+        assertTrue(payload.contains("\"error\":\"interrupted\""))
+        assertFalse(payload.contains("\"truncated\":"))
+        assertFalse(payload.contains("\"success\":"))
     }
 
     @Test
