@@ -1120,5 +1120,28 @@
   <string name="chat_page_termux_command_mode_content_desc">Termux 命令模式</string>
   <string name="chat_page_termux_command_mode_title">命令模式</string>
   <string name="chat_page_termux_command_mode_supporting">/termux</string>
+  <string name="assistant_page_skills_enable_catalog_title">啟用技能目錄</string>
+  <string name="assistant_page_skills_enable_catalog_desc">將 %1$s 中選取的技能以輕量目錄的形式提供給模型。</string>
+  <string name="assistant_page_skills_root_unresolved">（未解析）</string>
+  <string name="assistant_page_skills_root_fallback">workdir/skills</string>
+  <string name="assistant_page_skills_selected_count">已選取：%1$d</string>
+  <string name="assistant_page_skills_termux_required_title">需要 Termux 工具</string>
+  <string name="assistant_page_skills_termux_required_desc">在聊天中使用技能前，請先啟用 本地工具 &gt; Termux 指令。</string>
+  <string name="assistant_page_skills_model_unsupported_title">目前模型無法使用工具</string>
+  <string name="assistant_page_skills_model_unsupported_desc">選取項目會被保存，但在目前模型支援工具呼叫之前，技能目錄不會注入到上下文中。</string>
+  <string name="assistant_page_skills_refresh_failed_title">重新整理技能失敗</string>
+  <string name="assistant_page_skills_refreshing">正在從 %1$s 重新整理技能</string>
+  <string name="assistant_page_skills_empty_title">找不到技能</string>
+  <string name="assistant_page_skills_empty_desc">請在 %1$s 下建立子目錄，並新增包含 name 與 description frontmatter 的 SKILL.md。</string>
+  <string name="assistant_page_skills_available_title">可用技能</string>
+  <string name="assistant_page_skills_missing_title">遺失的已選項</string>
+  <string name="assistant_page_skills_missing_desc">這個技能仍被此助手選取，但它已不存在於 %1$s 中。</string>
+  <string name="assistant_page_skills_invalid_title">已忽略的目錄</string>
+  <string name="assistant_page_skills_reason_missing_skill_md">缺少 SKILL.md</string>
+  <string name="assistant_page_skills_reason_missing_yaml_frontmatter">SKILL.md 缺少 YAML frontmatter</string>
+  <string name="assistant_page_skills_reason_frontmatter_must_start">SKILL.md frontmatter 必須以 --- 開頭</string>
+  <string name="assistant_page_skills_reason_frontmatter_not_closed">SKILL.md frontmatter 未正確結束</string>
+  <string name="assistant_page_skills_reason_missing_name">SKILL.md frontmatter 缺少 name</string>
+  <string name="assistant_page_skills_reason_missing_description">SKILL.md frontmatter 缺少 description</string>
+  <string name="assistant_page_skills_reason_failed_to_read">讀取 SKILL.md 失敗：%1$s</string>
 </resources>
-

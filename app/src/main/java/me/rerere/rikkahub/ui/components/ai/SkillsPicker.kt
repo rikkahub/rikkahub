@@ -31,16 +31,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Package01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.skills.SkillCatalogEntry
 import me.rerere.rikkahub.data.skills.SkillInvalidEntry
+import me.rerere.rikkahub.data.skills.SkillInvalidReason
 import me.rerere.rikkahub.data.skills.SkillsCatalogState
 import me.rerere.rikkahub.data.skills.SkillsRepository
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
@@ -98,7 +101,7 @@ fun SkillsPickerButton(
                     ) {
                         Icon(
                             imageVector = HugeIcons.Package01,
-                            contentDescription = "Skills",
+                            contentDescription = stringResource(R.string.assistant_page_tab_skills),
                         )
                     }
                 }
@@ -120,7 +123,7 @@ fun SkillsPickerButton(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
-                    text = "Skills",
+                    text = stringResource(R.string.assistant_page_tab_skills),
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 )
                 SkillsPicker(
@@ -153,6 +156,16 @@ fun SkillsPicker(
             .filterNot { it in skillsState.entryNames }
             .sorted()
     }
+    val resolvedRootPath = if (skillsState.rootPath.isBlank()) {
+        stringResource(R.string.assistant_page_skills_root_unresolved)
+    } else {
+        skillsState.rootPath
+    }
+    val fallbackRootPath = if (skillsState.rootPath.isBlank()) {
+        stringResource(R.string.assistant_page_skills_root_fallback)
+    } else {
+        skillsState.rootPath
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -176,11 +189,14 @@ fun SkillsPicker(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Text(
-                                text = "Enable skills catalog",
+                                text = stringResource(R.string.assistant_page_skills_enable_catalog_title),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                text = "Expose selected skills from ${skillsState.rootPath.ifBlank { "(not resolved)" }} to the model as a lightweight catalog.",
+                                text = stringResource(
+                                    R.string.assistant_page_skills_enable_catalog_desc,
+                                    resolvedRootPath,
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -197,13 +213,16 @@ fun SkillsPicker(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Selected: ${assistant.selectedSkills.size}",
+                            text = stringResource(
+                                R.string.assistant_page_skills_selected_count,
+                                assistant.selectedSkills.size,
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Box(modifier = Modifier.weight(1f))
                         TextButton(onClick = onRefresh) {
-                            Text("Refresh")
+                            Text(stringResource(R.string.webview_page_refresh))
                         }
                     }
                 }
@@ -213,8 +232,8 @@ fun SkillsPicker(
         if (!termuxToolEnabled) {
             item("termux-warning") {
                 SkillsInfoCard(
-                    title = "Termux tool required",
-                    text = "Enable Local Tools > Termux Command before using skills in chat.",
+                    title = stringResource(R.string.assistant_page_skills_termux_required_title),
+                    text = stringResource(R.string.assistant_page_skills_termux_required_desc),
                     isError = true,
                 )
             }
@@ -223,8 +242,8 @@ fun SkillsPicker(
         if (!modelSupportsTools) {
             item("model-warning") {
                 SkillsInfoCard(
-                    title = "Current model cannot use tools",
-                    text = "Selections are saved, but the skills catalog will not be injected until the active model supports tool calls.",
+                    title = stringResource(R.string.assistant_page_skills_model_unsupported_title),
+                    text = stringResource(R.string.assistant_page_skills_model_unsupported_desc),
                     isError = false,
                 )
             }
@@ -233,7 +252,7 @@ fun SkillsPicker(
         if (skillsState.error != null) {
             item("error") {
                 SkillsInfoCard(
-                    title = "Failed to refresh skills",
+                    title = stringResource(R.string.assistant_page_skills_refresh_failed_title),
                     text = skillsState.error.orEmpty(),
                     isError = true,
                 )
@@ -251,7 +270,12 @@ fun SkillsPicker(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        Text("Refreshing skills from ${skillsState.rootPath.ifBlank { "workdir/skills" }}")
+                        Text(
+                            stringResource(
+                                R.string.assistant_page_skills_refreshing,
+                                fallbackRootPath,
+                            )
+                        )
                     }
                 }
             }
@@ -260,8 +284,11 @@ fun SkillsPicker(
         if (!skillsState.isLoading && skillsState.entries.isEmpty() && skillsState.invalidEntries.isEmpty()) {
             item("empty") {
                 SkillsInfoCard(
-                    title = "No skills found",
-                    text = "Create subdirectories under ${skillsState.rootPath.ifBlank { "workdir/skills" }} and add a SKILL.md with name and description frontmatter.",
+                    title = stringResource(R.string.assistant_page_skills_empty_title),
+                    text = stringResource(
+                        R.string.assistant_page_skills_empty_desc,
+                        fallbackRootPath,
+                    ),
                     isError = false,
                 )
             }
@@ -270,7 +297,7 @@ fun SkillsPicker(
         if (skillsState.entries.isNotEmpty()) {
             item("available-header") {
                 Text(
-                    text = "Available skills",
+                    text = stringResource(R.string.assistant_page_skills_available_title),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
@@ -295,7 +322,7 @@ fun SkillsPicker(
         if (missingSelections.isNotEmpty()) {
             item("missing-header") {
                 Text(
-                    text = "Missing selections",
+                    text = stringResource(R.string.assistant_page_skills_missing_title),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
@@ -319,7 +346,10 @@ fun SkillsPicker(
                         ) {
                             Text(text = directoryName, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                text = "This skill is still selected on the assistant, but it no longer exists in ${skillsState.rootPath.ifBlank { "workdir/skills" }}.",
+                                text = stringResource(
+                                    R.string.assistant_page_skills_missing_desc,
+                                    fallbackRootPath,
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -344,7 +374,7 @@ fun SkillsPicker(
         if (skillsState.invalidEntries.isNotEmpty()) {
             item("invalid-header") {
                 Text(
-                    text = "Ignored directories",
+                    text = stringResource(R.string.assistant_page_skills_invalid_title),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
@@ -429,7 +459,7 @@ private fun InvalidSkillEntryCard(entry: SkillInvalidEntry) {
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = entry.reason,
+                    text = localizedSkillInvalidReason(entry.reason),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -440,6 +470,31 @@ private fun InvalidSkillEntryCard(entry: SkillInvalidEntry) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun localizedSkillInvalidReason(reason: SkillInvalidReason): String {
+    return when (reason) {
+        SkillInvalidReason.MissingSkillFile -> stringResource(R.string.assistant_page_skills_reason_missing_skill_md)
+        SkillInvalidReason.MissingYamlFrontmatter -> stringResource(
+            R.string.assistant_page_skills_reason_missing_yaml_frontmatter
+        )
+        SkillInvalidReason.FrontmatterMustStart -> stringResource(
+            R.string.assistant_page_skills_reason_frontmatter_must_start
+        )
+        SkillInvalidReason.FrontmatterNotClosed -> stringResource(
+            R.string.assistant_page_skills_reason_frontmatter_not_closed
+        )
+        SkillInvalidReason.MissingName -> stringResource(R.string.assistant_page_skills_reason_missing_name)
+        SkillInvalidReason.MissingDescription -> stringResource(
+            R.string.assistant_page_skills_reason_missing_description
+        )
+        is SkillInvalidReason.FailedToRead -> stringResource(
+            R.string.assistant_page_skills_reason_failed_to_read,
+            reason.detail,
+        )
+        is SkillInvalidReason.Other -> reason.message
     }
 }
 

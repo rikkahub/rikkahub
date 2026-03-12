@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
 
 class SkillsRepositoryTest {
     @Test
@@ -24,7 +25,7 @@ class SkillsRepositoryTest {
                 SkillInvalidEntry(
                     directoryName = "broken-skill",
                     path = "/old/skills/broken-skill",
-                    reason = "Missing SKILL.md",
+                    reason = SkillInvalidReason.MissingSkillFile,
                 )
             ),
             error = "Previous failure",
@@ -92,8 +93,29 @@ class SkillsRepositoryTest {
         assertEquals("broken", result.invalidEntries.single().directoryName)
         assertEquals("/skills/broken", result.invalidEntries.single().path)
         assertEquals(
-            "Failed to read SKILL.md: Permission denied",
+            SkillInvalidReason.FailedToRead("Permission denied"),
             result.invalidEntries.single().reason,
+        )
+    }
+
+    @Test
+    fun `buildSkillCommandRequest should always use background Termux execution`() {
+        val request = buildSkillCommandRequest(
+            script = "echo ok",
+            workdir = "/data/data/com.termux/files/home",
+            label = "RikkaHub list local skills",
+        )
+
+        assertEquals(
+            TermuxRunCommandRequest(
+                commandPath = "/data/data/com.termux/files/usr/bin/bash",
+                arguments = listOf("-lc", "echo ok"),
+                workdir = "/data/data/com.termux/files/home",
+                background = true,
+                timeoutMs = 30_000L,
+                label = "RikkaHub list local skills",
+            ),
+            request,
         )
     }
 }

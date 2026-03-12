@@ -89,3 +89,10 @@
 - If the user does not explicitly request localization, prioritize implementing functionality without considering
   localization. (e.g `Text("Hello world")`)
 - For `locale-tui` operations, use the `locale-tui-localization` skill.
+
+## Termux Conventions
+
+- Any Termux-based status checks, discovery, health probes, token reads, or skills directory inspection must run in the
+  background (`TermuxRunCommandRequest.background = true`) and must not foreground-launch the Termux UI.
+- Only use foreground Termux execution when the feature explicitly requires user-visible interactive Termux UI, not for
+  routine app-side checks.

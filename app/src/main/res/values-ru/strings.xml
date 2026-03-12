@@ -1122,5 +1122,28 @@
   <string name="chat_page_termux_command_mode_content_desc">Командный режим Termux</string>
   <string name="chat_page_termux_command_mode_title">Командный режим</string>
   <string name="chat_page_termux_command_mode_supporting">/termux</string>
+  <string name="assistant_page_skills_enable_catalog_title">Включить каталог навыков</string>
+  <string name="assistant_page_skills_enable_catalog_desc">Предоставлять модели выбранные навыки из %1$s в виде легковесного каталога.</string>
+  <string name="assistant_page_skills_root_unresolved">(не определено)</string>
+  <string name="assistant_page_skills_root_fallback">workdir/skills</string>
+  <string name="assistant_page_skills_selected_count">Выбрано: %1$d</string>
+  <string name="assistant_page_skills_termux_required_title">Требуется инструмент Termux</string>
+  <string name="assistant_page_skills_termux_required_desc">Перед использованием навыков в чате включите Локальные инструменты &gt; Команда Termux.</string>
+  <string name="assistant_page_skills_model_unsupported_title">Текущая модель не поддерживает инструменты</string>
+  <string name="assistant_page_skills_model_unsupported_desc">Выбор сохраняется, но каталог навыков не будет добавлен в контекст, пока активная модель не поддерживает вызов инструментов.</string>
+  <string name="assistant_page_skills_refresh_failed_title">Не удалось обновить навыки</string>
+  <string name="assistant_page_skills_refreshing">Обновление навыков из %1$s</string>
+  <string name="assistant_page_skills_empty_title">Навыки не найдены</string>
+  <string name="assistant_page_skills_empty_desc">Создайте подкаталоги в %1$s и добавьте SKILL.md с frontmatter name и description.</string>
+  <string name="assistant_page_skills_available_title">Доступные навыки</string>
+  <string name="assistant_page_skills_missing_title">Отсутствующие выбранные элементы</string>
+  <string name="assistant_page_skills_missing_desc">Этот навык по-прежнему выбран для ассистента, но его больше нет в %1$s.</string>
+  <string name="assistant_page_skills_invalid_title">Игнорируемые каталоги</string>
+  <string name="assistant_page_skills_reason_missing_skill_md">Отсутствует SKILL.md</string>
+  <string name="assistant_page_skills_reason_missing_yaml_frontmatter">В SKILL.md отсутствует YAML frontmatter</string>
+  <string name="assistant_page_skills_reason_frontmatter_must_start">frontmatter в SKILL.md должен начинаться с ---</string>
+  <string name="assistant_page_skills_reason_frontmatter_not_closed">frontmatter в SKILL.md не закрыт</string>
+  <string name="assistant_page_skills_reason_missing_name">В frontmatter SKILL.md отсутствует name</string>
+  <string name="assistant_page_skills_reason_missing_description">В frontmatter SKILL.md отсутствует description</string>
+  <string name="assistant_page_skills_reason_failed_to_read">Не удалось прочитать SKILL.md: %1$s</string>
 </resources>
-

@@ -271,30 +271,6 @@ fun SettingTermuxPage() {
                 }
             }
 
-            item("background") {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
-                ) {
-                    FormItem(
-                        modifier = Modifier.padding(12.dp),
-                        label = { Text(stringResource(R.string.setting_termux_page_background_title)) },
-                        description = { Text(stringResource(R.string.setting_termux_page_background_desc)) },
-                        tail = {
-                            Switch(
-                                checked = settings.termuxRunInBackground,
-                                onCheckedChange = { enabled ->
-                                    scope.launch {
-                                        settingsStore.update { it.copy(termuxRunInBackground = enabled) }
-                                    }
-                                },
-                            )
-                        },
-                    )
-                }
-            }
-
             item("approval") {
                 Card(
                     colors = CardDefaults.cardColors(

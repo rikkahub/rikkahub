@@ -381,7 +381,7 @@ class ChatService(
                     commandPath = TERMUX_BASH_PATH,
                     arguments = listOf("-lc", command),
                     workdir = settings.termuxWorkdir,
-                    background = settings.termuxRunInBackground,
+                    background = true,
                     timeoutMs = settings.termuxTimeoutMs,
                     label = "RikkaHub /termux",
                     description = "Direct command mode"

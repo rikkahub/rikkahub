@@ -1122,5 +1122,28 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_termux_command_mode_content_desc">Termux コマンドモード</string>
   <string name="chat_page_termux_command_mode_title">コマンドモード</string>
   <string name="chat_page_termux_command_mode_supporting">/termux</string>
+  <string name="assistant_page_skills_enable_catalog_title">スキルカタログを有効化</string>
+  <string name="assistant_page_skills_enable_catalog_desc">%1$s から選択したスキルを軽量なカタログとしてモデルに提供します。</string>
+  <string name="assistant_page_skills_root_unresolved">（未解決）</string>
+  <string name="assistant_page_skills_root_fallback">workdir/skills</string>
+  <string name="assistant_page_skills_selected_count">選択済み: %1$d</string>
+  <string name="assistant_page_skills_termux_required_title">Termux ツールが必要です</string>
+  <string name="assistant_page_skills_termux_required_desc">チャットでスキルを使う前に、ローカルツール &gt; Termux Command を有効にしてください。</string>
+  <string name="assistant_page_skills_model_unsupported_title">現在のモデルはツールを使用できません</string>
+  <string name="assistant_page_skills_model_unsupported_desc">選択内容は保存されますが、アクティブなモデルがツール呼び出しに対応するまではスキルカタログは注入されません。</string>
+  <string name="assistant_page_skills_refresh_failed_title">スキルの更新に失敗しました</string>
+  <string name="assistant_page_skills_refreshing">%1$s からスキルを更新中</string>
+  <string name="assistant_page_skills_empty_title">スキルが見つかりません</string>
+  <string name="assistant_page_skills_empty_desc">%1$s 配下にサブディレクトリを作成し、name と description の frontmatter を含む SKILL.md を追加してください。</string>
+  <string name="assistant_page_skills_available_title">利用可能なスキル</string>
+  <string name="assistant_page_skills_missing_title">見つからない選択項目</string>
+  <string name="assistant_page_skills_missing_desc">このスキルはアシスタントでまだ選択されていますが、%1$s にはもう存在しません。</string>
+  <string name="assistant_page_skills_invalid_title">無視されたディレクトリ</string>
+  <string name="assistant_page_skills_reason_missing_skill_md">SKILL.md がありません</string>
+  <string name="assistant_page_skills_reason_missing_yaml_frontmatter">SKILL.md に YAML frontmatter がありません</string>
+  <string name="assistant_page_skills_reason_frontmatter_must_start">SKILL.md の frontmatter は --- で始める必要があります</string>
+  <string name="assistant_page_skills_reason_frontmatter_not_closed">SKILL.md の frontmatter が閉じられていません</string>
+  <string name="assistant_page_skills_reason_missing_name">SKILL.md の frontmatter に name がありません</string>
+  <string name="assistant_page_skills_reason_missing_description">SKILL.md の frontmatter に description がありません</string>
+  <string name="assistant_page_skills_reason_failed_to_read">SKILL.md の読み取りに失敗しました: %1$s</string>
 </resources>
-

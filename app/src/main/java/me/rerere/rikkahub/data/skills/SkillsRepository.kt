@@ -29,8 +29,19 @@ data class SkillCatalogEntry(
 data class SkillInvalidEntry(
     val directoryName: String,
     val path: String,
-    val reason: String,
+    val reason: SkillInvalidReason,
 )
+
+sealed interface SkillInvalidReason {
+    data object MissingSkillFile : SkillInvalidReason
+    data object MissingYamlFrontmatter : SkillInvalidReason
+    data object FrontmatterMustStart : SkillInvalidReason
+    data object FrontmatterNotClosed : SkillInvalidReason
+    data object MissingName : SkillInvalidReason
+    data object MissingDescription : SkillInvalidReason
+    data class FailedToRead(val detail: String) : SkillInvalidReason
+    data class Other(val message: String) : SkillInvalidReason
+}
 
 data class SkillsCatalogState(
     val workdir: String = "",
@@ -51,7 +62,7 @@ internal data class SkillFrontmatter(
 
 internal sealed interface SkillFrontmatterParseResult {
     data class Success(val frontmatter: SkillFrontmatter) : SkillFrontmatterParseResult
-    data class Error(val reason: String) : SkillFrontmatterParseResult
+    data class Error(val reason: SkillInvalidReason) : SkillFrontmatterParseResult
 }
 
 internal data class SkillDirectoryDescriptor(
@@ -144,12 +155,9 @@ class SkillsRepository(
     private suspend fun listSkillDirectories(rootPath: String): List<SkillDirectoryDescriptor> {
         val script = buildListScript(rootPath)
         val result = termuxCommandManager.run(
-            TermuxRunCommandRequest(
-                commandPath = TERMUX_BASH_PATH,
-                arguments = listOf("-lc", script),
+            buildSkillCommandRequest(
+                script = script,
                 workdir = settingsStore.settingsFlow.value.termuxWorkdir,
-                background = false,
-                timeoutMs = 30_000L,
                 label = "RikkaHub list local skills",
             )
         )
@@ -175,12 +183,9 @@ class SkillsRepository(
     private suspend fun readSkillFile(directoryPath: String): String {
         val script = buildReadSkillScript(directoryPath)
         val result = termuxCommandManager.run(
-            TermuxRunCommandRequest(
-                commandPath = TERMUX_BASH_PATH,
-                arguments = listOf("-lc", script),
+            buildSkillCommandRequest(
+                script = script,
                 workdir = settingsStore.settingsFlow.value.termuxWorkdir,
-                background = false,
-                timeoutMs = 30_000L,
                 label = "RikkaHub read local skill",
             )
         )
@@ -230,12 +235,12 @@ class SkillsRepository(
 internal fun parseSkillFrontmatter(markdown: String): SkillFrontmatterParseResult {
     val normalized = markdown.trimStart()
     if (!normalized.startsWith("---")) {
-        return SkillFrontmatterParseResult.Error("SKILL.md is missing YAML frontmatter")
+        return SkillFrontmatterParseResult.Error(SkillInvalidReason.MissingYamlFrontmatter)
     }
 
     val lines = normalized.lineSequence().toList()
     if (lines.isEmpty() || lines.first().trim() != "---") {
-        return SkillFrontmatterParseResult.Error("SKILL.md frontmatter must start with ---")
+        return SkillFrontmatterParseResult.Error(SkillInvalidReason.FrontmatterMustStart)
     }
 
     val endIndex = lines.indexOfFirst { indexLine ->
@@ -251,7 +256,7 @@ internal fun parseSkillFrontmatter(markdown: String): SkillFrontmatterParseResul
     }
 
     if (endIndex <= 0) {
-        return SkillFrontmatterParseResult.Error("SKILL.md frontmatter is not closed")
+        return SkillFrontmatterParseResult.Error(SkillInvalidReason.FrontmatterNotClosed)
     }
 
     val values = linkedMapOf<String, String>()
@@ -268,9 +273,9 @@ internal fun parseSkillFrontmatter(markdown: String): SkillFrontmatterParseResul
     }
 
     val name = values["name"]?.takeIf { it.isNotBlank() }
-        ?: return SkillFrontmatterParseResult.Error("SKILL.md frontmatter is missing name")
+        ?: return SkillFrontmatterParseResult.Error(SkillInvalidReason.MissingName)
     val description = values["description"]?.takeIf { it.isNotBlank() }
-        ?: return SkillFrontmatterParseResult.Error("SKILL.md frontmatter is missing description")
+        ?: return SkillFrontmatterParseResult.Error(SkillInvalidReason.MissingDescription)
 
     return SkillFrontmatterParseResult.Success(
         SkillFrontmatter(
@@ -300,6 +305,21 @@ internal fun SkillsCatalogState.toRefreshingCatalogState(
         invalidEntries = emptyList(),
         isLoading = true,
         error = null,
+    )
+}
+
+internal fun buildSkillCommandRequest(
+    script: String,
+    workdir: String,
+    label: String,
+): TermuxRunCommandRequest {
+    return TermuxRunCommandRequest(
+        commandPath = TERMUX_BASH_PATH,
+        arguments = listOf("-lc", script),
+        workdir = workdir,
+        background = true,
+        timeoutMs = 30_000L,
+        label = label,
     )
 }
 
@@ -341,7 +361,7 @@ internal suspend fun inspectSkillDirectory(
             SkillInvalidEntry(
                 directoryName = directoryName,
                 path = path,
-                reason = "Missing SKILL.md",
+                reason = SkillInvalidReason.MissingSkillFile,
             )
         )
     }
@@ -380,6 +400,7 @@ internal suspend fun inspectSkillDirectory(
     }
 }
 
-internal fun buildSkillReadFailureReason(error: Throwable): String {
-    return "Failed to read SKILL.md: ${error.message ?: error.javaClass.name}"
+internal fun buildSkillReadFailureReason(error: Throwable): SkillInvalidReason {
+    val detail = error.message ?: error.javaClass.name
+    return SkillInvalidReason.FailedToRead(detail)
 }

@@ -452,7 +452,7 @@ class LocalTools(
                             commandPath = TERMUX_BASH_PATH,
                             arguments = listOf("-lc", command),
                             workdir = settings.termuxWorkdir,
-                            background = settings.termuxRunInBackground,
+                            background = true,
                             timeoutMs = timeoutMs,
                             label = "RikkaHub termux_exec",
                         )
@@ -679,7 +679,7 @@ class LocalTools(
                             arguments = listOf("-"),
                             workdir = settings.termuxWorkdir,
                             stdin = code,
-                            background = settings.termuxRunInBackground,
+                            background = true,
                             timeoutMs = timeoutMs,
                             label = "RikkaHub termux_python",
                         )

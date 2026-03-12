@@ -43,7 +43,7 @@ class SkillsPromptTest {
 
         assertTrue(result is SkillFrontmatterParseResult.Error)
         assertEquals(
-            "SKILL.md frontmatter is missing description",
+            SkillInvalidReason.MissingDescription,
             (result as SkillFrontmatterParseResult.Error).reason,
         )
     }
