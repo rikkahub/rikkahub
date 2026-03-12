@@ -39,6 +39,8 @@ data class Assistant(
     val mcpServers: Set<Uuid> = emptySet(),
     val localTools: List<LocalToolOption> = listOf(LocalToolOption.TimeInfo),
     val localToolPrompts: Map<String, String> = emptyMap(),
+    val skillsEnabled: Boolean = false,
+    val selectedSkills: Set<String> = emptySet(),
     val termuxNeedsApproval: Boolean = true,
     val background: String? = null,
     val backgroundOpacity: Float = 1.0f,

@@ -18,6 +18,7 @@ import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.skills.SkillsRepository
 import kotlin.uuid.Uuid
 
 private const val TAG = "AssistantDetailVM"
@@ -27,6 +28,7 @@ class AssistantDetailVM(
     private val settingsStore: SettingsStore,
     private val memoryRepository: MemoryRepository,
     private val filesManager: FilesManager,
+    private val skillsRepository: SkillsRepository,
 ) : ViewModel() {
     private val assistantId = Uuid.parse(id)
 
@@ -67,6 +69,8 @@ class AssistantDetailVM(
         }.stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
+
+    val skillsState = skillsRepository.state
 
     val tags = settingsStore
         .settingsFlow
@@ -198,5 +202,9 @@ class AssistantDetailVM(
                 Log.w(TAG, "Failed to delete background file: $oldBackground", e)
             }
         }
+    }
+
+    fun refreshSkills() {
+        skillsRepository.requestRefresh()
     }
 }

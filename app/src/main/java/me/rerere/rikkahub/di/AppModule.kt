@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtySessionManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxWorkdirServerManager
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.skills.SkillsRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.ScheduledPromptManager
 import me.rerere.rikkahub.service.ScheduledPromptWorker
@@ -59,6 +60,14 @@ val appModule = module {
 
     single {
         LocalTools(get(), get(), get(), get(), get(), get())
+    }
+
+    single {
+        SkillsRepository(
+            appScope = get(),
+            settingsStore = get(),
+            termuxCommandManager = get(),
+        )
     }
 
     single {

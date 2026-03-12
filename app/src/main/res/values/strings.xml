@@ -11,6 +11,7 @@
   <string name="assistant_detail_basic_desc">Configure name, avatar, model, and parameters</string>
   <string name="assistant_detail_injections_desc">Configure message templates and lorebooks</string>
   <string name="assistant_detail_local_tools_desc">Enable local tools like JavaScript engine</string>
+  <string name="assistant_detail_skills_desc">Choose local skills from the Termux workdir</string>
   <string name="assistant_detail_mcp_desc">Configure MCP server tools for the assistant</string>
   <string name="assistant_detail_memory_desc">Manage assistant memory and recent chat references</string>
   <string name="assistant_detail_prompt_desc">Set system prompts, message templates, and regex rules</string>
@@ -124,6 +125,7 @@
   <string name="assistant_page_tab_basic">Basic Settings</string>
   <string name="assistant_page_tab_injections">Prompt Injections</string>
   <string name="assistant_page_tab_local_tools">Local Tools</string>
+  <string name="assistant_page_tab_skills">Skills</string>
   <string name="assistant_page_tab_mcp">MCP</string>
   <string name="assistant_page_tab_memory">Memory</string>
   <string name="assistant_page_tab_prompt">Prompts</string>

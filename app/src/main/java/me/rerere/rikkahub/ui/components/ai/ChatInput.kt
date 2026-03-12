@@ -120,6 +120,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -262,7 +263,8 @@ fun ChatInput(
                             // Search
                             val enableSearchMsg = stringResource(R.string.web_search_enabled)
                             val disableSearchMsg = stringResource(R.string.web_search_disabled)
-                            val chatModel = settings.getCurrentChatModel()
+                            val effectiveChatModel = assistant.chatModelId?.let { settings.findModelById(it) }
+                                ?: settings.getCurrentChatModel()
                             SearchPickerButton(
                                 enableSearch = enableSearch,
                                 settings = settings,
@@ -279,11 +281,11 @@ fun ChatInput(
                                     )
                                 },
                                 onUpdateSearchService = onUpdateSearchService,
-                                model = chatModel,
+                                model = effectiveChatModel,
                             )
 
                             // Reasoning
-                            val model = settings.getCurrentChatModel()
+                            val model = effectiveChatModel
                             if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
                                 ReasoningButton(
                                     reasoningTokens = assistant.thinkingBudget ?: 0,
@@ -301,6 +303,14 @@ fun ChatInput(
                             // Local Tools
                             LocalToolsPickerButton(
                                 assistant = assistant,
+                                onUpdateAssistant = {
+                                    onUpdateAssistant(it)
+                                },
+                            )
+
+                            SkillsPickerButton(
+                                assistant = assistant,
+                                modelSupportsTools = model?.abilities?.contains(ModelAbility.TOOL) == true,
                                 onUpdateAssistant = {
                                     onUpdateAssistant(it)
                                 },
