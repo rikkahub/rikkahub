@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -50,7 +51,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
@@ -62,7 +62,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +73,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -224,7 +225,7 @@ fun ChatInput(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     // Medias
-                    MediaFileInputRow(state = state, context = context)
+                    MediaFileInputRow(state = state)
 
                     // Text Input Row
                     TextInputRow(
@@ -627,9 +628,16 @@ private fun QuickMessageButton(
 @Composable
 private fun MediaFileInputRow(
     state: ChatInputState,
-    context: Context
 ) {
     val filesManager: FilesManager = koinInject()
+    val managedFiles by filesManager.observe().collectAsState(initial = emptyList())
+    val displayNameByRelativePath = remember(managedFiles) {
+        managedFiles.associate { it.relativePath to it.displayName }
+    }
+    val displayNameByFileName = remember(managedFiles) {
+        managedFiles.associate { it.relativePath.substringAfterLast('/') to it.displayName }
+    }
+
     fun removePart(part: UIMessagePart, url: String) {
         state.messageContent = state.messageContent.filterNot { it == part }
         if (state.shouldDeleteFileOnRemove(part)) {
@@ -640,137 +648,171 @@ private fun MediaFileInputRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp)
+            .padding(horizontal = 6.dp, vertical = 6.dp)
             .horizontalScroll(rememberScrollState())
     ) {
-        state.messageContent.filterIsInstance<UIMessagePart.Image>().fastForEach { image ->
-            Box {
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    tonalElevation = 4.dp
-                ) {
-                    AsyncImage(
-                        model = image.url,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                Icon(
-                    imageVector = HugeIcons.Cancel01,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .size(20.dp)
-                        .clickable {
-                            removePart(image, image.url)
-                        }
-                        .align(Alignment.TopEnd)
-                        .background(MaterialTheme.colorScheme.secondary),
-                    tint = MaterialTheme.colorScheme.onSecondary
-                )
-            }
-        }
-        state.messageContent.filterIsInstance<UIMessagePart.Video>().fastForEach { video ->
-            Box {
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    tonalElevation = 4.dp
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(HugeIcons.Video01, null)
-                    }
-                }
-                Icon(
-                    imageVector = HugeIcons.Cancel01,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .size(20.dp)
-                        .clickable {
-                            removePart(video, video.url)
-                        }
-                        .align(Alignment.TopEnd)
-                        .background(MaterialTheme.colorScheme.secondary),
-                    tint = MaterialTheme.colorScheme.onSecondary
-                )
-            }
-        }
-        state.messageContent.filterIsInstance<UIMessagePart.Audio>().fastForEach { audio ->
-            Box {
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    tonalElevation = 4.dp
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(HugeIcons.MusicNote03, null)
-                    }
-                }
-                Icon(
-                    imageVector = HugeIcons.Cancel01,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .size(20.dp)
-                        .clickable {
-                            removePart(audio, audio.url)
-                        }
-                        .align(Alignment.TopEnd)
-                        .background(MaterialTheme.colorScheme.secondary),
-                    tint = MaterialTheme.colorScheme.onSecondary
-                )
-            }
-        }
-        state.messageContent.filterIsInstance<UIMessagePart.Document>()
-            .fastForEach { document ->
-                Box {
-                    Surface(
-                        modifier = Modifier
-                            .height(48.dp)
-                            .widthIn(max = 128.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        tonalElevation = 4.dp
-                    ) {
-                        CompositionLocalProvider(
-                            LocalContentColor provides MaterialTheme.colorScheme.onSurface.copy(
-                                0.8f
-                            )
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(4.dp)
+        state.messageContent.fastForEach { part ->
+            when (part) {
+                is UIMessagePart.Image -> {
+                    AttachmentChip(
+                        title = attachmentNameFromUrl(
+                            url = part.url,
+                            fallback = "image",
+                            displayNameByRelativePath = displayNameByRelativePath,
+                            displayNameByFileName = displayNameByFileName
+                        ),
+                        leading = {
+                            Surface(
+                                modifier = Modifier.size(34.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             ) {
-                                Text(
-                                    text = document.fileName,
-                                    overflow = TextOverflow.Ellipsis,
+                                AsyncImage(
+                                    model = part.url,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
                                 )
                             }
-                        }
-                    }
-                    Icon(
-                        imageVector = HugeIcons.Cancel01,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .size(20.dp)
-                            .clickable {
-                                removePart(document, document.url)
-                            }
-                            .align(Alignment.TopEnd)
-                            .background(MaterialTheme.colorScheme.secondary),
-                        tint = MaterialTheme.colorScheme.onSecondary
+                        },
+                        onRemove = { removePart(part, part.url) }
                     )
                 }
+
+                is UIMessagePart.Video -> {
+                    AttachmentChip(
+                        title = attachmentNameFromUrl(
+                            url = part.url,
+                            fallback = "video",
+                            displayNameByRelativePath = displayNameByRelativePath,
+                            displayNameByFileName = displayNameByFileName
+                        ),
+                        leading = { AttachmentLeadingIcon(icon = HugeIcons.Video01) },
+                        onRemove = { removePart(part, part.url) }
+                    )
+                }
+
+                is UIMessagePart.Audio -> {
+                    AttachmentChip(
+                        title = attachmentNameFromUrl(
+                            url = part.url,
+                            fallback = "audio",
+                            displayNameByRelativePath = displayNameByRelativePath,
+                            displayNameByFileName = displayNameByFileName
+                        ),
+                        leading = { AttachmentLeadingIcon(icon = HugeIcons.MusicNote03) },
+                        onRemove = { removePart(part, part.url) }
+                    )
+                }
+
+                is UIMessagePart.Document -> {
+                    AttachmentChip(
+                        title = attachmentNameFromUrl(
+                            url = part.url,
+                            fallback = part.fileName,
+                            displayNameByRelativePath = displayNameByRelativePath,
+                            displayNameByFileName = displayNameByFileName
+                        ),
+                        leading = { AttachmentLeadingIcon(icon = HugeIcons.Files02) },
+                        onRemove = { removePart(part, part.url) }
+                    )
+                }
+
+                else -> Unit
             }
+        }
     }
+}
+
+@Composable
+private fun AttachmentChip(
+    title: String,
+    leading: @Composable () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 1.dp,
+        shadowElevation = 0.dp,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier
+                .height(44.dp)
+                .padding(start = 8.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            leading()
+            Text(
+                text = title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.widthIn(min = 40.dp, max = 180.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .size(26.dp)
+                    .clickable(onClick = onRemove),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Cancel01,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttachmentLeadingIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    Surface(
+        modifier = Modifier.size(34.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+private fun attachmentNameFromUrl(
+    url: String,
+    fallback: String,
+    displayNameByRelativePath: Map<String, String>,
+    displayNameByFileName: Map<String, String>,
+): String {
+    val parsed = runCatching { url.toUri() }.getOrNull()
+    val relativePath = parsed?.path
+        ?.substringAfter("/files/", missingDelimiterValue = "")
+        ?.takeIf { it.isNotBlank() }
+    if (relativePath != null) {
+        displayNameByRelativePath[relativePath]?.let { return it }
+    }
+
+    val storedFileName = parsed?.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+    if (storedFileName != null) {
+        displayNameByFileName[storedFileName]?.let { return it }
+        return storedFileName
+    }
+
+    return fallback
 }
 
 @Composable
