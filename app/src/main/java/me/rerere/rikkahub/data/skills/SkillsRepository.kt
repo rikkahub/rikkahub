@@ -34,18 +34,11 @@ private const val DEFAULT_CREATED_SKILL_DIRECTORY = "new-skill"
 private const val SKILL_PACKAGE_FILE_NAME = "SKILL.md"
 private const val BUNDLED_SKILLS_ASSET_ROOT = "builtin_skills"
 
-enum class SkillCatalogSource {
-    Local,
-    BuiltIn,
-}
-
 data class SkillCatalogEntry(
     val directoryName: String,
     val path: String,
     val name: String,
     val description: String,
-    val source: SkillCatalogSource = SkillCatalogSource.Local,
-    val inlineInstructions: String? = null,
 )
 
 data class SkillCreationResult(
@@ -54,7 +47,6 @@ data class SkillCreationResult(
 )
 
 data class SkillEditorDocument(
-    val source: SkillCatalogSource,
     val originalDirectoryName: String,
     val directoryName: String,
     val name: String,
@@ -241,7 +233,6 @@ class SkillsRepository(
         val document = parseSkillMarkdownDocument(markdown)
 
         return SkillEditorDocument(
-            source = entry.source,
             originalDirectoryName = entry.directoryName,
             directoryName = entry.directoryName,
             name = document.frontmatter.name,
