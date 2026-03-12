@@ -1125,6 +1125,7 @@
   <string name="assistant_page_skills_root_unresolved">（未解析）</string>
   <string name="assistant_page_skills_root_fallback">workdir/skills</string>
   <string name="assistant_page_skills_selected_count">已選取：%1$d</string>
+  <string name="assistant_page_skills_action_desc">在 %1$s 中建立新的 skill 樣板，或匯入 zip 技能包。</string>
   <string name="assistant_page_skills_termux_required_title">需要 Termux 工具</string>
   <string name="assistant_page_skills_termux_required_desc">在聊天中使用技能前，請先啟用 本地工具 &gt; Termux 指令。</string>
   <string name="assistant_page_skills_model_unsupported_title">目前模型無法使用工具</string>
@@ -1132,7 +1133,23 @@
   <string name="assistant_page_skills_refresh_failed_title">重新整理技能失敗</string>
   <string name="assistant_page_skills_refreshing">正在從 %1$s 重新整理技能</string>
   <string name="assistant_page_skills_empty_title">找不到技能</string>
-  <string name="assistant_page_skills_empty_desc">請在 %1$s 下建立子目錄，並新增包含 name 與 description frontmatter 的 SKILL.md。</string>
+  <string name="assistant_page_skills_empty_desc">可以直接使用「建立」或「匯入 zip」，也可以手動在 %1$s 下新增子目錄，並放入帶有 name 與 description frontmatter 的 SKILL.md。</string>
+  <string name="assistant_page_skills_create">建立</string>
+  <string name="assistant_page_skills_import_zip">匯入 zip</string>
+  <string name="assistant_page_skills_create_title">建立 skill</string>
+  <string name="assistant_page_skills_create_name">名稱</string>
+  <string name="assistant_page_skills_create_directory">目錄</string>
+  <string name="assistant_page_skills_create_description">描述</string>
+  <string name="assistant_page_skills_create_body">說明</string>
+  <string name="assistant_page_skills_create_body_placeholder">可選。不填則使用預設模板。</string>
+  <string name="assistant_page_skills_create_confirm">建立</string>
+  <string name="assistant_page_skills_create_in_progress">建立中…</string>
+  <string name="assistant_page_skills_import_in_progress">匯入中…</string>
+  <string name="assistant_page_skills_create_success">已建立 skill：%1$s</string>
+  <string name="assistant_page_skills_import_success_single">已匯入 skill：%1$s</string>
+  <string name="assistant_page_skills_import_success_multiple">已匯入 %1$d 個 skill</string>
+  <string name="assistant_page_skills_create_failed">建立 skill 失敗</string>
+  <string name="assistant_page_skills_import_failed">匯入技能包失敗</string>
   <string name="assistant_page_skills_available_title">可用技能</string>
   <string name="assistant_page_skills_missing_title">遺失的已選項</string>
   <string name="assistant_page_skills_missing_desc">這個技能仍被此助手選取，但它已不存在於 %1$s 中。</string>
@@ -1144,4 +1161,20 @@
   <string name="assistant_page_skills_reason_missing_name">SKILL.md frontmatter 缺少 name</string>
   <string name="assistant_page_skills_reason_missing_description">SKILL.md frontmatter 缺少 description</string>
   <string name="assistant_page_skills_reason_failed_to_read">讀取 SKILL.md 失敗：%1$s</string>
+  <string name="assistant_detail_skills_desc">從 Termux 工作目錄選擇本機技能</string>
+  <string name="assistant_page_background_blur">背景模糊</string>
+  <string name="assistant_page_background_blur_desc">調整聊天背景的高斯模糊強度。適用於 Android 12 及以上版本。</string>
+  <string name="assistant_page_background_blur_value">模糊：%1$d</string>
+  <string name="assistant_page_tab_skills">技能</string>
+  <string name="setting_display_page_code_block_render_depth_title">僅對最近的程式碼區塊使用豐富渲染</string>
+  <string name="setting_display_page_code_block_render_depth_desc">只對最近 N 則訊息（含）中的程式碼區塊套用 HTML/SVG 豐富渲染。較舊的訊息仍使用一般語法醒目顯示的程式碼區塊。0 代表不設限。</string>
+  <string name="setting_common_no_limit">不設限</string>
+  <string name="scheduled_task_runs_delete_all">刪除所有工作執行紀錄</string>
+  <string name="scheduled_task_runs_delete_all_title">刪除所有工作執行紀錄？</string>
+  <string name="scheduled_task_runs_delete_all_confirmation">這會永久刪除所有已完成的工作執行紀錄。</string>
+  <string name="scheduled_task_runs_delete_one_title">要刪除此工作執行嗎？</string>
+  <string name="scheduled_task_runs_delete_one_confirmation">此紀錄將被永久刪除。</string>
+  <string name="setting_termux_page_pty_refresh_hint">點選「重新整理工作階段」以向 Termux 查詢。開啟此頁面不再會自動啟動 Termux。</string>
+  <string name="setting_termux_page_pty_disabled_hint">停用時，termux_exec 只會提供 command 和 timeout_ms，且不會傳送 PTY 工具。</string>
 </resources>
+

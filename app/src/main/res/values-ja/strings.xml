@@ -1146,4 +1146,37 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_skills_reason_missing_name">SKILL.md の frontmatter に name がありません</string>
   <string name="assistant_page_skills_reason_missing_description">SKILL.md の frontmatter に description がありません</string>
   <string name="assistant_page_skills_reason_failed_to_read">SKILL.md の読み取りに失敗しました: %1$s</string>
+  <string name="assistant_detail_skills_desc">Termux workdir からローカルスキルを選択</string>
+  <string name="assistant_page_background_blur">背景のぼかし</string>
+  <string name="assistant_page_background_blur_desc">チャット背景のガウスぼかしの強さを調整します。Android 12 以降で有効です。</string>
+  <string name="assistant_page_background_blur_value">ぼかし: %1$d</string>
+  <string name="assistant_page_tab_skills">スキル</string>
+  <string name="setting_display_page_code_block_render_depth_title">直近のコードブロックのみリッチレンダリング</string>
+  <string name="setting_display_page_code_block_render_depth_desc">直近 N 件のメッセージ内のコードブロックにのみ、HTML/SVG によるリッチレンダリングを適用します。それより古いメッセージは通常のシンタックスハイライト付きコードブロックのままです。0 は無制限を意味します。</string>
+  <string name="setting_common_no_limit">制限なし</string>
+  <string name="scheduled_task_runs_delete_all">タスク実行をすべて削除</string>
+  <string name="scheduled_task_runs_delete_all_title">タスク実行をすべて削除しますか？</string>
+  <string name="scheduled_task_runs_delete_all_confirmation">完了したタスク実行の記録がすべて完全に削除されます。</string>
+  <string name="scheduled_task_runs_delete_one_title">このタスク実行を削除しますか？</string>
+  <string name="scheduled_task_runs_delete_one_confirmation">この記録は完全に削除されます。</string>
+  <string name="setting_termux_page_pty_refresh_hint">Termux に問い合わせるには "Refresh Sessions" をタップしてください。このページを開いても Termux は自動起動しなくなりました。</string>
+  <string name="setting_termux_page_pty_disabled_hint">無効化されている場合、termux_exec は command と timeout_ms だけを公開し、PTY ツールは送信されません。</string>
+  <string name="assistant_page_skills_action_desc">新しいスキルのひな型を作成するか、zip スキルパッケージを %1$s にインポートします。</string>
+  <string name="assistant_page_skills_create">作成</string>
+  <string name="assistant_page_skills_import_zip">zip をインポート</string>
+  <string name="assistant_page_skills_create_title">スキルを作成</string>
+  <string name="assistant_page_skills_create_name">名前</string>
+  <string name="assistant_page_skills_create_directory">ディレクトリ</string>
+  <string name="assistant_page_skills_create_description">説明</string>
+  <string name="assistant_page_skills_create_body">指示文</string>
+  <string name="assistant_page_skills_create_body_placeholder">任意。空欄のままにするとデフォルトのテンプレートが使用されます。</string>
+  <string name="assistant_page_skills_create_confirm">作成</string>
+  <string name="assistant_page_skills_create_in_progress">作成中…</string>
+  <string name="assistant_page_skills_import_in_progress">インポート中…</string>
+  <string name="assistant_page_skills_create_success">スキルを作成しました: %1$s</string>
+  <string name="assistant_page_skills_import_success_single">スキルをインポートしました: %1$s</string>
+  <string name="assistant_page_skills_import_success_multiple">%1$d 個のスキルをインポートしました</string>
+  <string name="assistant_page_skills_create_failed">スキルの作成に失敗しました</string>
+  <string name="assistant_page_skills_import_failed">スキルパッケージのインポートに失敗しました</string>
 </resources>
+

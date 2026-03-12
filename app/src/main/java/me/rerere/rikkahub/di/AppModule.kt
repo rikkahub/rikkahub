@@ -64,6 +64,7 @@ val appModule = module {
 
     single {
         SkillsRepository(
+            context = get(),
             appScope = get(),
             settingsStore = get(),
             termuxCommandManager = get(),

@@ -1,5 +1,10 @@
 package me.rerere.rikkahub.ui.components.ai
 
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,10 +12,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -19,6 +29,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,15 +40,23 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dokar.sonner.ToastType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Alert01
+import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Package01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
@@ -46,7 +66,9 @@ import me.rerere.rikkahub.data.skills.SkillInvalidEntry
 import me.rerere.rikkahub.data.skills.SkillInvalidReason
 import me.rerere.rikkahub.data.skills.SkillsCatalogState
 import me.rerere.rikkahub.data.skills.SkillsRepository
+import me.rerere.rikkahub.data.skills.sanitizeSkillDirectoryName
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
+import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.compose.koinInject
 
 @Composable
@@ -150,6 +172,10 @@ fun SkillsPicker(
     onUpdateAssistant: (Assistant) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val toaster = LocalToaster.current
+    val skillsRepository = koinInject<SkillsRepository>()
     val termuxToolEnabled = assistant.localTools.contains(LocalToolOption.TermuxExec)
     val missingSelections = remember(assistant.selectedSkills, skillsState.entryNames) {
         assistant.selectedSkills
@@ -165,6 +191,63 @@ fun SkillsPicker(
         stringResource(R.string.assistant_page_skills_root_fallback)
     } else {
         skillsState.rootPath
+    }
+
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var createName by remember { mutableStateOf("") }
+    var createDirectory by remember { mutableStateOf("") }
+    var createDescription by remember { mutableStateOf("") }
+    var createBody by remember { mutableStateOf("") }
+    var createDirectoryEdited by remember { mutableStateOf(false) }
+    var isCreating by remember { mutableStateOf(false) }
+    var isImporting by remember { mutableStateOf(false) }
+    val actionInProgress = isCreating || isImporting
+
+    fun resetCreateDialog() {
+        createName = ""
+        createDirectory = ""
+        createDescription = ""
+        createBody = ""
+        createDirectoryEdited = false
+    }
+
+    val zipImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { selectedUri ->
+            scope.launch {
+                isImporting = true
+                try {
+                    val imported = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(selectedUri)?.use { inputStream ->
+                            skillsRepository.importSkillZip(
+                                inputStream = inputStream,
+                                archiveName = queryDisplayName(context, selectedUri),
+                            )
+                        } ?: error(context.getString(R.string.assistant_page_skills_import_failed))
+                    }
+                    val message = if (imported.directories.size == 1) {
+                        context.getString(
+                            R.string.assistant_page_skills_import_success_single,
+                            imported.directories.single(),
+                        )
+                    } else {
+                        context.getString(
+                            R.string.assistant_page_skills_import_success_multiple,
+                            imported.directories.size,
+                        )
+                    }
+                    toaster.show(message, type = ToastType.Success)
+                } catch (error: Throwable) {
+                    toaster.show(
+                        error.message ?: context.getString(R.string.assistant_page_skills_import_failed),
+                        type = ToastType.Error,
+                    )
+                } finally {
+                    isImporting = false
+                }
+            }
+        }
     }
 
     LazyColumn(
@@ -208,6 +291,58 @@ fun SkillsPicker(
                             },
                         )
                     }
+
+                    Text(
+                        text = stringResource(
+                            R.string.assistant_page_skills_action_desc,
+                            fallbackRootPath,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            enabled = !actionInProgress,
+                            onClick = {
+                                resetCreateDialog()
+                                showCreateDialog = true
+                            },
+                        ) {
+                            Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Box(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isCreating) {
+                                    stringResource(R.string.assistant_page_skills_create_in_progress)
+                                } else {
+                                    stringResource(R.string.assistant_page_skills_create)
+                                }
+                            )
+                        }
+
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            enabled = !actionInProgress,
+                            onClick = {
+                                zipImportLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed"))
+                            },
+                        ) {
+                            Icon(HugeIcons.FileImport, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Box(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isImporting) {
+                                    stringResource(R.string.assistant_page_skills_import_in_progress)
+                                } else {
+                                    stringResource(R.string.assistant_page_skills_import_zip)
+                                }
+                            )
+                        }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -221,7 +356,10 @@ fun SkillsPicker(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Box(modifier = Modifier.weight(1f))
-                        TextButton(onClick = onRefresh) {
+                        TextButton(
+                            enabled = !actionInProgress,
+                            onClick = onRefresh,
+                        ) {
                             Text(stringResource(R.string.webview_page_refresh))
                         }
                     }
@@ -387,6 +525,147 @@ fun SkillsPicker(
             }
         }
     }
+
+    if (showCreateDialog) {
+        CreateSkillDialog(
+            name = createName,
+            directory = createDirectory,
+            description = createDescription,
+            body = createBody,
+            isCreating = isCreating,
+            onDismiss = {
+                if (!isCreating) {
+                    showCreateDialog = false
+                }
+            },
+            onNameChange = { value ->
+                createName = value
+                if (!createDirectoryEdited) {
+                    createDirectory = sanitizeSkillDirectoryName(value)
+                }
+            },
+            onDirectoryChange = { value ->
+                createDirectoryEdited = true
+                createDirectory = sanitizeSkillDirectoryName(value)
+            },
+            onDescriptionChange = { createDescription = it },
+            onBodyChange = { createBody = it },
+            onConfirm = {
+                scope.launch {
+                    isCreating = true
+                    try {
+                        val created = skillsRepository.createSkill(
+                            directoryName = createDirectory,
+                            name = createName,
+                            description = createDescription,
+                            body = createBody,
+                        )
+                        toaster.show(
+                            context.getString(
+                                R.string.assistant_page_skills_create_success,
+                                created.directoryName,
+                            ),
+                            type = ToastType.Success,
+                        )
+                        showCreateDialog = false
+                        resetCreateDialog()
+                    } catch (error: Throwable) {
+                        toaster.show(
+                            error.message ?: context.getString(R.string.assistant_page_skills_create_failed),
+                            type = ToastType.Error,
+                        )
+                    } finally {
+                        isCreating = false
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun CreateSkillDialog(
+    name: String,
+    directory: String,
+    description: String,
+    body: String,
+    isCreating: Boolean,
+    onDismiss: () -> Unit,
+    onNameChange: (String) -> Unit,
+    onDirectoryChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onBodyChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val canConfirm = name.isNotBlank() && description.isNotBlank() && !isCreating
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.assistant_page_skills_create_title)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .imePadding(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = name,
+                    onValueChange = onNameChange,
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.assistant_page_skills_create_name)) },
+                )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = directory,
+                    onValueChange = onDirectoryChange,
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.assistant_page_skills_create_directory)) },
+                )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = description,
+                    onValueChange = onDescriptionChange,
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.assistant_page_skills_create_description)) },
+                )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = body,
+                    onValueChange = onBodyChange,
+                    minLines = 6,
+                    label = { Text(stringResource(R.string.assistant_page_skills_create_body)) },
+                    placeholder = {
+                        Text(stringResource(R.string.assistant_page_skills_create_body_placeholder))
+                    },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = canConfirm,
+                onClick = onConfirm,
+            ) {
+                Text(
+                    text = if (isCreating) {
+                        stringResource(R.string.assistant_page_skills_create_in_progress)
+                    } else {
+                        stringResource(R.string.assistant_page_skills_create_confirm)
+                    }
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = !isCreating,
+                onClick = onDismiss,
+            ) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 @Composable
@@ -532,6 +811,17 @@ private fun SkillsInfoCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+private fun queryDisplayName(context: Context, uri: Uri): String? {
+    return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0) cursor.getString(nameIndex) else null
+        } else {
+            null
         }
     }
 }

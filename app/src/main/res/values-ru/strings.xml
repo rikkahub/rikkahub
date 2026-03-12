@@ -1146,4 +1146,37 @@
   <string name="assistant_page_skills_reason_missing_name">В frontmatter SKILL.md отсутствует name</string>
   <string name="assistant_page_skills_reason_missing_description">В frontmatter SKILL.md отсутствует description</string>
   <string name="assistant_page_skills_reason_failed_to_read">Не удалось прочитать SKILL.md: %1$s</string>
+  <string name="assistant_detail_skills_desc">Выберите локальные навыки из рабочего каталога Termux</string>
+  <string name="assistant_page_background_blur">Размытие фона</string>
+  <string name="assistant_page_background_blur_desc">Настройте силу гауссова размытия фона чата. Работает на Android 12 и выше.</string>
+  <string name="assistant_page_background_blur_value">Размытие: %1$d</string>
+  <string name="assistant_page_tab_skills">Навыки</string>
+  <string name="setting_display_page_code_block_render_depth_title">Расширенный рендеринг только последних блоков кода</string>
+  <string name="setting_display_page_code_block_render_depth_desc">Применять HTML/SVG‑рендеринг только к блокам кода в N самых последних сообщениях включительно. В старых сообщениях блоки кода остаются обычными с подсветкой синтаксиса. 0 — без ограничения.</string>
+  <string name="setting_common_no_limit">Без ограничения</string>
+  <string name="scheduled_task_runs_delete_all">Удалить все выполнения задачи</string>
+  <string name="scheduled_task_runs_delete_all_title">Удалить все выполнения задачи?</string>
+  <string name="scheduled_task_runs_delete_all_confirmation">Все записи завершённых запусков задач будут удалены без возможности восстановления.</string>
+  <string name="scheduled_task_runs_delete_one_title">Удалить этот запуск задачи?</string>
+  <string name="scheduled_task_runs_delete_one_confirmation">Эта запись будет удалена без возможности восстановления.</string>
+  <string name="setting_termux_page_pty_refresh_hint">Нажмите «Refresh Sessions», чтобы отправить запрос в Termux. Открытие этой страницы больше не запускает Termux автоматически.</string>
+  <string name="setting_termux_page_pty_disabled_hint">Если отключено, termux_exec предоставляет только command и timeout_ms, а PTY‑инструменты не передаются.</string>
+  <string name="assistant_page_skills_action_desc">Создайте новую заготовку навыка или импортируйте zip‑пакет навыка в %1$s.</string>
+  <string name="assistant_page_skills_create">Создать</string>
+  <string name="assistant_page_skills_import_zip">Импортировать zip</string>
+  <string name="assistant_page_skills_create_title">Создать навык</string>
+  <string name="assistant_page_skills_create_name">Имя</string>
+  <string name="assistant_page_skills_create_directory">Каталог</string>
+  <string name="assistant_page_skills_create_description">Описание</string>
+  <string name="assistant_page_skills_create_body">Инструкции</string>
+  <string name="assistant_page_skills_create_body_placeholder">Необязательно. Оставьте пустым, чтобы использовать шаблон по умолчанию.</string>
+  <string name="assistant_page_skills_create_confirm">Создать</string>
+  <string name="assistant_page_skills_create_in_progress">Создание…</string>
+  <string name="assistant_page_skills_import_in_progress">Импортирование…</string>
+  <string name="assistant_page_skills_create_success">Создан навык: %1$s</string>
+  <string name="assistant_page_skills_import_success_single">Импортирован навык: %1$s</string>
+  <string name="assistant_page_skills_import_success_multiple">Импортировано %1$d навыков</string>
+  <string name="assistant_page_skills_create_failed">Не удалось создать навык</string>
+  <string name="assistant_page_skills_import_failed">Не удалось импортировать пакет навыков</string>
 </resources>
+
