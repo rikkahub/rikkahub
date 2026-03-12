@@ -1178,5 +1178,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_skills_import_success_multiple">%1$d 個のスキルをインポートしました</string>
   <string name="assistant_page_skills_create_failed">スキルの作成に失敗しました</string>
   <string name="assistant_page_skills_import_failed">スキルパッケージのインポートに失敗しました</string>
+  <string name="assistant_page_skills_edit_confirm">保存</string>
+  <string name="assistant_page_skills_edit_failed">スキルを保存できませんでした</string>
+  <string name="assistant_page_skills_edit_in_progress">保存しています…</string>
+  <string name="assistant_page_skills_edit_load_failed">スキルを読み込めませんでした</string>
+  <string name="assistant_page_skills_edit_success">スキル「%1$s」を保存しました</string>
+  <string name="assistant_page_skills_edit_title">スキルを編集</string>
 </resources>
 

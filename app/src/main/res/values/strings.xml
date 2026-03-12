@@ -1159,6 +1159,12 @@
   <string name="assistant_page_skills_create_body_placeholder">Optional. Leave blank to use the default template.</string>
   <string name="assistant_page_skills_create_confirm">Create</string>
   <string name="assistant_page_skills_create_in_progress">Creating…</string>
+  <string name="assistant_page_skills_edit_title">Edit skill</string>
+  <string name="assistant_page_skills_edit_confirm">Save</string>
+  <string name="assistant_page_skills_edit_in_progress">Saving…</string>
+  <string name="assistant_page_skills_edit_load_failed">Failed to load skill</string>
+  <string name="assistant_page_skills_edit_success">Saved skill: %1$s</string>
+  <string name="assistant_page_skills_edit_failed">Failed to save skill</string>
   <string name="assistant_page_skills_import_in_progress">Importing…</string>
   <string name="assistant_page_skills_create_success">Created skill: %1$s</string>
   <string name="assistant_page_skills_import_success_single">Imported skill: %1$s</string>

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -33,16 +34,32 @@ private const val DEFAULT_CREATED_SKILL_DIRECTORY = "new-skill"
 private const val SKILL_PACKAGE_FILE_NAME = "SKILL.md"
 private const val BUNDLED_SKILLS_ASSET_ROOT = "builtin_skills"
 
+enum class SkillCatalogSource {
+    Local,
+    BuiltIn,
+}
+
 data class SkillCatalogEntry(
     val directoryName: String,
     val path: String,
     val name: String,
     val description: String,
+    val source: SkillCatalogSource = SkillCatalogSource.Local,
+    val inlineInstructions: String? = null,
 )
 
 data class SkillCreationResult(
     val directoryName: String,
     val path: String,
+)
+
+data class SkillEditorDocument(
+    val source: SkillCatalogSource,
+    val originalDirectoryName: String,
+    val directoryName: String,
+    val name: String,
+    val description: String,
+    val body: String,
 )
 
 data class SkillImportResult(
@@ -126,6 +143,11 @@ internal data class BundledSkill(
     val assetPath: String,
 )
 
+internal data class SkillMarkdownDocument(
+    val frontmatter: SkillFrontmatter,
+    val body: String,
+)
+
 class SkillsRepository(
     private val context: Context,
     private val appScope: AppScope,
@@ -139,6 +161,7 @@ class SkillsRepository(
     init {
         appScope.launch {
             settingsStore.settingsFlow
+                .filter { !it.init }
                 .map { it.termuxWorkdir }
                 .distinctUntilChanged()
                 .collect { workdir ->
@@ -148,8 +171,10 @@ class SkillsRepository(
     }
 
     fun requestRefresh() {
+        val settings = settingsStore.settingsFlow.value
+        if (settings.init) return
         appScope.launch {
-            refresh(settingsStore.settingsFlow.value.termuxWorkdir)
+            refresh(settings.termuxWorkdir)
         }
     }
 
@@ -194,6 +219,87 @@ class SkillsRepository(
                 script = script,
                 workdir = workdir,
                 label = "RikkaHub create local skill",
+                stdin = markdown,
+                timeoutMs = SKILL_WRITE_TIMEOUT_MS,
+            )
+
+            SkillCreationResult(
+                directoryName = finalDirectoryName,
+                path = "$rootPath/$finalDirectoryName",
+            )
+        }
+    }
+
+    suspend fun loadSkillDocument(entry: SkillCatalogEntry): SkillEditorDocument {
+        val settings = settingsStore.settingsFlow.value
+        require(!settings.init) { "Settings are not ready" }
+
+        val markdown = readSkillFile(
+            directoryPath = entry.path,
+            workdir = settings.termuxWorkdir,
+        )
+        val document = parseSkillMarkdownDocument(markdown)
+
+        return SkillEditorDocument(
+            source = entry.source,
+            originalDirectoryName = entry.directoryName,
+            directoryName = entry.directoryName,
+            name = document.frontmatter.name,
+            description = document.frontmatter.description,
+            body = document.body,
+        )
+    }
+
+    suspend fun updateSkill(
+        originalDirectoryName: String,
+        directoryName: String,
+        name: String,
+        description: String,
+        body: String,
+    ): SkillCreationResult {
+        require(originalDirectoryName.isNotBlank()) { "Original skill directory cannot be empty" }
+        require(name.isNotBlank()) { "Skill name cannot be empty" }
+        require(description.isNotBlank()) { "Skill description cannot be empty" }
+
+        return runCatalogMutation { workdir, rootPath ->
+            ensureSkillsRootDirectory(rootPath = rootPath, workdir = workdir)
+            val existingDirectoryNames = listSkillDirectories(rootPath, workdir)
+                .mapTo(linkedSetOf()) { it.directoryName }
+
+            val finalDirectoryName = sanitizeSkillDirectoryName(
+                input = directoryName.ifBlank { name },
+                fallback = originalDirectoryName,
+            )
+            val conflictingDirectories = existingDirectoryNames - originalDirectoryName
+            require(finalDirectoryName !in conflictingDirectories) {
+                "Skill directory already exists: $finalDirectoryName"
+            }
+
+            if (finalDirectoryName != originalDirectoryName) {
+                runSkillScript(
+                    script = buildMoveSkillDirectoryScript(
+                        rootPath = rootPath,
+                        fromDirectoryName = originalDirectoryName,
+                        toDirectoryName = finalDirectoryName,
+                    ),
+                    workdir = workdir,
+                    label = "RikkaHub rename local skill",
+                    timeoutMs = SKILL_WRITE_TIMEOUT_MS,
+                )
+            }
+
+            val markdown = buildSkillMarkdown(
+                name = name.trim(),
+                description = description.trim(),
+                body = body,
+            )
+            runSkillScript(
+                script = buildCreateSkillScript(
+                    rootPath = rootPath,
+                    directoryName = finalDirectoryName,
+                ),
+                workdir = workdir,
+                label = "RikkaHub update local skill",
                 stdin = markdown,
                 timeoutMs = SKILL_WRITE_TIMEOUT_MS,
             )
@@ -274,7 +380,9 @@ class SkillsRepository(
         mutation: suspend (workdir: String, rootPath: String) -> T,
     ): T {
         return refreshMutex.withLock {
-            val workdir = settingsStore.settingsFlow.value.termuxWorkdir
+            val settings = settingsStore.settingsFlow.value
+            require(!settings.init) { "Settings are not ready" }
+            val workdir = settings.termuxWorkdir
             val rootPath = buildSkillsRootPath(workdir)
             _state.value = _state.value.toMutatingCatalogState(
                 workdir = workdir,
@@ -572,6 +680,25 @@ class SkillsRepository(
             else
               mkdir -p "${'$'}ROOT"
             fi
+        """.trimIndent()
+    }
+
+    private fun buildMoveSkillDirectoryScript(
+        rootPath: String,
+        fromDirectoryName: String,
+        toDirectoryName: String,
+    ): String {
+        val safeRoot = rootPath.escapeForSingleQuotedShell()
+        val safeFrom = fromDirectoryName.escapeForSingleQuotedShell()
+        val safeTo = toDirectoryName.escapeForSingleQuotedShell()
+        return """
+            set -eu
+            ROOT='$safeRoot'
+            FROM='$safeFrom'
+            TO='$safeTo'
+            [ -d "${'$'}ROOT/${'$'}FROM" ] || exit 1
+            [ ! -e "${'$'}ROOT/${'$'}TO" ] || exit 1
+            mv "${'$'}ROOT/${'$'}FROM" "${'$'}ROOT/${'$'}TO"
         """.trimIndent()
     }
 
@@ -912,6 +1039,25 @@ internal fun buildSkillReadFailureReason(error: Throwable): SkillInvalidReason {
     return SkillInvalidReason.FailedToRead(detail)
 }
 
+internal fun parseSkillMarkdownDocument(markdown: String): SkillMarkdownDocument {
+    val normalized = markdown.trimStart()
+    val parsedFrontmatter = parseSkillFrontmatter(normalized)
+    val frontmatter = when (parsedFrontmatter) {
+        is SkillFrontmatterParseResult.Success -> parsedFrontmatter.frontmatter
+        is SkillFrontmatterParseResult.Error -> error(localizedSkillParseError(parsedFrontmatter.reason))
+    }
+
+    val lines = normalized.lineSequence().toList()
+    val endIndex = lines.drop(1).indexOfFirst { it.trim() == "---" }
+    require(endIndex >= 0) { "SKILL.md frontmatter is not closed" }
+    val body = lines.drop(endIndex + 2).joinToString("\n").trim()
+
+    return SkillMarkdownDocument(
+        frontmatter = frontmatter,
+        body = body,
+    )
+}
+
 internal fun buildSkillMarkdown(
     name: String,
     description: String,
@@ -932,6 +1078,19 @@ internal fun buildSkillMarkdown(
         appendLine()
         appendLine(resolvedBody)
         appendLine()
+    }
+}
+
+private fun localizedSkillParseError(reason: SkillInvalidReason): String {
+    return when (reason) {
+        SkillInvalidReason.MissingSkillFile -> "Missing $SKILL_PACKAGE_FILE_NAME"
+        SkillInvalidReason.MissingYamlFrontmatter -> "$SKILL_PACKAGE_FILE_NAME is missing YAML frontmatter"
+        SkillInvalidReason.FrontmatterMustStart -> "$SKILL_PACKAGE_FILE_NAME frontmatter must start with ---"
+        SkillInvalidReason.FrontmatterNotClosed -> "$SKILL_PACKAGE_FILE_NAME frontmatter is not closed"
+        SkillInvalidReason.MissingName -> "$SKILL_PACKAGE_FILE_NAME frontmatter is missing name"
+        SkillInvalidReason.MissingDescription -> "$SKILL_PACKAGE_FILE_NAME frontmatter is missing description"
+        is SkillInvalidReason.FailedToRead -> reason.detail
+        is SkillInvalidReason.Other -> reason.message
     }
 }
 

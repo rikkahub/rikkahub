@@ -144,6 +144,21 @@ class SkillsRepositoryTest {
     }
 
     @Test
+    fun `parseSkillMarkdownDocument should return body without frontmatter`() {
+        val markdown = buildSkillMarkdown(
+            name = "Demo",
+            description = "Desc",
+            body = "# Steps\n\nDo the thing.",
+        )
+
+        val document = parseSkillMarkdownDocument(markdown)
+
+        assertEquals("Demo", document.frontmatter.name)
+        assertEquals("Desc", document.frontmatter.description)
+        assertEquals("# Steps\n\nDo the thing.", document.body)
+    }
+
+    @Test
     fun `normalizeSkillArchiveEntryPath should reject traversal`() {
         val result = runCatching {
             normalizeSkillArchiveEntryPath("../danger.sh")

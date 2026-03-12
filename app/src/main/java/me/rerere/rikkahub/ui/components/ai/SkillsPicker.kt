@@ -27,6 +27,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -56,12 +57,14 @@ import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Alert01
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Package01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.skills.SkillCatalogEntry
+import me.rerere.rikkahub.data.skills.SkillEditorDocument
 import me.rerere.rikkahub.data.skills.SkillInvalidEntry
 import me.rerere.rikkahub.data.skills.SkillInvalidReason
 import me.rerere.rikkahub.data.skills.SkillsCatalogState
@@ -201,7 +204,13 @@ fun SkillsPicker(
     var createDirectoryEdited by remember { mutableStateOf(false) }
     var isCreating by remember { mutableStateOf(false) }
     var isImporting by remember { mutableStateOf(false) }
-    val actionInProgress = isCreating || isImporting
+    var editDocument by remember { mutableStateOf<SkillEditorDocument?>(null) }
+    var isLoadingEditor by remember { mutableStateOf(false) }
+    var isSavingEditor by remember { mutableStateOf(false) }
+    var showInvalidEntries by remember(skillsState.invalidEntries) {
+        mutableStateOf(skillsState.invalidEntries.isNotEmpty())
+    }
+    val actionInProgress = isCreating || isImporting || isLoadingEditor || isSavingEditor
 
     fun resetCreateDialog() {
         createName = ""
@@ -447,6 +456,22 @@ fun SkillsPicker(
                 SkillEntryCard(
                     entry = entry,
                     checked = entry.directoryName in assistant.selectedSkills,
+                    enabled = !actionInProgress,
+                    onEdit = {
+                        scope.launch {
+                            isLoadingEditor = true
+                            try {
+                                editDocument = skillsRepository.loadSkillDocument(entry)
+                            } catch (error: Throwable) {
+                                toaster.show(
+                                    error.message ?: context.getString(R.string.assistant_page_skills_edit_load_failed),
+                                    type = ToastType.Error,
+                                )
+                            } finally {
+                                isLoadingEditor = false
+                            }
+                        }
+                    },
                     onCheckedChange = { checked ->
                         val nextSelection = assistant.selectedSkills.toMutableSet().apply {
                             if (checked) add(entry.directoryName) else remove(entry.directoryName)
@@ -509,13 +534,28 @@ fun SkillsPicker(
             }
         }
 
-        if (skillsState.invalidEntries.isNotEmpty()) {
+        if (skillsState.invalidEntries.isNotEmpty() && showInvalidEntries) {
             item("invalid-header") {
-                Text(
-                    text = stringResource(R.string.assistant_page_skills_invalid_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_skills_invalid_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        onClick = { showInvalidEntries = false },
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Cancel01,
+                            contentDescription = stringResource(R.string.update_card_close),
+                        )
+                    }
+                }
             }
             items(
                 items = skillsState.invalidEntries,
@@ -527,12 +567,15 @@ fun SkillsPicker(
     }
 
     if (showCreateDialog) {
-        CreateSkillDialog(
+        SkillEditorDialog(
             name = createName,
             directory = createDirectory,
             description = createDescription,
             body = createBody,
-            isCreating = isCreating,
+            title = stringResource(R.string.assistant_page_skills_create_title),
+            confirmText = stringResource(R.string.assistant_page_skills_create_confirm),
+            progressText = stringResource(R.string.assistant_page_skills_create_in_progress),
+            isSaving = isCreating,
             onDismiss = {
                 if (!isCreating) {
                     showCreateDialog = false
@@ -581,15 +624,87 @@ fun SkillsPicker(
             },
         )
     }
+
+    editDocument?.let { currentDocument ->
+        SkillEditorDialog(
+            name = currentDocument.name,
+            directory = currentDocument.directoryName,
+            description = currentDocument.description,
+            body = currentDocument.body,
+            title = stringResource(R.string.assistant_page_skills_edit_title),
+            confirmText = stringResource(R.string.assistant_page_skills_edit_confirm),
+            progressText = stringResource(R.string.assistant_page_skills_edit_in_progress),
+            isSaving = isSavingEditor,
+            onDismiss = {
+                if (!isSavingEditor) {
+                    editDocument = null
+                }
+            },
+            onNameChange = { value ->
+                editDocument = currentDocument.copy(name = value)
+            },
+            onDirectoryChange = { value ->
+                editDocument = currentDocument.copy(directoryName = sanitizeSkillDirectoryName(value))
+            },
+            onDescriptionChange = { value ->
+                editDocument = currentDocument.copy(description = value)
+            },
+            onBodyChange = { value ->
+                editDocument = currentDocument.copy(body = value)
+            },
+            onConfirm = {
+                scope.launch {
+                    val latestDocument = editDocument ?: return@launch
+                    isSavingEditor = true
+                    try {
+                        val saved = skillsRepository.updateSkill(
+                            originalDirectoryName = latestDocument.originalDirectoryName,
+                            directoryName = latestDocument.directoryName,
+                            name = latestDocument.name,
+                            description = latestDocument.description,
+                            body = latestDocument.body,
+                        )
+                        if (latestDocument.originalDirectoryName in assistant.selectedSkills &&
+                            latestDocument.originalDirectoryName != saved.directoryName
+                        ) {
+                            val nextSelection = assistant.selectedSkills.toMutableSet().apply {
+                                remove(latestDocument.originalDirectoryName)
+                                add(saved.directoryName)
+                            }
+                            onUpdateAssistant(assistant.copy(selectedSkills = nextSelection))
+                        }
+                        toaster.show(
+                            context.getString(
+                                R.string.assistant_page_skills_edit_success,
+                                saved.directoryName,
+                            ),
+                            type = ToastType.Success,
+                        )
+                        editDocument = null
+                    } catch (error: Throwable) {
+                        toaster.show(
+                            error.message ?: context.getString(R.string.assistant_page_skills_edit_failed),
+                            type = ToastType.Error,
+                        )
+                    } finally {
+                        isSavingEditor = false
+                    }
+                }
+            },
+        )
+    }
 }
 
 @Composable
-private fun CreateSkillDialog(
+private fun SkillEditorDialog(
     name: String,
     directory: String,
     description: String,
     body: String,
-    isCreating: Boolean,
+    title: String,
+    confirmText: String,
+    progressText: String,
+    isSaving: Boolean,
     onDismiss: () -> Unit,
     onNameChange: (String) -> Unit,
     onDirectoryChange: (String) -> Unit,
@@ -597,11 +712,11 @@ private fun CreateSkillDialog(
     onBodyChange: (String) -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val canConfirm = name.isNotBlank() && description.isNotBlank() && !isCreating
+    val canConfirm = name.isNotBlank() && description.isNotBlank() && !isSaving
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.assistant_page_skills_create_title)) },
+        title = { Text(title) },
         text = {
             Column(
                 modifier = Modifier
@@ -649,17 +764,17 @@ private fun CreateSkillDialog(
                 onClick = onConfirm,
             ) {
                 Text(
-                    text = if (isCreating) {
-                        stringResource(R.string.assistant_page_skills_create_in_progress)
+                    text = if (isSaving) {
+                        progressText
                     } else {
-                        stringResource(R.string.assistant_page_skills_create_confirm)
+                        confirmText
                     }
                 )
             }
         },
         dismissButton = {
             TextButton(
-                enabled = !isCreating,
+                enabled = !isSaving,
                 onClick = onDismiss,
             ) {
                 Text(stringResource(R.string.cancel))
@@ -672,9 +787,14 @@ private fun CreateSkillDialog(
 private fun SkillEntryCard(
     entry: SkillCatalogEntry,
     checked: Boolean,
+    enabled: Boolean,
+    onEdit: () -> Unit,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Card {
+    Card(
+        onClick = onEdit,
+        enabled = enabled,
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -712,6 +832,7 @@ private fun SkillEntryCard(
             }
             Switch(
                 checked = checked,
+                enabled = enabled,
                 onCheckedChange = onCheckedChange,
             )
         }

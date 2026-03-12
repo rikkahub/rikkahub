@@ -1144,6 +1144,12 @@
   <string name="assistant_page_skills_create_body_placeholder">可選。不填則使用預設模板。</string>
   <string name="assistant_page_skills_create_confirm">建立</string>
   <string name="assistant_page_skills_create_in_progress">建立中…</string>
+  <string name="assistant_page_skills_edit_title">編輯 skill</string>
+  <string name="assistant_page_skills_edit_confirm">儲存</string>
+  <string name="assistant_page_skills_edit_in_progress">儲存中…</string>
+  <string name="assistant_page_skills_edit_load_failed">讀取 skill 失敗</string>
+  <string name="assistant_page_skills_edit_success">已儲存 skill：%1$s</string>
+  <string name="assistant_page_skills_edit_failed">儲存 skill 失敗</string>
   <string name="assistant_page_skills_import_in_progress">匯入中…</string>
   <string name="assistant_page_skills_create_success">已建立 skill：%1$s</string>
   <string name="assistant_page_skills_import_success_single">已匯入 skill：%1$s</string>
@@ -1177,4 +1183,3 @@
   <string name="setting_termux_page_pty_refresh_hint">點選「重新整理工作階段」以向 Termux 查詢。開啟此頁面不再會自動啟動 Termux。</string>
   <string name="setting_termux_page_pty_disabled_hint">停用時，termux_exec 只會提供 command 和 timeout_ms，且不會傳送 PTY 工具。</string>
 </resources>
-
