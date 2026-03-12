@@ -7,11 +7,15 @@ import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.map
 import androidx.room.withTransaction
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
@@ -37,6 +41,10 @@ class ConversationRepository(
         private const val PAGE_SIZE = 20
         private const val INITIAL_LOAD_SIZE = 40
     }
+
+    private val searchIndexEnsureMutex = Mutex()
+    @Volatile
+    private var hasEnsuredSearchIndex = false
 
     suspend fun getRecentConversations(assistantId: Uuid, limit: Int = 10): List<Conversation> {
         return conversationDAO.getRecentConversationsOfAssistant(
@@ -249,7 +257,10 @@ class ConversationRepository(
         filesManager.deleteChatFiles(fullConversation.files)
     }
 
-    suspend fun searchMessages(keyword: String) = messageFtsManager.search(keyword)
+    suspend fun searchMessages(keyword: String): List<MessageSearchResult> {
+        ensureSearchIndexReady()
+        return messageFtsManager.search(keyword)
+    }
 
     suspend fun rebuildAllIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }) {
         messageFtsManager.deleteAll()
@@ -261,6 +272,20 @@ class ConversationRepository(
             val conversation = conversationEntityToConversation(entity, nodes)
             messageFtsManager.indexConversation(conversation)
             onProgress(index + 1, total)
+        }
+    }
+
+    suspend fun ensureSearchIndexReady() {
+        if (hasEnsuredSearchIndex) return
+        searchIndexEnsureMutex.withLock {
+            if (hasEnsuredSearchIndex) return
+            val conversationCount = conversationDAO.countAll()
+            if (conversationCount > 0 && messageFtsManager.countRows() == 0) {
+                kotlinx.coroutines.withContext(NonCancellable) {
+                    rebuildAllIndexes()
+                }
+            }
+            hasEnsuredSearchIndex = true
         }
     }
 

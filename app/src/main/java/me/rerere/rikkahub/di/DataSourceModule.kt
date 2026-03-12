@@ -23,8 +23,11 @@ import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.db.fts.MESSAGE_FTS_CREATE_SQL
+import me.rerere.rikkahub.data.db.fts.MESSAGE_FTS_TABLE_NAME
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.SimpleDictManager
+import me.rerere.rikkahub.data.db.fts.isMessageFtsSchemaCompatible
 import me.rerere.rikkahub.data.db.migrations.Migration_6_7
 import me.rerere.rikkahub.data.db.migrations.Migration_11_12
 import me.rerere.rikkahub.data.db.migrations.Migration_13_14
@@ -82,19 +85,7 @@ val dataSourceModule = module {
                             }
                         }
                     }
-                    db.execSQL(
-                        """
-                        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
-                            text,
-                            node_id UNINDEXED,
-                            message_id UNINDEXED,
-                            conversation_id UNINDEXED,
-                            title UNINDEXED,
-                            update_at UNINDEXED,
-                            tokenize = 'simple'
-                        )
-                        """.trimIndent()
-                    )
+                    ensureMessageFtsTable(db)
                 }
             })
             .openHelperFactory(
@@ -264,5 +255,30 @@ val dataSourceModule = module {
 
     single<RikkaHubAPI> {
         get<Retrofit>().create(RikkaHubAPI::class.java)
+    }
+}
+
+private fun ensureMessageFtsTable(db: SupportSQLiteDatabase) {
+    val columns = getMessageFtsColumns(db)
+    if (columns.isNotEmpty() && !isMessageFtsSchemaCompatible(columns)) {
+        android.util.Log.w(
+            "DataSourceModule",
+            "ensureMessageFtsTable: recreating incompatible schema columns=$columns"
+        )
+        db.execSQL("DROP TABLE IF EXISTS $MESSAGE_FTS_TABLE_NAME")
+    }
+    db.execSQL(MESSAGE_FTS_CREATE_SQL)
+}
+
+private fun getMessageFtsColumns(db: SupportSQLiteDatabase): Set<String> {
+    val cursor = db.query("PRAGMA table_info('$MESSAGE_FTS_TABLE_NAME')")
+    return cursor.use {
+        val nameIndex = it.getColumnIndex("name")
+        if (nameIndex == -1) return emptySet()
+        buildSet {
+            while (it.moveToNext()) {
+                add(it.getString(nameIndex))
+            }
+        }
     }
 }

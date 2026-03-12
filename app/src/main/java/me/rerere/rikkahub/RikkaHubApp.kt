@@ -30,6 +30,7 @@ import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ScheduledTaskKeepAliveService
 import me.rerere.rikkahub.service.ScheduledPromptManager
 import me.rerere.rikkahub.service.WebServerService
@@ -67,6 +68,7 @@ class RikkaHubApp : Application() {
 
         // sync upload files to DB
         syncManagedFiles()
+        ensureSearchIndex()
 
         // Init remote config
         get<FirebaseRemoteConfig>().apply {
@@ -117,6 +119,16 @@ class RikkaHubApp : Application() {
                 get<FilesManager>().syncFolder()
             }.onFailure {
                 Log.e(TAG, "syncManagedFiles failed", it)
+            }
+        }
+    }
+
+    private fun ensureSearchIndex() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<ConversationRepository>().ensureSearchIndexReady()
+            }.onFailure {
+                Log.e(TAG, "ensureSearchIndex failed", it)
             }
         }
     }
