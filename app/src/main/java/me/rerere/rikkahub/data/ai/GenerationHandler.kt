@@ -41,6 +41,8 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.skills.SkillsRepository
+import me.rerere.rikkahub.data.skills.buildSkillsCatalogPrompt
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -68,6 +70,7 @@ class GenerationHandler(
     private val memoryRepo: MemoryRepository,
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
+    private val skillsRepository: SkillsRepository,
 ) {
     fun generateText(
         settings: Settings,
@@ -345,6 +348,15 @@ class GenerationHandler(
                 if (assistant.enableRecentChatsReference) {
                     appendLine()
                     append(buildRecentChatsPrompt(assistant, conversationRepo))
+                }
+
+                buildSkillsCatalogPrompt(
+                    assistant = assistant,
+                    model = model,
+                    catalog = skillsRepository.state.value,
+                )?.let {
+                    appendLine()
+                    append(it)
                 }
 
                 // 工具prompt
