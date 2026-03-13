@@ -61,7 +61,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.compose.runtime.mutableStateListOf
 import androidx.navigation3.runtime.NavKey
+import me.rerere.rikkahub.APP_DISPLAY_NAME
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.APP_WEBSITE_HOST
 import me.rerere.rikkahub.ui.context.Navigator
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -500,16 +502,15 @@ private fun ExportedChatImage(
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                             )
                             Text(
-                                text = "${LocalDateTime.now().toLocalString()}  rikka-ai.com",
+                                text = "${LocalDateTime.now().toLocalString()}  $APP_WEBSITE_HOST",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        // Use painterResource for the logo
-                        val painter = painterResource(id = R.mipmap.ic_launcher_foreground)
+                        val painter = painterResource(id = R.mipmap.ic_launcher)
                         Image(
                             painter = painter,
-                            contentDescription = "Logo",
+                            contentDescription = APP_DISPLAY_NAME,
                             modifier = Modifier.size(60.dp)
                         )
                     }

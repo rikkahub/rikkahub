@@ -3,20 +3,101 @@ import type { ComponentPropsWithRef } from "react";
 export default function Logo(props: ComponentPropsWithRef<'svg'>) {
   return (
     <svg
-      version="1.2"
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 1133.858 1133.858"
+      viewBox="0 0 1200 1200"
       width="256"
       height="256"
-      fill="currentColor"
-      stroke="currentColor"
-      stroke-width="20"
-      stroke-linejoin="round"
-      stroke-linecap="round"
       {...props}
     >
-      <path d="M876.11 661.31 777.97 491.4c-7.69-13.37-17.78-24.86-30.02-34.32-3.4-2.64-4.91-6.56-4.16-10.34l29.27-128.16c2.01-8.7 2.01-18.04 0-26.87l-35.45-155.78C731.3 108.3 707.09 89 678.7 89h-31.03c-28.38 0-52.47 19.3-58.78 46.93l-22.08 96.75-22.07-96.75C538.43 108.3 514.34 89 485.96 89h-31.03c-28.39 0-52.6 19.3-58.91 46.93l-35.45 155.78c-2.02 8.83-2.02 18.17 0 26.87l29.14 128.16c.88 3.78-.63 7.7-4.03 10.34-12.24 9.46-22.33 20.95-30.03 34.32l-98.13 169.91c-27.38 47.55-27.38 106.59 0 154.01l87.91 152.38c27.5 47.44 78.59 76.95 133.46 76.95h175.85c54.87 0 105.96-29.51 133.45-76.95l87.92-152.38c13.75-23.71 20.56-50.32 20.56-76.94s-6.81-53.23-20.56-77.07M832.34 790.1l-87.92 152.38c-18.41 31.91-52.73 51.72-89.68 51.72H478.89c-36.95 0-71.27-19.81-89.68-51.72L301.16 790.1c-18.42-31.91-18.42-71.65.12-103.57l98.02-169.9c4.41-7.57 10.21-14.26 17.28-19.68 18.8-14.51 27.62-38.6 22.33-61.44l-29.14-128.16c-.38-1.38-.38-2.9 0-4.41l35.44-155.78c1.01-4.55 5.05-7.7 9.72-7.7h31.03c4.66 0 8.58 3.15 9.59 7.7l35.57 155.78c.25 1.51.25 3.03 0 4.41l-23.09 101.3c-4.16 18.03.13 36.7 11.6 51.08 11.49 14.38 28.77 22.71 47.18 22.71 18.42 0 35.7-8.33 47.18-22.71s15.77-33.05 11.6-51.08l-23.08-101.3c-.25-1.38-.25-2.9 0-4.41l35.57-155.78c1.01-4.55 4.92-7.7 9.59-7.7h31.03c4.67 0 8.58 3.15 9.72 7.7l35.44 155.78c.38 1.51.38 3.03 0 4.41l-29.14 128.16c-5.29 22.84 3.53 46.93 22.33 61.44 7.07 5.42 12.87 12.11 17.28 19.68l98.01 169.9c18.55 31.92 18.55 71.66 0 103.57M557.22 419.87l9.59-42.13 9.59 42.13c1.01 4.04-.76 7.06-1.89 8.46-1.14 1.38-3.53 3.65-7.7 3.65-4.16 0-6.55-2.27-7.69-3.65-1.14-1.4-2.91-4.42-1.9-8.46" />
-      <path d="M464.71 879c-18.69 0-33.84-15.14-33.84-33.83V712.86c0-18.69 15.15-33.83 33.84-33.83 18.68 0 33.83 15.14 33.83 33.83v132.31c0 18.69-15.15 33.83-33.83 33.83m203 0c-18.69 0-33.83-15.14-33.83-33.83V712.86c0-18.69 15.14-33.83 33.83-33.83s33.83 15.14 33.83 33.83v132.31c0 18.69-15.14 33.83-33.83 33.83" />
+      <defs>
+        <filter id="lune-glow" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="8" result="blur1" />
+          <feGaussianBlur stdDeviation="15" result="blur2" />
+          <feMerge>
+            <feMergeNode in="blur2" />
+            <feMergeNode in="blur1" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        <linearGradient id="lune-blue-grad-1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#00f2fe" />
+          <stop offset="100%" stopColor="#4facfe" />
+        </linearGradient>
+
+        <linearGradient id="lune-blue-grad-2" x1="100%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#0052D4" />
+          <stop offset="50%" stopColor="#4364F7" />
+          <stop offset="100%" stopColor="#6FB1FC" />
+        </linearGradient>
+
+        <linearGradient id="lune-blue-grad-3" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#00C9FF" />
+          <stop offset="100%" stopColor="#192846" />
+        </linearGradient>
+      </defs>
+
+      <rect x="60" y="60" width="1080" height="1080" rx="260" fill="white" stroke="#d9e8ff" strokeWidth="24" />
+
+      <g transform="translate(100 100)">
+        <g fill="none" strokeLinecap="round" filter="url(#lune-glow)">
+          <circle cx="500" cy="500" r="4" fill="#00f2fe" opacity="0.6" />
+          <circle
+            cx="500"
+            cy="500"
+            r="90"
+            stroke="url(#lune-blue-grad-1)"
+            strokeWidth="7"
+            strokeDasharray="200 80 180 105"
+            transform="rotate(45 500 500)"
+          />
+          <circle
+            cx="500"
+            cy="500"
+            r="170"
+            stroke="url(#lune-blue-grad-2)"
+            strokeWidth="9"
+            strokeDasharray="350 150 400 168"
+            transform="rotate(135 500 500)"
+          />
+          <circle
+            cx="500"
+            cy="500"
+            r="260"
+            stroke="url(#lune-blue-grad-3)"
+            strokeWidth="6"
+            strokeDasharray="500 200 450 150 200 133"
+            transform="rotate(-60 500 500)"
+          />
+          <circle
+            cx="500"
+            cy="500"
+            r="360"
+            stroke="url(#lune-blue-grad-1)"
+            strokeWidth="11"
+            strokeDasharray="850 300 650 200 150 111"
+            transform="rotate(20 500 500)"
+            opacity="0.9"
+          />
+          <circle
+            cx="500"
+            cy="500"
+            r="460"
+            stroke="url(#lune-blue-grad-2)"
+            strokeWidth="5"
+            strokeDasharray="1100 400 800 350 150 90"
+            transform="rotate(-110 500 500)"
+            opacity="0.75"
+          />
+          <g stroke="#4facfe" strokeWidth="1" opacity="0.15">
+            <circle cx="500" cy="500" r="90" />
+            <circle cx="500" cy="500" r="170" />
+            <circle cx="500" cy="500" r="260" />
+            <circle cx="500" cy="500" r="360" />
+            <circle cx="500" cy="500" r="460" />
+          </g>
+        </g>
+      </g>
     </svg>
   );
 }

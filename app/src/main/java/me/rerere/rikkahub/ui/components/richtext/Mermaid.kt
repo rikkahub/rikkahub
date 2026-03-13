@@ -39,6 +39,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.hugeicons.stroke.View
+import me.rerere.rikkahub.APP_WEBSITE_HOST
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
@@ -420,7 +421,7 @@ private fun buildMermaidHtml(
                         // Draw watermark
                         ctx.font = '14px Arial';
                         ctx.fillStyle = '${onBackground}';
-                        ctx.fillText('rikka-ai.com', 20, canvas.height - 10);
+                        ctx.fillText('${APP_WEBSITE_HOST}', 20, canvas.height - 10);
 
                         // Get PNG image as base64
                         const pngBase64 = canvas.toDataURL('image/png').split(',')[1];

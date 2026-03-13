@@ -7,7 +7,7 @@
   <string name="about_page_version">Version</string>
   <string name="about_page_website">Website</string>
   <string name="add">Add</string>
-  <string name="app_name">RikkaHub</string>
+  <string name="app_name">RikkaHub-Lune</string>
   <string name="assistant_detail_basic_desc">Configure name, avatar, model, and parameters</string>
   <string name="assistant_detail_injections_desc">Configure message templates and lorebooks</string>
   <string name="assistant_detail_local_tools_desc">Enable local tools like JavaScript engine</string>
@@ -560,7 +560,7 @@
   <string name="setting_page_search_title">Search Service</string>
   <string name="setting_page_share">Share</string>
   <string name="setting_page_share_desc">Share this app with friends</string>
-  <string name="setting_page_share_text">RikkaHub - Open Source Android AI Assistant\n\nWebsite: https://rikka-ai.com/</string>
+  <string name="setting_page_share_text">RikkaHub-Lune - Open Source Android AI Assistant\n\nWebsite: https://example.com</string>
   <string name="setting_page_theme_setting">Theme Settings</string>
   <string name="setting_page_tts_service">Text-to-Speech Service</string>
   <string name="setting_page_tts_service_desc">Configure text-to-speech service providers</string>
@@ -887,7 +887,7 @@
   <string name="setting_files_page_folder_upload">Upload</string>
   <string name="setting_files_page_delete_content_description">Delete</string>
   <string name="setting_page_web_server">Web Server</string>
-  <string name="setting_page_web_server_desc">Allow you access RikkaHub via Web</string>
+  <string name="setting_page_web_server_desc">Allow you access RikkaHub-Lune via Web</string>
   <string name="setting_page_web_server_port">Port</string>
   <string name="setting_page_web_server_port_desc">Web server listen port (1024-65535)</string>
   <string name="setting_page_web_server_enable">Enable the embedded web server</string>
@@ -1080,7 +1080,7 @@
   <string name="enabled">Enabled</string>
   <string name="setting_android_integration">Android Integration</string>
   <string name="setting_android_integration_desc">Text selection popup settings</string>
-  <string name="text_selection_menu_label">Ask RikkaHub</string>
+  <string name="text_selection_menu_label">Ask RikkaHub-Lune</string>
   <string name="text_selection_translate">Translate</string>
   <string name="text_selection_explain">Explain</string>
   <string name="text_selection_summarize">Summarize</string>
@@ -1090,7 +1090,7 @@
   <string name="text_selection_continue_chat">Continue in App</string>
   <string name="text_selection_generating">Generating…</string>
   <string name="text_selection_try_it">Try It</string>
-  <string name="text_selection_setup_instructions">Select text in any app and tap “Ask RikkaHub” from the text toolbar.</string>
+  <string name="text_selection_setup_instructions">Select text in any app and tap “Ask RikkaHub-Lune” from the text toolbar.</string>
   <string name="text_selection_demo_text">This is sample text. Long press and select it to test the selection toolbar integration.</string>
   <string name="text_selection_use_default">Use default assistant</string>
   <string name="text_selection_assistant">Assistant</string>
