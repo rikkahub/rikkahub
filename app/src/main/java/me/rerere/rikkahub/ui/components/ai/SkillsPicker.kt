@@ -61,8 +61,8 @@ import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.FileImport
-import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
@@ -128,7 +128,7 @@ fun SkillsPickerButton(
                         }
                     ) {
                         Icon(
-                            imageVector = HugeIcons.Package01,
+                            imageVector = HugeIcons.Puzzle,
                             contentDescription = stringResource(R.string.assistant_page_tab_skills),
                         )
                     }
@@ -890,7 +890,7 @@ private fun SkillEntryCard(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(HugeIcons.Package01, contentDescription = null)
+            Icon(HugeIcons.Puzzle, contentDescription = null)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),

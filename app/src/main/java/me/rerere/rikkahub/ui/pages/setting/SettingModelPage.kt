@@ -2,13 +2,13 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Earth
+import me.rerere.hugeicons.stroke.FileScript
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.FileZip
 import me.rerere.hugeicons.stroke.Mortarboard01
 import me.rerere.hugeicons.stroke.Message01
 import me.rerere.hugeicons.stroke.MessageMultiple01
 import me.rerere.hugeicons.stroke.Notebook01
-import me.rerere.hugeicons.stroke.Tools
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -159,7 +159,7 @@ private fun DefaultTranslationModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(HugeIcons.Tools, null)
+                Icon(HugeIcons.FileScript, null)
             }
         }
     )
@@ -256,7 +256,7 @@ private fun DefaultSuggestionModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(HugeIcons.Tools, null)
+                Icon(HugeIcons.FileScript, null)
             }
         }
     )
@@ -350,7 +350,7 @@ private fun DefaultTitleModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(HugeIcons.Tools, null)
+                Icon(HugeIcons.FileScript, null)
             }
         }
     )
@@ -481,7 +481,7 @@ private fun DefaultOcrModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(HugeIcons.Tools, null)
+                Icon(HugeIcons.FileScript, null)
             }
         }
     )
@@ -577,7 +577,7 @@ private fun DefaultCompressModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(HugeIcons.Tools, null)
+                Icon(HugeIcons.FileScript, null)
             }
         }
     )

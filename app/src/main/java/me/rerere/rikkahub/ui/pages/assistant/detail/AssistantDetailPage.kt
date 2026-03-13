@@ -6,7 +6,7 @@ import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Code
 import me.rerere.hugeicons.stroke.Message02
-import me.rerere.hugeicons.stroke.Package01
+import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Injection
 import me.rerere.hugeicons.stroke.Wrench01
@@ -145,7 +145,7 @@ fun AssistantDetailPage(id: String) {
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantSkills(id)) },
-                        leadingContent = { Icon(HugeIcons.Package01, null) },
+                        leadingContent = { Icon(HugeIcons.Puzzle, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_skills_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_skills)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },

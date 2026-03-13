@@ -110,12 +110,14 @@ import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.CommandLine
 import me.rerere.hugeicons.stroke.Files02
+import me.rerere.hugeicons.stroke.FileZip
 import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.MusicNote03
-import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Video01
+import me.rerere.hugeicons.stroke.WebProgramming
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -918,7 +920,7 @@ private fun FilesPicker(
         ListItem(
             leadingContent = {
                 Icon(
-                    imageVector = HugeIcons.Package01,
+                    imageVector = HugeIcons.FileZip,
                     contentDescription = stringResource(R.string.chat_page_compress_context),
                 )
             },
@@ -943,7 +945,7 @@ private fun FilesPicker(
         ListItem(
             leadingContent = {
                 Icon(
-                    imageVector = HugeIcons.Package01,
+                    imageVector = HugeIcons.CommandLine,
                     contentDescription = stringResource(R.string.chat_page_termux_command_mode_content_desc),
                 )
             },
@@ -969,7 +971,7 @@ private fun FilesPicker(
         ListItem(
             leadingContent = {
                 Icon(
-                    imageVector = HugeIcons.Package01,
+                    imageVector = HugeIcons.WebProgramming,
                     contentDescription = stringResource(R.string.setting_display_page_code_block_rich_render_title),
                 )
             },
