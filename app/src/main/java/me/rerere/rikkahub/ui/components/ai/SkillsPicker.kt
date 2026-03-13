@@ -58,8 +58,10 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Package01
+import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
@@ -91,7 +93,7 @@ fun SkillsPickerButton(
     }
 
     LaunchedEffect(showPicker) {
-        if (showPicker) {
+        if (showPicker && !skillsState.isLoading && (skillsState.refreshedAt == 0L || skillsState.error != null)) {
             skillsRepository.requestRefresh()
         }
     }
@@ -155,7 +157,7 @@ fun SkillsPickerButton(
                     assistant = assistant,
                     skillsState = skillsState,
                     modelSupportsTools = modelSupportsTools,
-                    onRefresh = skillsRepository::requestRefresh,
+                    onRefresh = { skillsRepository.requestRefresh() },
                     onUpdateAssistant = onUpdateAssistant,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -207,10 +209,12 @@ fun SkillsPicker(
     var editDocument by remember { mutableStateOf<SkillEditorDocument?>(null) }
     var isLoadingEditor by remember { mutableStateOf(false) }
     var isSavingEditor by remember { mutableStateOf(false) }
+    var deleteEntry by remember { mutableStateOf<SkillCatalogEntry?>(null) }
+    var isDeleting by remember { mutableStateOf(false) }
     var showInvalidEntries by remember(skillsState.invalidEntries) {
         mutableStateOf(skillsState.invalidEntries.isNotEmpty())
     }
-    val actionInProgress = isCreating || isImporting || isLoadingEditor || isSavingEditor
+    val actionInProgress = isCreating || isImporting || isLoadingEditor || isSavingEditor || isDeleting
 
     fun resetCreateDialog() {
         createName = ""
@@ -472,6 +476,13 @@ fun SkillsPicker(
                             }
                         }
                     },
+                    onDelete = if (entry.isBundled) {
+                        null
+                    } else {
+                        {
+                            deleteEntry = entry
+                        }
+                    },
                     onCheckedChange = { checked ->
                         val nextSelection = assistant.selectedSkills.toMutableSet().apply {
                             if (checked) add(entry.directoryName) else remove(entry.directoryName)
@@ -620,6 +631,80 @@ fun SkillsPicker(
                     } finally {
                         isCreating = false
                     }
+                }
+            },
+        )
+    }
+
+    deleteEntry?.let { currentEntry ->
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDeleting) {
+                    deleteEntry = null
+                }
+            },
+            title = { Text(stringResource(R.string.confirm_delete)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.assistant_page_skills_delete_body,
+                        currentEntry.directoryName,
+                        skillsState.rootPath.ifBlank {
+                            stringResource(R.string.assistant_page_skills_root_fallback)
+                        },
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isDeleting,
+                    onClick = {
+                        scope.launch {
+                            val latestEntry = deleteEntry ?: return@launch
+                            isDeleting = true
+                            try {
+                                skillsRepository.deleteSkill(latestEntry.directoryName)
+                                if (latestEntry.directoryName in assistant.selectedSkills) {
+                                    onUpdateAssistant(
+                                        assistant.copy(
+                                            selectedSkills = assistant.selectedSkills - latestEntry.directoryName
+                                        )
+                                    )
+                                }
+                                toaster.show(
+                                    context.getString(
+                                        R.string.assistant_page_skills_delete_success,
+                                        latestEntry.directoryName,
+                                    ),
+                                    type = ToastType.Success,
+                                )
+                                deleteEntry = null
+                            } catch (error: Throwable) {
+                                toaster.show(
+                                    error.message ?: context.getString(R.string.assistant_page_skills_delete_failed),
+                                    type = ToastType.Error,
+                                )
+                            } finally {
+                                isDeleting = false
+                            }
+                        }
+                    },
+                ) {
+                    Text(
+                        text = if (isDeleting) {
+                            stringResource(R.string.assistant_page_skills_delete_in_progress)
+                        } else {
+                            stringResource(R.string.delete)
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isDeleting,
+                    onClick = { deleteEntry = null },
+                ) {
+                    Text(stringResource(R.string.cancel))
                 }
             },
         )
@@ -789,6 +874,7 @@ private fun SkillEntryCard(
     checked: Boolean,
     enabled: Boolean,
     onEdit: () -> Unit,
+    onDelete: (() -> Unit)?,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Card(
@@ -830,11 +916,36 @@ private fun SkillEntryCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(
-                checked = checked,
-                enabled = enabled,
-                onCheckedChange = onCheckedChange,
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                IconButton(
+                    enabled = enabled,
+                    onClick = onEdit,
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.PencilEdit01,
+                        contentDescription = stringResource(R.string.assistant_page_skills_edit_title),
+                    )
+                }
+                onDelete?.let { deleteSkill ->
+                    IconButton(
+                        enabled = enabled,
+                        onClick = deleteSkill,
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Delete01,
+                            contentDescription = stringResource(R.string.delete),
+                        )
+                    }
+                }
+                Switch(
+                    checked = checked,
+                    enabled = enabled,
+                    onCheckedChange = onCheckedChange,
+                )
+            }
         }
     }
 }

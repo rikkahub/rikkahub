@@ -1171,6 +1171,10 @@
   <string name="assistant_page_skills_import_success_multiple">Imported %1$d skills</string>
   <string name="assistant_page_skills_create_failed">Failed to create skill</string>
   <string name="assistant_page_skills_import_failed">Failed to import skill package</string>
+  <string name="assistant_page_skills_delete_body">Delete skill %1$s from %2$s? This cannot be undone.</string>
+  <string name="assistant_page_skills_delete_in_progress">Deleting…</string>
+  <string name="assistant_page_skills_delete_success">Deleted skill: %1$s</string>
+  <string name="assistant_page_skills_delete_failed">Failed to delete skill</string>
   <string name="assistant_page_skills_available_title">Available skills</string>
   <string name="assistant_page_skills_missing_title">Missing selections</string>
   <string name="assistant_page_skills_missing_desc">This skill is still selected on the assistant, but it no longer exists in %1$s.</string>

@@ -11,7 +11,7 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
 
 class SkillsRepositoryTest {
     @Test
-    fun `toRefreshingCatalogState should clear cached entries and errors`() {
+    fun `toRefreshingCatalogState should keep cached entries when refreshing same root`() {
         val initial = SkillsCatalogState(
             workdir = "/old",
             rootPath = "/old/skills",
@@ -35,6 +35,42 @@ class SkillsRepositoryTest {
         )
 
         val loading = initial.toRefreshingCatalogState(
+            workdir = "/old",
+            rootPath = "/old/skills",
+        )
+
+        assertEquals("/old", loading.workdir)
+        assertEquals("/old/skills", loading.rootPath)
+        assertEquals(initial.entries, loading.entries)
+        assertEquals(initial.invalidEntries, loading.invalidEntries)
+        assertTrue(loading.isLoading)
+        assertNull(loading.error)
+        assertEquals(123L, loading.refreshedAt)
+    }
+
+    @Test
+    fun `toRefreshingCatalogState should clear cached entries when root changes`() {
+        val initial = SkillsCatalogState(
+            workdir = "/old",
+            rootPath = "/old/skills",
+            entries = listOf(
+                SkillCatalogEntry(
+                    directoryName = "old-skill",
+                    path = "/old/skills/old-skill",
+                    name = "old-skill",
+                    description = "Old description",
+                )
+            ),
+            invalidEntries = listOf(
+                SkillInvalidEntry(
+                    directoryName = "broken-skill",
+                    path = "/old/skills/broken-skill",
+                    reason = SkillInvalidReason.MissingSkillFile,
+                )
+            ),
+        )
+
+        val loading = initial.toRefreshingCatalogState(
             workdir = "/new",
             rootPath = "/new/skills",
         )
@@ -45,7 +81,6 @@ class SkillsRepositoryTest {
         assertTrue(loading.invalidEntries.isEmpty())
         assertTrue(loading.isLoading)
         assertNull(loading.error)
-        assertEquals(123L, loading.refreshedAt)
     }
 
     @Test
@@ -98,6 +133,31 @@ class SkillsRepositoryTest {
             SkillInvalidReason.FailedToRead("Permission denied"),
             result.invalidEntries.single().reason,
         )
+    }
+
+    @Test
+    fun `discoverCatalogEntries should use preview content without reading skill file again`() = runBlocking {
+        val result = discoverCatalogEntries(
+            directories = listOf(
+                SkillDirectoryDescriptor(
+                    directoryName = "skill-creator",
+                    path = "/skills/skill-creator",
+                    hasSkillFile = true,
+                    skillMarkdownPreview = buildSkillMarkdown(
+                        name = "Skill Creator",
+                        description = "Built in",
+                        body = "",
+                    ),
+                )
+            ),
+            readSkillFile = { error("Should not read full skill file when preview is available") },
+        )
+
+        assertEquals(1, result.entries.size)
+        assertEquals("skill-creator", result.entries.single().directoryName)
+        assertEquals("Skill Creator", result.entries.single().name)
+        assertTrue(result.entries.single().isBundled)
+        assertTrue(result.invalidEntries.isEmpty())
     }
 
     @Test

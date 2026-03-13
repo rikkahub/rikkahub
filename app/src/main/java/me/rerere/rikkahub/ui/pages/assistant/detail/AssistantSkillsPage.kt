@@ -39,8 +39,10 @@ fun AssistantSkillsPage(id: String) {
     val model = assistant.chatModelId?.let { settings.findModelById(it) } ?: settings.getCurrentChatModel()
     val modelSupportsTools = model?.abilities?.contains(ModelAbility.TOOL) == true
 
-    LaunchedEffect(Unit) {
-        vm.refreshSkills()
+    LaunchedEffect(skillsState.refreshedAt, skillsState.isLoading, skillsState.error) {
+        if (!skillsState.isLoading && (skillsState.refreshedAt == 0L || skillsState.error != null)) {
+            vm.refreshSkills()
+        }
     }
 
     Scaffold(

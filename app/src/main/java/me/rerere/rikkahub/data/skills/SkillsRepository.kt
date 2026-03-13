@@ -7,6 +7,7 @@ import java.io.InputStream
 import java.util.Base64
 import java.util.UUID
 import java.util.zip.ZipInputStream
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
@@ -33,12 +35,14 @@ private const val DEFAULT_IMPORTED_SKILL_DIRECTORY = "skill-import"
 private const val DEFAULT_CREATED_SKILL_DIRECTORY = "new-skill"
 private const val SKILL_PACKAGE_FILE_NAME = "SKILL.md"
 private const val BUNDLED_SKILLS_ASSET_ROOT = "builtin_skills"
+private const val SKILL_LIST_PREVIEW_BYTES_LIMIT = 8 * 1024
 
 data class SkillCatalogEntry(
     val directoryName: String,
     val path: String,
     val name: String,
     val description: String,
+    val isBundled: Boolean = false,
 )
 
 data class SkillCreationResult(
@@ -102,6 +106,7 @@ internal data class SkillDirectoryDescriptor(
     val directoryName: String,
     val path: String,
     val hasSkillFile: Boolean,
+    val skillMarkdownPreview: String? = null,
 )
 
 internal data class SkillCatalogDiscoveryResult(
@@ -163,16 +168,23 @@ class SkillsRepository(
     }
 
     fun requestRefresh() {
+        requestRefresh(force = false)
+    }
+
+    fun requestRefresh(force: Boolean) {
         val settings = settingsStore.settingsFlow.value
         if (settings.init) return
+        if (!force && _state.value.isLoading && _state.value.workdir == settings.termuxWorkdir) return
         appScope.launch {
             refresh(settings.termuxWorkdir)
         }
     }
 
     suspend fun refresh(workdir: String = settingsStore.settingsFlow.value.termuxWorkdir) {
-        refreshMutex.withLock {
-            refreshLocked(workdir)
+        withContext(Dispatchers.IO) {
+            refreshMutex.withLock {
+                refreshLocked(workdir)
+            }
         }
     }
 
@@ -223,22 +235,24 @@ class SkillsRepository(
     }
 
     suspend fun loadSkillDocument(entry: SkillCatalogEntry): SkillEditorDocument {
-        val settings = settingsStore.settingsFlow.value
-        require(!settings.init) { "Settings are not ready" }
+        return withContext(Dispatchers.IO) {
+            val settings = settingsStore.settingsFlow.value
+            require(!settings.init) { "Settings are not ready" }
 
-        val markdown = readSkillFile(
-            directoryPath = entry.path,
-            workdir = settings.termuxWorkdir,
-        )
-        val document = parseSkillMarkdownDocument(markdown)
+            val markdown = readSkillFile(
+                directoryPath = entry.path,
+                workdir = settings.termuxWorkdir,
+            )
+            val document = parseSkillMarkdownDocument(markdown)
 
-        return SkillEditorDocument(
-            originalDirectoryName = entry.directoryName,
-            directoryName = entry.directoryName,
-            name = document.frontmatter.name,
-            description = document.frontmatter.description,
-            body = document.body,
-        )
+            SkillEditorDocument(
+                originalDirectoryName = entry.directoryName,
+                directoryName = entry.directoryName,
+                name = document.frontmatter.name,
+                description = document.frontmatter.description,
+                body = document.body,
+            )
+        }
     }
 
     suspend fun updateSkill(
@@ -345,6 +359,25 @@ class SkillsRepository(
         }
     }
 
+    suspend fun deleteSkill(directoryName: String) {
+        require(directoryName.isNotBlank()) { "Skill directory cannot be empty" }
+        require(!isBundledSkillDirectoryName(directoryName)) {
+            "Built-in skills cannot be deleted: $directoryName"
+        }
+
+        runCatalogMutation { workdir, rootPath ->
+            runSkillScript(
+                script = buildDeleteSkillScript(
+                    rootPath = rootPath,
+                    directoryName = directoryName,
+                ),
+                workdir = workdir,
+                label = "RikkaHub delete local skill",
+                timeoutMs = SKILL_WRITE_TIMEOUT_MS,
+            )
+        }
+    }
+
     private suspend fun refreshLocked(workdir: String) {
         val rootPath = buildSkillsRootPath(workdir)
         _state.value = _state.value.toRefreshingCatalogState(
@@ -370,32 +403,40 @@ class SkillsRepository(
     private suspend fun <T> runCatalogMutation(
         mutation: suspend (workdir: String, rootPath: String) -> T,
     ): T {
-        return refreshMutex.withLock {
-            val settings = settingsStore.settingsFlow.value
-            require(!settings.init) { "Settings are not ready" }
-            val workdir = settings.termuxWorkdir
-            val rootPath = buildSkillsRootPath(workdir)
-            _state.value = _state.value.toMutatingCatalogState(
-                workdir = workdir,
-                rootPath = rootPath,
-            )
-
-            runCatching {
-                ensureSkillsRootDirectory(rootPath = rootPath, workdir = workdir)
-                ensureBundledSkillsInstalled(rootPath = rootPath, workdir = workdir)
-                val result = mutation(workdir, rootPath)
-                _state.value = discover(workdir = workdir, rootPath = rootPath)
-                result
-            }.getOrElse { error ->
-                Log.w(TAG, "skills mutation failed for $rootPath", error)
-                _state.value = _state.value.copy(
+        return withContext(Dispatchers.IO) {
+            refreshMutex.withLock {
+                val settings = settingsStore.settingsFlow.value
+                require(!settings.init) { "Settings are not ready" }
+                val workdir = settings.termuxWorkdir
+                val rootPath = buildSkillsRootPath(workdir)
+                _state.value = _state.value.toMutatingCatalogState(
                     workdir = workdir,
                     rootPath = rootPath,
-                    isLoading = false,
-                    error = error.message ?: error.javaClass.name,
-                    refreshedAt = System.currentTimeMillis(),
                 )
-                throw error
+
+                runCatching {
+                    ensureSkillsRootDirectory(rootPath = rootPath, workdir = workdir)
+                    val existingDirectoryNames = listSkillDirectories(rootPath, workdir)
+                        .mapTo(linkedSetOf()) { it.directoryName }
+                    ensureBundledSkillsInstalled(
+                        rootPath = rootPath,
+                        workdir = workdir,
+                        existingDirectoryNames = existingDirectoryNames,
+                    )
+                    val result = mutation(workdir, rootPath)
+                    _state.value = discover(workdir = workdir, rootPath = rootPath)
+                    result
+                }.getOrElse { error ->
+                    Log.w(TAG, "skills mutation failed for $rootPath", error)
+                    _state.value = _state.value.copy(
+                        workdir = workdir,
+                        rootPath = rootPath,
+                        isLoading = false,
+                        error = error.message ?: error.javaClass.name,
+                        refreshedAt = System.currentTimeMillis(),
+                    )
+                    throw error
+                }
             }
         }
     }
@@ -404,9 +445,18 @@ class SkillsRepository(
         workdir: String,
         rootPath: String,
     ): SkillsCatalogState {
-        ensureSkillsRootDirectory(rootPath = rootPath, workdir = workdir)
-        ensureBundledSkillsInstalled(rootPath = rootPath, workdir = workdir)
-        val listed = listSkillDirectories(rootPath, workdir)
+        var listed = snapshotSkillDirectories(rootPath, workdir)
+        val existingDirectoryNames = listed
+            .mapTo(linkedSetOf()) { it.directoryName }
+        if (
+            ensureBundledSkillsInstalled(
+                rootPath = rootPath,
+                workdir = workdir,
+                existingDirectoryNames = existingDirectoryNames,
+            )
+        ) {
+            listed = snapshotSkillDirectories(rootPath, workdir)
+        }
         val discovery = discoverCatalogEntries(
             directories = listed,
             readSkillFile = { directoryPath -> readSkillFile(directoryPath, workdir) },
@@ -421,6 +471,34 @@ class SkillsRepository(
             error = null,
             refreshedAt = System.currentTimeMillis(),
         )
+    }
+
+    private suspend fun snapshotSkillDirectories(
+        rootPath: String,
+        workdir: String,
+    ): List<SkillDirectoryDescriptor> {
+        val result = runSkillScript(
+            script = buildDiscoverScript(rootPath),
+            workdir = workdir,
+            label = "RikkaHub scan local skills",
+        )
+        return result.stdout
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .mapNotNull { line ->
+                val parts = line.split('\t', limit = 4)
+                if (parts.size < 3) return@mapNotNull null
+                SkillDirectoryDescriptor(
+                    directoryName = parts[0],
+                    path = parts[1],
+                    hasSkillFile = parts[2] == "1",
+                    skillMarkdownPreview = parts.getOrNull(3)
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::decodeSkillMarkdownPreview),
+                )
+            }
+            .toList()
     }
 
     private suspend fun listSkillDirectories(
@@ -476,9 +554,9 @@ class SkillsRepository(
     private suspend fun ensureBundledSkillsInstalled(
         rootPath: String,
         workdir: String,
-    ) {
-        val existingDirectoryNames = listSkillDirectories(rootPath, workdir)
-            .mapTo(linkedSetOf()) { it.directoryName }
+        existingDirectoryNames: MutableSet<String>,
+    ): Boolean {
+        var installedAny = false
         BUNDLED_SKILLS.forEach { bundledSkill ->
             if (bundledSkill.directoryName in existingDirectoryNames) return@forEach
             runCatching {
@@ -488,10 +566,12 @@ class SkillsRepository(
                     bundledSkill = bundledSkill,
                 )
                 existingDirectoryNames += bundledSkill.directoryName
+                installedAny = true
             }.onFailure { error ->
                 Log.w(TAG, "Failed to install bundled skill ${bundledSkill.directoryName}", error)
             }
         }
+        return installedAny
     }
 
     private suspend fun installBundledSkill(
@@ -631,6 +711,28 @@ class SkillsRepository(
         """.trimIndent()
     }
 
+    private fun buildDiscoverScript(rootPath: String): String {
+        val safeRoot = rootPath.escapeForSingleQuotedShell()
+        return """
+            set -eu
+            ROOT='$safeRoot'
+            PREVIEW_BYTES=$SKILL_LIST_PREVIEW_BYTES_LIMIT
+            mkdir -p "${'$'}ROOT"
+            find "${'$'}ROOT" -mindepth 1 -maxdepth 1 -type d | sort | while IFS= read -r dir; do
+              [ -n "${'$'}dir" ] || continue
+              name="${'$'}(basename "${'$'}dir")"
+              skill_file="${'$'}dir/$SKILL_PACKAGE_FILE_NAME"
+              if [ -f "${'$'}skill_file" ]; then
+                printf '%s\t%s\t1\t' "${'$'}name" "${'$'}dir"
+                head -c "${'$'}PREVIEW_BYTES" "${'$'}skill_file" | base64 | tr -d '\n'
+                printf '\n'
+              else
+                printf '%s\t%s\t0\t\n' "${'$'}name" "${'$'}dir"
+              fi
+            done
+        """.trimIndent()
+    }
+
     private fun buildReadSkillScript(directoryPath: String): String {
         val safeDirectory = directoryPath.escapeForSingleQuotedShell()
         return """
@@ -690,6 +792,22 @@ class SkillsRepository(
             [ -d "${'$'}ROOT/${'$'}FROM" ] || exit 1
             [ ! -e "${'$'}ROOT/${'$'}TO" ] || exit 1
             mv "${'$'}ROOT/${'$'}FROM" "${'$'}ROOT/${'$'}TO"
+        """.trimIndent()
+    }
+
+    private fun buildDeleteSkillScript(
+        rootPath: String,
+        directoryName: String,
+    ): String {
+        val safeRoot = rootPath.escapeForSingleQuotedShell()
+        val safeDirectoryName = directoryName.escapeForSingleQuotedShell()
+        return """
+            set -eu
+            ROOT='$safeRoot'
+            DIR_NAME='$safeDirectoryName'
+            TARGET="${'$'}ROOT/${'$'}DIR_NAME"
+            [ -d "${'$'}TARGET" ] || exit 0
+            rm -rf "${'$'}TARGET"
         """.trimIndent()
     }
 
@@ -780,12 +898,23 @@ class SkillsRepository(
     }
 }
 
+private fun decodeSkillMarkdownPreview(encodedPreview: String): String {
+    return String(Base64.getDecoder().decode(encodedPreview), Charsets.UTF_8)
+}
+
 private val BUNDLED_SKILLS = listOf(
     BundledSkill(
         directoryName = "skill-creator",
         assetPath = "$BUNDLED_SKILLS_ASSET_ROOT/skill-creator",
     )
 )
+
+private val BUNDLED_SKILL_DIRECTORY_NAMES = BUNDLED_SKILLS
+    .mapTo(linkedSetOf()) { it.directoryName }
+
+internal fun isBundledSkillDirectoryName(directoryName: String): Boolean {
+    return directoryName in BUNDLED_SKILL_DIRECTORY_NAMES
+}
 
 internal fun parseSkillFrontmatter(markdown: String): SkillFrontmatterParseResult {
     val normalized = markdown.trimStart()
@@ -908,11 +1037,12 @@ internal fun SkillsCatalogState.toRefreshingCatalogState(
     workdir: String,
     rootPath: String,
 ): SkillsCatalogState {
+    val shouldKeepCachedEntries = this.workdir == workdir && this.rootPath == rootPath
     return copy(
         workdir = workdir,
         rootPath = rootPath,
-        entries = emptyList(),
-        invalidEntries = emptyList(),
+        entries = if (shouldKeepCachedEntries) entries else emptyList(),
+        invalidEntries = if (shouldKeepCachedEntries) invalidEntries else emptyList(),
         isLoading = true,
         error = null,
     )
@@ -956,14 +1086,7 @@ internal suspend fun discoverCatalogEntries(
     val invalidEntries = arrayListOf<SkillInvalidEntry>()
 
     directories.forEach { directory ->
-        when (
-            val result = inspectSkillDirectory(
-                directoryName = directory.directoryName,
-                path = directory.path,
-                hasSkillFile = directory.hasSkillFile,
-                readSkillFile = readSkillFile,
-            )
-        ) {
+        when (val result = inspectSkillDirectory(directory = directory, readSkillFile = readSkillFile)) {
             is SkillDirectoryInspectionResult.Valid -> validEntries += result.entry
             is SkillDirectoryInspectionResult.Invalid -> invalidEntries += result.entry
         }
@@ -976,26 +1099,26 @@ internal suspend fun discoverCatalogEntries(
 }
 
 internal suspend fun inspectSkillDirectory(
-    directoryName: String,
-    path: String,
-    hasSkillFile: Boolean,
+    directory: SkillDirectoryDescriptor,
     readSkillFile: suspend (String) -> String,
 ): SkillDirectoryInspectionResult {
-    if (!hasSkillFile) {
+    if (!directory.hasSkillFile) {
         return SkillDirectoryInspectionResult.Invalid(
             SkillInvalidEntry(
-                directoryName = directoryName,
-                path = path,
+                directoryName = directory.directoryName,
+                path = directory.path,
                 reason = SkillInvalidReason.MissingSkillFile,
             )
         )
     }
 
-    val markdown = runCatching { readSkillFile(path) }.getOrElse { error ->
+    val markdown = directory.skillMarkdownPreview ?: runCatching {
+        readSkillFile(directory.path)
+    }.getOrElse { error ->
         return SkillDirectoryInspectionResult.Invalid(
             SkillInvalidEntry(
-                directoryName = directoryName,
-                path = path,
+                directoryName = directory.directoryName,
+                path = directory.path,
                 reason = buildSkillReadFailureReason(error),
             )
         )
@@ -1005,10 +1128,11 @@ internal suspend fun inspectSkillDirectory(
         is SkillFrontmatterParseResult.Success -> {
             SkillDirectoryInspectionResult.Valid(
                 SkillCatalogEntry(
-                    directoryName = directoryName,
-                    path = path,
+                    directoryName = directory.directoryName,
+                    path = directory.path,
                     name = parsed.frontmatter.name,
                     description = parsed.frontmatter.description,
+                    isBundled = isBundledSkillDirectoryName(directory.directoryName),
                 )
             )
         }
@@ -1016,8 +1140,8 @@ internal suspend fun inspectSkillDirectory(
         is SkillFrontmatterParseResult.Error -> {
             SkillDirectoryInspectionResult.Invalid(
                 SkillInvalidEntry(
-                    directoryName = directoryName,
-                    path = path,
+                    directoryName = directory.directoryName,
+                    path = directory.path,
                     reason = parsed.reason,
                 )
             )
