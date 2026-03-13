@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
@@ -66,6 +67,7 @@ fun Mermaid(
     val darkMode = LocalDarkMode.current
     val density = LocalDensity.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val activity = LocalActivity.current
     val toaster = LocalToaster.current
 
@@ -99,13 +101,13 @@ fun Mermaid(
                         }
                     }
                     toaster.show(
-                        context.getString(R.string.mermaid_export_success),
+                        resources.getString(R.string.mermaid_export_success),
                         type = ToastType.Success
                     )
                 }.onFailure {
                     it.printStackTrace()
                     toaster.show(
-                        context.getString(R.string.mermaid_export_failed),
+                        resources.getString(R.string.mermaid_export_failed),
                         type = ToastType.Error
                     )
                 }

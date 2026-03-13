@@ -1178,6 +1178,10 @@
   <string name="assistant_page_skills_import_success_multiple">Импортировано %1$d навыков</string>
   <string name="assistant_page_skills_create_failed">Не удалось создать навык</string>
   <string name="assistant_page_skills_import_failed">Не удалось импортировать пакет навыков</string>
+  <string name="assistant_page_skills_delete_body">Удалить skill %1$s из %2$s? Это действие нельзя отменить.</string>
+  <string name="assistant_page_skills_delete_in_progress">Удаление…</string>
+  <string name="assistant_page_skills_delete_success">Skill удалён: %1$s</string>
+  <string name="assistant_page_skills_delete_failed">Не удалось удалить skill</string>
   <string name="assistant_page_skills_edit_confirm">Сохранить</string>
   <string name="assistant_page_skills_edit_failed">Не удалось сохранить навык</string>
   <string name="assistant_page_skills_edit_in_progress">Сохранение…</string>
@@ -1185,4 +1189,3 @@
   <string name="assistant_page_skills_edit_success">Навык сохранён: %1$s</string>
   <string name="assistant_page_skills_edit_title">Редактировать навык</string>
 </resources>
-

@@ -85,6 +85,7 @@ internal class MyWebViewClient(private val state: () -> WebViewState) : WebViewC
     }
 }
 
+@SuppressLint("JavascriptInterface")
 private fun WebView.syncJavascriptInterfaces(state: WebViewState) {
     val installedInterfaces = state.attachedInterfaces
     (installedInterfaces.keys - state.interfaces.keys).forEach { name ->

@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -178,6 +179,7 @@ fun SkillsPicker(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val skillsRepository = koinInject<SkillsRepository>()
@@ -237,15 +239,15 @@ fun SkillsPicker(
                                 inputStream = inputStream,
                                 archiveName = queryDisplayName(context, selectedUri),
                             )
-                        } ?: error(context.getString(R.string.assistant_page_skills_import_failed))
+                        } ?: error(resources.getString(R.string.assistant_page_skills_import_failed))
                     }
                     val message = if (imported.directories.size == 1) {
-                        context.getString(
+                        resources.getString(
                             R.string.assistant_page_skills_import_success_single,
                             imported.directories.single(),
                         )
                     } else {
-                        context.getString(
+                        resources.getString(
                             R.string.assistant_page_skills_import_success_multiple,
                             imported.directories.size,
                         )
@@ -253,7 +255,7 @@ fun SkillsPicker(
                     toaster.show(message, type = ToastType.Success)
                 } catch (error: Throwable) {
                     toaster.show(
-                        error.message ?: context.getString(R.string.assistant_page_skills_import_failed),
+                        error.message ?: resources.getString(R.string.assistant_page_skills_import_failed),
                         type = ToastType.Error,
                     )
                 } finally {
@@ -468,7 +470,7 @@ fun SkillsPicker(
                                 editDocument = skillsRepository.loadSkillDocument(entry)
                             } catch (error: Throwable) {
                                 toaster.show(
-                                    error.message ?: context.getString(R.string.assistant_page_skills_edit_load_failed),
+                                    error.message ?: resources.getString(R.string.assistant_page_skills_edit_load_failed),
                                     type = ToastType.Error,
                                 )
                             } finally {
@@ -615,7 +617,7 @@ fun SkillsPicker(
                             body = createBody,
                         )
                         toaster.show(
-                            context.getString(
+                            resources.getString(
                                 R.string.assistant_page_skills_create_success,
                                 created.directoryName,
                             ),
@@ -625,7 +627,7 @@ fun SkillsPicker(
                         resetCreateDialog()
                     } catch (error: Throwable) {
                         toaster.show(
-                            error.message ?: context.getString(R.string.assistant_page_skills_create_failed),
+                            error.message ?: resources.getString(R.string.assistant_page_skills_create_failed),
                             type = ToastType.Error,
                         )
                     } finally {
@@ -672,7 +674,7 @@ fun SkillsPicker(
                                     )
                                 }
                                 toaster.show(
-                                    context.getString(
+                                    resources.getString(
                                         R.string.assistant_page_skills_delete_success,
                                         latestEntry.directoryName,
                                     ),
@@ -681,7 +683,7 @@ fun SkillsPicker(
                                 deleteEntry = null
                             } catch (error: Throwable) {
                                 toaster.show(
-                                    error.message ?: context.getString(R.string.assistant_page_skills_delete_failed),
+                                    error.message ?: resources.getString(R.string.assistant_page_skills_delete_failed),
                                     type = ToastType.Error,
                                 )
                             } finally {
@@ -759,7 +761,7 @@ fun SkillsPicker(
                             onUpdateAssistant(assistant.copy(selectedSkills = nextSelection))
                         }
                         toaster.show(
-                            context.getString(
+                            resources.getString(
                                 R.string.assistant_page_skills_edit_success,
                                 saved.directoryName,
                             ),
@@ -768,7 +770,7 @@ fun SkillsPicker(
                         editDocument = null
                     } catch (error: Throwable) {
                         toaster.show(
-                            error.message ?: context.getString(R.string.assistant_page_skills_edit_failed),
+                            error.message ?: resources.getString(R.string.assistant_page_skills_edit_failed),
                             type = ToastType.Error,
                         )
                     } finally {
