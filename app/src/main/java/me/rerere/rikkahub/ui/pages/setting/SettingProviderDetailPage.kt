@@ -119,6 +119,7 @@ import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
+import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
 import me.rerere.rikkahub.ui.pages.setting.components.isUsingDefaultBaseUrl
 import me.rerere.rikkahub.ui.pages.setting.components.resetBaseUrlToDefault
@@ -255,7 +256,6 @@ private fun SettingProviderConfigPage(
     onDelete: () -> Unit
 ) {
     var internalProvider by remember(provider) { mutableStateOf(provider) }
-    val scope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -287,9 +287,8 @@ private fun SettingProviderConfigPage(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ConnectionTester(
+            ProviderConnectionTester(
                 internalProvider = internalProvider,
-                scope = scope
             )
 
             Spacer(Modifier.weight(1f))
@@ -373,105 +372,6 @@ private fun SettingProviderModelPage(
         providerSetting = provider,
         onUpdateProvider = onEdit
     )
-}
-
-@Composable
-private fun ConnectionTester(
-    internalProvider: ProviderSetting,
-    scope: CoroutineScope
-) {
-    var showTestDialog by remember { mutableStateOf(false) }
-    val providerManager = koinInject<ProviderManager>()
-    IconButton(
-        onClick = {
-            showTestDialog = true
-        }
-    ) {
-        Icon(HugeIcons.Connect, null)
-    }
-    if (showTestDialog) {
-        var model by remember(internalProvider) {
-            mutableStateOf(internalProvider.models.firstOrNull { it.type == ModelType.CHAT })
-        }
-        var testState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
-        AlertDialog(
-            onDismissRequest = { showTestDialog = false },
-            title = {
-                Text(stringResource(R.string.setting_provider_page_test_connection))
-            },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    ModelSelector(
-                        modelId = model?.id,
-                        providers = listOf(internalProvider),
-                        type = ModelType.CHAT,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        model = it
-                    }
-                    when (testState) {
-                        is UiState.Loading -> {
-                            LinearWavyProgressIndicator()
-                        }
-
-                        is UiState.Success -> {
-                            Text(
-                                text = stringResource(R.string.setting_provider_page_test_success),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.extendColors.green6
-                            )
-                        }
-
-                        is UiState.Error -> {
-                            Text(
-                                text = (testState as UiState.Error).error.message ?: "Error",
-                                color = MaterialTheme.extendColors.red6,
-                                maxLines = 10
-                            )
-                        }
-
-                        else -> {}
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTestDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            confirmButton = {
-
-                TextButton(
-                    onClick = {
-                        if (model == null) return@TextButton
-                        val provider = providerManager.getProviderByType(internalProvider)
-                        scope.launch {
-                            runCatching {
-                                testState = UiState.Loading
-                                provider.generateText(
-                                    providerSetting = internalProvider,
-                                    messages = listOf(
-                                        UIMessage.user("hello")
-                                    ),
-                                    params = TextGenerationParams(
-                                        model = model!!,
-                                    )
-                                )
-                                testState = UiState.Success("Success")
-                            }.onFailure {
-                                testState = UiState.Error(it)
-                            }
-                        }
-                    }
-                ) {
-                    Text(stringResource(R.string.setting_provider_page_test))
-                }
-            }
-        )
-    }
 }
 
 @Composable
