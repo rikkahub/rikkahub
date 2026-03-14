@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.message
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -700,11 +701,12 @@ private fun ChainOfThoughtScope.AskUserToolStep(
     // Parse questions from arguments
     val questions = remember(arguments) {
         runCatching {
-            arguments.jsonObject["questions"]?.jsonArray?.map { q ->
+            arguments.jsonObject["questions"]?.jsonArray?.mapIndexed { index, q ->
                 val obj = q.jsonObject
+                val id = obj["id"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
                 AskUserQuestion(
-                    id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "",
-                    question = obj["question"]?.jsonPrimitive?.contentOrNull ?: "",
+                    id = id.ifBlank { "q_${index + 1}" },
+                    question = obj["question"]?.jsonPrimitive?.contentOrNull.orEmpty().trim(),
                     options = obj["options"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
                 )
             } ?: emptyList()
@@ -712,11 +714,18 @@ private fun ChainOfThoughtScope.AskUserToolStep(
     }
 
     // Track answers for each question
-    val answers = remember { mutableStateMapOf<String, String>() }
+    val answers = remember(tool.toolCallId) { mutableStateMapOf<String, String>() }
 
-    val firstQuestion = questions.firstOrNull()?.question ?: "..."
+    val askUserTitle = stringResource(R.string.assistant_page_local_tools_ask_user_title)
+    val labelText = when {
+        questions.isEmpty() -> askUserTitle
+        questions.size <= 1 -> questions.first().question.ifBlank { "（问题为空）" }
+        else -> stringResource(R.string.chat_message_tool_ask_questions, questions.size)
+    }
 
     var expanded by remember { mutableStateOf(true) }
+    val expandedQuestions = remember(tool.toolCallId) { mutableStateMapOf<String, Boolean>() }
+    var freeText by remember(tool.toolCallId) { mutableStateOf("") }
 
     ControlledChainOfThoughtStep(
         expanded = expanded,
@@ -735,10 +744,7 @@ private fun ChainOfThoughtScope.AskUserToolStep(
         },
         label = {
             Text(
-                text = if (questions.size <= 1) firstQuestion else stringResource(
-                    R.string.chat_message_tool_ask_questions,
-                    questions.size
-                ),
+                text = labelText,
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.shimmer(isLoading = loading),
@@ -751,12 +757,86 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                if (questions.isEmpty()) {
+                    val rawInput = tool.input.ifBlank { "{}" }
+                    val inputPreview = remember(rawInput) {
+                        runCatching {
+                            JsonInstantPretty.encodeToString(
+                                JsonInstant.parseToJsonElement(rawInput)
+                            )
+                        }.getOrElse { rawInput }
+                    }
+
+                    HighlightCodeBlock(
+                        code = inputPreview,
+                        language = "json",
+                        style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+                    )
+
+                    if (isPending && onToolAnswer != null) {
+                        OutlinedTextField(
+                            value = freeText,
+                            onValueChange = { freeText = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            singleLine = false,
+                            minLines = 2,
+                            maxLines = 6,
+                        )
+                        FilledTonalButton(
+                            onClick = {
+                                val answerPayload = buildJsonObject {
+                                    put("answers", buildJsonObject {
+                                        put("free_text", JsonPrimitive(freeText))
+                                    })
+                                }
+                                onToolAnswer(tool.toolCallId, answerPayload.toString())
+                            },
+                            enabled = freeText.isNotBlank(),
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.Tick01,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.chat_message_tool_submit),
+                                modifier = Modifier.padding(start = 4.dp),
+                            )
+                        }
+                    } else if (isAnswered) {
+                        val answeredState = tool.approvalState as ToolApprovalState.Answered
+                        val answerJson = runCatching {
+                            JsonInstant.parseToJsonElement(answeredState.answer)
+                        }.getOrNull()
+                        val answerText = answerJson?.jsonObject?.get("answers")
+                            ?.jsonObject?.get("free_text")?.jsonPrimitive?.contentOrNull
+                            ?: answeredState.answer
+                        Text(
+                            text = answerText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    return@Column
+                }
+
                 questions.forEach { q ->
+                    val questionText = q.question.ifBlank { "（问题为空）" }
+                    val questionExpanded = expandedQuestions[q.id] == true
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = q.question,
+                            text = questionText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = if (questionExpanded) Int.MAX_VALUE else 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    expandedQuestions[q.id] = !questionExpanded
+                                },
                         )
 
                         if (isPending && onToolAnswer != null) {
@@ -781,17 +861,17 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                                 }
                             }
 
-                            // Free text input
-                            OutlinedTextField(
-                                value = answers[q.id] ?: "",
-                                onValueChange = { answers[q.id] = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = MaterialTheme.typography.bodySmall,
-                                singleLine = false,
-                                minLines = 1,
-                                maxLines = 3,
-                            )
-                        } else if (isAnswered) {
+                    // Free text input
+                    OutlinedTextField(
+                        value = answers[q.id] ?: "",
+                        onValueChange = { answers[q.id] = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        singleLine = false,
+                        minLines = 1,
+                        maxLines = 3,
+                    )
+                } else if (isAnswered) {
                             // Show the user's answer
                             val answeredState = tool.approvalState as ToolApprovalState.Answered
                             val answerJson = runCatching {

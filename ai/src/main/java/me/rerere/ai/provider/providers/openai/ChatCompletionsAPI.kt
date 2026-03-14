@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonArrayBuilder
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -62,6 +63,12 @@ import okhttp3.sse.EventSources
 import kotlin.time.Clock
 
 private const val TAG = "ChatCompletionsAPI"
+
+internal fun JsonElement?.asToolArgumentsString(): String = when (this) {
+    null -> ""
+    is JsonPrimitive -> contentOrNull ?: ""
+    else -> toString()
+}
 
 class ChatCompletionsAPI(
     private val client: OkHttpClient,
@@ -624,13 +631,14 @@ class ChatCompletionsAPI(
                     val toolCallId = toolCalls.jsonObject["id"]?.jsonPrimitive?.contentOrNull
                     val toolName =
                         toolCalls.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
-                    val arguments =
-                        toolCalls.jsonObject["function"]?.jsonObject?.get("arguments")?.jsonPrimitive?.contentOrNull
+                    val arguments = toolCalls.jsonObject["function"]?.jsonObject
+                        ?.get("arguments")
+                        .asToolArgumentsString()
                     add(
                         UIMessagePart.Tool(
                             toolCallId = toolCallId ?: "",
                             toolName = toolName ?: "",
-                            input = arguments ?: "",
+                            input = arguments,
                             output = emptyList()
                         )
                     )
