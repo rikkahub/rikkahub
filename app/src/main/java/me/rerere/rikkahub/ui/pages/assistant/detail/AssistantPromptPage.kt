@@ -254,6 +254,12 @@ private fun AssistantPromptContent(
                         withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
                             append("{{ date }}")
                         }
+                        append(", ")
+                        append(stringResource(R.string.assistant_page_template_variable_location))
+                        append(": ")
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                            append("{{ location }}")
+                        }
                     })
                 }
             )

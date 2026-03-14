@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import android.Manifest
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Add01
@@ -15,8 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -47,6 +48,12 @@ import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionLocationCoarse
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionLocationFine
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionState
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionStatus
+import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -102,6 +109,11 @@ private fun AssistantMemoryContent(
     onUpdateMemory: (AssistantMemory) -> Unit,
     onDeleteMemory: (AssistantMemory) -> Unit,
 ) {
+    val locationPermissionState = rememberPermissionState(
+        permissions = setOf(PermissionLocationFine, PermissionLocationCoarse)
+    )
+    PermissionManager(permissionState = locationPermissionState)
+
     val memoryDialogState = useEditState<AssistantMemory> {
         if (it.id == 0) {
             onAddMemory(it)
@@ -246,6 +258,11 @@ private fun AssistantMemoryContent(
             )
         }
 
+        PromptLocationPermissionCard(
+            modifier = Modifier.fillMaxWidth(),
+            permissionState = locationPermissionState,
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -305,6 +322,61 @@ private fun AssistantMemoryContent(
             )
         }
     )
+}
+
+@Composable
+private fun PromptLocationPermissionCard(
+    modifier: Modifier = Modifier,
+    permissionState: PermissionState,
+) {
+    val fineStatus = permissionState.permissionStates[Manifest.permission.ACCESS_FINE_LOCATION]
+    val coarseStatus = permissionState.permissionStates[Manifest.permission.ACCESS_COARSE_LOCATION]
+    val statusText = when {
+        fineStatus == PermissionStatus.Granted -> {
+            stringResource(R.string.assistant_page_prompt_location_status_precise)
+        }
+
+        coarseStatus == PermissionStatus.Granted -> {
+            stringResource(R.string.assistant_page_prompt_location_status_approximate)
+        }
+
+        else -> {
+            stringResource(R.string.assistant_page_prompt_location_status_denied)
+        }
+    }
+
+    Card(
+        modifier = modifier,
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.assistant_page_prompt_location_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(R.string.assistant_page_prompt_location_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Button(
+                onClick = { permissionState.requestPermissions() },
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text(stringResource(R.string.assistant_page_prompt_location_action))
+            }
+        }
+    }
 }
 
 @Composable
