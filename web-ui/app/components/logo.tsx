@@ -9,94 +9,42 @@ export default function Logo(props: ComponentPropsWithRef<'svg'>) {
       height="256"
       {...props}
     >
-      <defs>
-        <filter id="lune-glow" x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="8" result="blur1" />
-          <feGaussianBlur stdDeviation="15" result="blur2" />
-          <feMerge>
-            <feMergeNode in="blur2" />
-            <feMergeNode in="blur1" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
+      <rect x="70" y="70" width="1060" height="1060" rx="250" fill="white" stroke="#e7e7e7" strokeWidth="24" />
 
-        <linearGradient id="lune-blue-grad-1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#00f2fe" />
-          <stop offset="100%" stopColor="#4facfe" />
-        </linearGradient>
-
-        <linearGradient id="lune-blue-grad-2" x1="100%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#0052D4" />
-          <stop offset="50%" stopColor="#4364F7" />
-          <stop offset="100%" stopColor="#6FB1FC" />
-        </linearGradient>
-
-        <linearGradient id="lune-blue-grad-3" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#00C9FF" />
-          <stop offset="100%" stopColor="#192846" />
-        </linearGradient>
-      </defs>
-
-      <rect x="60" y="60" width="1080" height="1080" rx="260" fill="white" stroke="#d9e8ff" strokeWidth="24" />
-
-      <g transform="translate(100 100)">
-        <g fill="none" strokeLinecap="round" filter="url(#lune-glow)">
-          <circle cx="500" cy="500" r="4" fill="#00f2fe" opacity="0.6" />
-          <circle
-            cx="500"
-            cy="500"
-            r="90"
-            stroke="url(#lune-blue-grad-1)"
-            strokeWidth="7"
-            strokeDasharray="200 80 180 105"
-            transform="rotate(45 500 500)"
-          />
-          <circle
-            cx="500"
-            cy="500"
-            r="170"
-            stroke="url(#lune-blue-grad-2)"
-            strokeWidth="9"
-            strokeDasharray="350 150 400 168"
-            transform="rotate(135 500 500)"
-          />
-          <circle
-            cx="500"
-            cy="500"
-            r="260"
-            stroke="url(#lune-blue-grad-3)"
-            strokeWidth="6"
-            strokeDasharray="500 200 450 150 200 133"
-            transform="rotate(-60 500 500)"
-          />
-          <circle
-            cx="500"
-            cy="500"
-            r="360"
-            stroke="url(#lune-blue-grad-1)"
-            strokeWidth="11"
-            strokeDasharray="850 300 650 200 150 111"
-            transform="rotate(20 500 500)"
-            opacity="0.9"
-          />
-          <circle
-            cx="500"
-            cy="500"
-            r="460"
-            stroke="url(#lune-blue-grad-2)"
-            strokeWidth="5"
-            strokeDasharray="1100 400 800 350 150 90"
-            transform="rotate(-110 500 500)"
-            opacity="0.75"
-          />
-          <g stroke="#4facfe" strokeWidth="1" opacity="0.15">
-            <circle cx="500" cy="500" r="90" />
-            <circle cx="500" cy="500" r="170" />
-            <circle cx="500" cy="500" r="260" />
-            <circle cx="500" cy="500" r="360" />
-            <circle cx="500" cy="500" r="460" />
-          </g>
-        </g>
+      <g transform="translate(190 190)" fill="none" stroke="#111111" strokeLinecap="round">
+        <circle
+          cx="410"
+          cy="410"
+          r="330"
+          strokeWidth="13"
+          strokeDasharray="350 116 250 146"
+          transform="rotate(-20 410 410)"
+        />
+        <circle
+          cx="410"
+          cy="410"
+          r="248"
+          strokeWidth="15"
+          strokeDasharray="246 90 184 96"
+          transform="rotate(32 410 410)"
+        />
+        <circle
+          cx="410"
+          cy="410"
+          r="166"
+          strokeWidth="17"
+          strokeDasharray="164 62 116 70"
+          transform="rotate(112 410 410)"
+        />
+        <circle
+          cx="410"
+          cy="410"
+          r="86"
+          strokeWidth="18"
+          strokeDasharray="88 32 62 40"
+          transform="rotate(10 410 410)"
+        />
+        <circle cx="410" cy="410" r="10" fill="#111111" stroke="none" />
       </g>
     </svg>
   );
