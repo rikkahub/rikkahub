@@ -46,11 +46,7 @@ class ScheduledTaskKeepAliveService : Service() {
             }
 
             ACTION_STOP -> {
-                serviceScope.launch {
-                    settingsStore.update { it.copy(scheduledTaskKeepAliveEnabled = false) }
-                }
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                disableKeepAliveAndStop(removeNotification = true)
             }
 
             null -> {
@@ -91,11 +87,23 @@ class ScheduledTaskKeepAliveService : Service() {
             true
         } catch (e: SecurityException) {
             Log.e(TAG, "Failed to start scheduled task keep-alive service", e)
-            serviceScope.launch {
+            disableKeepAliveAndStop(removeNotification = false)
+            false
+        }
+    }
+
+    private fun disableKeepAliveAndStop(removeNotification: Boolean) {
+        observeSettingsJob?.cancel()
+        serviceScope.launch {
+            runCatching {
                 settingsStore.update { it.copy(scheduledTaskKeepAliveEnabled = false) }
+            }.onFailure { error ->
+                Log.e(TAG, "Failed to disable scheduled task keep-alive service", error)
+            }
+            if (removeNotification) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
             }
             stopSelf()
-            false
         }
     }
 
