@@ -118,6 +118,7 @@ import me.rerere.hugeicons.stroke.Files02
 import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.MusicNote03
+import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.hugeicons.stroke.Zap
@@ -131,7 +132,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.ui.components.ui.InjectionSelector
+import me.rerere.rikkahub.ui.components.ui.ExtensionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
@@ -865,35 +866,33 @@ private fun FilesPicker(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Prompt Injections
-        if (settings.modeInjections.isNotEmpty() || settings.lorebooks.isNotEmpty()) {
-            val activeCount = assistant.modeInjectionIds.size + assistant.lorebookIds.size
-            ListItem(
-                leadingContent = {
-                    Icon(
-                        imageVector = HugeIcons.Book03,
-                        contentDescription = stringResource(R.string.chat_page_prompt_injections),
+        // Extensions (Prompt Injections + Skills)
+        val activeCount = assistant.modeInjectionIds.size + assistant.lorebookIds.size + assistant.enabledSkills.size
+        ListItem(
+            leadingContent = {
+                Icon(
+                    imageVector = HugeIcons.Package,
+                    contentDescription = stringResource(R.string.assistant_page_tab_extensions),
+                )
+            },
+            headlineContent = {
+                Text(stringResource(R.string.assistant_page_tab_extensions))
+            },
+            trailingContent = {
+                if (activeCount > 0) {
+                    Text(
+                        text = activeCount.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
                     )
+                }
+            },
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.large)
+                .clickable {
+                    onShowInjectionSheetChange(true)
                 },
-                headlineContent = {
-                    Text(stringResource(R.string.chat_page_prompt_injections))
-                },
-                trailingContent = {
-                    if (activeCount > 0) {
-                        Text(
-                            text = activeCount.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                },
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.large)
-                    .clickable {
-                        onShowInjectionSheetChange(true)
-                    },
-            )
-        }
+        )
 
         // Compress History Button
         ListItem(
@@ -1279,7 +1278,10 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                         url = localUri.toString(), fileName = fileName, mime = mime
                     )
                 } else {
-                    toaster.show("不支持的文件类型: $fileName", type = ToastType.Error)
+                    toaster.show(
+                        context.getString(R.string.chat_input_unsupported_file_type, fileName),
+                        type = ToastType.Error
+                    )
                     null
                 }
             }
@@ -1352,7 +1354,7 @@ private fun InjectionQuickConfigSheet(
                 .fillMaxHeight(0.75f)
                 .padding(horizontal = 16.dp),
         ) {
-            InjectionSelector(
+            ExtensionSelector(
                 assistant = assistant,
                 settings = settings,
                 onUpdate = onUpdateAssistant,
@@ -1362,6 +1364,13 @@ private fun InjectionQuickConfigSheet(
                         sheetState.hide()
                         onDismiss()
                         navController.navigate(Screen.Prompts)
+                    }
+                },
+                onNavigateToSkills = {
+                    scope.launch {
+                        sheetState.hide()
+                        onDismiss()
+                        navController.navigate(Screen.Skills)
                     }
                 })
 
