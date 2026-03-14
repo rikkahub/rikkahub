@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,11 +30,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -41,8 +45,22 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.paging.insertSeparators
+import androidx.paging.map
 import androidx.paging.compose.collectAsLazyPagingItems
+import java.time.ZoneId
+import kotlin.uuid.Uuid
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ChartColumn
@@ -74,9 +92,9 @@ import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.utils.navigateToChatPage
+import me.rerere.rikkahub.utils.toChatDateLabel
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
-import kotlin.uuid.Uuid
 
 @Composable
 fun ChatDrawerContent(
@@ -90,8 +108,27 @@ fun ChatDrawerContent(
     val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
 
-    val conversations = vm.conversations.collectAsLazyPagingItems()
-    val conversationListState = rememberLazyListState()
+    val conversations = remember(settings.assistantId) {
+        ChatDrawerState.getFlow(settings.assistantId, repo, context.applicationContext)
+    }.collectAsLazyPagingItems()
+
+    val conversationListState = key(settings.assistantId) {
+        val pos = ChatDrawerState.getScrollPosition(settings.assistantId)
+        rememberLazyListState(
+            initialFirstVisibleItemIndex = pos.index,
+            initialFirstVisibleItemScrollOffset = pos.offset
+        )
+    }
+
+    LaunchedEffect(conversationListState) {
+        snapshotFlow {
+            conversationListState.firstVisibleItemIndex to conversationListState.firstVisibleItemScrollOffset
+        }
+            .distinctUntilChanged()
+            .collectLatest { (index, offset): Pair<Int, Int> ->
+                ChatDrawerState.setScrollPosition(settings.assistantId, index, offset)
+            }
+    }
 
     val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
         initialValue = emptyMap(),
@@ -573,5 +610,98 @@ private fun AssistantItem(
                 }
             }
         }
+    }
+}
+
+/**
+ * Singleton to persist drawer state (scroll position and data flow)
+ * independent of ChatVM lifecycle.
+ *
+ * Scroll positions are tracked per-assistant so switching back restores
+ * the previous position. The PagingData flow is cached per-assistant to
+ * avoid data reload when ChatVM is recreated.
+ */
+private object ChatDrawerState {
+    data class ScrollPosition(val index: Int = 0, val offset: Int = 0)
+
+    private val scrollPositions = mutableMapOf<Uuid, ScrollPosition>()
+
+    fun getScrollPosition(assistantId: Uuid): ScrollPosition =
+        scrollPositions[assistantId] ?: ScrollPosition()
+
+    @Synchronized
+    fun setScrollPosition(assistantId: Uuid, index: Int, offset: Int) {
+        scrollPositions[assistantId] = ScrollPosition(index, offset)
+    }
+
+    private data class CachedState(
+        val assistantId: Uuid,
+        val flow: Flow<PagingData<ConversationListItem>>,
+        val scope: CoroutineScope,
+    )
+
+    private var cache: CachedState? = null
+
+    @Synchronized
+    fun getFlow(
+        assistantId: Uuid,
+        repo: ConversationRepository,
+        applicationContext: Context
+    ): Flow<PagingData<ConversationListItem>> {
+        val current = cache
+        if (current != null && current.assistantId == assistantId) {
+            return current.flow
+        }
+
+        current?.scope?.cancel()
+        val newScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+        val flow = repo.getConversationsOfAssistantPaging(assistantId)
+            .map { pagingData ->
+                pagingData
+                    .map { ConversationListItem.Item(it) }
+                    .insertSeparators { before: ConversationListItem.Item?, after: ConversationListItem.Item? ->
+                        insertSeparators(before, after, applicationContext)
+                    }
+            }
+            .cachedIn(newScope)
+
+        cache = CachedState(assistantId, flow, newScope)
+        return flow
+    }
+
+    private fun createDateHeader(item: ConversationListItem.Item, context: Context): ConversationListItem.DateHeader {
+        val date = item.conversation.updateAt.atZone(ZoneId.systemDefault()).toLocalDate()
+        return ConversationListItem.DateHeader(date = date, label = date.toChatDateLabel(context))
+    }
+
+    private fun insertSeparators(
+        before: ConversationListItem.Item?,
+        after: ConversationListItem.Item?,
+        context: Context
+    ): ConversationListItem? {
+        if (after == null) return null
+
+        if (before == null) {
+            return if (after.conversation.isPinned) {
+                ConversationListItem.PinnedHeader
+            } else {
+                createDateHeader(after, context)
+            }
+        }
+
+        if (before.conversation.isPinned && !after.conversation.isPinned) {
+            return createDateHeader(after, context)
+        }
+
+        if (!before.conversation.isPinned && !after.conversation.isPinned) {
+            val beforeDate = before.conversation.updateAt.atZone(ZoneId.systemDefault()).toLocalDate()
+            val afterDate = after.conversation.updateAt.atZone(ZoneId.systemDefault()).toLocalDate()
+            if (beforeDate != afterDate) {
+                return createDateHeader(after, context)
+            }
+        }
+
+        return null
     }
 }
