@@ -79,6 +79,21 @@ import kotlin.time.Clock
 
 private const val COLLAPSE_LINES = 10
 
+internal fun normalizeCodeFenceContentForDisplay(
+    code: String,
+    completeCodeBlock: Boolean,
+): String {
+    if (!completeCodeBlock) {
+        return code
+    }
+
+    return when {
+        code.endsWith("\r\n") -> code.dropLast(2)
+        code.endsWith('\n') || code.endsWith('\r') -> code.dropLast(1)
+        else -> code
+    }
+}
+
 @Composable
 fun HighlightCodeBlock(
     code: String,
@@ -104,6 +119,12 @@ fun HighlightCodeBlock(
     }
     val autoWrap = settings.displaySetting.codeBlockAutoWrap
     val showLineNumbers = settings.displaySetting.showLineNumbers
+    val normalizedCode = remember(code, completeCodeBlock) {
+        normalizeCodeFenceContentForDisplay(
+            code = code,
+            completeCodeBlock = completeCodeBlock,
+        )
+    }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*")
@@ -154,9 +175,9 @@ fun HighlightCodeBlock(
                 }
                 else -> {
                     val textStyle = LocalTextStyle.current.merge(style)
-                    val codeLines = remember(code) { code.lines() }
+                    val codeLines = remember(normalizedCode) { normalizedCode.lines() }
                     val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
-                    val displayCode = if (isExpanded) code else collapsedCode
+                    val displayCode = if (isExpanded) normalizedCode else collapsedCode
                     val displayLines = remember(displayCode) { displayCode.lines() }
 
                     // 如果显示行号且自动换行，需要逐行渲染以保持对齐

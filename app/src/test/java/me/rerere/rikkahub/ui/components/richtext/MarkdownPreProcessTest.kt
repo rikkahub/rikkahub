@@ -79,6 +79,43 @@ class MarkdownPreProcessTest {
         )
     }
 
+    @Test
+    fun normalize_code_fence_content_for_display_trims_fence_newline_only() {
+        val markdown = """
+            ```kotlin
+            println("hi")
+            ```
+        """.trimIndent()
+        val codeFence = findFirstCodeFence(parser.buildMarkdownTreeFromString(markdown))
+
+        val code = extractCodeFenceContent(codeFence, markdown)
+        val displayCode = normalizeCodeFenceContentForDisplay(
+            code = code.orEmpty(),
+            completeCodeBlock = true,
+        )
+
+        assertEquals("println(\"hi\")", displayCode)
+    }
+
+    @Test
+    fun normalize_code_fence_content_for_display_preserves_intentional_blank_line() {
+        val markdown = """
+            ```html
+            <div>keep</div>
+
+            ```
+        """.trimIndent()
+        val codeFence = findFirstCodeFence(parser.buildMarkdownTreeFromString(markdown))
+
+        val code = extractCodeFenceContent(codeFence, markdown)
+        val displayCode = normalizeCodeFenceContentForDisplay(
+            code = code.orEmpty(),
+            completeCodeBlock = true,
+        )
+
+        assertEquals("<div>keep</div>\n", displayCode)
+    }
+
     private fun findFirstCodeFence(node: ASTNode): ASTNode {
         if (node.type == MarkdownElementTypes.CODE_FENCE) {
             return node
