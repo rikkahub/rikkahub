@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.prompts
+package me.rerere.rikkahub.ui.pages.extensions
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
