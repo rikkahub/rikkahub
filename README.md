@@ -15,7 +15,7 @@ A native Android LLM chat client forked from RikkaHub and rebranded for this rep
 ## 🔗 Project Links
 
 - Website placeholder: [https://example.com](https://example.com)
-- GitHub repository: [https://github.com/sybdz/haqimi](https://github.com/sybdz/haqimi)
+- GitHub repository: [https://github.com/sybdz/rikkahub-lune](https://github.com/sybdz/rikkahub-lune)
 - Original project: [https://github.com/rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)
 
 ## ✨ Features

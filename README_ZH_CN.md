@@ -16,7 +16,7 @@
 ## 🔗 项目链接
 
 - 官网占位符: [https://example.com](https://example.com)
-- 当前仓库: [https://github.com/sybdz/haqimi](https://github.com/sybdz/haqimi)
+- 当前仓库: [https://github.com/sybdz/rikkahub-lune](https://github.com/sybdz/rikkahub-lune)
 - 原项目仓库: [https://github.com/rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)
 
 ## ✨ 功能特色

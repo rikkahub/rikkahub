@@ -16,7 +16,7 @@
 ## 🔗 項目連結
 
 - 官網占位符: [https://example.com](https://example.com)
-- 當前倉庫: [https://github.com/sybdz/haqimi](https://github.com/sybdz/haqimi)
+- 當前倉庫: [https://github.com/sybdz/rikkahub-lune](https://github.com/sybdz/rikkahub-lune)
 - 原項目倉庫: [https://github.com/rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)
 
 ## ✨ 功能特色
