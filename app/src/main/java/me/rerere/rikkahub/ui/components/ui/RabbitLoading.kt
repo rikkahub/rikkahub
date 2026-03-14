@@ -71,10 +71,15 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
         label = "pulse"
     )
 
-    val orbitColor = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) {
-        Color(0xFF111111)
+    val orbitPrimary = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) {
+        Color(0xFF00A8D6)
     } else {
-        Color.White
+        Color(0xFF3BE7FF)
+    }
+    val orbitSecondary = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) {
+        Color(0xFF4E66F5)
+    } else {
+        Color(0xFF8EA2FF)
     }
     val glowPrimary = Color(0xFF00D4FF)
     val glowSecondary = Color(0xFF6D8BFF)
@@ -103,6 +108,7 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
             startAngle: Float,
             sweepAngle: Float,
             strokeWidth: Float,
+            orbitColor: Color,
             glowColor: Color,
             glowBoost: Float = 1f,
         ) {
@@ -143,6 +149,7 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
                 startAngle = 16f,
                 sweepAngle = 208f,
                 strokeWidth = strokeOuter,
+                orbitColor = orbitPrimary,
                 glowColor = glowPrimary,
                 glowBoost = 1.15f,
             )
@@ -152,6 +159,7 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
                 startAngle = 272f,
                 sweepAngle = 46f,
                 strokeWidth = strokeOuter * 0.8f,
+                orbitColor = orbitSecondary,
                 glowColor = glowSecondary,
             )
         }
@@ -164,6 +172,7 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
                 startAngle = 58f,
                 sweepAngle = 152f,
                 strokeWidth = strokeMiddle,
+                orbitColor = orbitSecondary,
                 glowColor = glowSecondary,
                 glowBoost = 1.1f,
             )
@@ -173,6 +182,7 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
                 startAngle = 238f,
                 sweepAngle = 74f,
                 strokeWidth = strokeMiddle * 0.85f,
+                orbitColor = orbitPrimary,
                 glowColor = glowPrimary,
             )
         }
@@ -185,6 +195,7 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
                 startAngle = 34f,
                 sweepAngle = 120f,
                 strokeWidth = strokeInner,
+                orbitColor = orbitPrimary,
                 glowColor = glowPrimary,
                 glowBoost = 1.2f,
             )
@@ -194,6 +205,7 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
                 startAngle = 214f,
                 sweepAngle = 88f,
                 strokeWidth = strokeInner,
+                orbitColor = orbitSecondary,
                 glowColor = glowSecondary,
             )
         }
@@ -211,7 +223,7 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
             radius = centerDot * 3.4f
         )
         drawCircle(
-            color = orbitColor.copy(alpha = 0.65f + pulse.value * 0.2f),
+            color = orbitPrimary.copy(alpha = 0.72f + pulse.value * 0.18f),
             radius = centerDot * pulse.value
         )
     }
