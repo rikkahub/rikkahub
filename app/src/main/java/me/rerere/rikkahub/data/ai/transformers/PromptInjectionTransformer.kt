@@ -221,10 +221,10 @@ private fun createMergedInjectionMessages(injections: List<PromptInjection>): Li
 }
 
 /**
- * 查找安全的插入位置，避免破坏工具调用链
+ * 查找安全的插入位置，避免注入到 USER → ASSISTANT(含Tool) 之间
  *
- * 工具调用链的结构：ASSISTANT(未执行的Tool) -> ASSISTANT(已执行的Tool)
- * 不能在这两者之间插入消息
+ * 某些提供商（如 deepseek）要求 USER 之后紧跟带工具的 ASSISTANT，
+ * 在两者之间插入消息会导致报错或破坏推理连续性。
  */
 internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): Int {
     var index = targetIndex.coerceIn(0, messages.size)
@@ -234,16 +234,14 @@ internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): I
         val prevMessage = messages.getOrNull(index - 1)
         val currentMessage = messages.getOrNull(index)
 
-        // 检查是否在工具调用链中间
-        // 如果前一条包含未执行的 Tool，当前包含已执行的 Tool
-        val isPrevToolCall = prevMessage?.getTools()?.any { !it.isExecuted } == true
-        val isCurrentToolResult = currentMessage?.getTools()?.any { it.isExecuted } == true
+        // 不能插入到 USER → ASSISTANT(含Tool) 之间
+        val isPrevUser = prevMessage?.role == MessageRole.USER
+        val isCurrentAssistantWithTools = currentMessage?.role == MessageRole.ASSISTANT
+            && currentMessage.getTools().isNotEmpty()
 
-        if (isPrevToolCall && isCurrentToolResult) {
-            // 在工具调用链中间，需要继续往前找
+        if (isPrevUser && isCurrentAssistantWithTools) {
             index--
         } else {
-            // 找到安全位置
             break
         }
     }
