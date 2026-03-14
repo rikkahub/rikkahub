@@ -359,6 +359,8 @@
   <string name="reasoning_custom">Custom reasoning budget</string>
   <string name="reasoning_heavy">Heavy reasoning</string>
   <string name="reasoning_heavy_desc">The model will use a large amount of reasoning to answer questions.</string>
+  <string name="reasoning_xhigh">XHigh reasoning</string>
+  <string name="reasoning_xhigh_desc">The model will use an extra-large amount of reasoning to answer questions.</string>
   <string name="reasoning_light">Light reasoning</string>
   <string name="reasoning_light_desc">The model will use a small amount of reasoning to answer questions.</string>
   <string name="reasoning_medium">Medium reasoning</string>
@@ -564,6 +566,7 @@
   <string name="setting_provider_page_reasoning">Reasoning</string>
   <string name="setting_provider_page_response_api">Response API</string>
   <string name="setting_provider_page_response_api_warning">Response API is OpenAI\'s next-generation API. Most providers do not support it. If you don\'t know what this is, don\'t enable it.</string>
+  <string name="setting_provider_page_response_api_codex_warning">Codex models require Response API</string>
   <string name="setting_provider_page_save">Save</string>
   <string name="setting_provider_page_save_success">Save successful</string>
   <string name="setting_provider_page_scan_error">Error: %s</string>

@@ -353,6 +353,21 @@ class ResponseAPIMessageTest {
         assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
     }
 
+    @Test
+    fun `openai response api should use xhigh effort when thinkingBudget is 64000`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(thinkingBudget = 64_000)
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertTrue("reasoning should exist", reasoning != null)
+        assertEquals("xhigh", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(

@@ -231,6 +231,9 @@ private val OFFICIAL_PROVIDER_HOSTS = setOf(
     CLAUDE_OFFICIAL_HOST
 )
 
+private fun ProviderSetting.OpenAI.hasCodexModel(): Boolean =
+    models.any { it.modelId.contains("codex", ignoreCase = true) }
+
 @Composable
 private fun ColumnScope.ProviderConfigureOpenAI(
     provider: ProviderSetting.OpenAI,
@@ -317,6 +320,14 @@ private fun ColumnScope.ProviderConfigureOpenAI(
                     )
                 }
             }
+        )
+    }
+
+    if (!provider.useResponseApi && provider.hasCodexModel()) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_response_api_codex_warning),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }
