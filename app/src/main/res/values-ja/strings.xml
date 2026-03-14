@@ -913,5 +913,5 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="update_card_downloading">ダウンロード中です。進捗はステータスバーでご確認ください</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_title">アプリアイコン風の読み込みインジケーターを使用</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">デフォルトの円形読み込みインジケーターの代わりに、アプリアイコンのアニメーションを使用します</string>
+  <string name="chat_message_tool_empty_question">(質問が空です)</string>
 </resources>
-

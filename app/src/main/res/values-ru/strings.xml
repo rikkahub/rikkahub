@@ -906,5 +906,5 @@
   <string name="update_card_downloading">Идёт загрузка, следите за прогрессом в строке состояния</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_title">Использовать индикатор загрузки в стиле значка приложения</string>
   <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">Использовать анимированный значок приложения вместо стандартного круглого индикатора загрузки</string>
+  <string name="chat_message_tool_empty_question">(Пустой вопрос)</string>
 </resources>
-

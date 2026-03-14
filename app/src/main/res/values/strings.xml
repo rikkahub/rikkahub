@@ -911,4 +911,5 @@
   <string name="update_card_new_version_found">New version found %s</string>
   <string name="update_card_close">Close</string>
   <string name="update_card_downloading">Downloading, please check status bar for progress</string>
+  <string name="chat_message_tool_empty_question">(Empty question)</string>
 </resources>
