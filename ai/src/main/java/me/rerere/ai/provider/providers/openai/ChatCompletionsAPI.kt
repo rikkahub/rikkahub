@@ -46,6 +46,7 @@ import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
+import me.rerere.ai.util.toJsonRequestBodyWithCustomContentType
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonArrayOrNull
 import me.rerere.common.http.jsonObjectOrNull
@@ -82,7 +83,7 @@ class ChatCompletionsAPI(
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
-            .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
+            .post(json.encodeToString(requestBody).toJsonRequestBodyWithCustomContentType(params.customHeaders))
             .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey)}")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -139,9 +140,8 @@ class ChatCompletionsAPI(
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
-            .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
+            .post(json.encodeToString(requestBody).toJsonRequestBodyWithCustomContentType(params.customHeaders))
             .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey)}")
-            .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 

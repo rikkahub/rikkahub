@@ -40,6 +40,7 @@ import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
+import me.rerere.ai.util.toJsonRequestBodyWithCustomContentType
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
@@ -71,9 +72,8 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
-            .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
+            .post(json.encodeToString(requestBody).toJsonRequestBodyWithCustomContentType(params.customHeaders))
             .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
-            .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
@@ -106,9 +106,8 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
-            .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
+            .post(json.encodeToString(requestBody).toJsonRequestBodyWithCustomContentType(params.customHeaders))
             .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
-            .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 

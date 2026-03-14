@@ -8,7 +8,11 @@ import me.rerere.ai.provider.CustomHeader
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
+import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody
+import okhttp3.RequestBody
+import okio.BufferedSink
 import okhttp3.internal.http.RealResponseBody
 
 fun List<CustomHeader>.toHeaders(): Headers {
@@ -19,6 +23,30 @@ fun List<CustomHeader>.toHeaders(): Headers {
                 add(it.name, it.value)
             }
     }.build()
+}
+
+fun List<CustomHeader>.contentTypeValueOrNull(): String? {
+    return firstOrNull { it.name.equals("Content-Type", ignoreCase = true) && it.value.isNotBlank() }
+        ?.value
+        ?.trim()
+}
+
+/**
+ * Build a JSON request body but force its Content-Type to exactly match the user-provided header
+ * when present (e.g. "application/json" without charset).
+ */
+fun String.toJsonRequestBodyWithCustomContentType(customHeaders: List<CustomHeader>): RequestBody {
+    val explicit = customHeaders.contentTypeValueOrNull()
+    val mediaType: MediaType = (explicit ?: "application/json").toMediaType()
+    val bytes = toByteArray(Charsets.UTF_8)
+
+    return object : RequestBody() {
+        override fun contentType(): MediaType = mediaType
+        override fun contentLength(): Long = bytes.size.toLong()
+        override fun writeTo(sink: BufferedSink) {
+            sink.write(bytes)
+        }
+    }
 }
 
 fun Request.Builder.configureReferHeaders(url: String): Request.Builder {
