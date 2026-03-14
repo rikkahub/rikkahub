@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.StrokeCap
@@ -75,6 +76,8 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
     } else {
         Color.White
     }
+    val glowPrimary = Color(0xFF00D4FF)
+    val glowSecondary = Color(0xFF6D8BFF)
 
     Canvas(modifier = modifier) {
         val minSide = size.minDimension
@@ -94,72 +97,119 @@ private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
             return topLeft to Size(ringSize, ringSize)
         }
 
-        rotate(outerRotation.value, center) {
-            val (topLeft, arcSize) = ring(0.86f)
+        fun drawOrbit(
+            topLeft: Offset,
+            arcSize: Size,
+            startAngle: Float,
+            sweepAngle: Float,
+            strokeWidth: Float,
+            glowColor: Color,
+            glowBoost: Float = 1f,
+        ) {
             drawArc(
-                color = orbitColor,
-                startAngle = 16f,
-                sweepAngle = 208f,
+                color = glowColor.copy(alpha = 0.12f * glowBoost),
+                startAngle = startAngle,
+                sweepAngle = sweepAngle,
                 useCenter = false,
                 topLeft = topLeft,
                 size = arcSize,
-                style = Stroke(width = strokeOuter, cap = StrokeCap.Round)
+                style = Stroke(width = strokeWidth * 2.2f, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = glowColor.copy(alpha = 0.18f * glowBoost),
+                startAngle = startAngle,
+                sweepAngle = sweepAngle,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth * 1.6f, cap = StrokeCap.Round)
             )
             drawArc(
                 color = orbitColor,
-                startAngle = 272f,
-                sweepAngle = 46f,
+                startAngle = startAngle,
+                sweepAngle = sweepAngle,
                 useCenter = false,
                 topLeft = topLeft,
                 size = arcSize,
-                style = Stroke(width = strokeOuter * 0.8f, cap = StrokeCap.Round)
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+        }
+
+        rotate(outerRotation.value, center) {
+            val (topLeft, arcSize) = ring(0.86f)
+            drawOrbit(
+                topLeft = topLeft,
+                arcSize = arcSize,
+                startAngle = 16f,
+                sweepAngle = 208f,
+                strokeWidth = strokeOuter,
+                glowColor = glowPrimary,
+                glowBoost = 1.15f,
+            )
+            drawOrbit(
+                topLeft = topLeft,
+                arcSize = arcSize,
+                startAngle = 272f,
+                sweepAngle = 46f,
+                strokeWidth = strokeOuter * 0.8f,
+                glowColor = glowSecondary,
             )
         }
 
         rotate(middleRotation.value, center) {
             val (topLeft, arcSize) = ring(0.64f)
-            drawArc(
-                color = orbitColor,
+            drawOrbit(
+                topLeft = topLeft,
+                arcSize = arcSize,
                 startAngle = 58f,
                 sweepAngle = 152f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeMiddle, cap = StrokeCap.Round)
+                strokeWidth = strokeMiddle,
+                glowColor = glowSecondary,
+                glowBoost = 1.1f,
             )
-            drawArc(
-                color = orbitColor,
+            drawOrbit(
+                topLeft = topLeft,
+                arcSize = arcSize,
                 startAngle = 238f,
                 sweepAngle = 74f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeMiddle * 0.85f, cap = StrokeCap.Round)
+                strokeWidth = strokeMiddle * 0.85f,
+                glowColor = glowPrimary,
             )
         }
 
         rotate(innerRotation.value, center) {
             val (topLeft, arcSize) = ring(0.42f)
-            drawArc(
-                color = orbitColor,
+            drawOrbit(
+                topLeft = topLeft,
+                arcSize = arcSize,
                 startAngle = 34f,
                 sweepAngle = 120f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeInner, cap = StrokeCap.Round)
+                strokeWidth = strokeInner,
+                glowColor = glowPrimary,
+                glowBoost = 1.2f,
             )
-            drawArc(
-                color = orbitColor,
+            drawOrbit(
+                topLeft = topLeft,
+                arcSize = arcSize,
                 startAngle = 214f,
                 sweepAngle = 88f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeInner, cap = StrokeCap.Round)
+                strokeWidth = strokeInner,
+                glowColor = glowSecondary,
             )
         }
 
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    glowPrimary.copy(alpha = 0.28f * pulse.value),
+                    glowSecondary.copy(alpha = 0.16f * pulse.value),
+                    Color.Transparent
+                ),
+                center = center,
+                radius = centerDot * 3.4f
+            ),
+            radius = centerDot * 3.4f
+        )
         drawCircle(
             color = orbitColor.copy(alpha = 0.65f + pulse.value * 0.2f),
             radius = centerDot * pulse.value
