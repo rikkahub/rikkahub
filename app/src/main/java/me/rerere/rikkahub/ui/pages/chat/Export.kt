@@ -507,12 +507,17 @@ private fun ExportedChatImage(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        val painter = painterResource(id = R.mipmap.ic_launcher)
-                        Image(
-                            painter = painter,
-                            contentDescription = APP_DISPLAY_NAME,
-                            modifier = Modifier.size(60.dp)
-                        )
+                        Surface(
+                            modifier = Modifier.size(60.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                                contentDescription = APP_DISPLAY_NAME,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
                     }
 
                     // Messages
