@@ -202,30 +202,23 @@ function ChatInputInner({
   const pasteLongTextThreshold = useSettingsStore(
     (state) => state.settings?.displaySetting.pasteLongTextThreshold ?? 1000,
   );
-  const { currentAssistant } = useCurrentAssistant();
+  const { currentAssistant, settings } = useCurrentAssistant();
 
   const quickMessages = React.useMemo(() => {
-    const source = currentAssistant?.quickMessages;
-    if (!Array.isArray(source)) {
+    const ids = currentAssistant?.quickMessageIds;
+    const allQuickMessages = settings?.quickMessages ?? [];
+    if (!Array.isArray(ids) || ids.length === 0 || allQuickMessages.length === 0) {
       return [] as QuickMessageOption[];
     }
-
-    return source
-      .map((item) => {
-        const title = typeof item?.title === "string" ? item.title.trim() : "";
-        const content =
-          typeof item?.content === "string" ? item.content.trim() : "";
-        if (!content) {
-          return null;
-        }
-
-        return {
-          title: title || t("chat.quick_message_default_title"),
-          content,
-        };
-      })
-      .filter((item): item is QuickMessageOption => item !== null);
-  }, [currentAssistant?.quickMessages, t]);
+    const idSet = new Set(ids);
+    return allQuickMessages
+      .filter((qm) => idSet.has(qm.id))
+      .map((qm) => ({
+        title: qm.title.trim() || t("chat.quick_message_default_title"),
+        content: qm.content.trim(),
+      }))
+      .filter((item): item is QuickMessageOption => item.content.length > 0);
+  }, [currentAssistant?.quickMessageIds, settings?.quickMessages, t]);
 
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
