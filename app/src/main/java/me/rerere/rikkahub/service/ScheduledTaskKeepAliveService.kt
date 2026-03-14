@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,7 @@ import org.koin.android.ext.android.inject
 
 class ScheduledTaskKeepAliveService : Service() {
     companion object {
+        private const val TAG = "ScheduledTaskKeepAlive"
         const val ACTION_START = "me.rerere.rikkahub.action.SCHEDULED_TASK_KEEP_ALIVE_START"
         const val ACTION_STOP = "me.rerere.rikkahub.action.SCHEDULED_TASK_KEEP_ALIVE_STOP"
         const val NOTIFICATION_ID = 2002
@@ -39,20 +41,16 @@ class ScheduledTaskKeepAliveService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                startForegroundCompat()
+                if (!startForegroundSafely()) return START_NOT_STICKY
                 observeKeepAliveSetting()
             }
 
             ACTION_STOP -> {
-                serviceScope.launch {
-                    settingsStore.update { it.copy(scheduledTaskKeepAliveEnabled = false) }
-                }
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                disableKeepAliveAndStop(removeNotification = true)
             }
 
             null -> {
-                startForegroundCompat()
+                if (!startForegroundSafely()) return START_NOT_STICKY
                 observeKeepAliveSetting()
                 serviceScope.launch {
                     if (!settingsStore.settingsFlowRaw.first().scheduledTaskKeepAliveEnabled) {
@@ -80,6 +78,32 @@ class ScheduledTaskKeepAliveService : Service() {
             )
         } else {
             startForeground(NOTIFICATION_ID, buildNotification())
+        }
+    }
+
+    private fun startForegroundSafely(): Boolean {
+        return try {
+            startForegroundCompat()
+            true
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Failed to start scheduled task keep-alive service", e)
+            disableKeepAliveAndStop(removeNotification = false)
+            false
+        }
+    }
+
+    private fun disableKeepAliveAndStop(removeNotification: Boolean) {
+        observeSettingsJob?.cancel()
+        serviceScope.launch {
+            runCatching {
+                settingsStore.update { it.copy(scheduledTaskKeepAliveEnabled = false) }
+            }.onFailure { error ->
+                Log.e(TAG, "Failed to disable scheduled task keep-alive service", error)
+            }
+            if (removeNotification) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            }
+            stopSelf()
         }
     }
 

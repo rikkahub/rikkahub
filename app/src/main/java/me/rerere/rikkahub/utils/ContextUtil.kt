@@ -21,6 +21,7 @@ import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import me.rerere.rikkahub.APP_DISPLAY_NAME
 
 import java.io.File
 import java.io.FileOutputStream
@@ -114,7 +115,7 @@ fun Context.getComponentActivity(): ComponentActivity? {
 fun Context.exportImage(
     activity: Activity,
     bitmap: Bitmap,
-    fileName: String = "RikkaHub_${System.currentTimeMillis()}.png"
+    fileName: String = "${APP_DISPLAY_NAME}_${System.currentTimeMillis()}.png"
 ): Boolean {
     // 检查存储权限（Android 9及以下需要）
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -247,7 +248,7 @@ private fun ensureImageFileName(fileName: String, mimeType: String): String {
     val normalizedFileName = fileName
         .substringAfterLast('/')
         .substringAfterLast('\\')
-        .ifBlank { "RikkaHub_${System.currentTimeMillis()}" }
+        .ifBlank { "${APP_DISPLAY_NAME}_${System.currentTimeMillis()}" }
     if (normalizedFileName.contains('.')) {
         return normalizedFileName
     }

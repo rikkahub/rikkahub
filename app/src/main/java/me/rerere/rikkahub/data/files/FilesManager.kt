@@ -24,6 +24,7 @@ import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.Logging
+import me.rerere.rikkahub.APP_DISPLAY_NAME
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.repository.FilesRepository
@@ -325,7 +326,7 @@ class FilesManager(
 
             image.startsWith("content:") -> {
                 val uri = image.toUri()
-                val fileName = getFileNameFromUri(uri) ?: "RikkaHub_${System.currentTimeMillis()}"
+                val fileName = getFileNameFromUri(uri) ?: "${APP_DISPLAY_NAME}_${System.currentTimeMillis()}"
                 val mimeType = normalizeImageMimeType(
                     getFileMimeType(uri)
                         ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
@@ -604,7 +605,7 @@ class FilesManager(
         val header = image.substringBefore(',')
         check(header.contains(";base64")) { "Unsupported image data URL" }
         val mimeType = normalizeImageMimeType(header.substringAfter("data:").substringBefore(';'))
-        val fileName = "RikkaHub_${System.currentTimeMillis()}.${extensionFromMimeType(mimeType)}"
+        val fileName = "${APP_DISPLAY_NAME}_${System.currentTimeMillis()}.${extensionFromMimeType(mimeType)}"
         return InlineImageData(
             bytes = Base64.decode(image.substringAfter("base64,").toByteArray()),
             mimeType = mimeType,
@@ -635,7 +636,7 @@ class FilesManager(
             return ensureImageExtension(pathName, mimeType)
         }
 
-        return "RikkaHub_${System.currentTimeMillis()}.${extensionFromMimeType(mimeType)}"
+        return "${APP_DISPLAY_NAME}_${System.currentTimeMillis()}.${extensionFromMimeType(mimeType)}"
     }
 
     private fun extractFileNameFromContentDisposition(contentDisposition: String?): String? {
@@ -674,7 +675,7 @@ class FilesManager(
         val normalizedFileName = fileName
             .substringAfterLast('/')
             .substringAfterLast('\\')
-            .ifBlank { "RikkaHub_${System.currentTimeMillis()}" }
+            .ifBlank { "${APP_DISPLAY_NAME}_${System.currentTimeMillis()}" }
         return if (normalizedFileName.contains('.')) {
             normalizedFileName
         } else {

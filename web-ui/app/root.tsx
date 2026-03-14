@@ -15,11 +15,12 @@ import "./i18n";
 import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./components/theme-provider";
 import { WebAuthGate } from "./components/web-auth-gate";
+import Logo from "~/components/logo";
 
 const queryClient = new QueryClient();
 
 export const links: Route.LinksFunction = () => [
-  { rel: "icon", href: "/favicon.ico", type: "image/x-icon", sizes: "any" },
+  { rel: "icon", href: "/favicon.png", type: "image/png", sizes: "64x64" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -62,14 +63,9 @@ export default function App() {
 export function HydrateFallback() {
   return (
     <div className="flex items-center justify-center h-screen w-screen bg-background">
-      <div className="flex items-center gap-1.5">
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="h-2.5 w-2.5 rounded-full bg-primary animate-bounce"
-            style={{ animationDelay: `${i * 0.15}s` }}
-          />
-        ))}
+      <div className="relative flex items-center justify-center">
+        <div className="absolute inset-2 rounded-[2rem] bg-primary/10 blur-2xl animate-pulse" />
+        <Logo className="relative h-16 w-16 animate-[pulse_2400ms_ease-in-out_infinite]" />
       </div>
     </div>
   );
