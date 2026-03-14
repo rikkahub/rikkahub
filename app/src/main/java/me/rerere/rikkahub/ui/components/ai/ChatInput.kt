@@ -128,9 +128,11 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ui.ExtensionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
@@ -200,6 +202,163 @@ fun ChatInput(
             expand = type
         }
     }
+
+    val context = LocalContext.current
+    val filesManager: FilesManager = koinInject()
+
+    // Camera launcher
+    var cameraOutputUri by remember { mutableStateOf<Uri?>(null) }
+    var cameraOutputFile by remember { mutableStateOf<File?>(null) }
+    val (_, launchCameraCrop) = useCropLauncher(
+        onCroppedImageReady = { croppedUri ->
+            state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
+            dismissExpand()
+        },
+        onCleanup = {
+            cameraOutputFile?.delete()
+            cameraOutputFile = null
+            cameraOutputUri = null
+        }
+    )
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captureSuccessful ->
+        if (captureSuccessful && cameraOutputUri != null) {
+            if (settings.displaySetting.skipCropImage) {
+                state.addImages(filesManager.createChatFilesByContents(listOf(cameraOutputUri!!)))
+                cameraOutputFile?.delete()
+                cameraOutputFile = null
+                cameraOutputUri = null
+                dismissExpand()
+            } else {
+                launchCameraCrop(cameraOutputUri!!)
+            }
+        } else {
+            cameraOutputFile?.delete()
+            cameraOutputFile = null
+            cameraOutputUri = null
+        }
+    }
+    val onLaunchCamera: () -> Unit = {
+        cameraOutputFile = context.cacheDir.resolve("camera_${Uuid.random()}.jpg")
+        cameraOutputUri = FileProvider.getUriForFile(
+            context, "${context.packageName}.fileprovider", cameraOutputFile!!
+        )
+        cameraLauncher.launch(cameraOutputUri!!)
+    }
+
+    // Image picker launcher
+    var preCropTempFile by remember { mutableStateOf<File?>(null) }
+    val (_, launchImageCrop) = useCropLauncher(
+        onCroppedImageReady = { croppedUri ->
+            state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
+            dismissExpand()
+        },
+        onCleanup = {
+            preCropTempFile?.delete()
+            preCropTempFile = null
+        }
+    )
+    val imagePickerLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selectedUris ->
+            if (selectedUris.isNotEmpty()) {
+                Log.d("ImagePickButton", "Selected URIs: $selectedUris")
+                if (settings.displaySetting.skipCropImage) {
+                    state.addImages(filesManager.createChatFilesByContents(selectedUris))
+                    dismissExpand()
+                } else {
+                    if (selectedUris.size == 1) {
+                        val tempFile = File(context.appTempFolder, "pick_temp_${System.currentTimeMillis()}.jpg")
+                        runCatching {
+                            context.contentResolver.openInputStream(selectedUris.first())?.use { input ->
+                                tempFile.outputStream().use { output -> input.copyTo(output) }
+                            }
+                            preCropTempFile = tempFile
+                            launchImageCrop(tempFile.toUri())
+                        }.onFailure {
+                            Log.e("ImagePickButton", "Failed to copy image to temp, falling back", it)
+                            launchImageCrop(selectedUris.first())
+                        }
+                    } else {
+                        state.addImages(filesManager.createChatFilesByContents(selectedUris))
+                        dismissExpand()
+                    }
+                }
+            } else {
+                Log.d("ImagePickButton", "No images selected")
+            }
+        }
+
+    // Video picker launcher
+    val videoPickerLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selectedUris ->
+            if (selectedUris.isNotEmpty()) {
+                state.addVideos(filesManager.createChatFilesByContents(selectedUris))
+                dismissExpand()
+            }
+        }
+
+    // Audio picker launcher
+    val audioPickerLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selectedUris ->
+            if (selectedUris.isNotEmpty()) {
+                state.addAudios(filesManager.createChatFilesByContents(selectedUris))
+                dismissExpand()
+            }
+        }
+
+    // File picker launcher
+    val filePickerLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isNotEmpty()) {
+                val allowedMimeTypes = setOf(
+                    "text/plain", "text/html", "text/css", "text/javascript", "text/csv", "text/xml",
+                    "application/json", "application/javascript", "application/pdf",
+                    "application/msword",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/vnd.ms-excel",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "application/vnd.ms-powerpoint",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                )
+                val documents = uris.mapNotNull { uri ->
+                    val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
+                    val mime = filesManager.getFileMimeType(uri) ?: "text/plain"
+                    val isAllowed = allowedMimeTypes.contains(mime) || mime.startsWith("text/") ||
+                        mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+                        mime == "application/pdf" ||
+                        fileName.endsWith(".txt", ignoreCase = true) ||
+                        fileName.endsWith(".md", ignoreCase = true) ||
+                        fileName.endsWith(".csv", ignoreCase = true) ||
+                        fileName.endsWith(".json", ignoreCase = true) ||
+                        fileName.endsWith(".js", ignoreCase = true) ||
+                        fileName.endsWith(".html", ignoreCase = true) ||
+                        fileName.endsWith(".css", ignoreCase = true) ||
+                        fileName.endsWith(".xml", ignoreCase = true) ||
+                        fileName.endsWith(".py", ignoreCase = true) ||
+                        fileName.endsWith(".java", ignoreCase = true) ||
+                        fileName.endsWith(".kt", ignoreCase = true) ||
+                        fileName.endsWith(".ts", ignoreCase = true) ||
+                        fileName.endsWith(".tsx", ignoreCase = true) ||
+                        fileName.endsWith(".markdown", ignoreCase = true) ||
+                        fileName.endsWith(".mdx", ignoreCase = true) ||
+                        fileName.endsWith(".yml", ignoreCase = true) ||
+                        fileName.endsWith(".yaml", ignoreCase = true)
+                    if (isAllowed) {
+                        val localUri = filesManager.createChatFilesByContents(listOf(uri))[0]
+                        UIMessagePart.Document(url = localUri.toString(), fileName = fileName, mime = mime)
+                    } else {
+                        toaster.show(
+                            context.getString(R.string.chat_input_unsupported_file_type, fileName),
+                            type = ToastType.Error
+                        )
+                        null
+                    }
+                }
+                if (documents.isNotEmpty()) {
+                    state.addFiles(documents)
+                    dismissExpand()
+                }
+            }
+        }
 
     // Collapse when ime is visible
     val imeVisile = WindowInsets.isImeVisible
@@ -418,7 +577,13 @@ fun ChatInput(
                             onShowInjectionSheetChange = { showInjectionSheet = it },
                             showCompressDialog = showCompressDialog,
                             onShowCompressDialogChange = { showCompressDialog = it },
-                            onDismiss = { dismissExpand() })
+                            onDismiss = { dismissExpand() },
+                            onTakePic = onLaunchCamera,
+                            onPickImage = { imagePickerLauncher.launch("image/*") },
+                            onPickVideo = { videoPickerLauncher.launch("video/*") },
+                            onPickAudio = { audioPickerLauncher.launch("audio/*") },
+                            onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
+                        )
                     }
                 }
             }
@@ -454,6 +619,9 @@ private fun TextInputRow(
     val settings = LocalSettings.current
     val filesManager: FilesManager = koinInject()
     val assistant = settings.getCurrentAssistant()
+    val quickMessages = remember(settings.quickMessages, assistant.quickMessageIds) {
+        settings.getQuickMessagesOfAssistant(assistant)
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -556,9 +724,9 @@ private fun TextInputRow(
                     }
                 }
             },
-            leadingIcon = if (assistant.quickMessages.isNotEmpty()) {
+            leadingIcon = if (quickMessages.isNotEmpty()) {
                 {
-                    QuickMessageButton(assistant = assistant, state = state)
+                    QuickMessageButton(quickMessages = quickMessages, state = state)
                 }
             } else null,
         )
@@ -572,7 +740,7 @@ private fun TextInputRow(
 
 @Composable
 private fun QuickMessageButton(
-    assistant: Assistant,
+    quickMessages: List<QuickMessage>,
     state: ChatInputState,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -588,10 +756,11 @@ private fun QuickMessageButton(
                 .widthIn(min = 200.dp)
                 .width(IntrinsicSize.Min)
         ) {
-            assistant.quickMessages.forEach { quickMessage ->
+            quickMessages.forEach { quickMessage ->
                 Surface(
                     onClick = {
                         state.appendText(quickMessage.content)
+                        expanded = false
                     },
                     color = Color.Transparent,
                     modifier = Modifier.fillMaxWidth(),
@@ -818,7 +987,12 @@ private fun FilesPicker(
     onShowInjectionSheetChange: (Boolean) -> Unit,
     showCompressDialog: Boolean,
     onShowCompressDialogChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onTakePic: () -> Unit,
+    onPickImage: () -> Unit,
+    onPickVideo: () -> Unit,
+    onPickAudio: () -> Unit,
+    onPickFile: () -> Unit,
 ) {
     val settings = LocalSettings.current
     val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
@@ -833,40 +1007,26 @@ private fun FilesPicker(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            TakePicButton {
-                state.addImages(it)
-                onDismiss()
-            }
+            TakePicButton(onLaunchCamera = onTakePic)
 
-            ImagePickButton {
-                state.addImages(it)
-                onDismiss()
-            }
+            ImagePickButton(onClick = onPickImage)
 
             if (provider != null && provider is ProviderSetting.Google) {
-                VideoPickButton {
-                    state.addVideos(it)
-                    onDismiss()
-                }
+                VideoPickButton(onClick = onPickVideo)
 
-                AudioPickButton {
-                    state.addAudios(it)
-                    onDismiss()
-                }
+                AudioPickButton(onClick = onPickAudio)
             }
 
-            FilePickButton {
-                state.addFiles(it)
-                onDismiss()
-            }
+            FilePickButton(onClick = onPickFile)
         }
 
         HorizontalDivider(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Extensions (Prompt Injections + Skills)
-        val activeCount = assistant.modeInjectionIds.size + assistant.lorebookIds.size + assistant.enabledSkills.size
+        // Extensions (Quick Messages + Prompt Injections + Skills)
+        val activeCount =
+            assistant.quickMessageIds.size + assistant.modeInjectionIds.size + assistant.lorebookIds.size + assistant.enabledSkills.size
         ListItem(
             leadingContent = {
                 Icon(
@@ -1043,107 +1203,19 @@ private fun useCropLauncher(
 }
 
 @Composable
-private fun ImagePickButton(onAddImages: (List<Uri>) -> Unit = {}) {
-    val context = LocalContext.current
-    val settings = LocalSettings.current
-    val filesManager: FilesManager = koinInject()
-    var preCropTempFile by remember { mutableStateOf<File?>(null) }
-
-    val (_, launchCrop) = useCropLauncher(
-        onCroppedImageReady = { croppedUri ->
-            onAddImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
-        },
-        onCleanup = {
-            preCropTempFile?.delete()
-            preCropTempFile = null
-        }
-    )
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { selectedUris ->
-        if (selectedUris.isNotEmpty()) {
-            Log.d("ImagePickButton", "Selected URIs: $selectedUris")
-            // Check if we should skip crop based on settings
-            if (settings.displaySetting.skipCropImage) {
-                // Skip crop, directly add images
-                onAddImages(filesManager.createChatFilesByContents(selectedUris))
-            } else {
-                // Show crop interface
-                if (selectedUris.size == 1) {
-                    // Single image - copy to app temp storage first, then crop
-                    val tempFile = File(context.appTempFolder, "pick_temp_${System.currentTimeMillis()}.jpg")
-                    runCatching {
-                        context.contentResolver.openInputStream(selectedUris.first())?.use { input ->
-                            tempFile.outputStream().use { output -> input.copyTo(output) }
-                        }
-                        preCropTempFile = tempFile
-                        launchCrop(tempFile.toUri())
-                    }.onFailure {
-                        Log.e("ImagePickButton", "Failed to copy image to temp, falling back", it)
-                        launchCrop(selectedUris.first())
-                    }
-                } else {
-                    // Multiple images - no crop
-                    onAddImages(filesManager.createChatFilesByContents(selectedUris))
-                }
-            }
-        } else {
-            Log.d("ImagePickButton", "No images selected")
-        }
-    }
-
+private fun ImagePickButton(onClick: () -> Unit = {}) {
     BigIconTextButton(icon = {
         Icon(HugeIcons.Image02, null)
     }, text = {
         Text(stringResource(R.string.photo))
     }) {
-        imagePickerLauncher.launch("image/*")
+        onClick()
     }
 }
 
 @Composable
-fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
+fun TakePicButton(onLaunchCamera: () -> Unit = {}) {
     val cameraPermission = rememberPermissionState(PermissionCamera)
-
-    val context = LocalContext.current
-    val settings = LocalSettings.current
-    val filesManager: FilesManager = koinInject()
-    var cameraOutputUri by remember { mutableStateOf<Uri?>(null) }
-    var cameraOutputFile by remember { mutableStateOf<File?>(null) }
-
-    val (_, launchCrop) = useCropLauncher(onCroppedImageReady = { croppedUri ->
-        onAddImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
-    }, onCleanup = {
-        // Clean up camera temp file after cropping is done
-        cameraOutputFile?.delete()
-        cameraOutputFile = null
-        cameraOutputUri = null
-    })
-
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { captureSuccessful ->
-        if (captureSuccessful && cameraOutputUri != null) {
-            // Check if we should skip crop based on settings
-            if (settings.displaySetting.skipCropImage) {
-                // Skip crop, directly add image
-                onAddImages(filesManager.createChatFilesByContents(listOf(cameraOutputUri!!)))
-                // Clean up camera temp file
-                cameraOutputFile?.delete()
-                cameraOutputFile = null
-                cameraOutputUri = null
-            } else {
-                // Show crop interface
-                launchCrop(cameraOutputUri!!)
-            }
-        } else {
-            // Clean up camera temp file if capture failed
-            cameraOutputFile?.delete()
-            cameraOutputFile = null
-            cameraOutputUri = null
-        }
-    }
 
     // 使用权限管理器包装
     PermissionManager(
@@ -1155,12 +1227,7 @@ fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
             Text(stringResource(R.string.take_picture))
         }) {
             if (cameraPermission.allRequiredPermissionsGranted) {
-                // 权限已授权，直接启动相机
-                cameraOutputFile = context.cacheDir.resolve("camera_${Uuid.random()}.jpg")
-                cameraOutputUri = FileProvider.getUriForFile(
-                    context, "${context.packageName}.fileprovider", cameraOutputFile!!
-                )
-                cameraLauncher.launch(cameraOutputUri!!)
+                onLaunchCamera()
             } else {
                 // 请求权限
                 cameraPermission.requestPermissions()
@@ -1170,132 +1237,35 @@ fun TakePicButton(onAddImages: (List<Uri>) -> Unit = {}) {
 }
 
 @Composable
-fun VideoPickButton(onAddVideos: (List<Uri>) -> Unit = {}) {
-    val context = LocalContext.current
-    val filesManager: FilesManager = koinInject()
-    val videoPickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { selectedUris ->
-        if (selectedUris.isNotEmpty()) {
-            onAddVideos(filesManager.createChatFilesByContents(selectedUris))
-        }
-    }
-
+fun VideoPickButton(onClick: () -> Unit = {}) {
     BigIconTextButton(icon = {
         Icon(HugeIcons.Video01, null)
     }, text = {
         Text(stringResource(R.string.video))
     }) {
-        videoPickerLauncher.launch("video/*")
+        onClick()
     }
 }
 
 @Composable
-fun AudioPickButton(onAddAudios: (List<Uri>) -> Unit = {}) {
-    val context = LocalContext.current
-    val filesManager: FilesManager = koinInject()
-    val audioPickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { selectedUris ->
-        if (selectedUris.isNotEmpty()) {
-            onAddAudios(filesManager.createChatFilesByContents(selectedUris))
-        }
-    }
-
+fun AudioPickButton(onClick: () -> Unit = {}) {
     BigIconTextButton(icon = {
         Icon(HugeIcons.MusicNote03, null)
     }, text = {
         Text(stringResource(R.string.audio))
     }) {
-        audioPickerLauncher.launch("audio/*")
+        onClick()
     }
 }
 
 @Composable
-fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
-    val context = LocalContext.current
-    val toaster = LocalToaster.current
-    val filesManager: FilesManager = koinInject()
-    val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) {
-            val allowedMimeTypes = setOf(
-                "text/plain",
-                "text/html",
-                "text/css",
-                "text/javascript",
-                "text/csv",
-                "text/xml",
-                "application/json",
-                "application/javascript",
-                "application/pdf",
-                "application/msword",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "application/vnd.ms-excel",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/vnd.ms-powerpoint",
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-            )
-
-            val documents = uris.mapNotNull { uri ->
-                val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
-                val mime = filesManager.getFileMimeType(uri) ?: "text/plain"
-
-                // Filter by MIME type or file extension
-                val isAllowed =
-                    allowedMimeTypes.contains(mime) || mime.startsWith("text/") || mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mime == "application/pdf" || fileName.endsWith(
-                        ".txt",
-                        ignoreCase = true
-                    ) || fileName.endsWith(".md", ignoreCase = true) || fileName.endsWith(
-                        ".csv",
-                        ignoreCase = true
-                    ) || fileName.endsWith(".json", ignoreCase = true) || fileName.endsWith(
-                        ".js",
-                        ignoreCase = true
-                    ) || fileName.endsWith(".html", ignoreCase = true) || fileName.endsWith(
-                        ".css",
-                        ignoreCase = true
-                    ) || fileName.endsWith(".xml", ignoreCase = true) || fileName.endsWith(
-                        ".py",
-                        ignoreCase = true
-                    ) || fileName.endsWith(".java", ignoreCase = true) || fileName.endsWith(
-                        ".kt",
-                        ignoreCase = true
-                    ) || fileName.endsWith(".ts", ignoreCase = true) || fileName.endsWith(
-                        ".tsx",
-                        ignoreCase = true
-                    ) || fileName.endsWith(".md", ignoreCase = true) || fileName.endsWith(
-                        ".markdown",
-                        ignoreCase = true
-                    ) || fileName.endsWith(".mdx", ignoreCase = true) || fileName.endsWith(
-                        ".yml",
-                        ignoreCase = true
-                    ) || fileName.endsWith(".yaml", ignoreCase = true)
-
-                if (isAllowed) {
-                    val localUri = filesManager.createChatFilesByContents(listOf(uri))[0]
-                    UIMessagePart.Document(
-                        url = localUri.toString(), fileName = fileName, mime = mime
-                    )
-                } else {
-                    toaster.show(
-                        context.getString(R.string.chat_input_unsupported_file_type, fileName),
-                        type = ToastType.Error
-                    )
-                    null
-                }
-            }
-
-            if (documents.isNotEmpty()) {
-                onAddFiles(documents)
-            }
-        }
-    }
+fun FilePickButton(onClick: () -> Unit = {}) {
     BigIconTextButton(icon = {
         Icon(HugeIcons.Files02, null)
     }, text = {
         Text(stringResource(R.string.upload_file))
     }) {
-        pickMedia.launch(arrayOf("*/*"))
+        onClick()
     }
 }
 
@@ -1358,6 +1328,13 @@ private fun InjectionQuickConfigSheet(
                 settings = settings,
                 onUpdate = onUpdateAssistant,
                 modifier = Modifier.weight(1f),
+                onNavigateToQuickMessages = {
+                    scope.launch {
+                        sheetState.hide()
+                        onDismiss()
+                        navController.navigate(Screen.QuickMessages)
+                    }
+                },
                 onNavigateToPrompts = {
                     scope.launch {
                         sheetState.hide()
