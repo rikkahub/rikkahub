@@ -133,7 +133,7 @@ class FilesManager(
         }
         uris.forEach { uri ->
             val sourceName = getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "file"
-            val sourceMime = getFileMimeType(uri)
+            val sourceMime = resolveMimeType(uri, sourceName)
             val fileName = buildUuidFileName(displayName = sourceName, mimeType = sourceMime)
             val file = dir.resolve(fileName)
             if (!file.exists()) {
@@ -146,7 +146,8 @@ class FilesManager(
                         inputStream.copyTo(outputStream)
                     }
                 }
-                val guessedMime = sourceMime ?: guessMimeType(file, sourceName)
+                val guessedMime = sourceMime.takeUnless { it == "application/octet-stream" }
+                    ?: guessMimeType(file, sourceName)
                 trackUploadFile(file = file, displayName = sourceName, mimeType = guessedMime)
                 newUris.add(newUri)
             }.onFailure {
@@ -535,6 +536,31 @@ class FilesManager(
         }
     }
 
+    fun resolveMimeType(uri: Uri, fileName: String? = null): String {
+        val normalizedUriMime = normalizeMimeType(getFileMimeType(uri))
+        if (normalizedUriMime != null && normalizedUriMime != "application/octet-stream") {
+            return normalizedUriMime
+        }
+
+        val resolvedName = fileName ?: getFileNameFromUri(uri)
+        val normalizedNameMime = resolvedName
+            ?.substringAfterLast('.', "")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { extension ->
+                when (extension.lowercase()) {
+                    "zip" -> "application/zip"
+                    "md" -> "text/markdown"
+                    else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
+                }
+            }
+            ?.let(::normalizeMimeType)
+        if (normalizedNameMime != null) {
+            return normalizedNameMime
+        }
+
+        return normalizedUriMime ?: "application/octet-stream"
+    }
+
     private fun guessMimeType(file: File, fileName: String): String {
         val ext = fileName.substringAfterLast('.', "").lowercase()
         if (ext.isNotEmpty()) {
@@ -662,6 +688,20 @@ class FilesManager(
             ?.lowercase()
             ?.takeIf { it.startsWith("image/") }
             ?: "image/png"
+    }
+
+    private fun normalizeMimeType(mimeType: String?): String? {
+        return mimeType
+            ?.substringBefore(';')
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { normalized ->
+                when (normalized) {
+                    "application/x-zip-compressed" -> "application/zip"
+                    else -> normalized
+                }
+            }
     }
 
     private fun extensionFromMimeType(mimeType: String): String {

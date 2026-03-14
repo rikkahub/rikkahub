@@ -1182,4 +1182,10 @@
   <string name="scheduled_task_runs_delete_one_confirmation">此紀錄將被永久刪除。</string>
   <string name="setting_termux_page_pty_refresh_hint">點選「重新整理工作階段」以向 Termux 查詢。開啟此頁面不再會自動啟動 Termux。</string>
   <string name="setting_termux_page_pty_disabled_hint">停用時，termux_exec 只會提供 command 和 timeout_ms，且不會傳送 PTY 工具。</string>
+  <string name="notification_channel_tool_approval">工具審核</string>
+  <string name="notification_tool_approval_title">需要工具審核</string>
+  <string name="notification_tool_approval_content">待審核工具：%1$s</string>
+  <string name="setting_display_page_tool_approval_notification">工具審核通知</string>
+  <string name="setting_display_page_tool_approval_notification_desc">當工具呼叫等待審核時播放通知提示音</string>
 </resources>
+

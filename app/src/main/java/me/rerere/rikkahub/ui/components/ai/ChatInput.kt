@@ -1311,7 +1311,6 @@ fun AudioPickButton(onAddAudios: (List<Uri>) -> Unit = {}) {
 
 @Composable
 fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
-    val context = LocalContext.current
     val toaster = LocalToaster.current
     val filesManager: FilesManager = koinInject()
     val pickMedia =
@@ -1332,18 +1331,20 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                     "application/vnd.ms-excel",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     "application/vnd.ms-powerpoint",
-                    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    "application/zip"
                 )
 
                 val documents = uris.mapNotNull { uri ->
                     val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
-                    val mime = filesManager.getFileMimeType(uri) ?: "text/plain"
+                    val mime = filesManager.resolveMimeType(uri, fileName)
 
                     // Filter by MIME type or file extension
                     val isAllowed = allowedMimeTypes.contains(mime) ||
                         mime.startsWith("text/") ||
                         mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
                         mime == "application/pdf" ||
+                        mime == "application/zip" ||
                         fileName.endsWith(".txt", ignoreCase = true) ||
                         fileName.endsWith(".md", ignoreCase = true) ||
                         fileName.endsWith(".csv", ignoreCase = true) ||
@@ -1361,7 +1362,8 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                         fileName.endsWith(".markdown", ignoreCase = true) ||
                         fileName.endsWith(".mdx", ignoreCase = true) ||
                         fileName.endsWith(".yml", ignoreCase = true) ||
-                        fileName.endsWith(".yaml", ignoreCase = true)
+                        fileName.endsWith(".yaml", ignoreCase = true) ||
+                        fileName.endsWith(".zip", ignoreCase = true)
 
                     if (isAllowed) {
                         val localUri = filesManager.createChatFilesByContents(listOf(uri))[0]

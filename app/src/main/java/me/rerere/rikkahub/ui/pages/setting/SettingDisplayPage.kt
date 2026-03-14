@@ -70,6 +70,12 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
     )
     PermissionManager(permissionState = permissionState)
 
+    fun ensureNotificationPermissionIfNeeded(enabled: Boolean) {
+        if (enabled && !permissionState.allPermissionsGranted) {
+            permissionState.requestPermissions()
+        }
+    }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -199,10 +205,21 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             Switch(
                                 checked = displaySetting.enableNotificationOnMessageGeneration,
                                 onCheckedChange = {
-                                    if (it && !permissionState.allPermissionsGranted) {
-                                        permissionState.requestPermissions()
-                                    }
+                                    ensureNotificationPermissionIfNeeded(it)
                                     updateDisplaySetting(displaySetting.copy(enableNotificationOnMessageGeneration = it))
+                                }
+                            )
+                        },
+                    )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_tool_approval_notification)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_tool_approval_notification_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.enableToolApprovalNotification,
+                                onCheckedChange = {
+                                    ensureNotificationPermissionIfNeeded(it)
+                                    updateDisplaySetting(displaySetting.copy(enableToolApprovalNotification = it))
                                 }
                             )
                         },

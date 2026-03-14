@@ -374,7 +374,10 @@
   <string name="more_options">More options</string>
   <string name="no_text_content_to_copy">No text content available to copy</string>
   <string name="notification_channel_chat_completed">Chat Completed</string>
+  <string name="notification_channel_tool_approval">Tool Approval</string>
   <string name="notification_chat_done_title">Chat Message Generated</string>
+  <string name="notification_tool_approval_title">Tool approval required</string>
+  <string name="notification_tool_approval_content">Pending tool: %1$s</string>
   <string name="notification_channel_scheduled_task">Scheduled Prompts</string>
   <string name="notification_scheduled_task_success_title">Task completed: %1$s</string>
   <string name="notification_scheduled_task_success_fallback">Scheduled prompt finished successfully.</string>
@@ -1186,4 +1189,7 @@
   <string name="assistant_page_skills_reason_missing_name">SKILL.md frontmatter is missing name</string>
   <string name="assistant_page_skills_reason_missing_description">SKILL.md frontmatter is missing description</string>
   <string name="assistant_page_skills_reason_failed_to_read">Failed to read SKILL.md: %1$s</string>
+  <string name="setting_display_page_tool_approval_notification">Tool Approval Notification</string>
+  <string name="setting_display_page_tool_approval_notification_desc">Play a notification sound when a tool call is waiting for approval</string>
 </resources>
+

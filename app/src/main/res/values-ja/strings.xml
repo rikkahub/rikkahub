@@ -1188,4 +1188,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_skills_edit_load_failed">スキルを読み込めませんでした</string>
   <string name="assistant_page_skills_edit_success">スキル「%1$s」を保存しました</string>
   <string name="assistant_page_skills_edit_title">スキルを編集</string>
+  <string name="notification_channel_tool_approval">ツール承認</string>
+  <string name="notification_tool_approval_title">ツールの承認が必要です</string>
+  <string name="notification_tool_approval_content">保留中のツール: %1$s</string>
+  <string name="setting_display_page_tool_approval_notification">ツール承認通知</string>
+  <string name="setting_display_page_tool_approval_notification_desc">ツール呼び出しが承認待ちになったときに通知音を鳴らします</string>
 </resources>
+

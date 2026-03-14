@@ -34,7 +34,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.ModelAbility
@@ -51,6 +53,7 @@ import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.TOOL_APPROVAL_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -665,6 +668,7 @@ class ChatService(
     ) {
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
+        cancelToolApprovalNotification(conversationId)
 
         val job = appScope.launch {
             try {
@@ -812,18 +816,33 @@ class ChatService(
                     updateAt = Instant.now()
                 )
                 updateConversation(conversationId, updatedConversation)
+                val hasPendingToolApproval =
+                    findPendingApprovalTool(updatedConversation.currentMessages) != null
 
                 // Show notification if app is not in foreground
-                if (notifyOnCompletion && !isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
+                if (
+                    notifyOnCompletion &&
+                    !hasPendingToolApproval &&
+                    !isForeground.value &&
+                    settings.displaySetting.enableNotificationOnMessageGeneration
+                ) {
                     sendGenerationDoneNotification(conversationId)
                 }
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
                         ptySessionsOpenedThisRun += extractPtySessionIds(chunk.messages)
+                        val previousPendingToolId =
+                            findPendingApprovalTool(getConversationFlow(conversationId).value.currentMessages)?.toolCallId
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunk.messages)
                         updateConversation(conversationId, updatedConversation)
+                        val pendingTool = findPendingApprovalTool(updatedConversation.currentMessages)
+                        when {
+                            pendingTool == null -> cancelToolApprovalNotification(conversationId)
+                            pendingTool.toolCallId != previousPendingToolId ->
+                                sendToolApprovalNotification(conversationId, pendingTool)
+                        }
 
                         // 如果应用不在前台，发送 Live Update 通知
                         if (notifyOnCompletion && !isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
@@ -1118,6 +1137,10 @@ class ChatService(
         return conversationId.hashCode() + 10000
     }
 
+    private fun getToolApprovalNotificationId(conversationId: Uuid): Int {
+        return conversationId.hashCode() + 20000
+    }
+
     private fun sendLiveUpdateNotification(
         conversationId: Uuid,
         messages: List<UIMessage>
@@ -1143,6 +1166,56 @@ class ChatService(
             requestPromotedOngoing = true
             shortCriticalText = chipText
         }
+    }
+
+    private fun sendToolApprovalNotification(
+        conversationId: Uuid,
+        tool: UIMessagePart.Tool,
+    ) {
+        if (!settingsStore.settingsFlow.value.displaySetting.enableToolApprovalNotification) {
+            cancelToolApprovalNotification(conversationId)
+            return
+        }
+        context.sendNotification(
+            channelId = TOOL_APPROVAL_NOTIFICATION_CHANNEL_ID,
+            notificationId = getToolApprovalNotificationId(conversationId)
+        ) {
+            title = context.getString(R.string.notification_tool_approval_title)
+            content = buildToolApprovalNotificationText(tool)
+            autoCancel = true
+            useDefaults = true
+            useBigTextStyle = true
+            category = NotificationCompat.CATEGORY_REMINDER
+            contentIntent = getPendingIntent(context, conversationId)
+        }
+    }
+
+    private fun buildToolApprovalNotificationText(tool: UIMessagePart.Tool): String {
+        val toolLabel = tool.toolName.removePrefix("mcp__").ifBlank { tool.toolName }
+        val arguments = tool.inputAsJson().jsonObject
+        val preview = when (tool.toolName) {
+            "termux_exec" -> arguments["command"]?.jsonPrimitive?.contentOrNull
+            "termux_python" -> arguments["code"]?.jsonPrimitive?.contentOrNull
+            "write_stdin" -> arguments["chars"]?.jsonPrimitive?.contentOrNull
+            else -> arguments["query"]?.jsonPrimitive?.contentOrNull
+                ?: arguments["url"]?.jsonPrimitive?.contentOrNull
+                ?: arguments["text"]?.jsonPrimitive?.contentOrNull
+        }
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        return if (preview != null) {
+            "$toolLabel: ${preview.take(160)}"
+        } else {
+            context.getString(R.string.notification_tool_approval_content, toolLabel)
+        }
+    }
+
+    private fun findPendingApprovalTool(messages: List<UIMessage>): UIMessagePart.Tool? {
+        return messages.lastOrNull()
+            ?.getTools()
+            ?.lastOrNull { it.isPending }
     }
 
     private fun determineNotificationContent(parts: List<UIMessagePart>): Triple<String, String, String> {
@@ -1190,6 +1263,10 @@ class ChatService(
 
     private fun cancelLiveUpdateNotification(conversationId: Uuid) {
         context.cancelNotification(getLiveUpdateNotificationId(conversationId))
+    }
+
+    private fun cancelToolApprovalNotification(conversationId: Uuid) {
+        context.cancelNotification(getToolApprovalNotificationId(conversationId))
     }
 
     private fun getPendingIntent(context: Context, conversationId: Uuid): PendingIntent {

@@ -137,6 +137,47 @@ private fun JsonElement?.getStringContent(key: String): String? =
 
 internal fun UIMessagePart.Tool.canOpenPreviewSheet(): Boolean = toolName != ToolNames.ASK_USER
 
+internal data class PendingApprovalPreview(
+    val code: String,
+    val language: String,
+)
+
+internal fun UIMessagePart.Tool.pendingApprovalPreview(): PendingApprovalPreview? {
+    if (!isPending) return null
+
+    val arguments = inputAsJson()
+    val argumentObject = arguments.jsonObjectOrNull
+    return when (toolName) {
+        "termux_exec" -> argumentObject?.get("command")?.jsonPrimitiveOrNull?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
+            ?.let { PendingApprovalPreview(code = it, language = "bash") }
+            ?: PendingApprovalPreview(
+                code = JsonInstantPretty.encodeToString(arguments),
+                language = "json"
+            )
+
+        "termux_python" -> argumentObject?.get("code")?.jsonPrimitiveOrNull?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
+            ?.let { PendingApprovalPreview(code = it, language = "python") }
+            ?: PendingApprovalPreview(
+                code = JsonInstantPretty.encodeToString(arguments),
+                language = "json"
+            )
+
+        "write_stdin" -> PendingApprovalPreview(
+            code = argumentObject?.get("chars")?.jsonPrimitiveOrNull?.contentOrNull
+                ?.takeIf { it.isNotBlank() }
+                ?: "[poll for more output]",
+            language = "text"
+        )
+
+        else -> PendingApprovalPreview(
+            code = JsonInstantPretty.encodeToString(arguments),
+            language = "json"
+        )
+    }
+}
+
 @Composable
 fun ChainOfThoughtScope.ChatMessageToolStep(
     tool: UIMessagePart.Tool,
@@ -158,6 +199,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
     val arguments = tool.inputAsJson()
+    val pendingPreview = tool.pendingApprovalPreview()
     val memoryAction = arguments.getStringContent("action")
     val content = if (tool.isExecuted) {
         runCatching {
@@ -212,7 +254,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         ToolNames.SCRAPE_WEB -> arguments.getStringContent("url") != null
         ToolNames.TTS -> arguments.getStringContent("text") != null
         else -> false
-    } || isDenied || images.isNotEmpty()
+    } || isDenied || images.isNotEmpty() || pendingPreview != null
 
     ControlledChainOfThoughtStep(
         expanded = expanded,
@@ -280,6 +322,13 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         content = if (hasExtraContent) {
             {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    pendingPreview?.let { preview ->
+                        HighlightCodeBlock(
+                            code = preview.code,
+                            language = preview.language,
+                            style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+                        )
+                    }
                     if (tool.toolName == ToolNames.MEMORY &&
                         memoryAction in listOf(MemoryActions.CREATE, MemoryActions.EDIT)
                     ) {

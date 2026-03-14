@@ -1188,4 +1188,10 @@
   <string name="assistant_page_skills_edit_load_failed">Не удалось загрузить навык</string>
   <string name="assistant_page_skills_edit_success">Навык сохранён: %1$s</string>
   <string name="assistant_page_skills_edit_title">Редактировать навык</string>
+  <string name="notification_channel_tool_approval">Подтверждение инструментов</string>
+  <string name="notification_tool_approval_title">Требуется подтверждение инструмента</string>
+  <string name="notification_tool_approval_content">Ожидающий инструмент: %1$s</string>
+  <string name="setting_display_page_tool_approval_notification">Уведомление о подтверждении инструмента</string>
+  <string name="setting_display_page_tool_approval_notification_desc">Воспроизводить звук уведомления, когда вызов инструмента ожидает подтверждения</string>
 </resources>
+

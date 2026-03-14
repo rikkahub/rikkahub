@@ -45,6 +45,7 @@ private const val TAG = "RikkaHubApp"
 
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
+const val TOOL_APPROVAL_NOTIFICATION_CHANNEL_ID = "tool_approval"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 const val SCHEDULED_TASK_NOTIFICATION_CHANNEL_ID = "scheduled_task"
 const val SCHEDULED_TASK_KEEP_ALIVE_NOTIFICATION_CHANNEL_ID = "scheduled_task_keep_alive"
@@ -199,6 +200,16 @@ class RikkaHubApp : Application() {
             .setVibrationEnabled(false)
             .build()
         notificationManager.createNotificationChannel(chatLiveUpdateChannel)
+
+        val toolApprovalChannel = NotificationChannelCompat
+            .Builder(
+                TOOL_APPROVAL_NOTIFICATION_CHANNEL_ID,
+                NotificationManagerCompat.IMPORTANCE_HIGH
+            )
+            .setName(getString(R.string.notification_channel_tool_approval))
+            .setVibrationEnabled(true)
+            .build()
+        notificationManager.createNotificationChannel(toolApprovalChannel)
 
         val webServerChannel = NotificationChannelCompat
             .Builder(WEB_SERVER_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
