@@ -950,5 +950,14 @@
   <string name="skills_page_repo_url_hint">Поддерживает пути /tree/branch или подкаталоги</string>
   <string name="skills_page_downloading">Загрузка...</string>
   <string name="skills_page_import_confirm">Импорт</string>
+  <string name="quick_messages_page_add_title">Добавить быстрое сообщение</string>
+  <string name="quick_messages_page_edit_title">Редактировать быстрое сообщение</string>
+  <string name="quick_messages_page_delete_title">Удалить быстрое сообщение</string>
+  <string name="quick_messages_page_delete_message">Вы уверены, что хотите удалить "%s"? Это действие нельзя отменить.</string>
+  <string name="quick_messages_page_empty_title">Нет быстрых сообщений</string>
+  <string name="quick_messages_page_empty_content">Нет содержимого</string>
+  <string name="quick_messages_page_empty_hint">Нажмите кнопку + в правом нижнем углу, чтобы добавить быстрое сообщение</string>
+  <string name="quick_messages_page_untitled">Без названия</string>
+  <string name="extensions_page_quick_messages_desc">Управление общими шаблонами быстрых сообщений</string>
 </resources>
 

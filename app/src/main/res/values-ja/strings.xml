@@ -957,5 +957,14 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="skills_page_repo_url_hint">/tree/branchまたはサブディレクトリパスをサポート</string>
   <string name="skills_page_downloading">ダウンロード中…</string>
   <string name="skills_page_import_confirm">インポート</string>
+  <string name="quick_messages_page_add_title">クイックメッセージを追加</string>
+  <string name="quick_messages_page_edit_title">クイックメッセージを編集</string>
+  <string name="quick_messages_page_delete_title">クイックメッセージを削除</string>
+  <string name="quick_messages_page_delete_message">"%s"を削除してもよろしいですか？この操作は元に戻せません。</string>
+  <string name="quick_messages_page_empty_title">クイックメッセージがありません</string>
+  <string name="quick_messages_page_empty_content">コンテンツがありません</string>
+  <string name="quick_messages_page_empty_hint">右下の+ボタンをタップしてクイックメッセージを追加</string>
+  <string name="quick_messages_page_untitled">無題</string>
+  <string name="extensions_page_quick_messages_desc">共有クイックメッセージテンプレートを管理</string>
 </resources>
 

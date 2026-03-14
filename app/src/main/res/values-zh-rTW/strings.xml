@@ -955,5 +955,14 @@
   <string name="skills_page_repo_url_hint">支援 /tree/branch 或子目錄路徑</string>
   <string name="skills_page_downloading">下載中…</string>
   <string name="skills_page_import_confirm">匯入</string>
+  <string name="quick_messages_page_add_title">新增快速訊息</string>
+  <string name="quick_messages_page_edit_title">編輯快速訊息</string>
+  <string name="quick_messages_page_delete_title">刪除快速訊息</string>
+  <string name="quick_messages_page_delete_message">您確定要刪除「%s」嗎？此動作無法復原。</string>
+  <string name="quick_messages_page_empty_title">無快速訊息</string>
+  <string name="quick_messages_page_empty_content">無內容</string>
+  <string name="quick_messages_page_empty_hint">點擊右下角的 + 按鈕來新增快速訊息</string>
+  <string name="quick_messages_page_untitled">未命名</string>
+  <string name="extensions_page_quick_messages_desc">管理共用的快速訊息範本</string>
 </resources>
 

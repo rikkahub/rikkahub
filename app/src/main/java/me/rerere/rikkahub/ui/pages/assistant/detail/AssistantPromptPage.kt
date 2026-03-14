@@ -75,7 +75,6 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -409,99 +408,6 @@ private fun AssistantPromptContent(
                                     role = nextRole,
                                     parts = listOf(UIMessagePart.Text(""))
                                 )
-                            )
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(HugeIcons.Add01, null)
-                }
-            }
-        }
-
-        Card(
-            colors = CustomColors.cardColorsOnSurfaceContainer
-        ) {
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_quick_messages))
-                },
-                description = {
-                    Text(stringResource(R.string.assistant_page_quick_messages_desc))
-                }
-            )
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(16.dp)
-            ) {
-                assistant.quickMessages.fastForEachIndexed { index, quickMessage ->
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OutlinedTextField(
-                                value = quickMessage.title,
-                                onValueChange = { title ->
-                                    onUpdate(
-                                        assistant.copy(
-                                            quickMessages = assistant.quickMessages.mapIndexed { i, msg ->
-                                                if (i == index) {
-                                                    msg.copy(title = title)
-                                                } else {
-                                                    msg
-                                                }
-                                            }
-                                        )
-                                    )
-                                },
-                                modifier = Modifier.weight(1f),
-                                label = { Text(stringResource(R.string.assistant_page_quick_message_title)) }
-                            )
-                            IconButton(
-                                onClick = {
-                                    onUpdate(
-                                        assistant.copy(
-                                            quickMessages = assistant.quickMessages.filterIndexed { i, _ ->
-                                                i != index
-                                            }
-                                        )
-                                    )
-                                }
-                            ) {
-                                Icon(HugeIcons.Cancel01, null)
-                            }
-                        }
-                        OutlinedTextField(
-                            value = quickMessage.content,
-                            onValueChange = { text ->
-                                onUpdate(
-                                    assistant.copy(
-                                        quickMessages = assistant.quickMessages.mapIndexed { i, msg ->
-                                            if (i == index) {
-                                                msg.copy(content = text)
-                                            } else {
-                                                msg
-                                            }
-                                        }
-                                    )
-                                )
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 6,
-                            label = { Text(stringResource(R.string.assistant_page_quick_message_content)) }
-                        )
-                    }
-                }
-                Button(
-                    onClick = {
-                        onUpdate(
-                            assistant.copy(
-                                quickMessages = assistant.quickMessages + QuickMessage()
                             )
                         )
                     },

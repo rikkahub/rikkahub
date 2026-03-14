@@ -26,6 +26,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.QuickMessage
 
 @Composable
 fun ModeInjectionsContent(
@@ -116,6 +117,43 @@ fun SkillsContent(
                     Switch(
                         checked = enabledSkills.contains(skill.name),
                         onCheckedChange = { checked -> onToggle(skill.name, checked) }
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            )
+        }
+    }
+}
+
+@Composable
+fun QuickMessagesContent(
+    quickMessages: List<QuickMessage>,
+    selectedIds: Set<kotlin.uuid.Uuid>,
+    onToggle: (kotlin.uuid.Uuid, Boolean) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        items(quickMessages, key = { it.id }) { quickMessage ->
+            ListItem(
+                headlineContent = {
+                    Text(quickMessage.title.ifBlank { stringResource(R.string.extension_content_unnamed) })
+                },
+                supportingContent = if (quickMessage.content.isNotBlank()) {
+                    {
+                        Text(
+                            text = quickMessage.content,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            maxLines = 2,
+                        )
+                    }
+                } else null,
+                trailingContent = {
+                    Switch(
+                        checked = selectedIds.contains(quickMessage.id),
+                        onCheckedChange = { checked -> onToggle(quickMessage.id, checked) }
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),

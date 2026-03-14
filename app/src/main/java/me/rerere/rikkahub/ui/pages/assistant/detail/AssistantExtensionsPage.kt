@@ -26,6 +26,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
+import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -42,7 +43,7 @@ fun AssistantExtensionsPage(id: String) {
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState { 3 }
+    val pagerState = rememberPagerState { 4 }
 
     Scaffold(
         topBar = {
@@ -68,16 +69,21 @@ fun AssistantExtensionsPage(id: String) {
                 Tab(
                     selected = pagerState.currentPage == 0,
                     onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                    text = { Text(stringResource(R.string.assistant_extensions_page_tab_mode_injections)) }
+                    text = { Text(stringResource(R.string.assistant_extensions_page_tab_quick_messages)) }
                 )
                 Tab(
                     selected = pagerState.currentPage == 1,
                     onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                    text = { Text(stringResource(R.string.assistant_extensions_page_tab_lorebooks)) }
+                    text = { Text(stringResource(R.string.assistant_extensions_page_tab_mode_injections)) }
                 )
                 Tab(
                     selected = pagerState.currentPage == 2,
                     onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
+                    text = { Text(stringResource(R.string.assistant_extensions_page_tab_lorebooks)) }
+                )
+                Tab(
+                    selected = pagerState.currentPage == 3,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(3) } },
                     text = { Text(stringResource(R.string.assistant_extensions_page_tab_skills)) }
                 )
             }
@@ -90,6 +96,26 @@ fun AssistantExtensionsPage(id: String) {
             ) { page ->
                 when (page) {
                     0 -> {
+                        if (settings.quickMessages.isEmpty()) {
+                            ExtensionEmptyState(
+                                message = stringResource(R.string.assistant_extensions_page_empty_quick_messages),
+                                buttonText = stringResource(R.string.assistant_extensions_page_goto_extensions),
+                                onAction = { navController.navigate(Screen.QuickMessages) },
+                            )
+                        } else {
+                            QuickMessagesContent(
+                                quickMessages = settings.quickMessages,
+                                selectedIds = assistant.quickMessageIds,
+                                onToggle = { quickMessageId, checked ->
+                                    val newIds = if (checked) assistant.quickMessageIds + quickMessageId
+                                    else assistant.quickMessageIds - quickMessageId
+                                    vm.update(assistant.copy(quickMessageIds = newIds))
+                                },
+                            )
+                        }
+                    }
+
+                    1 -> {
                         if (settings.modeInjections.isEmpty()) {
                             ExtensionEmptyState(
                                 message = stringResource(R.string.assistant_extensions_page_empty_mode_injections),
@@ -109,7 +135,7 @@ fun AssistantExtensionsPage(id: String) {
                         }
                     }
 
-                    1 -> {
+                    2 -> {
                         if (settings.lorebooks.isEmpty()) {
                             ExtensionEmptyState(
                                 message = stringResource(R.string.assistant_extensions_page_empty_lorebooks),
@@ -129,7 +155,7 @@ fun AssistantExtensionsPage(id: String) {
                         }
                     }
 
-                    2 -> {
+                    3 -> {
                         if (skills.isEmpty()) {
                             ExtensionEmptyState(
                                 message = stringResource(R.string.assistant_extensions_page_empty_skills),
