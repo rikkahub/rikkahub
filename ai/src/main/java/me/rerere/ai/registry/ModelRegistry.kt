@@ -63,6 +63,17 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GPT_5_CODEX = defineModel {
+        tokens("gpt", "5", "codex")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val CODEX_MINI_LATEST = defineModel {
+        exact("codex-mini-latest")
+        toolReasoningAbility()
+    }
+
     private val GEMINI_20_FLASH = defineModel {
         tokens("gemini", "2", "0", "flash")
         visionInput()
@@ -328,6 +339,8 @@ object ModelRegistry {
         GPT_5_2,
         GPT_5_3,
         GPT_5_4,
+        GPT_5_CODEX,
+        CODEX_MINI_LATEST,
         GEMINI_20_FLASH,
         GEMINI_2_5_FLASH,
         GEMINI_2_5_PRO,

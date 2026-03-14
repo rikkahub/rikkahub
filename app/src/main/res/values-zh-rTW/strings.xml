@@ -347,6 +347,8 @@
   <string name="reasoning_custom">自定義推理預算</string>
   <string name="reasoning_heavy">重度推理</string>
   <string name="reasoning_heavy_desc">模型將使用大量推理來回答問題。</string>
+  <string name="reasoning_xhigh">超重度推理</string>
+  <string name="reasoning_xhigh_desc">模型將使用超大量推理來回答問題。</string>
   <string name="reasoning_light">輕度推理</string>
   <string name="reasoning_light_desc">模型將使用少量推理來回答問題。</string>
   <string name="reasoning_medium">中度推理</string>
@@ -549,6 +551,7 @@
   <string name="setting_provider_page_reasoning">推理</string>
   <string name="setting_provider_page_response_api">Response API</string>
   <string name="setting_provider_page_response_api_warning">Response API是OpenAI新一代API，大部分提供商並不支持，如果你不知道這是什麼，不要開啟</string>
+  <string name="setting_provider_page_response_api_codex_warning">Codex 模型需要開啟 Response API</string>
   <string name="setting_provider_page_save">保存</string>
   <string name="setting_provider_page_save_success">保存成功</string>
   <string name="setting_provider_page_scan_error">錯誤: %s</string>
@@ -965,4 +968,3 @@
   <string name="quick_messages_page_untitled">未命名</string>
   <string name="extensions_page_quick_messages_desc">管理共用的快速訊息範本</string>
 </resources>
-

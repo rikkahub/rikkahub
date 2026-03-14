@@ -347,6 +347,8 @@
   <string name="reasoning_custom">自定义推理预算</string>
   <string name="reasoning_heavy">重度推理</string>
   <string name="reasoning_heavy_desc">模型将使用大量推理来回答问题。</string>
+  <string name="reasoning_xhigh">超重度推理</string>
+  <string name="reasoning_xhigh_desc">模型将使用超大量推理来回答问题。</string>
   <string name="reasoning_light">轻度推理</string>
   <string name="reasoning_light_desc">模型将使用少量推理来回答问题。</string>
   <string name="reasoning_medium">中度推理</string>
@@ -551,6 +553,7 @@
   <string name="setting_provider_page_reasoning">推理</string>
   <string name="setting_provider_page_response_api">Response API</string>
   <string name="setting_provider_page_response_api_warning">Response API是OpenAI新一代API，大部分提供商并不支持，如果你不知道这是什么，不要开启</string>
+  <string name="setting_provider_page_response_api_codex_warning">Codex 模型需要开启 Response API</string>
   <string name="setting_provider_page_save">保存</string>
   <string name="setting_provider_page_save_success">保存成功</string>
   <string name="setting_provider_page_scan_error">错误: %s</string>

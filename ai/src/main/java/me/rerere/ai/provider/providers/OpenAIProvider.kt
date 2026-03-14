@@ -44,6 +44,12 @@ class OpenAIProvider(
     private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
     private val responseAPI = ResponseAPI(client = client)
 
+    private fun requireCodexUsesResponseApi(providerSetting: ProviderSetting.OpenAI, modelId: String) {
+        if (!providerSetting.useResponseApi && modelId.contains("codex", ignoreCase = true)) {
+            // Codex 模型必须开启 Response API
+            error("Codex 模型需要开启 Response API 请在 OpenAI 提供商设置中勾选 Response API")
+        }
+    }
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
@@ -106,36 +112,44 @@ class OpenAIProvider(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): Flow<MessageChunk> = if (providerSetting.useResponseApi) {
-        responseAPI.streamText(
-            providerSetting = providerSetting,
-            messages = messages,
-            params = params
-        )
-    } else {
-        chatCompletionsAPI.streamText(
-            providerSetting = providerSetting,
-            messages = messages,
-            params = params
-        )
+    ): Flow<MessageChunk> {
+        requireCodexUsesResponseApi(providerSetting, params.model.modelId)
+
+        return if (providerSetting.useResponseApi) {
+            responseAPI.streamText(
+                providerSetting = providerSetting,
+                messages = messages,
+                params = params
+            )
+        } else {
+            chatCompletionsAPI.streamText(
+                providerSetting = providerSetting,
+                messages = messages,
+                params = params
+            )
+        }
     }
 
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): MessageChunk = if (providerSetting.useResponseApi) {
-        responseAPI.generateText(
-            providerSetting = providerSetting,
-            messages = messages,
-            params = params
-        )
-    } else {
-        chatCompletionsAPI.generateText(
-            providerSetting = providerSetting,
-            messages = messages,
-            params = params
-        )
+    ): MessageChunk {
+        requireCodexUsesResponseApi(providerSetting, params.model.modelId)
+
+        return if (providerSetting.useResponseApi) {
+            responseAPI.generateText(
+                providerSetting = providerSetting,
+                messages = messages,
+                params = params
+            )
+        } else {
+            chatCompletionsAPI.generateText(
+                providerSetting = providerSetting,
+                messages = messages,
+                params = params
+            )
+        }
     }
 
     override suspend fun generateEmbedding(

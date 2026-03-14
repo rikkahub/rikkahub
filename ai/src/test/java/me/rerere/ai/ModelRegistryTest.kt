@@ -90,4 +90,36 @@ class ModelRegistryTest {
             ModelRegistry.MODEL_ABILITIES.getData("minimax-m2.5")
         )
     }
+
+    @Test
+    fun testCodexModels() {
+        listOf(
+            "gpt-5-codex",
+            "gpt-5.2-codex",
+            "gpt-5.1-codex-max"
+        ).forEach { modelId ->
+            assertEquals(
+                listOf(Modality.TEXT, Modality.IMAGE),
+                ModelRegistry.MODEL_INPUT_MODALITIES.getData(modelId)
+            )
+            assertEquals(
+                listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+                ModelRegistry.MODEL_ABILITIES.getData(modelId)
+            )
+        }
+
+        assertEquals(
+            listOf(Modality.TEXT),
+            ModelRegistry.MODEL_INPUT_MODALITIES.getData("codex-mini-latest")
+        )
+        assertEquals(
+            listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            ModelRegistry.MODEL_ABILITIES.getData("codex-mini-latest")
+        )
+
+        assertEquals(
+            listOf(Modality.TEXT),
+            ModelRegistry.MODEL_INPUT_MODALITIES.getData("gpt-5-chat")
+        )
+    }
 }

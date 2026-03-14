@@ -82,6 +82,7 @@ fun ReasoningButton(
                     ReasoningLevel.LOW -> Icon(ReasoningLow, null)
                     ReasoningLevel.MEDIUM -> Icon(ReasoningMedium, null)
                     ReasoningLevel.HIGH -> Icon(ReasoningHigh, null)
+                    ReasoningLevel.XHIGH -> Icon(ReasoningHigh, null)
                 }
             }
             if (!onlyIcon) Text(stringResource(R.string.setting_provider_page_reasoning))
@@ -182,6 +183,21 @@ fun ReasoningPicker(
                 },
                 onClick = {
                     onUpdateReasoningTokens(32_000)
+                }
+            )
+            ReasoningLevelCard(
+                selected = currentLevel == ReasoningLevel.XHIGH,
+                icon = {
+                    Icon(ReasoningHigh, null)
+                },
+                title = {
+                    Text(stringResource(id = R.string.reasoning_xhigh))
+                },
+                description = {
+                    Text(stringResource(id = R.string.reasoning_xhigh_desc))
+                },
+                onClick = {
+                    onUpdateReasoningTokens(64_000)
                 }
             )
 
