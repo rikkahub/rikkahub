@@ -34,19 +34,19 @@ class SkillManager(
     }
 
     fun readSkillBody(skillName: String): String? {
-        val skillFile = getSkillsDir().resolve(skillName).resolve("SKILL.md")
+        val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
         if (!skillFile.exists()) return null
         return SkillFrontmatterParser.extractBody(skillFile.readText())
     }
 
     fun readSkillContent(skillName: String): String? {
-        val skillFile = getSkillsDir().resolve(skillName).resolve("SKILL.md")
+        val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
         if (!skillFile.exists()) return null
         return skillFile.readText()
     }
 
     fun saveSkill(name: String, content: String): SkillMetadata? {
-        val skillDir = getSkillsDir().resolve(name)
+        val skillDir = resolveSkillDir(name) ?: return null
         skillDir.mkdirs()
         val skillFile = skillDir.resolve("SKILL.md")
         skillFile.writeText(content)
@@ -54,7 +54,8 @@ class SkillManager(
     }
 
     suspend fun deleteSkill(name: String): Boolean = withContext(Dispatchers.IO) {
-        val deleted = getSkillsDir().resolve(name).deleteRecursively()
+        val skillDir = resolveSkillDir(name) ?: return@withContext false
+        val deleted = skillDir.deleteRecursively()
         if (deleted) {
             settingsStore.update { settings ->
                 settings.copy(
@@ -69,6 +70,15 @@ class SkillManager(
             }
         }
         deleted
+    }
+
+    fun resolveSkillFile(skillName: String, relativePath: String): File? {
+        val skillDir = resolveSkillDir(skillName) ?: return null
+        return SkillPaths.resolveSkillFile(skillDir, relativePath)
+    }
+
+    private fun resolveSkillDir(skillName: String): File? {
+        return SkillPaths.resolveSkillDir(getSkillsDir(), skillName)
     }
 
     private fun parseSkillFile(skillFile: File, skillDir: File): SkillMetadata? {
@@ -102,11 +112,13 @@ data class SkillMetadata(
 }
 
 object SkillFrontmatterParser {
+    private val frontmatterEndRegex = Regex("""\r?\n---(?:\r?\n|$)""")
+
     fun parse(content: String): Map<String, String> {
         val result = mutableMapOf<String, String>()
         if (!content.startsWith("---")) return result
-        val endIndex = content.indexOf("\n---", 3).takeIf { it >= 0 } ?: return result
-        val yaml = content.substring(4, endIndex).trim()
+        val endRange = findFrontmatterEndRange(content) ?: return result
+        val yaml = content.substring(3, endRange.first).trim()
         yaml.lines().forEach { line ->
             val colonIdx = line.indexOf(':')
             if (colonIdx > 0) {
@@ -122,7 +134,12 @@ object SkillFrontmatterParser {
 
     fun extractBody(content: String): String {
         if (!content.startsWith("---")) return content
-        val endIndex = content.indexOf("\n---", 3).takeIf { it >= 0 } ?: return content
-        return content.substring(endIndex + 4).trimStart()
+        val endRange = findFrontmatterEndRange(content) ?: return content
+        return content.substring(endRange.last + 1).trimStart('\r', '\n')
+    }
+
+    private fun findFrontmatterEndRange(content: String): IntRange? {
+        if (!content.startsWith("---")) return null
+        return frontmatterEndRegex.find(content, startIndex = 3)?.range
     }
 }

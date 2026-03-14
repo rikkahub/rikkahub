@@ -69,12 +69,8 @@ fun createSkillTools(
                     skillManager.readSkillBody(name)
                         ?: error("Skill '$name' not found")
                 } else {
-                    val skillDir = skillManager.getSkillsDir().resolve(name).canonicalFile
-                    val target = skillDir.resolve(path).canonicalFile
-                    // 防止路径穿越
-                    require(target.path.startsWith(skillDir.path)) {
-                        "Path '$path' is outside the skill directory"
-                    }
+                    val target = skillManager.resolveSkillFile(name, path)
+                        ?: error("Path '$path' is outside the skill directory")
                     require(target.exists()) { "File '$path' not found in skill '$name'" }
                     target.readText()
                 }
