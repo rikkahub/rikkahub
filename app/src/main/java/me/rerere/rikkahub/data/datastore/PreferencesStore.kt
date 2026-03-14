@@ -428,7 +428,8 @@ class SettingsStore(
     suspend fun updateAssistantInjections(
         assistantId: Uuid,
         modeInjectionIds: Set<Uuid>,
-        lorebookIds: Set<Uuid>
+        lorebookIds: Set<Uuid>,
+        quickMessageIds: Set<Uuid> = emptySet(),
     ) {
         update { settings ->
             settings.copy(
@@ -436,7 +437,8 @@ class SettingsStore(
                     if (assistant.id == assistantId) {
                         assistant.copy(
                             modeInjectionIds = modeInjectionIds,
-                            lorebookIds = lorebookIds
+                            lorebookIds = lorebookIds,
+                            quickMessageIds = quickMessageIds,
                         )
                     } else {
                         assistant

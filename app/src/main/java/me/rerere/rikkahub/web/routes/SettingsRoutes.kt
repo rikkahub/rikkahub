@@ -114,10 +114,18 @@ fun Route.settingsRoutes(
                 throw BadRequestException("lorebookIds contains unknown lorebook id")
             }
 
+            val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
+            val requestedQuickMessageIds =
+                request.quickMessageIds.map { it.toUuid("quickMessageIds") }.toSet()
+            if (!validQuickMessageIds.containsAll(requestedQuickMessageIds)) {
+                throw BadRequestException("quickMessageIds contains unknown quick message id")
+            }
+
             settingsStore.updateAssistantInjections(
                 assistantId = assistantId,
                 modeInjectionIds = requestedModeInjectionIds,
-                lorebookIds = requestedLorebookIds
+                lorebookIds = requestedLorebookIds,
+                quickMessageIds = requestedQuickMessageIds,
             )
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
         }

@@ -8,16 +8,19 @@
     "empty": "No MCP servers available"
   },
   "injection": {
-    "title": "Prompt Injection",
-    "description": "Enable mode injections and lorebooks for current assistant",
-    "update_failed": "Failed to update prompt injections",
+    "title": "Extensions",
+    "description": "Enable quick messages, mode injections and lorebooks for current assistant",
+    "update_failed": "Failed to update extensions",
+    "tab_quickmessages": "Quick Messages",
     "tab_mode": "Mode Injection",
     "tab_lorebook": "Lorebook",
     "unnamed_mode": "Unnamed Mode Injection",
     "unnamed_lorebook": "Unnamed Lorebook",
+    "unnamed_quickmessage": "Unnamed Quick Message",
     "disabled": "Disabled",
     "empty_mode": "No mode injections available",
-    "empty_lorebook": "No lorebooks available"
+    "empty_lorebook": "No lorebooks available",
+    "empty_quickmessages": "No quick messages available"
   },
   "reasoning": {
     "title": "Reasoning",

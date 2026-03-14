@@ -23,7 +23,7 @@ import { ModelList } from "~/components/input/model-list";
 import { ReasoningPickerButton } from "~/components/input/reasoning-picker";
 import { SearchPickerButton } from "~/components/input/search-picker";
 import { McpPickerButton } from "~/components/input/mcp-picker";
-import { InjectionPickerButton } from "~/components/input/injection-picker";
+import { ExtensionPickerButton } from "~/components/input/extension-picker";
 import { useSettingsStore } from "~/stores";
 import { Button } from "~/components/ui/button";
 import {
@@ -702,7 +702,7 @@ function ChatInputInner({
               <SearchPickerButton disabled={!canSwitchModel} />
               <ReasoningPickerButton disabled={!canSwitchModel} />
               <McpPickerButton disabled={!canSwitchModel} />
-              <InjectionPickerButton disabled={!canSwitchModel} />
+              <ExtensionPickerButton disabled={!canSwitchModel} />
               <QuickMessageButton
                 quickMessages={quickMessages}
                 disabled={!canUseQuickMessage}
