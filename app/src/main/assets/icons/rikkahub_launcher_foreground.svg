@@ -1,87 +1,89 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 432" width="432" height="432">
-  <g fill="none" stroke-linecap="round">
-    <circle
-      cx="216"
-      cy="216"
-      r="24"
-      stroke="#F3FCFF"
-      stroke-opacity="0.92"
-      stroke-width="6"
-      stroke-dasharray="40.2 10.1"
-      transform="rotate(18 216 216)"
-    />
-    <circle
-      cx="216"
-      cy="216"
-      r="44"
-      stroke="#E0F4FF"
-      stroke-opacity="0.86"
-      stroke-width="7.2"
-      stroke-dasharray="64.5 27.6"
-      transform="rotate(-10 216 216)"
-    />
-    <circle
-      cx="216"
-      cy="216"
-      r="68"
-      stroke="#BFE5FF"
-      stroke-opacity="0.8"
-      stroke-width="8.5"
-      stroke-dasharray="83.1 59.3"
-      transform="rotate(-38 216 216)"
-    />
-    <circle
-      cx="216"
-      cy="216"
-      r="96"
-      stroke="#A0D2FF"
-      stroke-opacity="0.74"
-      stroke-width="9.8"
-      stroke-dasharray="93.8 107.2"
-      transform="rotate(-68 216 216)"
-    />
-    <circle
-      cx="216"
-      cy="216"
-      r="128"
-      stroke="#88C5FF"
-      stroke-opacity="0.68"
-      stroke-width="11"
-      stroke-dasharray="93.8 174.3"
-      transform="rotate(-98 216 216)"
-    />
-  </g>
+  <g transform="translate(216 216) scale(0.95) translate(-216 -216)">
+    <g fill="none" stroke-linecap="round">
+      <circle
+        cx="216"
+        cy="216"
+        r="24"
+        stroke="#F3FCFF"
+        stroke-opacity="0.92"
+        stroke-width="6"
+        stroke-dasharray="40.2 10.1"
+        transform="rotate(18 216 216)"
+      />
+      <circle
+        cx="216"
+        cy="216"
+        r="44"
+        stroke="#E0F4FF"
+        stroke-opacity="0.86"
+        stroke-width="7.2"
+        stroke-dasharray="64.5 27.6"
+        transform="rotate(-10 216 216)"
+      />
+      <circle
+        cx="216"
+        cy="216"
+        r="68"
+        stroke="#BFE5FF"
+        stroke-opacity="0.8"
+        stroke-width="8.5"
+        stroke-dasharray="83.1 59.3"
+        transform="rotate(-38 216 216)"
+      />
+      <circle
+        cx="216"
+        cy="216"
+        r="96"
+        stroke="#A0D2FF"
+        stroke-opacity="0.74"
+        stroke-width="9.8"
+        stroke-dasharray="93.8 107.2"
+        transform="rotate(-68 216 216)"
+      />
+      <circle
+        cx="216"
+        cy="216"
+        r="128"
+        stroke="#88C5FF"
+        stroke-opacity="0.68"
+        stroke-width="11"
+        stroke-dasharray="93.8 174.3"
+        transform="rotate(-98 216 216)"
+      />
+    </g>
 
-  <g fill="#F6FCFF">
-    <circle cx="205.7" cy="237.9" r="2.4" />
-    <circle cx="191.8" cy="254.7" r="2.8" />
-    <circle cx="194.5" cy="281.7" r="3.2" />
-    <circle cx="249" cy="307.1" r="3.8" />
-    <circle cx="289" cy="321.2" r="4.4" />
-    <circle cx="240.2" cy="216.9" r="2.6" />
-    <circle cx="257.9" cy="199.3" r="3" />
-    <circle cx="284.9" cy="191.8" r="3.5" />
-    <circle cx="311.1" cy="198.3" r="4" />
-    <circle cx="335.8" cy="231.7" r="4.5" />
-    <circle cx="202.1" cy="193.8" r="2.4" />
-    <circle cx="198.3" cy="174.1" r="2.9" />
-    <circle cx="168.6" cy="165.6" r="3.3" />
-    <circle cx="145.4" cy="140.6" r="3.8" />
-    <circle cx="135.7" cy="95.5" r="4.4" />
-  </g>
+    <g fill="#F6FCFF">
+      <circle cx="205.7" cy="237.9" r="2.4" />
+      <circle cx="191.8" cy="254.7" r="2.8" />
+      <circle cx="194.5" cy="281.7" r="3.2" />
+      <circle cx="249" cy="307.1" r="3.8" />
+      <circle cx="289" cy="321.2" r="4.4" />
+      <circle cx="240.2" cy="216.9" r="2.6" />
+      <circle cx="257.9" cy="199.3" r="3" />
+      <circle cx="284.9" cy="191.8" r="3.5" />
+      <circle cx="311.1" cy="198.3" r="4" />
+      <circle cx="335.8" cy="231.7" r="4.5" />
+      <circle cx="202.1" cy="193.8" r="2.4" />
+      <circle cx="198.3" cy="174.1" r="2.9" />
+      <circle cx="168.6" cy="165.6" r="3.3" />
+      <circle cx="145.4" cy="140.6" r="3.8" />
+      <circle cx="135.7" cy="95.5" r="4.4" />
+    </g>
 
-  <g stroke="#F4FBFF" stroke-linecap="round">
-    <path d="M216 190 V242" stroke-width="3.2" stroke-opacity="0.34" />
-    <path d="M190 216 H242" stroke-width="3.2" stroke-opacity="0.26" />
-  </g>
+    <g stroke="#F4FBFF" stroke-linecap="round">
+      <path d="M216 190 V242" stroke-width="3.2" stroke-opacity="0.34" />
+      <path d="M190 216 H242" stroke-width="3.2" stroke-opacity="0.26" />
+    </g>
 
-  <g fill="#FFFFFF">
-    <circle cx="146.8" cy="157.2" r="1.4" opacity="0.5" />
-    <circle cx="295.6" cy="136.4" r="2.2" opacity="0.8" />
-    <circle cx="305.9" cy="288.6" r="1.8" opacity="0.6" />
-    <circle cx="133" cy="271.4" r="1.1" opacity="0.4" />
-  </g>
+    <g fill="#FFFFFF">
+      <circle cx="146.8" cy="157.2" r="1.4" opacity="0.5" />
+      <circle cx="295.6" cy="136.4" r="2.2" opacity="0.8" />
+      <circle cx="305.9" cy="288.6" r="1.8" opacity="0.6" />
+      <circle cx="133" cy="271.4" r="1.1" opacity="0.4" />
+    </g>
 
-  <circle cx="216" cy="216" r="6" fill="#FFFFFF" />
-  <circle cx="216" cy="216" r="2.5" fill="#88CFFF" />
+    <circle cx="216" cy="216" r="6" fill="#FFFFFF" />
+    <circle cx="216" cy="216" r="2.5" fill="#88CFFF" />
+  </g>
 </svg>
