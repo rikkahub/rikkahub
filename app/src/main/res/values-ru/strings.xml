@@ -1240,4 +1240,11 @@
   <string name="quick_messages_page_empty_hint">Нажмите кнопку + в правом нижнем углу, чтобы добавить быстрое сообщение</string>
   <string name="quick_messages_page_untitled">Без названия</string>
   <string name="quick_messages_page_more_actions">Дополнительные действия</string>
+  <string name="setting_provider_page_import_success_count">Импортировано %1$d поставщиков</string>
+  <string name="setting_provider_page_selected">Выбрано</string>
+  <string name="setting_provider_page_selected_count">Выбрано: %1$d</string>
+  <string name="setting_provider_page_deselect_all">Снять выделение со всех</string>
+  <string name="provider_share_sheet_models_not_included">Общие поставщики не включают списки моделей.</string>
+  <string name="provider_share_sheet_qr_unavailable">Этот набор слишком велик для QR-кода. Используйте системный способ отправки.</string>
 </resources>
+

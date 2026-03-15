@@ -1240,4 +1240,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="quick_messages_page_empty_hint">右下の＋ボタンをタップしてクイックメッセージを追加してください</string>
   <string name="quick_messages_page_untitled">無題</string>
   <string name="quick_messages_page_more_actions">その他の操作</string>
+  <string name="setting_provider_page_import_success_count">%1$d 件のプロバイダーをインポートしました</string>
+  <string name="setting_provider_page_selected">選択済み</string>
+  <string name="setting_provider_page_selected_count">%1$d 件を選択中</string>
+  <string name="setting_provider_page_deselect_all">すべての選択を解除</string>
+  <string name="provider_share_sheet_models_not_included">共有されたプロバイダーにはモデル一覧が含まれていません。</string>
+  <string name="provider_share_sheet_qr_unavailable">この選択内容は大きすぎて QR コードに収まりません。代わりにシステム共有を使用してください。</string>
 </resources>
+
