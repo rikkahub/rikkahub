@@ -40,8 +40,8 @@ private fun VortexLoadingIndicator(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "vortex_loading")
     val globalRotation = transition.animateFloat(
         initialValue = 0f,
-        // Keep the head moving into the open arc so the trail follows behind it.
-        targetValue = -360f,
+        // Spin clockwise while keeping each arm's trail behind the bright head.
+        targetValue = 360f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1800, easing = LinearEasing)
         ),
@@ -90,12 +90,12 @@ private fun VortexLoadingIndicator(modifier: Modifier = Modifier) {
             val sweepFraction = (sweepAngle / 360f).coerceIn(0.08f, 0.95f)
             return Brush.sweepGradient(
                 colorStops = arrayOf(
-                    0f to headColor,
-                    sweepFraction * 0.16f to tailColor.copy(alpha = 0.92f),
-                    sweepFraction * 0.48f to tailColor.copy(alpha = 0.4f),
-                    sweepFraction * 0.82f to tailColor.copy(alpha = 0.08f),
-                    sweepFraction to Color.Transparent,
-                    1f to Color.Transparent,
+                    0f to Color.Transparent,
+                    1f - sweepFraction to Color.Transparent,
+                    1f - (sweepFraction * 0.82f) to tailColor.copy(alpha = 0.08f),
+                    1f - (sweepFraction * 0.48f) to tailColor.copy(alpha = 0.4f),
+                    1f - (sweepFraction * 0.16f) to tailColor.copy(alpha = 0.92f),
+                    1f to headColor,
                 ),
                 center = trailCenter
             )
@@ -121,7 +121,7 @@ private fun VortexLoadingIndicator(modifier: Modifier = Modifier) {
                             headColor = headColor,
                             tailColor = tailColor,
                         ),
-                        startAngle = 0f,
+                        startAngle = -sweepAngle,
                         sweepAngle = sweepAngle,
                         useCenter = false,
                         topLeft = arcTopLeft,
