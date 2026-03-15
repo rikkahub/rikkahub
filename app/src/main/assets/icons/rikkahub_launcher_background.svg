@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 432" width="432" height="432">
+  <defs>
+    <radialGradient id="bg" cx="216" cy="216" r="248" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#19253B" />
+      <stop offset="0.44" stop-color="#0D1728" />
+      <stop offset="1" stop-color="#040811" />
+    </radialGradient>
+    <radialGradient id="coreGlow" cx="216" cy="216" r="118" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#78CBFF" stop-opacity="0.18" />
+      <stop offset="0.46" stop-color="#78CBFF" stop-opacity="0.05" />
+      <stop offset="1" stop-color="#78CBFF" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="vignette" cx="216" cy="216" r="248" gradientUnits="userSpaceOnUse">
+      <stop offset="0.72" stop-color="#000000" stop-opacity="0" />
+      <stop offset="1" stop-color="#000000" stop-opacity="0.28" />
+    </radialGradient>
+  </defs>
+
+  <rect width="432" height="432" fill="url(#bg)" />
+  <rect width="432" height="432" fill="url(#coreGlow)" />
+  <rect width="432" height="432" fill="url(#vignette)" />
+</svg>

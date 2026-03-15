@@ -513,9 +513,9 @@ private fun ExportedChatImage(
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Image(
-                                painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                                painter = painterResource(id = R.mipmap.ic_launcher),
                                 contentDescription = APP_DISPLAY_NAME,
-                                modifier = Modifier.padding(8.dp)
+                                modifier = Modifier.padding(4.dp)
                             )
                         }
                     }

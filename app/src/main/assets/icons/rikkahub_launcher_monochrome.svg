@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 432" width="432" height="432">
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round">
+    <circle
+      cx="216"
+      cy="216"
+      r="28"
+      stroke-width="7.6"
+      stroke-dasharray="46.9 11.7"
+      transform="rotate(18 216 216)"
+    />
+    <circle
+      cx="216"
+      cy="216"
+      r="52"
+      stroke-width="9"
+      stroke-dasharray="76.2 32.7"
+      transform="rotate(-10 216 216)"
+    />
+    <circle
+      cx="216"
+      cy="216"
+      r="80"
+      stroke-width="10.5"
+      stroke-dasharray="97.7 69.8"
+      transform="rotate(-38 216 216)"
+    />
+    <circle
+      cx="216"
+      cy="216"
+      r="112"
+      stroke-width="12"
+      stroke-dasharray="109.5 125.1"
+      transform="rotate(-68 216 216)"
+    />
+    <circle
+      cx="216"
+      cy="216"
+      r="148"
+      stroke-width="13.5"
+      stroke-dasharray="108.5 201.5"
+      transform="rotate(-98 216 216)"
+    />
+    <path d="M216 186 V246" stroke-width="4.4" />
+    <path d="M186 216 H246" stroke-width="4.4" />
+  </g>
+
+  <g fill="#FFFFFF">
+    <circle cx="204.1" cy="241.3" r="3.2" />
+    <circle cx="188" cy="260.8" r="3.6" />
+    <circle cx="191.1" cy="292" r="4.2" />
+    <circle cx="254.2" cy="321.3" r="4.8" />
+    <circle cx="300.4" cy="337.6" r="5.4" />
+    <circle cx="244" cy="217" r="3.4" />
+    <circle cx="264.5" cy="196.7" r="3.8" />
+    <circle cx="295.7" cy="188" r="4.4" />
+    <circle cx="326" cy="195.5" r="4.9" />
+    <circle cx="354.5" cy="234.1" r="5.6" />
+    <circle cx="199.9" cy="190.3" r="3.2" />
+    <circle cx="195.5" cy="167.6" r="3.6" />
+    <circle cx="161.2" cy="157.7" r="4.2" />
+    <circle cx="134.4" cy="128.8" r="4.8" />
+    <circle cx="123.1" cy="76.7" r="5.4" />
+    <circle cx="136" cy="148" r="1.8" />
+    <circle cx="308" cy="124" r="2.7" />
+    <circle cx="320" cy="300" r="2.2" />
+    <circle cx="120" cy="280" r="1.5" />
+    <circle cx="216" cy="216" r="6.8" />
+  </g>
+</svg>

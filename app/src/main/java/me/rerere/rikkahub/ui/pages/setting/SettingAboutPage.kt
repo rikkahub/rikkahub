@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -112,7 +112,7 @@ fun SettingAboutPage() {
                             model = R.mipmap.ic_launcher,
                             contentDescription = "Logo",
                             modifier = Modifier
-                                .clip(CircleShape)
+                                .clip(RoundedCornerShape(32.dp))
                                 .size(150.dp)
                                 .onGloballyPositioned { coordinates ->
                                     val position = coordinates.positionInParent()

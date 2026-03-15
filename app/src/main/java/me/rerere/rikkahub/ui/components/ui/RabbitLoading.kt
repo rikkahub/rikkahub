@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -15,10 +16,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.luminance
 import me.rerere.rikkahub.ui.context.LocalSettings
 
 @Composable
@@ -26,7 +27,7 @@ fun RabbitLoadingIndicator(modifier: Modifier = Modifier) {
     val useAppIconStyleLoadingIndicator = LocalSettings.current.displaySetting.useAppIconStyleLoadingIndicator
 
     if (useAppIconStyleLoadingIndicator) {
-        OrbitLoadingIndicator(modifier = modifier)
+        VortexLoadingIndicator(modifier = modifier)
     } else {
         ContainedLoadingIndicator(
             modifier = modifier,
@@ -35,196 +36,161 @@ fun RabbitLoadingIndicator(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun OrbitLoadingIndicator(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "lune_loading")
-    val outerRotation = transition.animateFloat(
+private fun VortexLoadingIndicator(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "vortex_loading")
+    val globalRotation = transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 12000, easing = LinearEasing)
+            animation = tween(durationMillis = 1800, easing = LinearEasing)
         ),
-        label = "outer_rotation"
+        label = "global_rotation"
     )
-    val middleRotation = transition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
+    val corePulse = transition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 8200, easing = LinearEasing)
-        ),
-        label = "middle_rotation"
-    )
-    val innerRotation = transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 5600, easing = LinearEasing)
-        ),
-        label = "inner_rotation"
-    )
-    val pulse = transition.animateFloat(
-        initialValue = 0.72f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1400, easing = LinearEasing),
+            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "pulse"
+        label = "core_pulse"
+    )
+    val glowPulse = transition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow_pulse"
     )
 
-    val orbitPrimary = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) {
-        Color(0xFF00A8D6)
-    } else {
-        Color(0xFF3BE7FF)
-    }
-    val orbitSecondary = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) {
-        Color(0xFF4E66F5)
-    } else {
-        Color(0xFF8EA2FF)
-    }
-    val glowPrimary = Color(0xFF00D4FF)
-    val glowSecondary = Color(0xFF6D8BFF)
+    val isLightBackground = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    val primaryHead = if (isLightBackground) Color(0xFF0E82AB) else Color(0xFFF3FCFF)
+    val primaryTail = if (isLightBackground) Color(0xFF5CC7EA) else Color(0xFF8FD9FF)
+    val secondaryHead = if (isLightBackground) Color(0xFF3469DB) else Color(0xFFE5F6FF)
+    val secondaryTail = if (isLightBackground) Color(0xFF96BCFF) else Color(0xFFAAD8FF)
+    val coreColor = if (isLightBackground) Color(0xFF1490C4) else Color(0xFFFFFFFF)
+    val coreGlow = if (isLightBackground) Color(0x334EB9FF) else Color(0x3D8FD8FF)
 
     Canvas(modifier = modifier) {
         val minSide = size.minDimension
         if (minSide <= 0f) return@Canvas
 
-        val strokeOuter = minSide * 0.12f
-        val strokeMiddle = minSide * 0.1f
-        val strokeInner = minSide * 0.09f
-        val centerDot = minSide * 0.05f
+        val trailCenter = center
+        val maxRadius = minSide * 0.42f
+        val coreRadius = minSide * 0.052f
 
-        fun ring(sizeFactor: Float): Pair<Offset, Size> {
-            val ringSize = minSide * sizeFactor
-            val topLeft = Offset(
-                x = center.x - ringSize / 2f,
-                y = center.y - ringSize / 2f
-            )
-            return topLeft to Size(ringSize, ringSize)
-        }
-
-        fun drawOrbit(
-            topLeft: Offset,
-            arcSize: Size,
-            startAngle: Float,
+        fun trailBrush(
             sweepAngle: Float,
+            headColor: Color,
+            tailColor: Color,
+        ): Brush {
+            val sweepFraction = (sweepAngle / 360f).coerceIn(0.08f, 0.95f)
+            return Brush.sweepGradient(
+                colorStops = arrayOf(
+                    0f to headColor,
+                    sweepFraction * 0.16f to tailColor.copy(alpha = 0.92f),
+                    sweepFraction * 0.48f to tailColor.copy(alpha = 0.4f),
+                    sweepFraction * 0.82f to tailColor.copy(alpha = 0.08f),
+                    sweepFraction to Color.Transparent,
+                    1f to Color.Transparent,
+                ),
+                center = trailCenter
+            )
+        }
+
+        fun drawRing(
+            radius: Float,
             strokeWidth: Float,
-            orbitColor: Color,
-            glowColor: Color,
-            glowBoost: Float = 1f,
+            sweepAngle: Float,
+            ringOffsetAngle: Float,
+            headColor: Color,
+            tailColor: Color,
         ) {
-            drawArc(
-                color = glowColor.copy(alpha = 0.12f * glowBoost),
-                startAngle = startAngle,
-                sweepAngle = sweepAngle,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeWidth * 2.2f, cap = StrokeCap.Round)
-            )
-            drawArc(
-                color = glowColor.copy(alpha = 0.18f * glowBoost),
-                startAngle = startAngle,
-                sweepAngle = sweepAngle,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeWidth * 1.6f, cap = StrokeCap.Round)
-            )
-            drawArc(
-                color = orbitColor,
-                startAngle = startAngle,
-                sweepAngle = sweepAngle,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-            )
+            val arcTopLeft = Offset(trailCenter.x - radius, trailCenter.y - radius)
+            val arcSize = Size(radius * 2f, radius * 2f)
+
+            for (arm in 0 until 3) {
+                val armRotation = globalRotation.value + ringOffsetAngle + arm * 120f
+                rotate(armRotation, trailCenter) {
+                    drawArc(
+                        brush = trailBrush(
+                            sweepAngle = sweepAngle,
+                            headColor = headColor,
+                            tailColor = tailColor,
+                        ),
+                        startAngle = 0f,
+                        sweepAngle = sweepAngle,
+                        useCenter = false,
+                        topLeft = arcTopLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                    )
+                    drawCircle(
+                        color = headColor.copy(alpha = 0.98f),
+                        center = Offset(trailCenter.x + radius, trailCenter.y),
+                        radius = strokeWidth * 0.46f
+                    )
+                }
+            }
         }
 
-        rotate(outerRotation.value, center) {
-            val (topLeft, arcSize) = ring(0.86f)
-            drawOrbit(
-                topLeft = topLeft,
-                arcSize = arcSize,
-                startAngle = 16f,
-                sweepAngle = 208f,
-                strokeWidth = strokeOuter,
-                orbitColor = orbitPrimary,
-                glowColor = glowPrimary,
-                glowBoost = 1.15f,
-            )
-            drawOrbit(
-                topLeft = topLeft,
-                arcSize = arcSize,
-                startAngle = 272f,
-                sweepAngle = 46f,
-                strokeWidth = strokeOuter * 0.8f,
-                orbitColor = orbitSecondary,
-                glowColor = glowSecondary,
-            )
-        }
-
-        rotate(middleRotation.value, center) {
-            val (topLeft, arcSize) = ring(0.64f)
-            drawOrbit(
-                topLeft = topLeft,
-                arcSize = arcSize,
-                startAngle = 58f,
-                sweepAngle = 152f,
-                strokeWidth = strokeMiddle,
-                orbitColor = orbitSecondary,
-                glowColor = glowSecondary,
-                glowBoost = 1.1f,
-            )
-            drawOrbit(
-                topLeft = topLeft,
-                arcSize = arcSize,
-                startAngle = 238f,
-                sweepAngle = 74f,
-                strokeWidth = strokeMiddle * 0.85f,
-                orbitColor = orbitPrimary,
-                glowColor = glowPrimary,
-            )
-        }
-
-        rotate(innerRotation.value, center) {
-            val (topLeft, arcSize) = ring(0.42f)
-            drawOrbit(
-                topLeft = topLeft,
-                arcSize = arcSize,
-                startAngle = 34f,
-                sweepAngle = 120f,
-                strokeWidth = strokeInner,
-                orbitColor = orbitPrimary,
-                glowColor = glowPrimary,
-                glowBoost = 1.2f,
-            )
-            drawOrbit(
-                topLeft = topLeft,
-                arcSize = arcSize,
-                startAngle = 214f,
-                sweepAngle = 88f,
-                strokeWidth = strokeInner,
-                orbitColor = orbitSecondary,
-                glowColor = glowSecondary,
-            )
-        }
+        drawRing(
+            radius = maxRadius * 0.3f,
+            strokeWidth = minSide * 0.045f,
+            sweepAngle = 90f,
+            ringOffsetAngle = 0f,
+            headColor = primaryHead,
+            tailColor = primaryTail,
+        )
+        drawRing(
+            radius = maxRadius * 0.53f,
+            strokeWidth = minSide * 0.04f,
+            sweepAngle = 70f,
+            ringOffsetAngle = -30f,
+            headColor = secondaryHead,
+            tailColor = secondaryTail,
+        )
+        drawRing(
+            radius = maxRadius * 0.76f,
+            strokeWidth = minSide * 0.035f,
+            sweepAngle = 45f,
+            ringOffsetAngle = -60f,
+            headColor = primaryHead,
+            tailColor = primaryTail,
+        )
 
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    glowPrimary.copy(alpha = 0.28f * pulse.value),
-                    glowSecondary.copy(alpha = 0.16f * pulse.value),
+                    coreGlow.copy(alpha = 0.75f * glowPulse.value),
                     Color.Transparent
                 ),
-                center = center,
-                radius = centerDot * 3.4f
+                center = trailCenter,
+                radius = coreRadius * 3.8f
             ),
-            radius = centerDot * 3.4f
+            center = trailCenter,
+            radius = coreRadius * 3.8f
+        )
+        drawLine(
+            color = coreColor.copy(alpha = 0.28f * glowPulse.value),
+            start = Offset(trailCenter.x - coreRadius * 2f, trailCenter.y),
+            end = Offset(trailCenter.x + coreRadius * 2f, trailCenter.y),
+            strokeWidth = coreRadius * 0.32f,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = coreColor.copy(alpha = 0.2f * glowPulse.value),
+            start = Offset(trailCenter.x, trailCenter.y - coreRadius * 2f),
+            end = Offset(trailCenter.x, trailCenter.y + coreRadius * 2f),
+            strokeWidth = coreRadius * 0.26f,
+            cap = StrokeCap.Round
         )
         drawCircle(
-            color = orbitPrimary.copy(alpha = 0.72f + pulse.value * 0.18f),
-            radius = centerDot * pulse.value
+            color = coreColor.copy(alpha = 0.96f),
+            center = trailCenter,
+            radius = coreRadius * corePulse.value
         )
     }
 }
