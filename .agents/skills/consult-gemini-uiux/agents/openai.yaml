@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gemini UI/UX Advisor"
+  short_description: "Ask Gemini for UI/UX and frontend design input"
+  default_prompt: "Use $consult-gemini-uiux to get a Gemini second opinion on UI/UX, visual polish, and frontend implementation before coding."
