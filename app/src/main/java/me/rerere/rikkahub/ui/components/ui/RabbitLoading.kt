@@ -40,7 +40,8 @@ private fun VortexLoadingIndicator(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "vortex_loading")
     val globalRotation = transition.animateFloat(
         initialValue = 0f,
-        targetValue = 360f,
+        // Keep the head moving into the open arc so the trail follows behind it.
+        targetValue = -360f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1800, easing = LinearEasing)
         ),

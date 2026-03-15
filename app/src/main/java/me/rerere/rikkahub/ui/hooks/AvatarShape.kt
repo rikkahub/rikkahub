@@ -17,7 +17,7 @@ fun rememberAvatarShape(loading: Boolean): Shape {
     val infiniteTransition = rememberInfiniteTransition()
     val rotateAngle = infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 360f,
+        targetValue = -360f,
         animationSpec = infiniteRepeatable(
             animation = tween(
                 durationMillis = 3000,
