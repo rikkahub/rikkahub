@@ -115,7 +115,6 @@ import me.rerere.hugeicons.stroke.FileZip
 import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.MusicNote03
-import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.hugeicons.stroke.WebProgramming
 import me.rerere.hugeicons.stroke.Zap
@@ -132,7 +131,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
-import me.rerere.rikkahub.ui.components.ui.ExtensionSelector
+import me.rerere.rikkahub.ui.components.ui.InjectionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
@@ -892,34 +891,35 @@ private fun FilesPicker(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Extensions (Quick Messages + Prompt Injections + Skills)
-        val activeCount =
-            assistant.quickMessageIds.size + assistant.modeInjectionIds.size + assistant.lorebookIds.size + assistant.enabledSkills.size
-        ListItem(
-            leadingContent = {
-                Icon(
-                    imageVector = HugeIcons.Package,
-                    contentDescription = stringResource(R.string.assistant_page_tab_extensions),
-                )
-            },
-            headlineContent = {
-                Text(stringResource(R.string.assistant_page_tab_extensions))
-            },
-            trailingContent = {
-                if (activeCount > 0) {
-                    Text(
-                        text = activeCount.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+        // Prompt Injections
+        if (settings.modeInjections.isNotEmpty() || settings.lorebooks.isNotEmpty()) {
+            val activeCount = assistant.modeInjectionIds.size + assistant.lorebookIds.size
+            ListItem(
+                leadingContent = {
+                    Icon(
+                        imageVector = HugeIcons.Book03,
+                        contentDescription = stringResource(R.string.chat_page_prompt_injections),
                     )
-                }
-            },
-            modifier = Modifier
-                .clip(MaterialTheme.shapes.large)
-                .clickable {
-                    onShowInjectionSheetChange(true)
                 },
-        )
+                headlineContent = {
+                    Text(stringResource(R.string.chat_page_prompt_injections))
+                },
+                trailingContent = {
+                    if (activeCount > 0) {
+                        Text(
+                            text = activeCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.large)
+                    .clickable {
+                        onShowInjectionSheetChange(true)
+                    },
+            )
+        }
 
         // Compress History Button
         ListItem(
@@ -1448,18 +1448,11 @@ private fun InjectionQuickConfigSheet(
                 .fillMaxHeight(0.75f)
                 .padding(horizontal = 16.dp),
         ) {
-            ExtensionSelector(
+            InjectionSelector(
                 assistant = assistant,
                 settings = settings,
                 onUpdate = onUpdateAssistant,
                 modifier = Modifier.weight(1f),
-                onNavigateToQuickMessages = {
-                    scope.launch {
-                        sheetState.hide()
-                        onDismiss()
-                        navController.navigate(Screen.QuickMessages)
-                    }
-                },
                 onNavigateToPrompts = {
                     scope.launch {
                         sheetState.hide()
@@ -1467,13 +1460,6 @@ private fun InjectionQuickConfigSheet(
                         navController.navigate(Screen.Prompts)
                     }
                 },
-                onNavigateToSkills = {
-                    scope.launch {
-                        sheetState.hide()
-                        onDismiss()
-                        navController.navigate(Screen.Skills)
-                    }
-                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))

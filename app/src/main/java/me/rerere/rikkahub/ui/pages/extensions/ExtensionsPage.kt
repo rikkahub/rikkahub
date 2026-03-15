@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.stroke.Book03
-import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -65,12 +64,6 @@ fun ExtensionsPage() {
                         leadingContent = { Icon(HugeIcons.Book03, null) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_prompts)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_prompts_desc)) },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.Skills) },
-                        leadingContent = { Icon(HugeIcons.Puzzle, null) },
-                        headlineContent = { Text(stringResource(R.string.extensions_page_agent_skills)) },
-                        supportingContent = { Text(stringResource(R.string.extensions_page_agent_skills_desc)) },
                     )
                 }
             }

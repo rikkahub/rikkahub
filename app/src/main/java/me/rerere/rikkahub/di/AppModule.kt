@@ -118,7 +118,6 @@ val appModule = module {
             termuxPtySessionManager = get(),
             mcpManager = get(),
             filesManager = get(),
-            skillManager = get()
         )
     }
 

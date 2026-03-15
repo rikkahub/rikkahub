@@ -48,7 +48,6 @@ data class Assistant(
     val messageInjectionTemplate: MessageInjectionTemplate = MessageInjectionTemplate.default(),
     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
-    val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val openAIReasoningEffort: String = "",
 )
