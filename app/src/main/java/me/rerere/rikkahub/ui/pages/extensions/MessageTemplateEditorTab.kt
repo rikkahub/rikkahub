@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.prompts
+package me.rerere.rikkahub.ui.pages.extensions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

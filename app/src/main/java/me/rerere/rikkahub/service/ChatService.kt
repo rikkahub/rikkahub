@@ -59,6 +59,7 @@ import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
+import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxDirectCommandParseResult
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxDirectCommandParser
@@ -69,6 +70,7 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxResult
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
 import me.rerere.rikkahub.data.ai.tools.termux.isSuccessful
+import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTemplateInjectionTransformer
@@ -158,6 +160,7 @@ class ChatService(
     private val termuxPtySessionManager: TermuxPtySessionManager,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
+    private val skillManager: SkillManager,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -778,6 +781,16 @@ class ChatService(
                 tools = buildList {
                     if (settings.enableWebSearch) {
                         addAll(createSearchTools(settings))
+                    }
+                    addAll(localTools.getTools(assistant.localTools, assistant))
+                    if (assistant.enabledSkills.isNotEmpty()) {
+                        addAll(
+                            createSkillTools(
+                                enabledSkills = assistant.enabledSkills,
+                                allSkills = skillManager.listSkills(),
+                                skillManager = skillManager,
+                            )
+                        )
                     }
                     addAll(localTools.getTools(assistant.localTools, assistant))
                     mcpTools.forEach { tool ->

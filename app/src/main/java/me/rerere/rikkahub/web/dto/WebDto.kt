@@ -81,6 +81,7 @@ data class UpdateAssistantInjectionsRequest(
     val assistantId: String,
     val modeInjectionIds: List<String>,
     val lorebookIds: List<String>,
+    val quickMessageIds: List<String> = emptyList(),
 )
 
 @Serializable

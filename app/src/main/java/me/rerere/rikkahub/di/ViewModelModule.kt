@@ -12,7 +12,9 @@ import me.rerere.rikkahub.ui.pages.search.SearchVM
 import me.rerere.rikkahub.ui.pages.history.HistoryVM
 import me.rerere.rikkahub.ui.pages.stats.StatsVM
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenVM
-import me.rerere.rikkahub.ui.pages.prompts.PromptVM
+import me.rerere.rikkahub.ui.pages.extensions.PromptVM
+import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesVM
+import me.rerere.rikkahub.ui.pages.extensions.SkillsVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
@@ -45,6 +47,7 @@ val viewModelModule = module {
             memoryRepository = get(),
             filesManager = get(),
             skillsRepository = get(),
+            skillManager = get(),
         )
     }
     viewModelOf(::TranslatorVM)
@@ -58,6 +61,8 @@ val viewModelModule = module {
     viewModelOf(::ImgGenVM)
     viewModelOf(::DeveloperVM)
     viewModelOf(::PromptVM)
+    viewModelOf(::QuickMessagesVM)
+    viewModelOf(::SkillsVM)
     viewModelOf(::FavoriteVM)
     viewModelOf(::SearchVM)
     viewModelOf(::StatsVM)

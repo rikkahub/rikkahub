@@ -38,6 +38,12 @@ export interface AssistantQuickMessage {
   content: string;
 }
 
+export interface QuickMessage {
+  id: string;
+  title: string;
+  content: string;
+}
+
 export interface ModeInjectionProfile {
   id: string;
   name: string;
@@ -64,7 +70,7 @@ export interface AssistantProfile {
   avatar?: AssistantAvatar;
   useAssistantAvatar?: boolean;
   tags: string[];
-  quickMessages?: AssistantQuickMessage[];
+  quickMessageIds?: string[];
   [key: string]: unknown;
 }
 
@@ -145,6 +151,7 @@ export interface Settings {
   lorebooks?: LorebookProfile[];
   mcpServers: McpServerConfig[];
   searchServices: SearchServiceOption[];
+  quickMessages?: QuickMessage[];
   searchServiceSelected: number;
   [key: string]: unknown;
 }

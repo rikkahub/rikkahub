@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.components.ui
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -96,7 +95,7 @@ fun UIAvatar(
     var urlInput by remember { mutableStateOf("") }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
+        contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
             val localUris = filesManager.createChatFilesByContents(listOf(it))
@@ -195,7 +194,7 @@ fun UIAvatar(
                     Button(
                         onClick = {
                             showPickOption = false
-                            imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            imagePickerLauncher.launch("image/*")
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {

@@ -187,6 +187,7 @@ class LocalTools(
             description = """
                 Read or write plain text from the device clipboard.
                 Use action: read or write. For write, provide text.
+                Do NOT write to the clipboard unless the user has explicitly requested it.
             """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(

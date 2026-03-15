@@ -54,7 +54,7 @@ import me.rerere.hugeicons.stroke.ImageUpload
 import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.Megaphone01
-import me.rerere.hugeicons.stroke.SecurityWarning
+import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share04
@@ -180,10 +180,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_scheduled_tasks)) },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.Prompts) },
-                        leadingContent = { Icon(HugeIcons.Book03, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_prompts_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_prompts_title)) },
+                        onClick = { navController.navigate(Screen.Extensions) },
+                        leadingContent = { Icon(HugeIcons.Package, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_extensions_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_extensions)) },
                     )
                 }
             }

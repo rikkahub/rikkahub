@@ -74,6 +74,7 @@ import me.rerere.rikkahub.data.ai.tools.LocalToolCatalog
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.model.ScheduleType
 import me.rerere.rikkahub.data.model.ScheduledPromptTask
 import me.rerere.rikkahub.data.model.TaskRunStatus
@@ -479,6 +480,12 @@ private fun TaskEditorSheet(
 
     val assistants = remember(settings.assistants) { settings.assistants }
     val selectedAssistant = settings.getAssistantById(assistantId) ?: settings.getCurrentAssistant()
+    val quickMessages = remember(settings.quickMessages, selectedAssistant.quickMessageIds) {
+        settings.getQuickMessagesOfAssistant(selectedAssistant)
+            .map { it.content }
+            .filter { it.isNotBlank() }
+            .take(8)
+    }
     val models = remember(settings.providers) {
         settings.providers.flatMap { it.models }.distinctBy { it.id }
     }
@@ -528,7 +535,7 @@ private fun TaskEditorSheet(
                 minLines = 4
             )
 
-            if (selectedAssistant.quickMessages.isNotEmpty()) {
+            if (quickMessages.isNotEmpty()) {
                 Text(
                     text = stringResource(R.string.assistant_schedule_insert_quick_message),
                     style = MaterialTheme.typography.labelMedium
@@ -537,11 +544,7 @@ private fun TaskEditorSheet(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    selectedAssistant.quickMessages
-                        .map { it.content }
-                        .filter { it.isNotBlank() }
-                        .take(8)
-                        .forEach { quickMessage ->
+                    quickMessages.forEach { quickMessage ->
                             AssistChip(
                                 onClick = {
                                     prompt = if (prompt.isBlank()) {
