@@ -3,6 +3,7 @@ package me.rerere.rikkahub
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.rikkahub.ui.components.ui.decodeProviderSettings
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
 import me.rerere.rikkahub.ui.components.ui.encodeForShare
 import org.junit.Assert.assertEquals
@@ -122,7 +123,7 @@ class ShareSheetTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun `decode should throw exception for wrong version`() {
-        decodeProviderSetting("ai-provider:v2:somedata")
+        decodeProviderSetting("ai-provider:v3:somedata")
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -158,5 +159,66 @@ class ShareSheetTest {
             assertEquals(original.name, decoded.name)
             assertEquals(original.enabled, decoded.enabled)
         }
+    }
+
+    @Test
+    fun `decodeProviderSettings should keep legacy single share format compatible`() {
+        val original = ProviderSetting.OpenAI(
+            name = "Legacy OpenAI",
+            apiKey = "legacy-key"
+        )
+
+        val encoded = original.encodeForShare()
+        val decoded = decodeProviderSettings(encoded)
+
+        assertEquals(1, decoded.size)
+        assertTrue(decoded.single() is ProviderSetting.OpenAI)
+        assertEquals(original.name, decoded.single().name)
+    }
+
+    @Test
+    fun `multi provider share should round trip`() {
+        val original = listOf(
+            ProviderSetting.OpenAI(
+                name = "OpenAI Batch",
+                apiKey = "key-1",
+                models = listOf(
+                    Model(
+                        id = Uuid.random(),
+                        displayName = "gpt-5"
+                    )
+                )
+            ),
+            ProviderSetting.Google(
+                name = "Google Batch",
+                apiKey = "key-2",
+                vertexAI = true,
+                projectId = "batch-project"
+            ),
+            ProviderSetting.Claude(
+                name = "Claude Batch",
+                apiKey = "key-3",
+                promptCaching = true
+            )
+        )
+
+        val encoded = original.encodeForShare()
+        val decoded = decodeProviderSettings(encoded)
+
+        assertEquals(3, decoded.size)
+        assertEquals(original.map { it.name }, decoded.map { it.name })
+        assertTrue(decoded.all { it.models.isEmpty() })
+        assertTrue((decoded[1] as ProviderSetting.Google).vertexAI)
+        assertTrue((decoded[2] as ProviderSetting.Claude).promptCaching)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `decodeProviderSetting should reject multi provider share payload`() {
+        val encoded = listOf(
+            ProviderSetting.OpenAI(name = "OpenAI"),
+            ProviderSetting.Claude(name = "Claude")
+        ).encodeForShare()
+
+        decodeProviderSetting(encoded)
     }
 }

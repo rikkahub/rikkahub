@@ -602,6 +602,7 @@
   <string name="setting_provider_page_import_dialog_message">Please select import method:</string>
   <string name="setting_provider_page_import_dialog_title">Import Provider Configuration</string>
   <string name="setting_provider_page_import_success">Import successful</string>
+  <string name="setting_provider_page_import_success_count">Imported %1$d providers</string>
   <string name="setting_provider_page_input_modality">Input Modality</string>
   <string name="setting_provider_page_location">Location (e.g. us-central1)</string>
   <string name="setting_provider_page_model_count">%d models</string>
@@ -630,7 +631,10 @@
   <string name="setting_provider_page_scan_error">Error: %s</string>
   <string name="setting_provider_page_scan_qr_code">Scan QR Code</string>
   <string name="setting_provider_page_search_providers">Search providers</string>
+  <string name="setting_provider_page_selected">Selected</string>
+  <string name="setting_provider_page_selected_count">%1$d selected</string>
   <string name="setting_provider_page_select_all">Select All (%1$d)</string>
+  <string name="setting_provider_page_deselect_all">Deselect All</string>
   <string name="setting_provider_page_select_from_gallery">Select from Gallery</string>
   <string name="setting_provider_page_service_account_email">Service Account Email</string>
   <string name="setting_provider_page_test">Test</string>
@@ -640,6 +644,8 @@
   <string name="setting_provider_page_title">Providers</string>
   <string name="setting_provider_page_tool">Tool</string>
   <string name="setting_provider_page_vertex_ai">Vertex AI</string>
+  <string name="provider_share_sheet_models_not_included">Shared providers do not include model lists.</string>
+  <string name="provider_share_sheet_qr_unavailable">This selection is too large to fit in a QR code. Use system share instead.</string>
   <string name="setting_tts_page_add">Add</string>
   <string name="setting_tts_page_add_provider">Add TTS Provider</string>
   <string name="setting_tts_page_add_provider_content_description">Add TTS Provider</string>

@@ -543,6 +543,7 @@
   <string name="setting_provider_page_import_dialog_message">请选择导入方式：</string>
   <string name="setting_provider_page_import_dialog_title">导入供应商配置</string>
   <string name="setting_provider_page_import_success">导入成功</string>
+  <string name="setting_provider_page_import_success_count">已导入 %1$d 个提供商</string>
   <string name="setting_provider_page_input_modality">输入模态</string>
   <string name="setting_provider_page_location">位置（例如 us-central1）</string>
   <string name="setting_provider_page_model_count">%d个模型</string>
@@ -571,7 +572,10 @@
   <string name="setting_provider_page_scan_error">错误: %s</string>
   <string name="setting_provider_page_scan_qr_code">扫描二维码</string>
   <string name="setting_provider_page_search_providers">搜索提供商</string>
+  <string name="setting_provider_page_selected">已选中</string>
+  <string name="setting_provider_page_selected_count">已选择 %1$d 个</string>
   <string name="setting_provider_page_select_all">全选（%1$d）</string>
+  <string name="setting_provider_page_deselect_all">取消全选</string>
   <string name="setting_provider_page_select_from_gallery">从相册选择</string>
   <string name="setting_provider_page_service_account_email">服务账户邮箱</string>
   <string name="setting_provider_page_test">测试</string>
@@ -581,6 +585,8 @@
   <string name="setting_provider_page_title">提供商</string>
   <string name="setting_provider_page_tool">工具</string>
   <string name="setting_provider_page_vertex_ai">Vertex AI</string>
+  <string name="provider_share_sheet_models_not_included">分享的提供商配置不包含模型列表。</string>
+  <string name="provider_share_sheet_qr_unavailable">所选内容过多，无法生成二维码，请改用系统分享。</string>
   <string name="setting_tts_page_add">添加</string>
   <string name="setting_tts_page_add_provider">添加TTS提供商</string>
   <string name="setting_tts_page_add_provider_content_description">添加TTS提供商</string>

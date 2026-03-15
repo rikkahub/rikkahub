@@ -9,8 +9,10 @@ import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Share01
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -72,9 +74,11 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.ShareSheet
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
-import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
+import me.rerere.rikkahub.ui.components.ui.decodeProviderSettings
+import me.rerere.rikkahub.ui.components.ui.rememberShareSheetState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
@@ -94,7 +98,10 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val currentLocale = LocalConfiguration.current.locales[0]
+    val shareSheetState = rememberShareSheetState()
     var searchQuery by remember { mutableStateOf("") }
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedProviderIds by remember { mutableStateOf(emptySet<Uuid>()) }
     val lazyListState = rememberLazyStaggeredGridState()
     val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
         val newProviders = settings.providers.toMutableList().apply {
@@ -112,46 +119,108 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
             }
         }
     }
+    val selectedProviders = remember(settings.providers, selectedProviderIds) {
+        settings.providers.filter { it.id in selectedProviderIds }
+    }
+    val allFilteredSelected = filteredProviders.isNotEmpty() && filteredProviders.all { it.id in selectedProviderIds }
+
+    fun exitSelectionMode() {
+        isSelectionMode = false
+        selectedProviderIds = emptySet()
+    }
+
+    ShareSheet(shareSheetState)
 
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
-                    Text(text = stringResource(R.string.setting_provider_page_title))
+                    Text(
+                        text = if (isSelectionMode) {
+                            stringResource(R.string.setting_provider_page_selected_count, selectedProviderIds.size)
+                        } else {
+                            stringResource(R.string.setting_provider_page_title)
+                        }
+                    )
                 },
                 navigationIcon = {
                     BackButton()
                 },
                 actions = {
-                    if (currentLocale.language == "zh") {
+                    if (isSelectionMode) {
+                        TextButton(
+                            onClick = {
+                                selectedProviderIds = if (allFilteredSelected) {
+                                    selectedProviderIds - filteredProviders.map { it.id }.toSet()
+                                } else {
+                                    selectedProviderIds + filteredProviders.map { it.id }
+                                }
+                            },
+                            enabled = filteredProviders.isNotEmpty()
+                        ) {
+                            Text(
+                                text = if (allFilteredSelected) {
+                                    stringResource(R.string.setting_provider_page_deselect_all)
+                                } else {
+                                    stringResource(R.string.setting_provider_page_select_all, filteredProviders.size)
+                                }
+                            )
+                        }
                         IconButton(
                             onClick = {
-                                val aihubmixIndex = filteredProviders.indexOfFirst {
-                                    it.id.toString() == "1b1395ed-b702-4aeb-8bc1-b681c4456953"
+                                if (selectedProviders.isNotEmpty()) {
+                                    shareSheetState.show(selectedProviders)
                                 }
-                                if (aihubmixIndex != -1) {
-                                    scope.launch {
-                                        lazyListState.animateScrollToItem(aihubmixIndex)
-                                    }
-                                }
+                            },
+                            enabled = selectedProviders.isNotEmpty()
+                        ) {
+                            Icon(HugeIcons.Share01, null)
+                        }
+                        IconButton(
+                            onClick = {
+                                exitSelectionMode()
                             }
                         ) {
-                            AutoAIIcon("AiHubMix")
+                            Icon(HugeIcons.Cancel01, null)
                         }
-                    }
-                    ImportProviderButton {
-                        vm.updateSettings(
-                            settings.copy(
-                                providers = listOf(it.copyProvider(Uuid.random())) + settings.providers
+                    } else {
+                        if (currentLocale.language == "zh") {
+                            IconButton(
+                                onClick = {
+                                    val aihubmixIndex = filteredProviders.indexOfFirst {
+                                        it.id.toString() == "1b1395ed-b702-4aeb-8bc1-b681c4456953"
+                                    }
+                                    if (aihubmixIndex != -1) {
+                                        scope.launch {
+                                            lazyListState.animateScrollToItem(aihubmixIndex)
+                                        }
+                                    }
+                                }
+                            ) {
+                                AutoAIIcon("AiHubMix")
+                            }
+                        }
+                        IconButton(
+                            onClick = {
+                                isSelectionMode = true
+                            }
+                        ) {
+                            Icon(HugeIcons.Share01, null)
+                        }
+                        ImportProviderButton { importedProviders ->
+                            vm.updateSettings(
+                                settings.copy(
+                                    providers = importedProviders.map { it.copyProvider(Uuid.random()) } + settings.providers
+                                )
                             )
-                        )
-                    }
-                    AddButton {
-                        vm.updateSettings(
-                            settings.copy(
-                                providers = listOf(it) + settings.providers
+                        }
+                        AddButton {
+                            vm.updateSettings(
+                                settings.copy(
+                                    providers = listOf(it) + settings.providers
+                                )
                             )
-                        )
+                        }
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -210,28 +279,42 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                 .scale(if (isDragging) 0.95f else 1f)
                                 .fillMaxWidth(),
                             provider = provider,
-                            dragHandle = {
-                                val haptic = LocalHapticFeedback.current
-                                IconButton(
-                                    onClick = {},
-                                    modifier = Modifier
-                                        .longPressDraggableHandle(
-                                            onDragStarted = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                            },
-                                            onDragStopped = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                            }
+                            selected = provider.id in selectedProviderIds,
+                            selectionMode = isSelectionMode,
+                            dragHandle = if (!isSelectionMode) {
+                                {
+                                    val haptic = LocalHapticFeedback.current
+                                    IconButton(
+                                        onClick = {},
+                                        modifier = Modifier
+                                            .longPressDraggableHandle(
+                                                onDragStarted = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                                },
+                                                onDragStopped = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                                }
+                                            )
+                                    ) {
+                                        Icon(
+                                            imageVector = HugeIcons.DragDropHorizontal,
+                                            contentDescription = null
                                         )
-                                ) {
-                                    Icon(
-                                        imageVector = HugeIcons.DragDropHorizontal,
-                                        contentDescription = null
-                                    )
+                                    }
                                 }
+                            } else {
+                                null
                             },
                             onClick = {
-                                navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
+                                if (isSelectionMode) {
+                                    selectedProviderIds = if (provider.id in selectedProviderIds) {
+                                        selectedProviderIds - provider.id
+                                    } else {
+                                        selectedProviderIds + provider.id
+                                    }
+                                } else {
+                                    navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
+                                }
                             }
                         )
                     }
@@ -243,7 +326,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
 
 @Composable
 private fun ImportProviderButton(
-    onAdd: (ProviderSetting) -> Unit
+    onAdd: (List<ProviderSetting>) -> Unit
 ) {
     val toaster = LocalToaster.current
     val context = LocalContext.current
@@ -374,7 +457,7 @@ private fun ImportProviderButton(
 
 private fun handleQRResult(
     result: QRResult,
-    onAdd: (ProviderSetting) -> Unit,
+    onAdd: (List<ProviderSetting>) -> Unit,
     toaster: com.dokar.sonner.ToasterState,
     context: android.content.Context
 ) {
@@ -397,12 +480,9 @@ private fun handleQRResult(
             }
 
             is QRResult.QRSuccess -> {
-                val setting = decodeProviderSetting(result.content.rawValue ?: "")
-                onAdd(setting)
-                toaster.show(
-                    context.getString(R.string.setting_provider_page_import_success),
-                    type = ToastType.Success
-                )
+                val providers = decodeProviderSettings(result.content.rawValue ?: "")
+                onAdd(providers)
+                showImportSuccessToast(context, toaster, providers.size)
             }
 
             QRResult.QRUserCanceled -> {}
@@ -417,7 +497,7 @@ private fun handleQRResult(
 
 private fun handleImageQRCode(
     uri: Uri,
-    onAdd: (ProviderSetting) -> Unit,
+    onAdd: (List<ProviderSetting>) -> Unit,
     toaster: com.dokar.sonner.ToasterState,
     context: android.content.Context
 ) {
@@ -433,18 +513,28 @@ private fun handleImageQRCode(
             return
         }
 
-        val setting = decodeProviderSetting(qrContent)
-        onAdd(setting)
-        toaster.show(
-            context.getString(R.string.setting_provider_page_import_success),
-            type = ToastType.Success
-        )
+        val providers = decodeProviderSettings(qrContent)
+        onAdd(providers)
+        showImportSuccessToast(context, toaster, providers.size)
     }.onFailure { error ->
         toaster.show(
             context.getString(R.string.setting_provider_page_image_qr_decode_failed, error.message ?: ""),
             type = ToastType.Error
         )
     }
+}
+
+private fun showImportSuccessToast(
+    context: android.content.Context,
+    toaster: com.dokar.sonner.ToasterState,
+    count: Int
+) {
+    val message = if (count == 1) {
+        context.getString(R.string.setting_provider_page_import_success)
+    } else {
+        context.getString(R.string.setting_provider_page_import_success_count, count)
+    }
+    toaster.show(message, type = ToastType.Success)
 }
 
 
@@ -503,11 +593,18 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
 private fun ProviderItem(
     provider: ProviderSetting,
     modifier: Modifier = Modifier,
-    dragHandle: @Composable () -> Unit,
+    selected: Boolean = false,
+    selectionMode: Boolean = false,
+    dragHandle: (@Composable () -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Card(
         modifier = modifier,
+        border = if (selectionMode && selected) {
+            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            null
+        },
         colors = CardDefaults.cardColors(
             containerColor = if (provider.enabled) {
                 CustomColors.listItemColors.containerColor
@@ -530,7 +627,15 @@ private fun ProviderItem(
                     modifier = Modifier.size(36.dp)
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                dragHandle()
+                if (selectionMode) {
+                    if (selected) {
+                        Tag(type = TagType.INFO) {
+                            Text(stringResource(R.string.setting_provider_page_selected))
+                        }
+                    }
+                } else {
+                    dragHandle?.invoke()
+                }
             }
             Column(
                 modifier = Modifier,
