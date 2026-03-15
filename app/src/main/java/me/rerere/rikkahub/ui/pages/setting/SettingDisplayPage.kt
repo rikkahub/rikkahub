@@ -23,8 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,12 +51,11 @@ private const val MAX_CODE_BLOCK_RENDER_DEPTH = 100
 @Composable
 fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
+    val displaySetting = settings.displaySetting
     var amoledDarkMode by rememberAmoledDarkMode()
 
     fun updateDisplaySetting(setting: DisplaySetting) {
-        displaySetting = setting
-        vm.updateSettings(settings.copy(displaySetting = setting))
+        vm.updateDisplaySetting(setting)
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -167,7 +164,9 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            item {
+            item(
+                key = "general_settings_${settings.init}_${displaySetting.enableNotificationOnMessageGeneration}"
+            ) {
                 var createNewConversationOnStart by rememberSharedPreferenceBoolean(
                     "create_new_conversation_on_start",
                     true
@@ -206,7 +205,9 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 checked = displaySetting.enableNotificationOnMessageGeneration,
                                 onCheckedChange = {
                                     ensureNotificationPermissionIfNeeded(it)
-                                    updateDisplaySetting(displaySetting.copy(enableNotificationOnMessageGeneration = it))
+                                    updateDisplaySetting(
+                                        displaySetting.copy(enableNotificationOnMessageGeneration = it)
+                                    )
                                 }
                             )
                         },
@@ -219,7 +220,9 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 checked = displaySetting.enableToolApprovalNotification,
                                 onCheckedChange = {
                                     ensureNotificationPermissionIfNeeded(it)
-                                    updateDisplaySetting(displaySetting.copy(enableToolApprovalNotification = it))
+                                    updateDisplaySetting(
+                                        displaySetting.copy(enableToolApprovalNotification = it)
+                                    )
                                 }
                             )
                         },
@@ -232,7 +235,9 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 Switch(
                                     checked = displaySetting.enableLiveUpdateNotification,
                                     onCheckedChange = {
-                                        updateDisplaySetting(displaySetting.copy(enableLiveUpdateNotification = it))
+                                        updateDisplaySetting(
+                                            displaySetting.copy(enableLiveUpdateNotification = it)
+                                        )
                                     }
                                 )
                             },
