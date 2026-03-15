@@ -147,6 +147,8 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
+        // 按 content block 记住当前流式上下文
+        val streamAccumulator = ClaudeStreamEventAccumulator()
         val requestBody = buildMessageRequest(providerSetting, messages, params, stream = true)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
@@ -177,16 +179,10 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 }
 
                 val dataJson = json.parseToJsonElement(data).jsonObject
-                val deltaMessage = parseMessage(buildJsonArray {
-                    val contentBlockObj = dataJson["content_block"]?.jsonObject
-                    val deltaObj = dataJson["delta"]?.jsonObject
-                    if (contentBlockObj != null) {
-                        add(contentBlockObj)
-                    }
-                    if (deltaObj != null) {
-                        add(deltaObj)
-                    }
-                })
+                val deltaMessage = streamAccumulator.parseEvent(
+                    eventType = type ?: dataJson["type"]?.jsonPrimitive?.contentOrNull,
+                    dataJson = dataJson
+                )
                 val tokenUsage = parseTokenUsage(dataJson)
                 val messageChunk = MessageChunk(
                     id = id ?: "",
@@ -480,74 +476,9 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
     }
 
     private fun parseMessage(content: JsonArray): UIMessage {
-        val parts = mutableListOf<UIMessagePart>()
-
-        content.forEach { contentBlock ->
-            val block = contentBlock.jsonObject
-            val type = block["type"]?.jsonPrimitive?.contentOrNull
-
-            when (type) {
-                "text", "text_delta" -> {
-                    val text = block["text"]?.jsonPrimitive?.contentOrNull ?: ""
-                    if (text.isNotEmpty()) {
-                        parts.add(UIMessagePart.Text(text))
-                    }
-                }
-
-                "thinking", "thinking_delta", "signature_delta" -> {
-                    val thinking = block["thinking"]?.jsonPrimitive?.contentOrNull ?: ""
-                    val signature = block["signature"]?.jsonPrimitive?.contentOrNull
-                    if (thinking.isNotEmpty() || signature != null) {
-                        val reasoning = UIMessagePart.Reasoning(
-                            reasoning = thinking,
-                            createdAt = Clock.System.now(),
-                            finishedAt = null
-                        )
-                        if (signature != null) {
-                            reasoning.metadata = buildJsonObject {
-                                put("signature", signature)
-                            }
-                        }
-                        parts.add(reasoning)
-                    }
-                }
-
-                "redacted_thinking" -> {
-                    val data = block["data"]?.jsonPrimitiveOrNull?.contentOrNull
-                    println(data)
-                }
-
-                "tool_use" -> {
-                    val id = block["id"]?.jsonPrimitive?.contentOrNull ?: ""
-                    val name = block["name"]?.jsonPrimitive?.contentOrNull ?: ""
-                    val input = block["input"]?.jsonObject ?: JsonObject(emptyMap())
-                    parts.add(
-                        UIMessagePart.Tool(
-                            toolCallId = id,
-                            toolName = name,
-                            input = if (input.isEmpty()) "" else json.encodeToString(input),
-                            output = emptyList()
-                        )
-                    )
-                }
-
-                "input_json_delta" -> {
-                    val input = block["partial_json"]?.jsonPrimitive?.contentOrNull
-                    parts.add(
-                        UIMessagePart.Tool(
-                            toolCallId = "",
-                            toolName = "",
-                            input = input ?: "",
-                            output = emptyList()
-                        )
-                    )
-                }
-            }
-        }
-
         return UIMessage(
             role = MessageRole.ASSISTANT,
-            parts = parts
+            parts = content.mapNotNull { parseClaudeContentBlock(it.jsonObject) }
         )
     }
 
@@ -569,5 +500,137 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             totalTokens = promptTokens + completionTokens,
             cachedTokens = cachedInputTokens,
         )
+    }
+}
+
+internal data class ClaudeStreamToolContext(
+    val toolCallId: String,
+    val toolName: String,
+)
+
+internal data class ClaudeStreamContentBlockContext(
+    val type: String,
+    val toolContext: ClaudeStreamToolContext? = null,
+)
+
+internal class ClaudeStreamEventAccumulator {
+    private val contentBlockContexts = mutableMapOf<Int, ClaudeStreamContentBlockContext>()
+
+    fun parseEvent(eventType: String?, dataJson: JsonObject): UIMessage {
+        val parts = when (eventType) {
+            "content_block_start" -> {
+                val contentBlock = dataJson["content_block"]?.jsonObject
+                if (contentBlock != null) {
+                    // 用 index 绑定后续 delta 到同一个 block
+                    dataJson["index"]?.jsonPrimitive?.intOrNull?.let { index ->
+                        contentBlockContexts[index] = contentBlock.toContentBlockContext()
+                    }
+                    listOfNotNull(parseClaudeContentBlock(contentBlock))
+                } else {
+                    emptyList()
+                }
+            }
+
+            "content_block_delta" -> {
+                val delta = dataJson["delta"]?.jsonObject
+                val context = dataJson["index"]?.jsonPrimitive?.intOrNull?.let(contentBlockContexts::get)
+                if (delta != null) {
+                    listOfNotNull(parseClaudeContentBlock(delta, context?.toolContext))
+                } else {
+                    emptyList()
+                }
+            }
+
+            "content_block_stop" -> {
+                // block 结束后立刻清理上下文
+                dataJson["index"]?.jsonPrimitive?.intOrNull?.let(contentBlockContexts::remove)
+                emptyList()
+            }
+
+            else -> emptyList()
+        }
+        return UIMessage(role = MessageRole.ASSISTANT, parts = parts)
+    }
+
+    private fun JsonObject.toContentBlockContext(): ClaudeStreamContentBlockContext {
+        val type = this["type"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val toolContext = if (type == "tool_use") {
+            ClaudeStreamToolContext(
+                toolCallId = this["id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                toolName = this["name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+            )
+        } else {
+            null
+        }
+        return ClaudeStreamContentBlockContext(type = type, toolContext = toolContext)
+    }
+}
+
+private fun parseClaudeContentBlock(
+    block: JsonObject,
+    toolContext: ClaudeStreamToolContext? = null
+): UIMessagePart? {
+    val type = block["type"]?.jsonPrimitive?.contentOrNull
+
+    return when (type) {
+        "text", "text_delta" -> {
+            val text = block["text"]?.jsonPrimitive?.contentOrNull ?: ""
+            if (text.isNotEmpty()) {
+                UIMessagePart.Text(text)
+            } else {
+                null
+            }
+        }
+
+        "thinking", "thinking_delta", "signature_delta" -> {
+            val thinking = block["thinking"]?.jsonPrimitive?.contentOrNull ?: ""
+            val signature = block["signature"]?.jsonPrimitive?.contentOrNull
+            if (thinking.isNotEmpty() || signature != null) {
+                val reasoning = UIMessagePart.Reasoning(
+                    reasoning = thinking,
+                    createdAt = Clock.System.now(),
+                    finishedAt = null
+                )
+                if (signature != null) {
+                    reasoning.metadata = buildJsonObject {
+                        put("signature", signature)
+                    }
+                }
+                reasoning
+            } else {
+                null
+            }
+        }
+
+        "redacted_thinking" -> {
+            val data = block["data"]?.jsonPrimitiveOrNull?.contentOrNull
+            println(data)
+            null
+        }
+
+        "tool_use" -> {
+            val id = block["id"]?.jsonPrimitive?.contentOrNull ?: ""
+            val name = block["name"]?.jsonPrimitive?.contentOrNull ?: ""
+            val input = block["input"]?.jsonObject ?: JsonObject(emptyMap())
+            UIMessagePart.Tool(
+                toolCallId = id,
+                toolName = name,
+                input = if (input.isEmpty()) "" else json.encodeToString(input),
+                output = emptyList()
+            )
+        }
+
+        "input_json_delta" -> {
+            val input = block["partial_json"]?.jsonPrimitive?.contentOrNull ?: return null
+            UIMessagePart.Tool(
+                // 这里只继续追加参数片段 名字保留给 start 事件
+                toolCallId = toolContext?.toolCallId.orEmpty(),
+                toolName = "",
+                input = input,
+                output = emptyList()
+            )
+        }
+
+        else -> null
     }
 }
