@@ -1239,27 +1239,5 @@
   <string name="quick_messages_page_empty_content">Нет содержимого</string>
   <string name="quick_messages_page_empty_hint">Нажмите кнопку + в правом нижнем углу, чтобы добавить быстрое сообщение</string>
   <string name="quick_messages_page_untitled">Без названия</string>
-  <string name="skills_page_title">Навыки агента</string>
-  <string name="skills_page_import_from_github">Импортировать из GitHub</string>
-  <string name="skills_page_empty_title">Нет навыков</string>
-  <string name="skills_page_empty_hint">Нажмите кнопку + в правом нижнем углу, чтобы добавить навык</string>
-  <string name="skills_page_save_failed">Не удалось сохранить, проверьте формат навыка</string>
-  <string name="skills_page_import_success">Навык импортирован: %s</string>
-  <string name="skills_page_import_failed">Ошибка импорта: %s</string>
-  <string name="skills_page_delete_title">Удалить навык</string>
-  <string name="skills_page_delete_message">Вы уверены, что хотите удалить «%s»? Это действие нельзя будет отменить.</string>
-  <string name="skills_page_more_actions">Дополнительные действия</string>
-  <string name="skills_page_add_title">Добавить навык</string>
-  <string name="skills_page_skill_content_label">Содержимое SKILL.md</string>
-  <string name="skills_page_name_error">Не найдено поле name, проверьте формат frontmatter</string>
-  <string name="skills_page_skill_name">Название навыка: %s</string>
-  <string name="skills_page_paste_hint">Вставьте полное содержимое файла SKILL.md</string>
-  <string name="skills_page_save">Сохранить</string>
-  <string name="skills_page_import_dialog_title">Импорт из GitHub</string>
-  <string name="skills_page_import_description">Введите URL репозитория GitHub, и файл SKILL.md в корневом каталоге будет автоматически загружен.</string>
-  <string name="skills_page_repo_url_label">URL репозитория</string>
-  <string name="skills_page_repo_url_hint">Поддерживает пути /tree/branch или к подкаталогам</string>
-  <string name="skills_page_downloading">Загрузка...</string>
-  <string name="skills_page_import_confirm">Импортировать</string>
+  <string name="quick_messages_page_more_actions">Дополнительные действия</string>
 </resources>
-

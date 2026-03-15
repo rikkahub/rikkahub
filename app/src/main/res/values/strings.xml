@@ -1237,26 +1237,5 @@
   <string name="quick_messages_page_empty_content">No content</string>
   <string name="quick_messages_page_empty_hint">Tap the + button at the bottom right to add a quick message</string>
   <string name="quick_messages_page_untitled">Untitled</string>
-  <string name="skills_page_title">Agent Skills</string>
-  <string name="skills_page_import_from_github">Import from GitHub</string>
-  <string name="skills_page_empty_title">No Skills</string>
-  <string name="skills_page_empty_hint">Tap the + button at the bottom right to add a Skill</string>
-  <string name="skills_page_save_failed">Save failed, please check the Skill format</string>
-  <string name="skills_page_import_success">Skill imported: %s</string>
-  <string name="skills_page_import_failed">Import failed: %s</string>
-  <string name="skills_page_delete_title">Delete Skill</string>
-  <string name="skills_page_delete_message">Are you sure you want to delete "%s"? This action cannot be undone.</string>
-  <string name="skills_page_more_actions">More actions</string>
-  <string name="skills_page_add_title">Add Skill</string>
-  <string name="skills_page_skill_content_label">SKILL.md Content</string>
-  <string name="skills_page_name_error">Cannot find the name field, please check the frontmatter format</string>
-  <string name="skills_page_skill_name">Skill name: %s</string>
-  <string name="skills_page_paste_hint">Paste the full SKILL.md file content</string>
-  <string name="skills_page_save">Save</string>
-  <string name="skills_page_import_dialog_title">Import from GitHub</string>
-  <string name="skills_page_import_description">Enter a GitHub repository URL, and the SKILL.md file in the root directory will be downloaded automatically.</string>
-  <string name="skills_page_repo_url_label">Repository URL</string>
-  <string name="skills_page_repo_url_hint">Supports /tree/branch or subdirectory paths</string>
-  <string name="skills_page_downloading">Downloading...</string>
-  <string name="skills_page_import_confirm">Import</string>
+  <string name="quick_messages_page_more_actions">More actions</string>
 </resources>

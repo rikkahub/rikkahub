@@ -1239,27 +1239,5 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="quick_messages_page_empty_content">内容がありません</string>
   <string name="quick_messages_page_empty_hint">右下の＋ボタンをタップしてクイックメッセージを追加してください</string>
   <string name="quick_messages_page_untitled">無題</string>
-  <string name="skills_page_title">エージェントスキル</string>
-  <string name="skills_page_import_from_github">GitHub からインポート</string>
-  <string name="skills_page_empty_title">スキルがありません</string>
-  <string name="skills_page_empty_hint">右下の＋ボタンをタップしてスキルを追加してください</string>
-  <string name="skills_page_save_failed">保存に失敗しました。スキルの形式を確認してください</string>
-  <string name="skills_page_import_success">スキルをインポートしました: %s</string>
-  <string name="skills_page_import_failed">インポートに失敗しました: %s</string>
-  <string name="skills_page_delete_title">スキルを削除</string>
-  <string name="skills_page_delete_message">「%s」を削除してもよろしいですか？この操作は元に戻せません。</string>
-  <string name="skills_page_more_actions">その他の操作</string>
-  <string name="skills_page_add_title">スキルを追加</string>
-  <string name="skills_page_skill_content_label">SKILL.md の内容</string>
-  <string name="skills_page_name_error">名前フィールドが見つかりません。frontmatter の形式を確認してください。</string>
-  <string name="skills_page_skill_name">スキル名: %s</string>
-  <string name="skills_page_paste_hint">完全な SKILL.md ファイルの内容を貼り付けてください</string>
-  <string name="skills_page_save">保存</string>
-  <string name="skills_page_import_dialog_title">GitHub からインポート</string>
-  <string name="skills_page_import_description">GitHub リポジトリの URL を入力すると、ルートディレクトリ内の SKILL.md ファイルが自動的にダウンロードされます。</string>
-  <string name="skills_page_repo_url_label">リポジトリ URL</string>
-  <string name="skills_page_repo_url_hint">/tree/branch やサブディレクトリのパスに対応</string>
-  <string name="skills_page_downloading">ダウンロード中...</string>
-  <string name="skills_page_import_confirm">インポート</string>
+  <string name="quick_messages_page_more_actions">その他の操作</string>
 </resources>
-

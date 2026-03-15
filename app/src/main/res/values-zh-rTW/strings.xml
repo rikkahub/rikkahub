@@ -1237,27 +1237,5 @@
   <string name="quick_messages_page_empty_content">沒有內容</string>
   <string name="quick_messages_page_empty_hint">點選右下角的 + 按鈕以新增快速訊息</string>
   <string name="quick_messages_page_untitled">未命名</string>
-  <string name="skills_page_title">Agent 技能</string>
-  <string name="skills_page_import_from_github">從 GitHub 匯入</string>
-  <string name="skills_page_empty_title">尚無技能</string>
-  <string name="skills_page_empty_hint">點選右下角的 + 按鈕以新增技能</string>
-  <string name="skills_page_save_failed">儲存失敗，請檢查技能格式</string>
-  <string name="skills_page_import_success">已匯入技能：%s</string>
-  <string name="skills_page_import_failed">匯入失敗：%s</string>
-  <string name="skills_page_delete_title">刪除技能</string>
-  <string name="skills_page_delete_message">確定要刪除「%s」嗎？此動作無法復原。</string>
-  <string name="skills_page_more_actions">更多操作</string>
-  <string name="skills_page_add_title">新增技能</string>
-  <string name="skills_page_skill_content_label">SKILL.md 內容</string>
-  <string name="skills_page_name_error">找不到 name 欄位，請檢查 frontmatter 格式</string>
-  <string name="skills_page_skill_name">技能名稱：%s</string>
-  <string name="skills_page_paste_hint">貼上完整的 SKILL.md 檔案內容</string>
-  <string name="skills_page_save">儲存</string>
-  <string name="skills_page_import_dialog_title">從 GitHub 匯入</string>
-  <string name="skills_page_import_description">輸入 GitHub 儲存庫 URL，根目錄中的 SKILL.md 檔案會自動下載。</string>
-  <string name="skills_page_repo_url_label">儲存庫 URL</string>
-  <string name="skills_page_repo_url_hint">支援 /tree/branch 或子目錄路徑</string>
-  <string name="skills_page_downloading">正在下載⋯⋯</string>
-  <string name="skills_page_import_confirm">匯入</string>
+  <string name="quick_messages_page_more_actions">更多操作</string>
 </resources>
-

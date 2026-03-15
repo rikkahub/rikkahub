@@ -213,7 +213,7 @@ private fun QuickMessageCard(
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(
                         imageVector = HugeIcons.MoreVertical,
-                        contentDescription = stringResource(R.string.skills_page_more_actions),
+                        contentDescription = stringResource(R.string.quick_messages_page_more_actions),
                     )
                 }
                 DropdownMenu(
