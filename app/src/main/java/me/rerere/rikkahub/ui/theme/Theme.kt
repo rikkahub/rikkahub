@@ -53,7 +53,7 @@ fun RikkahubTheme(
     }
     val amoledDarkMode by rememberAmoledDarkMode()
 
-    val colorScheme = when {
+    val baseColorScheme = when {
         settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
@@ -61,14 +61,32 @@ fun RikkahubTheme(
         darkTheme -> findPresetTheme(settings.themeId).getColorScheme(dark = true)
         else -> findPresetTheme(settings.themeId).getColorScheme(dark = false)
     }
-    val colorSchemeConverted = remember(darkTheme, amoledDarkMode, colorScheme) {
-        if (darkTheme && amoledDarkMode) {
-            colorScheme.copy(
+    val colorSchemeConverted = remember(
+        darkTheme,
+        amoledDarkMode,
+        baseColorScheme,
+        settings.customThemeSetting.enabled,
+        settings.customThemeSetting.light,
+        settings.customThemeSetting.dark,
+    ) {
+        val amoledAdjusted = if (darkTheme && amoledDarkMode) {
+            baseColorScheme.copy(
                 background = AMOLED_DARK_BACKGROUND,
                 surface = AMOLED_DARK_BACKGROUND,
             )
         } else {
-            colorScheme
+            baseColorScheme
+        }
+
+        if (settings.customThemeSetting.enabled) {
+            val tokenSource = if (darkTheme) {
+                settings.customThemeSetting.dark
+            } else {
+                settings.customThemeSetting.light
+            }
+            amoledAdjusted.applyThemeTokenOverrides(tokenSource)
+        } else {
+            amoledAdjusted
         }
     }
     val extendColors = if (darkTheme) ExtendDarkColors else ExtendLightColors
