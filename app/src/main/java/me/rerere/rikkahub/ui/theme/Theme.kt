@@ -93,7 +93,7 @@ fun RikkahubTheme(
             colorScheme = colorSchemeConverted,
             typography = Typography,
             content = content,
-            motionScheme = MotionScheme.expressive()
+            // motionScheme = MotionScheme.expressive()
         )
     }
 }
