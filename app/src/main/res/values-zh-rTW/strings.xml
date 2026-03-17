@@ -1238,4 +1238,24 @@
   <string name="quick_messages_page_empty_hint">點選右下角的 + 按鈕以新增快速訊息</string>
   <string name="quick_messages_page_untitled">未命名</string>
   <string name="quick_messages_page_more_actions">更多操作</string>
+  <string name="setting_display_page_custom_theme_section_title">自訂主題 Tokens</string>
+  <string name="setting_display_page_custom_theme_enabled_title">啟用自訂主題</string>
+  <string name="setting_display_page_custom_theme_enabled_desc">用使用者定義的 ColorScheme token 覆蓋目前的 Compose 主題。</string>
+  <string name="setting_display_page_custom_theme_edit_title">編輯亮色與暗色 Tokens</string>
+  <string name="setting_display_page_custom_theme_edit_desc">已設定亮色 token：%1$d，暗色 token：%2$d</string>
+  <string name="setting_display_page_custom_theme_dialog_title">編輯自訂主題</string>
+  <string name="setting_display_page_custom_theme_dialog_desc">像寫 CSS 一樣撰寫 ColorScheme token 宣告。支援 primary、background、surfaceContainer、outline 等鍵。</string>
+  <string name="setting_display_page_custom_theme_light_label">亮色 Tokens</string>
+  <string name="setting_display_page_custom_theme_dark_label">暗色 Tokens</string>
+  <string name="setting_display_page_custom_theme_format_hint">格式範例：key: #RRGGBBAA; 也支援 #RRGGBB 或 0xAARRGGBB。</string>
+  <string name="setting_display_page_custom_theme_parse_hint">已辨識 %1$d 個 token。將忽略 %2$d 條無效或不支援的宣告。</string>
+  <string name="setting_display_page_custom_theme_advanced_edit">進階編輯</string>
+  <string name="setting_display_page_custom_theme_hex_label">十六進位顏色</string>
+  <string name="setting_display_page_custom_theme_presets">預設顏色</string>
+  <string name="setting_display_page_custom_theme_reset">重設 Token</string>
+  <string name="setting_display_page_custom_theme_raw_editor_title">進階 Token 編輯器</string>
+  <string name="setting_display_page_custom_theme_insert_light_template">插入亮色範本</string>
+  <string name="setting_display_page_custom_theme_insert_dark_template">插入暗色範本</string>
+  <string name="setting_display_page_custom_theme_state_default">預設</string>
+  <string name="setting_display_page_custom_theme_state_custom">自訂</string>
 </resources>

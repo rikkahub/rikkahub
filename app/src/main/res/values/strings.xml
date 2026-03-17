@@ -1244,4 +1244,24 @@
   <string name="quick_messages_page_empty_hint">Tap the + button at the bottom right to add a quick message</string>
   <string name="quick_messages_page_untitled">Untitled</string>
   <string name="quick_messages_page_more_actions">More actions</string>
+  <string name="setting_display_page_custom_theme_section_title">Custom Theme Tokens</string>
+  <string name="setting_display_page_custom_theme_enabled_title">Enable custom theme</string>
+  <string name="setting_display_page_custom_theme_enabled_desc">Override the current Compose theme with user-defined ColorScheme tokens.</string>
+  <string name="setting_display_page_custom_theme_edit_title">Edit light and dark tokens</string>
+  <string name="setting_display_page_custom_theme_edit_desc">Configured light tokens: %1$d, dark tokens: %2$d</string>
+  <string name="setting_display_page_custom_theme_dialog_title">Edit Custom Theme</string>
+  <string name="setting_display_page_custom_theme_dialog_desc">Write ColorScheme token declarations like CSS. Supported keys include primary, background, surfaceContainer, outline and more.</string>
+  <string name="setting_display_page_custom_theme_light_label">Light tokens</string>
+  <string name="setting_display_page_custom_theme_dark_label">Dark tokens</string>
+  <string name="setting_display_page_custom_theme_format_hint">Format example: key: #RRGGBBAA; You can also use #RRGGBB or 0xAARRGGBB.</string>
+  <string name="setting_display_page_custom_theme_parse_hint">Recognized %1$d tokens. %2$d entries will be ignored.</string>
+  <string name="setting_display_page_custom_theme_advanced_edit">Advanced</string>
+  <string name="setting_display_page_custom_theme_hex_label">Hex value</string>
+  <string name="setting_display_page_custom_theme_presets">Presets</string>
+  <string name="setting_display_page_custom_theme_reset">Reset token</string>
+  <string name="setting_display_page_custom_theme_raw_editor_title">Advanced Token Editor</string>
+  <string name="setting_display_page_custom_theme_insert_light_template">Insert light template</string>
+  <string name="setting_display_page_custom_theme_insert_dark_template">Insert dark template</string>
+  <string name="setting_display_page_custom_theme_state_default">Default</string>
+  <string name="setting_display_page_custom_theme_state_custom">Custom</string>
 </resources>

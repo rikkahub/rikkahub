@@ -1246,5 +1246,25 @@
   <string name="setting_provider_page_deselect_all">Снять выделение со всех</string>
   <string name="provider_share_sheet_models_not_included">Общие поставщики не включают списки моделей.</string>
   <string name="provider_share_sheet_qr_unavailable">Этот набор слишком велик для QR-кода. Используйте системный способ отправки.</string>
+  <string name="setting_display_page_custom_theme_section_title">Пользовательские токены темы</string>
+  <string name="setting_display_page_custom_theme_enabled_title">Включить пользовательскую тему</string>
+  <string name="setting_display_page_custom_theme_enabled_desc">Переопределить текущую тему Compose пользовательскими токенами ColorScheme.</string>
+  <string name="setting_display_page_custom_theme_edit_title">Изменить светлые и тёмные токены</string>
+  <string name="setting_display_page_custom_theme_edit_desc">Настроенных светлых токенов: %1$d, тёмных токенов: %2$d</string>
+  <string name="setting_display_page_custom_theme_dialog_title">Изменить пользовательскую тему</string>
+  <string name="setting_display_page_custom_theme_dialog_desc">Записывайте объявления токенов ColorScheme как в CSS. Поддерживаемые ключи включают primary, background, surfaceContainer, outline и другие.</string>
+  <string name="setting_display_page_custom_theme_light_label">Светлые токены</string>
+  <string name="setting_display_page_custom_theme_dark_label">Тёмные токены</string>
+  <string name="setting_display_page_custom_theme_format_hint">Пример формата: key: #RRGGBBAA; также можно использовать #RRGGBB или 0xAARRGGBB.</string>
+  <string name="setting_display_page_custom_theme_parse_hint">Распознано %1$d токенов. %2$d записей будут проигнорированы.</string>
+  <string name="setting_display_page_custom_theme_advanced_edit">Дополнительно</string>
+  <string name="setting_display_page_custom_theme_hex_label">Hex-значение</string>
+  <string name="setting_display_page_custom_theme_presets">Предустановки</string>
+  <string name="setting_display_page_custom_theme_reset">Сбросить токен</string>
+  <string name="setting_display_page_custom_theme_raw_editor_title">Расширенный редактор токенов</string>
+  <string name="setting_display_page_custom_theme_insert_light_template">Вставить светлый шаблон</string>
+  <string name="setting_display_page_custom_theme_insert_dark_template">Вставить тёмный шаблон</string>
+  <string name="setting_display_page_custom_theme_state_default">По умолчанию</string>
+  <string name="setting_display_page_custom_theme_state_custom">Пользовательский</string>
 </resources>
 
