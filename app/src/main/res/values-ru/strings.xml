@@ -959,5 +959,13 @@
   <string name="quick_messages_page_empty_hint">Нажмите кнопку + в правом нижнем углу, чтобы добавить быстрое сообщение</string>
   <string name="quick_messages_page_untitled">Без названия</string>
   <string name="extensions_page_quick_messages_desc">Управление общими шаблонами быстрых сообщений</string>
+  <string name="safe_mode_title">Безопасный режим</string>
+  <string name="safe_mode_description">При последнем запуске приложение завершилось с ошибкой. Вы можете переключиться на другого ассистента, чтобы решить проблему.</string>
+  <string name="safe_mode_current_assistant">Текущий ассистент: %s</string>
+  <string name="safe_mode_default_assistant">Ассистент по умолчанию</string>
+  <string name="safe_mode_switch_assistant">Переключить помощника</string>
+  <string name="safe_mode_crash_report">Отчёт о сбое</string>
+  <string name="safe_mode_copy">Копировать</string>
+  <string name="safe_mode_assistants">Помощники</string>
 </resources>
 

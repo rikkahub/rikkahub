@@ -966,5 +966,13 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="quick_messages_page_empty_hint">右下の+ボタンをタップしてクイックメッセージを追加</string>
   <string name="quick_messages_page_untitled">無題</string>
   <string name="extensions_page_quick_messages_desc">共有クイックメッセージテンプレートを管理</string>
+  <string name="safe_mode_title">セーフモード</string>
+  <string name="safe_mode_description">前回の起動時にアプリがクラッシュしました。別のアシスタントに切り替えて問題を解決できます。</string>
+  <string name="safe_mode_current_assistant">現在のアシスタント: %s</string>
+  <string name="safe_mode_default_assistant">デフォルトアシスタント</string>
+  <string name="safe_mode_switch_assistant">アシスタントを切り替える</string>
+  <string name="safe_mode_crash_report">クラッシュレポート</string>
+  <string name="safe_mode_copy">コピー</string>
+  <string name="safe_mode_assistants">アシスタント</string>
 </resources>
 

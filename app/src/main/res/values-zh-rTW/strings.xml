@@ -964,5 +964,13 @@
   <string name="quick_messages_page_empty_hint">點擊右下角的 + 按鈕來新增快速訊息</string>
   <string name="quick_messages_page_untitled">未命名</string>
   <string name="extensions_page_quick_messages_desc">管理共用的快速訊息範本</string>
+  <string name="safe_mode_title">安全模式</string>
+  <string name="safe_mode_description">應用程式在上次啟動時崩潰。您可以切換到其他助理來解決此問題。</string>
+  <string name="safe_mode_current_assistant">目前助理：%s</string>
+  <string name="safe_mode_default_assistant">預設助理</string>
+  <string name="safe_mode_switch_assistant">切換助理</string>
+  <string name="safe_mode_crash_report">當機報告</string>
+  <string name="safe_mode_copy">複製</string>
+  <string name="safe_mode_assistants">助理</string>
 </resources>
 

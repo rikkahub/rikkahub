@@ -109,6 +109,8 @@ import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.db.MigrationState
+import me.rerere.rikkahub.ui.activity.SafeModeActivity
+import me.rerere.rikkahub.utils.CrashHandler
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
@@ -126,6 +128,11 @@ class RouteActivity : ComponentActivity() {
         enableEdgeToEdge()
         disableNavigationBarContrast()
         super.onCreate(savedInstanceState)
+        if (CrashHandler.hasCrashed(this)) {
+            startActivity(Intent(this, SafeModeActivity::class.java))
+            finish()
+            return
+        }
         setContent {
             RikkahubTheme {
                 setSingletonImageLoaderFactory { context ->
