@@ -171,7 +171,7 @@ private fun parseThemeColor(value: String): Color? {
     val trimmed = value.trim()
     return when {
         trimmed.startsWith("#") -> parseCssHexColor(trimmed.removePrefix("#"))
-        trimmed.startsWith("0x", ignoreCase = true) -> parseAndroidHexColor(trimmed.removePrefix("0x"))
+        trimmed.startsWith("0x", ignoreCase = true) -> parseAndroidHexColor(trimmed.drop(2))
         else -> null
     }
 }

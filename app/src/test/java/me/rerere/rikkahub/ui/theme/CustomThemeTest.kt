@@ -52,6 +52,11 @@ class CustomThemeTest {
     }
 
     @Test
+    fun parse_theme_color_string_accepts_uppercase_android_hex_prefix() {
+        assertEquals(Color(170, 187, 204, 255), parseThemeColorString("0XFFAABBCC"))
+    }
+
+    @Test
     fun build_theme_token_template_exports_common_keys() {
         val template = buildThemeTokenTemplate(
             lightColorScheme(
