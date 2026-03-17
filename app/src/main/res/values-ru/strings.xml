@@ -1266,5 +1266,12 @@
   <string name="setting_display_page_custom_theme_insert_dark_template">Вставить тёмный шаблон</string>
   <string name="setting_display_page_custom_theme_state_default">По умолчанию</string>
   <string name="setting_display_page_custom_theme_state_custom">Пользовательский</string>
+  <string name="safe_mode_title">Безопасный режим</string>
+  <string name="safe_mode_description">При последнем запуске приложение завершилось с ошибкой. Вы можете переключиться на другого ассистента, чтобы решить проблему.</string>
+  <string name="safe_mode_current_assistant">Текущий ассистент: %s</string>
+  <string name="safe_mode_default_assistant">Ассистент по умолчанию</string>
+  <string name="safe_mode_switch_assistant">Переключить помощника</string>
+  <string name="safe_mode_crash_report">Отчёт о сбое</string>
+  <string name="safe_mode_copy">Копировать</string>
+  <string name="safe_mode_assistants">Помощники</string>
 </resources>
-

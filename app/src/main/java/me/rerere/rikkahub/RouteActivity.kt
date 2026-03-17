@@ -122,6 +122,8 @@ import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.db.MigrationState
 import me.rerere.rikkahub.service.ChatService
 import okhttp3.OkHttpClient
+import me.rerere.rikkahub.ui.activity.SafeModeActivity
+import me.rerere.rikkahub.utils.CrashHandler
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
@@ -139,6 +141,11 @@ class RouteActivity : ComponentActivity() {
         enableEdgeToEdge()
         disableNavigationBarContrast()
         super.onCreate(savedInstanceState)
+        if (CrashHandler.hasCrashed(this)) {
+            startActivity(Intent(this, SafeModeActivity::class.java))
+            finish()
+            return
+        }
         setContent {
             RikkahubTheme {
                 setSingletonImageLoaderFactory { context ->

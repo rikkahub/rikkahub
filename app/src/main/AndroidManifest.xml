@@ -28,6 +28,12 @@
     android:name="android.hardware.camera.autofocus"
     android:required="false" />
 
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.TTS_SERVICE" />
+    </intent>
+  </queries>
+
   <application
     android:name=".RikkaHubApp"
     android:allowBackup="true"
@@ -42,6 +48,16 @@
     android:usesCleartextTraffic="true"
     tools:targetApi="33">
     <activity
+      android:name=".ui.activity.SafeModeActivity"
+      android:exported="false"
+      android:label="@string/title_activity_safe_mode"
+      android:theme="@style/Theme.Rikkahub" />
+    <activity
+      android:name=".ui.activity.SafeModeActivity"
+      android:exported="false"
+      android:label="@string/title_activity_safe_mode"
+      android:theme="@style/Theme.Rikkahub" />
+    <activity
       android:name=".RouteActivity"
       android:configChanges="keyboardHidden|orientation|screenSize"
       android:exported="true"
@@ -49,31 +65,34 @@
       android:windowSoftInputMode="adjustResize">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
+
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
       <intent-filter>
         <action android:name="android.intent.action.SEND" />
+
         <category android:name="android.intent.category.DEFAULT" />
+
         <data android:mimeType="text/plain" />
       </intent-filter>
       <meta-data
         android:name="android.app.shortcuts"
         android:resource="@xml/shortcuts" />
     </activity>
-
     <activity
       android:name=".ui.activity.ShortcutHandlerActivity"
       android:exported="true"
       android:theme="@android:style/Theme.Translucent.NoTitleBar">
       <intent-filter>
         <action android:name="android.intent.action.VIEW" />
+
         <category android:name="android.intent.category.DEFAULT" />
+
         <data
           android:host="shortcut"
           android:scheme="rikkahub" />
       </intent-filter>
     </activity>
-
     <activity
       android:name=".ui.activity.TextSelectionActivity"
       android:exported="true"
@@ -135,7 +154,6 @@
         android:name="android.support.FILE_PROVIDER_PATHS"
         android:resource="@xml/file_paths" />
     </provider>
-
     <provider
       android:name="androidx.startup.InitializationProvider"
       android:authorities="${applicationId}.androidx-startup"
