@@ -1246,5 +1246,25 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_deselect_all">すべての選択を解除</string>
   <string name="provider_share_sheet_models_not_included">共有されたプロバイダーにはモデル一覧が含まれていません。</string>
   <string name="provider_share_sheet_qr_unavailable">この選択内容は大きすぎて QR コードに収まりません。代わりにシステム共有を使用してください。</string>
+  <string name="setting_display_page_custom_theme_section_title">カスタムテーマトークン</string>
+  <string name="setting_display_page_custom_theme_enabled_title">カスタムテーマを有効にする</string>
+  <string name="setting_display_page_custom_theme_enabled_desc">現在の Compose テーマを、ユーザー定義の ColorScheme トークンで上書きします。</string>
+  <string name="setting_display_page_custom_theme_edit_title">ライト／ダークトークンを編集</string>
+  <string name="setting_display_page_custom_theme_edit_desc">設定済みライトトークン: %1$d、ダークトークン: %2$d</string>
+  <string name="setting_display_page_custom_theme_dialog_title">カスタムテーマを編集</string>
+  <string name="setting_display_page_custom_theme_dialog_desc">CSS のように ColorScheme トークンを宣言してください。使用できるキーには primary、background、surfaceContainer、outline などがあります。</string>
+  <string name="setting_display_page_custom_theme_light_label">ライトトークン</string>
+  <string name="setting_display_page_custom_theme_dark_label">ダークトークン</string>
+  <string name="setting_display_page_custom_theme_format_hint">書式例: key: #RRGGBBAA; #RRGGBB や 0xAARRGGBB も使用できます。</string>
+  <string name="setting_display_page_custom_theme_parse_hint">%1$d 個のトークンを認識しました。%2$d 件のエントリは無視されます。</string>
+  <string name="setting_display_page_custom_theme_advanced_edit">高度な設定</string>
+  <string name="setting_display_page_custom_theme_hex_label">16進数の値</string>
+  <string name="setting_display_page_custom_theme_presets">プリセット</string>
+  <string name="setting_display_page_custom_theme_reset">トークンをリセット</string>
+  <string name="setting_display_page_custom_theme_raw_editor_title">高度なトークンエディター</string>
+  <string name="setting_display_page_custom_theme_insert_light_template">ライトテンプレートを挿入</string>
+  <string name="setting_display_page_custom_theme_insert_dark_template">ダークテンプレートを挿入</string>
+  <string name="setting_display_page_custom_theme_state_default">デフォルト</string>
+  <string name="setting_display_page_custom_theme_state_custom">カスタム</string>
 </resources>
 
