@@ -63,11 +63,12 @@
   "conversation_search": {
     "search_conversations": "搜索对话",
     "search_failed": "搜索失败",
-    "input_placeholder": "搜索消息内容...",
+    "input_placeholder": "搜索消息内容或对话标题...",
     "searching": "搜索中...",
     "type_to_start": "输入关键词开始搜索",
-    "no_results": "没有找到匹配的消息",
-    "unnamed_conversation": "未命名会话"
+    "no_results": "没有找到匹配的消息或标题",
+    "unnamed_conversation": "未命名会话",
+    "title_match": "匹配到对话标题"
   },
   "quick_jump": {
     "role_user": "用户",

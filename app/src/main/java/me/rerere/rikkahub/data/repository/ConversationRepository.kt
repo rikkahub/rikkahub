@@ -155,8 +155,14 @@ class ConversationRepository(
             enablePlaceholders = false
         ),
         pagingSourceFactory = { conversationDAO.searchConversationsPaging(titleKeyword) }
-    ).flow.map { pagingData ->
-        pagingData.map { entity ->
+        ).flow.map { pagingData ->
+            pagingData.map { entity ->
+                conversationSummaryToConversation(entity)
+            }
+        }
+
+    suspend fun searchConversationTitles(keyword: String, limit: Int = 20): List<Conversation> {
+        return conversationDAO.searchConversationTitles(keyword, limit).map { entity ->
             conversationSummaryToConversation(entity)
         }
     }

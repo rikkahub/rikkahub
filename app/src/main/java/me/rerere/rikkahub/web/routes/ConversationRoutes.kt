@@ -102,15 +102,24 @@ fun Route.conversationRoutes(
             )
         }
 
-        // GET /api/conversations/search?query=foo - Full-text search messages
+        // GET /api/conversations/search?query=foo - Search conversation titles and indexed messages
         get("/search") {
             val query = call.request.queryParameters["query"]?.trim().orEmpty()
             if (query.isBlank()) {
                 call.respond(emptyList<MessageSearchResultDto>())
                 return@get
             }
-            val results = conversationRepo.searchMessages(query)
-            call.respond(results.map { result ->
+            val titleResults = conversationRepo.searchConversationTitles(query).map { conversation ->
+                MessageSearchResultDto(
+                    nodeId = "",
+                    messageId = "title:${conversation.id}",
+                    conversationId = conversation.id.toString(),
+                    title = conversation.title,
+                    updateAt = conversation.updateAt.toEpochMilli(),
+                    snippet = "",
+                )
+            }
+            val messageResults = conversationRepo.searchMessages(query).map { result ->
                 MessageSearchResultDto(
                     nodeId = result.nodeId,
                     messageId = result.messageId,
@@ -119,7 +128,8 @@ fun Route.conversationRoutes(
                     updateAt = result.updateAt.toEpochMilli(),
                     snippet = result.snippet,
                 )
-            })
+            }
+            call.respond(titleResults + messageResults)
         }
 
         // SSE /api/conversations/stream - Stream conversation list invalidation events

@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -45,7 +46,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -53,8 +53,6 @@ import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.uuid.Uuid
 
 @Composable
@@ -193,12 +191,24 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                             items(vm.results) { result ->
                                 SearchResultItem(
                                     result = result,
+                                    query = vm.searchQuery,
                                     onClick = {
-                                        navigateToChatPage(
-                                            navController,
-                                            chatId = Uuid.parse(result.conversationId),
-                                            nodeId = Uuid.parse(result.nodeId),
-                                        )
+                                        when (result) {
+                                            is SearchResult.Title -> {
+                                                navigateToChatPage(
+                                                    navController,
+                                                    chatId = Uuid.parse(result.conversationId),
+                                                )
+                                            }
+
+                                            is SearchResult.Message -> {
+                                                navigateToChatPage(
+                                                    navController,
+                                                    chatId = Uuid.parse(result.conversationId),
+                                                    nodeId = Uuid.parse(result.nodeId),
+                                                )
+                                            }
+                                        }
                                     }
                                 )
                             }
@@ -212,33 +222,24 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
 
 @Composable
 private fun SearchResultItem(
-    result: MessageSearchResult,
+    result: SearchResult,
+    query: String,
     onClick: () -> Unit,
 ) {
     val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
     val untitled = stringResource(R.string.search_page_untitled)
-    val snippetText = buildAnnotatedString {
-        val snippet = result.snippet
-        var index = 0
-        while (index < snippet.length) {
-            val start = snippet.indexOf('[', index)
-            if (start == -1) {
-                append(snippet.substring(index))
-                break
-            }
-            if (start > index) {
-                append(snippet.substring(index, start))
-            }
-            val end = snippet.indexOf(']', start + 1)
-            if (end == -1) {
-                append(snippet.substring(start))
-                break
-            }
-            val matched = snippet.substring(start + 1, end)
-            withStyle(SpanStyle(background = highlightColor)) {
-                append(matched)
-            }
-            index = end + 1
+    val titleMatchText = stringResource(R.string.search_page_title_match)
+    val titleText = remember(result.title, query, untitled, highlightColor) {
+        highlightQuery(
+            text = result.title.ifBlank { untitled },
+            query = query,
+            highlightColor = highlightColor
+        )
+    }
+    val snippetText = remember(result, titleMatchText, highlightColor) {
+        when (result) {
+            is SearchResult.Title -> AnnotatedString(titleMatchText)
+            is SearchResult.Message -> highlightSnippet(result.snippet, highlightColor)
         }
     }
     val formattedTime = remember(result.updateAt) {
@@ -257,14 +258,18 @@ private fun SearchResultItem(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = result.title.ifBlank { untitled },
+                text = titleText,
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = snippetText,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (result is SearchResult.Title) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
             )
             Text(
                 text = formattedTime,
@@ -272,5 +277,62 @@ private fun SearchResultItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+private fun highlightSnippet(snippet: String, highlightColor: Color): AnnotatedString = buildAnnotatedString {
+    var index = 0
+    while (index < snippet.length) {
+        val start = snippet.indexOf('[', index)
+        if (start == -1) {
+            append(snippet.substring(index))
+            break
+        }
+        if (start > index) {
+            append(snippet.substring(index, start))
+        }
+        val end = snippet.indexOf(']', start + 1)
+        if (end == -1) {
+            append(snippet.substring(start))
+            break
+        }
+        val matched = snippet.substring(start + 1, end)
+        withStyle(SpanStyle(background = highlightColor)) {
+            append(matched)
+        }
+        index = end + 1
+    }
+}
+
+private fun highlightQuery(
+    text: String,
+    query: String,
+    highlightColor: Color,
+): AnnotatedString = buildAnnotatedString {
+    if (query.isBlank()) {
+        append(text)
+        return@buildAnnotatedString
+    }
+
+    val lowerText = text.lowercase()
+    val lowerQuery = query.lowercase()
+    var searchFrom = 0
+
+    while (searchFrom < text.length) {
+        val matchIndex = lowerText.indexOf(lowerQuery, startIndex = searchFrom)
+        if (matchIndex == -1) {
+            append(text.substring(searchFrom))
+            break
+        }
+
+        if (matchIndex > searchFrom) {
+            append(text.substring(searchFrom, matchIndex))
+        }
+
+        val matchEnd = (matchIndex + query.length).coerceAtMost(text.length)
+        withStyle(SpanStyle(background = highlightColor)) {
+            append(text.substring(matchIndex, matchEnd))
+        }
+        searchFrom = matchEnd
     }
 }

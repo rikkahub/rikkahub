@@ -33,6 +33,9 @@ interface ConversationDAO {
     @Query("SELECT id, assistant_id as assistantId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt FROM conversationentity WHERE title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
     fun searchConversationsPaging(searchText: String): PagingSource<Int, LightConversationEntity>
 
+    @Query("SELECT id, assistant_id as assistantId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt FROM conversationentity WHERE title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC LIMIT :limit")
+    suspend fun searchConversationTitles(searchText: String, limit: Int): List<LightConversationEntity>
+
     @Query("SELECT * FROM conversationentity WHERE assistant_id = :assistantId AND title LIKE '%' || :searchText || '%' ORDER BY is_pinned DESC, update_at DESC")
     fun searchConversationsOfAssistant(assistantId: String, searchText: String): Flow<List<ConversationEntity>>
 
