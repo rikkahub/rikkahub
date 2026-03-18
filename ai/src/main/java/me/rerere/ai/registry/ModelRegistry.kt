@@ -63,6 +63,18 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GPT_5_4_MINI = defineModel {
+        tokens("gpt", "5", "4", "mini")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val GPT_5_4_NANO = defineModel {
+        tokens("gpt", "5", "4", "nano")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val GEMINI_20_FLASH = defineModel {
         tokens("gemini", "2", "0", "flash")
         visionInput()
@@ -309,8 +321,18 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val MINIMAX_M2_7 = defineModel {
+        tokens("minimax", "m", "2", "7")
+        toolReasoningAbility()
+    }
+
     private val XIAOMI_MIMO_V2 = defineModel {
         tokens("mimo", "v", "2")
+        toolReasoningAbility()
+    }
+
+    private val XIAOMI_MIMO_V2_PRO = defineModel {
+        tokens("mimo", "v", "2", "pro")
         toolReasoningAbility()
     }
 
@@ -328,6 +350,8 @@ object ModelRegistry {
         GPT_5_2,
         GPT_5_3,
         GPT_5_4,
+        GPT_5_4_MINI,
+        GPT_5_4_NANO,
         GEMINI_20_FLASH,
         GEMINI_2_5_FLASH,
         GEMINI_2_5_PRO,
@@ -367,7 +391,9 @@ object ModelRegistry {
         GLM_5,
         MINIMAX_M2,
         MINIMAX_M2_5,
+        MINIMAX_M2_7,
         XIAOMI_MIMO_V2,
+        XIAOMI_MIMO_V2_PRO,
         QWEN_MT
     )
 
