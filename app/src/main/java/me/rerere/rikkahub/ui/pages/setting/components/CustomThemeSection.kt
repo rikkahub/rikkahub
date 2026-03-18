@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -96,7 +97,7 @@ private enum class ThemeEditorTab {
 
 private data class CommonThemeToken(
     val key: String,
-    val label: String,
+    @param:StringRes val labelRes: Int,
 )
 
 private data class ActiveColorPicker(
@@ -106,24 +107,24 @@ private data class ActiveColorPicker(
 
 private data class ThemeColorTokenGroup(
     val id: String,
-    val title: String,
-    val description: String,
+    @param:StringRes val titleRes: Int,
+    @param:StringRes val descriptionRes: Int,
     val tokens: List<CommonThemeToken>,
     val expandedByDefault: Boolean,
 )
 
 private data class ThemeShapeToken(
     val key: String,
-    val label: String,
-    val description: String,
+    @param:StringRes val labelRes: Int,
+    @param:StringRes val descriptionRes: Int,
     val defaultValue: Dp,
     val range: ClosedFloatingPointRange<Float>,
 )
 
 private data class ThemeScaleToken(
     val key: String,
-    val label: String,
-    val description: String,
+    @param:StringRes val labelRes: Int,
+    @param:StringRes val descriptionRes: Int,
     val defaultValue: Float,
     val range: ClosedFloatingPointRange<Float>,
 )
@@ -133,69 +134,69 @@ private val PREVIEW_SWATCH_KEYS = listOf("primary", "surface", "surfaceContainer
 private val VISUAL_THEME_COLOR_GROUPS = listOf(
     ThemeColorTokenGroup(
         id = "brand",
-        title = "Brand",
-        description = "Primary emphasis colors and their readable foregrounds.",
+        titleRes = R.string.setting_display_page_custom_theme_group_brand_title,
+        descriptionRes = R.string.setting_display_page_custom_theme_group_brand_desc,
         expandedByDefault = true,
         tokens = listOf(
-            CommonThemeToken("primary", "Primary"),
-            CommonThemeToken("onPrimary", "On Primary"),
-            CommonThemeToken("primaryContainer", "Primary Container"),
-            CommonThemeToken("onPrimaryContainer", "On Primary Container"),
-            CommonThemeToken("inversePrimary", "Inverse Primary"),
+            CommonThemeToken("primary", R.string.setting_display_page_custom_theme_token_primary_label),
+            CommonThemeToken("onPrimary", R.string.setting_display_page_custom_theme_token_on_primary_label),
+            CommonThemeToken("primaryContainer", R.string.setting_display_page_custom_theme_token_primary_container_label),
+            CommonThemeToken("onPrimaryContainer", R.string.setting_display_page_custom_theme_token_on_primary_container_label),
+            CommonThemeToken("inversePrimary", R.string.setting_display_page_custom_theme_token_inverse_primary_label),
         ),
     ),
     ThemeColorTokenGroup(
         id = "supporting",
-        title = "Secondary And Tertiary",
-        description = "Supporting accents for chips, cards, and alternate callouts.",
+        titleRes = R.string.setting_display_page_custom_theme_group_supporting_title,
+        descriptionRes = R.string.setting_display_page_custom_theme_group_supporting_desc,
         expandedByDefault = false,
         tokens = listOf(
-            CommonThemeToken("secondary", "Secondary"),
-            CommonThemeToken("onSecondary", "On Secondary"),
-            CommonThemeToken("secondaryContainer", "Secondary Container"),
-            CommonThemeToken("onSecondaryContainer", "On Secondary Container"),
-            CommonThemeToken("tertiary", "Tertiary"),
-            CommonThemeToken("onTertiary", "On Tertiary"),
-            CommonThemeToken("tertiaryContainer", "Tertiary Container"),
-            CommonThemeToken("onTertiaryContainer", "On Tertiary Container"),
+            CommonThemeToken("secondary", R.string.setting_display_page_custom_theme_token_secondary_label),
+            CommonThemeToken("onSecondary", R.string.setting_display_page_custom_theme_token_on_secondary_label),
+            CommonThemeToken("secondaryContainer", R.string.setting_display_page_custom_theme_token_secondary_container_label),
+            CommonThemeToken("onSecondaryContainer", R.string.setting_display_page_custom_theme_token_on_secondary_container_label),
+            CommonThemeToken("tertiary", R.string.setting_display_page_custom_theme_token_tertiary_label),
+            CommonThemeToken("onTertiary", R.string.setting_display_page_custom_theme_token_on_tertiary_label),
+            CommonThemeToken("tertiaryContainer", R.string.setting_display_page_custom_theme_token_tertiary_container_label),
+            CommonThemeToken("onTertiaryContainer", R.string.setting_display_page_custom_theme_token_on_tertiary_container_label),
         ),
     ),
     ThemeColorTokenGroup(
         id = "surface",
-        title = "Surfaces",
-        description = "Background layers and text colors used across the UI.",
+        titleRes = R.string.setting_display_page_custom_theme_group_surface_title,
+        descriptionRes = R.string.setting_display_page_custom_theme_group_surface_desc,
         expandedByDefault = true,
         tokens = listOf(
-            CommonThemeToken("background", "Background"),
-            CommonThemeToken("onBackground", "On Background"),
-            CommonThemeToken("surface", "Surface"),
-            CommonThemeToken("onSurface", "On Surface"),
-            CommonThemeToken("surfaceVariant", "Surface Variant"),
-            CommonThemeToken("onSurfaceVariant", "On Surface Variant"),
-            CommonThemeToken("surfaceContainerLowest", "Surface Container Lowest"),
-            CommonThemeToken("surfaceContainerLow", "Surface Container Low"),
-            CommonThemeToken("surfaceContainer", "Surface Container"),
-            CommonThemeToken("surfaceContainerHigh", "Surface Container High"),
-            CommonThemeToken("surfaceContainerHighest", "Surface Container Highest"),
-            CommonThemeToken("surfaceBright", "Surface Bright"),
-            CommonThemeToken("surfaceDim", "Surface Dim"),
+            CommonThemeToken("background", R.string.setting_display_page_custom_theme_token_background_label),
+            CommonThemeToken("onBackground", R.string.setting_display_page_custom_theme_token_on_background_label),
+            CommonThemeToken("surface", R.string.setting_display_page_custom_theme_token_surface_label),
+            CommonThemeToken("onSurface", R.string.setting_display_page_custom_theme_token_on_surface_label),
+            CommonThemeToken("surfaceVariant", R.string.setting_display_page_custom_theme_token_surface_variant_label),
+            CommonThemeToken("onSurfaceVariant", R.string.setting_display_page_custom_theme_token_on_surface_variant_label),
+            CommonThemeToken("surfaceContainerLowest", R.string.setting_display_page_custom_theme_token_surface_container_lowest_label),
+            CommonThemeToken("surfaceContainerLow", R.string.setting_display_page_custom_theme_token_surface_container_low_label),
+            CommonThemeToken("surfaceContainer", R.string.setting_display_page_custom_theme_token_surface_container_label),
+            CommonThemeToken("surfaceContainerHigh", R.string.setting_display_page_custom_theme_token_surface_container_high_label),
+            CommonThemeToken("surfaceContainerHighest", R.string.setting_display_page_custom_theme_token_surface_container_highest_label),
+            CommonThemeToken("surfaceBright", R.string.setting_display_page_custom_theme_token_surface_bright_label),
+            CommonThemeToken("surfaceDim", R.string.setting_display_page_custom_theme_token_surface_dim_label),
         ),
     ),
     ThemeColorTokenGroup(
         id = "utility",
-        title = "Utility And Feedback",
-        description = "Error colors, outlines, scrims, and inverse surfaces.",
+        titleRes = R.string.setting_display_page_custom_theme_group_utility_title,
+        descriptionRes = R.string.setting_display_page_custom_theme_group_utility_desc,
         expandedByDefault = false,
         tokens = listOf(
-            CommonThemeToken("inverseSurface", "Inverse Surface"),
-            CommonThemeToken("inverseOnSurface", "Inverse On Surface"),
-            CommonThemeToken("error", "Error"),
-            CommonThemeToken("onError", "On Error"),
-            CommonThemeToken("errorContainer", "Error Container"),
-            CommonThemeToken("onErrorContainer", "On Error Container"),
-            CommonThemeToken("outline", "Outline"),
-            CommonThemeToken("outlineVariant", "Outline Variant"),
-            CommonThemeToken("scrim", "Scrim"),
+            CommonThemeToken("inverseSurface", R.string.setting_display_page_custom_theme_token_inverse_surface_label),
+            CommonThemeToken("inverseOnSurface", R.string.setting_display_page_custom_theme_token_inverse_on_surface_label),
+            CommonThemeToken("error", R.string.setting_display_page_custom_theme_token_error_label),
+            CommonThemeToken("onError", R.string.setting_display_page_custom_theme_token_on_error_label),
+            CommonThemeToken("errorContainer", R.string.setting_display_page_custom_theme_token_error_container_label),
+            CommonThemeToken("onErrorContainer", R.string.setting_display_page_custom_theme_token_on_error_container_label),
+            CommonThemeToken("outline", R.string.setting_display_page_custom_theme_token_outline_label),
+            CommonThemeToken("outlineVariant", R.string.setting_display_page_custom_theme_token_outline_variant_label),
+            CommonThemeToken("scrim", R.string.setting_display_page_custom_theme_token_scrim_label),
         ),
     ),
 )
@@ -203,43 +204,43 @@ private val VISUAL_THEME_COLOR_GROUPS = listOf(
 private val VISUAL_THEME_SHAPE_TOKENS = listOf(
     ThemeShapeToken(
         key = "shapeSmall",
-        label = "Small radius",
-        description = "Compact chips and small inputs.",
+        labelRes = R.string.setting_display_page_custom_theme_shape_small_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_shape_small_desc,
         defaultValue = 12.dp,
         range = 0f..32f,
     ),
     ThemeShapeToken(
         key = "shapeMedium",
-        label = "Medium radius",
-        description = "Standard cards and mid-sized surfaces.",
+        labelRes = R.string.setting_display_page_custom_theme_shape_medium_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_shape_medium_desc,
         defaultValue = 16.dp,
         range = 0f..40f,
     ),
     ThemeShapeToken(
         key = "shapeLarge",
-        label = "Large radius",
-        description = "Message bubbles and large cards.",
+        labelRes = R.string.setting_display_page_custom_theme_shape_large_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_shape_large_desc,
         defaultValue = 24.dp,
         range = 0f..64f,
     ),
     ThemeShapeToken(
         key = "shapeExtraLarge",
-        label = "Extra large radius",
-        description = "Hero containers and prominent panels.",
+        labelRes = R.string.setting_display_page_custom_theme_shape_extra_large_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_shape_extra_large_desc,
         defaultValue = 32.dp,
         range = 0f..80f,
     ),
     ThemeShapeToken(
         key = "shapeLargeIncreased",
-        label = "Large increased",
-        description = "Expressive variants used by larger controls.",
+        labelRes = R.string.setting_display_page_custom_theme_shape_large_increased_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_shape_large_increased_desc,
         defaultValue = 28.dp,
         range = 0f..80f,
     ),
     ThemeShapeToken(
         key = "shapeExtraLargeIncreased",
-        label = "Extra large increased",
-        description = "Extra expressive radius for large panels.",
+        labelRes = R.string.setting_display_page_custom_theme_shape_extra_large_increased_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_shape_extra_large_increased_desc,
         defaultValue = 36.dp,
         range = 0f..96f,
     ),
@@ -248,43 +249,43 @@ private val VISUAL_THEME_SHAPE_TOKENS = listOf(
 private val VISUAL_THEME_SCALE_TOKENS = listOf(
     ThemeScaleToken(
         key = "fontScale",
-        label = "Global scale",
-        description = "Scales every text style before per-group adjustments.",
+        labelRes = R.string.setting_display_page_custom_theme_scale_font_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_scale_font_desc,
         defaultValue = 1f,
         range = 0.8f..1.4f,
     ),
     ThemeScaleToken(
         key = "displayScale",
-        label = "Display scale",
-        description = "Huge marketing or splash typography.",
+        labelRes = R.string.setting_display_page_custom_theme_scale_display_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_scale_display_desc,
         defaultValue = 1f,
         range = 0.8f..1.4f,
     ),
     ThemeScaleToken(
         key = "headlineScale",
-        label = "Headline scale",
-        description = "Large section titles and dialogs.",
+        labelRes = R.string.setting_display_page_custom_theme_scale_headline_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_scale_headline_desc,
         defaultValue = 1f,
         range = 0.8f..1.4f,
     ),
     ThemeScaleToken(
         key = "titleScale",
-        label = "Title scale",
-        description = "Card titles and compact section headers.",
+        labelRes = R.string.setting_display_page_custom_theme_scale_title_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_scale_title_desc,
         defaultValue = 1f,
         range = 0.8f..1.4f,
     ),
     ThemeScaleToken(
         key = "bodyScale",
-        label = "Body scale",
-        description = "Most chat and settings copy.",
+        labelRes = R.string.setting_display_page_custom_theme_scale_body_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_scale_body_desc,
         defaultValue = 1f,
         range = 0.8f..1.4f,
     ),
     ThemeScaleToken(
         key = "labelScale",
-        label = "Label scale",
-        description = "Chips, helper text, and small labels.",
+        labelRes = R.string.setting_display_page_custom_theme_scale_label_label,
+        descriptionRes = R.string.setting_display_page_custom_theme_scale_label_desc,
         defaultValue = 1f,
         range = 0.8f..1.4f,
     ),
@@ -609,7 +610,7 @@ private fun CustomThemeEditorDialog(
         val effectiveColor = overrideColor ?: targetBaseScheme.themeTokenColor(picker.token.key)
 
         ThemeColorPickerSheet(
-            title = picker.token.label,
+            title = stringResource(picker.token.labelRes),
             initialColor = effectiveColor,
             defaultColor = targetBaseScheme.themeTokenColor(picker.token.key),
             hasOverride = overrideColor != null,
@@ -672,7 +673,7 @@ private fun ThemeEditorSummaryCard(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = "Edit colors, radius, and type in one place without leaving the preview.",
+                        text = stringResource(R.string.setting_display_page_custom_theme_editor_summary_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -687,9 +688,18 @@ private fun ThemeEditorSummaryCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                ThemeCountPill(label = "Light", value = "$lightTokenCount tokens")
-                ThemeCountPill(label = "Dark", value = "$darkTokenCount tokens")
-                ThemeCountPill(label = "Modes", value = "Visual and code")
+                ThemeCountPill(
+                    label = stringResource(R.string.setting_display_page_custom_theme_mode_light),
+                    value = stringResource(R.string.setting_display_page_custom_theme_count_tokens, lightTokenCount),
+                )
+                ThemeCountPill(
+                    label = stringResource(R.string.setting_display_page_custom_theme_mode_dark),
+                    value = stringResource(R.string.setting_display_page_custom_theme_count_tokens, darkTokenCount),
+                )
+                ThemeCountPill(
+                    label = stringResource(R.string.setting_display_page_custom_theme_count_modes_label),
+                    value = stringResource(R.string.setting_display_page_custom_theme_count_modes_value),
+                )
             }
         }
     }
@@ -744,9 +754,9 @@ private fun ThemeEditorTabRow(
                 label = {
                     Text(
                         text = when (tab) {
-                            ThemeEditorTab.COLORS -> "Colors"
-                            ThemeEditorTab.STYLE -> "Style"
-                            ThemeEditorTab.CODE -> "Code"
+                            ThemeEditorTab.COLORS -> stringResource(R.string.setting_display_page_custom_theme_tab_colors)
+                            ThemeEditorTab.STYLE -> stringResource(R.string.setting_display_page_custom_theme_tab_style)
+                            ThemeEditorTab.CODE -> stringResource(R.string.setting_display_page_custom_theme_tab_code)
                         }
                     )
                 },
@@ -817,11 +827,11 @@ private fun ThemeColorGroupCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
-                        text = group.title,
+                        text = stringResource(group.titleRes),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = group.description,
+                        text = stringResource(group.descriptionRes),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -831,7 +841,13 @@ private fun ThemeColorGroupCard(
                         expanded = !expanded
                     }
                 ) {
-                    Text(if (expanded) "Hide" else "Show")
+                    Text(
+                        if (expanded) {
+                            stringResource(R.string.setting_display_page_custom_theme_action_hide)
+                        } else {
+                            stringResource(R.string.setting_display_page_custom_theme_action_show)
+                        }
+                    )
                 }
             }
 
@@ -893,12 +909,18 @@ private fun ThemeColorTokenRow(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = token.label,
+                    text = stringResource(token.labelRes),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(
                     text = buildString {
-                        append(if (isCustom) "Custom" else "Default")
+                        append(
+                            if (isCustom) {
+                                stringResource(R.string.setting_display_page_custom_theme_state_custom)
+                            } else {
+                                stringResource(R.string.setting_display_page_custom_theme_state_default)
+                            }
+                        )
                         append(" · ")
                         append(color.toCssHex())
                     },
@@ -913,7 +935,7 @@ private fun ThemeColorTokenRow(
             ) {
                 if (onReset != null) {
                     TextButton(onClick = onReset) {
-                        Text("Reset")
+                        Text(stringResource(R.string.setting_display_page_custom_theme_reset))
                     }
                 }
                 ColorSwatch(
@@ -938,8 +960,8 @@ private fun ThemeStyleTab(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ThemeSliderCard(
-            title = "Corner radius",
-            description = "These sliders expose the shape tokens that were previously only reachable in raw code.",
+            title = stringResource(R.string.setting_display_page_custom_theme_style_shape_title),
+            description = stringResource(R.string.setting_display_page_custom_theme_style_shape_desc),
         ) {
             VISUAL_THEME_SHAPE_TOKENS.forEach { token ->
                 ThemeShapeSliderRow(
@@ -951,8 +973,8 @@ private fun ThemeStyleTab(
         }
 
         ThemeSliderCard(
-            title = "Typography scale",
-            description = "Scale the entire type ramp or just one text group.",
+            title = stringResource(R.string.setting_display_page_custom_theme_style_type_title),
+            description = stringResource(R.string.setting_display_page_custom_theme_style_type_desc),
         ) {
             VISUAL_THEME_SCALE_TOKENS.forEach { token ->
                 ThemeScaleSliderRow(
@@ -1027,14 +1049,20 @@ private fun ThemeShapeSliderRow(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = token.label,
+                    text = stringResource(token.labelRes),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(
                     text = buildString {
-                        append(token.description)
+                        append(stringResource(token.descriptionRes))
                         append(" · ")
-                        append(if (value != null) "Custom" else "Default")
+                        append(
+                            if (value != null) {
+                                stringResource(R.string.setting_display_page_custom_theme_state_custom)
+                            } else {
+                                stringResource(R.string.setting_display_page_custom_theme_state_default)
+                            }
+                        )
                         append(" · ")
                         append(formatThemeDimensionTokenValue(effectiveValue))
                     },
@@ -1044,7 +1072,7 @@ private fun ThemeShapeSliderRow(
             }
             if (value != null) {
                 TextButton(onClick = { onValueChange(null) }) {
-                    Text("Reset")
+                    Text(stringResource(R.string.setting_display_page_custom_theme_reset))
                 }
             }
         }
@@ -1079,14 +1107,20 @@ private fun ThemeScaleSliderRow(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = token.label,
+                    text = stringResource(token.labelRes),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(
                     text = buildString {
-                        append(token.description)
+                        append(stringResource(token.descriptionRes))
                         append(" · ")
-                        append(if (value != null) "Custom" else "Default")
+                        append(
+                            if (value != null) {
+                                stringResource(R.string.setting_display_page_custom_theme_state_custom)
+                            } else {
+                                stringResource(R.string.setting_display_page_custom_theme_state_default)
+                            }
+                        )
                         append(" · ")
                         append((effectiveValue * 100).roundToInt())
                         append("%")
@@ -1097,7 +1131,7 @@ private fun ThemeScaleSliderRow(
             }
             if (value != null) {
                 TextButton(onClick = { onValueChange(null) }) {
-                    Text("Reset")
+                    Text(stringResource(R.string.setting_display_page_custom_theme_reset))
                 }
             }
         }
@@ -1142,14 +1176,20 @@ private fun ThemeCodeTab(
             ) {
                 Text(
                     text = if (mode == ThemeEditorMode.LIGHT) {
-                        "Light token source"
+                        stringResource(
+                            R.string.setting_display_page_custom_theme_code_source_title,
+                            stringResource(R.string.setting_display_page_custom_theme_mode_light),
+                        )
                     } else {
-                        "Dark token source"
+                        stringResource(
+                            R.string.setting_display_page_custom_theme_code_source_title,
+                            stringResource(R.string.setting_display_page_custom_theme_mode_dark),
+                        )
                     },
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "Use raw editing when you need exact token names, comments, or overrides not surfaced visually.",
+                    text = stringResource(R.string.setting_display_page_custom_theme_code_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1161,7 +1201,13 @@ private fun ThemeCodeTab(
                             onSourceChange(buildThemeTokenTemplate(baseScheme))
                         }
                     ) {
-                        Text("Insert template")
+                        Text(
+                            if (mode == ThemeEditorMode.LIGHT) {
+                                stringResource(R.string.setting_display_page_custom_theme_insert_light_template)
+                            } else {
+                                stringResource(R.string.setting_display_page_custom_theme_insert_dark_template)
+                            }
+                        )
                     }
                     if (source.isNotBlank()) {
                         TextButton(
@@ -1169,7 +1215,7 @@ private fun ThemeCodeTab(
                                 onSourceChange("")
                             }
                         ) {
-                            Text("Clear")
+                            Text(stringResource(R.string.setting_display_page_custom_theme_code_clear))
                         }
                     }
                 }
@@ -1217,7 +1263,7 @@ private fun ThemeParseStatusCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "Parser status",
+                text = stringResource(R.string.setting_display_page_custom_theme_parser_title),
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
@@ -1232,7 +1278,10 @@ private fun ThemeParseStatusCard(
 
             if (parseResult.unsupportedKeys.isNotEmpty()) {
                 Text(
-                    text = "Unsupported: ${parseResult.unsupportedKeys.take(6).joinToString()}",
+                    text = stringResource(
+                        R.string.setting_display_page_custom_theme_parser_unsupported,
+                        parseResult.unsupportedKeys.take(6).joinToString(),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1240,7 +1289,10 @@ private fun ThemeParseStatusCard(
 
             if (parseResult.invalidEntries.isNotEmpty()) {
                 Text(
-                    text = "Invalid: ${parseResult.invalidEntries.take(3).joinToString(" | ")}",
+                    text = stringResource(
+                        R.string.setting_display_page_custom_theme_parser_invalid,
+                        parseResult.invalidEntries.take(3).joinToString(" | "),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1303,12 +1355,16 @@ private fun ThemePreviewCard(
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Text(
-                                    text = "Live Preview",
+                                    text = stringResource(R.string.setting_display_page_custom_theme_preview_title),
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Text(
-                                    text = if (darkMode) "Dark mode" else "Light mode",
+                                    text = if (darkMode) {
+                                        stringResource(R.string.setting_display_page_custom_theme_preview_mode_dark)
+                                    } else {
+                                        stringResource(R.string.setting_display_page_custom_theme_preview_mode_light)
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -1344,12 +1400,12 @@ private fun ThemePreviewCard(
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 Text(
-                                    text = "Assistant",
+                                    text = stringResource(R.string.setting_display_page_custom_theme_preview_role),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                    text = "The visual editor now covers colors, radius, and typography in one screen.",
+                                    text = stringResource(R.string.setting_display_page_custom_theme_preview_message),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
@@ -1365,7 +1421,7 @@ private fun ThemePreviewCard(
                                 color = MaterialTheme.colorScheme.primaryContainer,
                             ) {
                                 Text(
-                                    text = "Editing finally feels usable.",
+                                    text = stringResource(R.string.setting_display_page_custom_theme_preview_reply),
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1381,7 +1437,7 @@ private fun ThemePreviewCard(
                                 color = MaterialTheme.colorScheme.surfaceVariant,
                             ) {
                                 Text(
-                                    text = "Outline",
+                                    text = stringResource(R.string.setting_display_page_custom_theme_token_outline_label),
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1392,7 +1448,7 @@ private fun ThemePreviewCard(
                                 color = MaterialTheme.colorScheme.secondaryContainer,
                             ) {
                                 Text(
-                                    text = "Secondary",
+                                    text = stringResource(R.string.setting_display_page_custom_theme_token_secondary_label),
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1411,7 +1467,7 @@ private fun ThemePreviewCard(
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             ) {
                                 Text(
-                                    text = "Message input",
+                                    text = stringResource(R.string.setting_display_page_custom_theme_preview_input),
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
