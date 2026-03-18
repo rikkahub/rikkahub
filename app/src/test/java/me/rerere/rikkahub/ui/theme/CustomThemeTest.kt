@@ -1,10 +1,14 @@
 package me.rerere.rikkahub.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.compose.ui.unit.dp
 
 class CustomThemeTest {
     @Test
@@ -57,6 +61,28 @@ class CustomThemeTest {
     }
 
     @Test
+    fun parse_theme_token_source_accepts_shape_and_scale_declarations() {
+        val result = parseThemeTokenSource(
+            """
+            :root {
+              --shape-large: 28dp;
+              radius_small: 10;
+              font-scale: 1.08;
+              title_scale: 112%;
+              body-scale: nope;
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(4, result.validCount)
+        assertEquals(28.dp, result.shapeOverrides["shapeLarge"])
+        assertEquals(10.dp, result.shapeOverrides["shapeSmall"])
+        assertEquals(1.08f, result.scaleOverrides["fontScale"])
+        assertEquals(1.12f, result.scaleOverrides["titleScale"])
+        assertEquals(1, result.invalidEntries.size)
+    }
+
+    @Test
     fun build_theme_token_template_exports_common_keys() {
         val template = buildThemeTokenTemplate(
             lightColorScheme(
@@ -74,6 +100,7 @@ class CustomThemeTest {
         assertTrue(template.contains("primary: #102030FF;"))
         assertTrue(template.contains("surfaceContainerHigh: #152535FF;"))
         assertTrue(template.contains("outline: #172737FF;"))
+        assertTrue(template.contains("// shapeLarge: 24dp;"))
     }
 
     @Test
@@ -94,5 +121,42 @@ class CustomThemeTest {
         assertTrue(updated.contains("primary: #AABBCCDD;"))
         assertTrue(!updated.contains("--primary: #01020304;"))
         assertTrue(updated.contains("outline: #05060708;"))
+    }
+
+    @Test
+    fun apply_theme_shape_token_overrides_updates_matching_shape_slots() {
+        val base = Shapes()
+
+        val updated = base.applyThemeTokenOverrides(
+            """
+            shapeMedium: 18dp;
+            shapeLarge: 28dp;
+            """.trimIndent()
+        )
+
+        assertEquals(
+            base.copy(
+                medium = RoundedCornerShape(18.dp),
+                large = RoundedCornerShape(28.dp),
+            ),
+            updated,
+        )
+    }
+
+    @Test
+    fun apply_theme_typography_token_overrides_scales_global_and_group_sizes() {
+        val base = Typography()
+
+        val updated = base.applyThemeTokenOverrides(
+            """
+            fontScale: 1.10;
+            bodyScale: 0.90;
+            titleScale: 120%;
+            """.trimIndent()
+        )
+
+        assertEquals(base.headlineSmall.fontSize * 1.10f, updated.headlineSmall.fontSize)
+        assertEquals(base.bodyMedium.fontSize * 0.99f, updated.bodyMedium.fontSize)
+        assertEquals(base.titleMedium.fontSize * 1.32f, updated.titleMedium.fontSize)
     }
 }
