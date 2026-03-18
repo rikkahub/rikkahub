@@ -91,6 +91,8 @@ import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
+import me.rerere.rikkahub.ui.theme.themedRoundedShape
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.base64Encode
@@ -273,6 +275,7 @@ private fun MessagePartsBlock(
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+    val themeTokens = LocalThemeTokenOverrides.current
 
     // 消息输出HapticFeedback
     val hapticFeedback = LocalHapticFeedback.current
@@ -433,7 +436,10 @@ private fun MessagePartsBlock(
                                 context.startActivity(chooserIndent)
                             },
                             modifier = Modifier,
-                            shape = RoundedCornerShape(8.dp),
+                            shape = themeTokens.themedRoundedShape(
+                                tokenKey = "shapeSmall",
+                                fallback = 8.dp,
+                            ),
                         ) {
                             Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                                 Icon(HugeIcons.Video01, null)
@@ -456,7 +462,10 @@ private fun MessagePartsBlock(
                                 context.startActivity(chooserIndent)
                             },
                             modifier = Modifier,
-                            shape = RoundedCornerShape(50),
+                            shape = themeTokens.themedRoundedShape(
+                                tokenKey = "shapeLarge",
+                                fallback = 50.dp,
+                            ),
                             color = MaterialTheme.colorScheme.secondaryContainer
                         ) {
                             ProvideTextStyle(MaterialTheme.typography.labelSmall) {
@@ -500,7 +509,10 @@ private fun MessagePartsBlock(
                                 context.startActivity(chooserIndent)
                             },
                             modifier = Modifier,
-                            shape = RoundedCornerShape(50),
+                            shape = themeTokens.themedRoundedShape(
+                                tokenKey = "shapeLarge",
+                                fallback = 50.dp,
+                            ),
                             color = MaterialTheme.colorScheme.tertiaryContainer
                         ) {
                             ProvideTextStyle(MaterialTheme.typography.labelSmall) {

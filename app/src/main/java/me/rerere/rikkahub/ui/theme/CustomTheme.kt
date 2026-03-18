@@ -52,6 +52,14 @@ private enum class ThemeTokenType {
     SCALE,
 }
 
+enum class ThemeTokenTextScaleGroup {
+    DISPLAY,
+    HEADLINE,
+    TITLE,
+    BODY,
+    LABEL,
+}
+
 private data class ThemeTokenDescriptor(
     val key: String,
     val type: ThemeTokenType,
@@ -245,12 +253,11 @@ fun MaterialTypography.applyThemeTokenOverrides(parseResult: ThemeTokenParseResu
         return this
     }
 
-    val globalScale = overrides["fontScale"] ?: 1f
-    val displayScale = combinedScale(globalScale, overrides["displayScale"])
-    val headlineScale = combinedScale(globalScale, overrides["headlineScale"])
-    val titleScale = combinedScale(globalScale, overrides["titleScale"])
-    val bodyScale = combinedScale(globalScale, overrides["bodyScale"])
-    val labelScale = combinedScale(globalScale, overrides["labelScale"])
+    val displayScale = ThemeTokenTextScaleGroup.DISPLAY.resolveScale(overrides)
+    val headlineScale = ThemeTokenTextScaleGroup.HEADLINE.resolveScale(overrides)
+    val titleScale = ThemeTokenTextScaleGroup.TITLE.resolveScale(overrides)
+    val bodyScale = ThemeTokenTextScaleGroup.BODY.resolveScale(overrides)
+    val labelScale = ThemeTokenTextScaleGroup.LABEL.resolveScale(overrides)
 
     return copy(
         displayLarge = displayLarge.scaled(displayScale),
@@ -284,6 +291,23 @@ fun MaterialTypography.applyThemeTokenOverrides(parseResult: ThemeTokenParseResu
         labelMediumEmphasized = labelMediumEmphasized.scaled(labelScale),
         labelSmallEmphasized = labelSmallEmphasized.scaled(labelScale),
     )
+}
+
+fun ThemeTokenParseResult.themedRoundedShape(
+    tokenKey: String,
+    fallback: Dp,
+): RoundedCornerShape {
+    return themeRoundedShape(shapeOverrides[tokenKey] ?: fallback)
+}
+
+fun ThemeTokenParseResult.applyThemeTokenTextScale(
+    style: TextStyle,
+    group: ThemeTokenTextScaleGroup,
+): TextStyle {
+    if (scaleOverrides.isEmpty()) {
+        return style
+    }
+    return style.scaled(group.resolveScale(scaleOverrides))
 }
 
 private fun upsertThemeTokenValueSource(
@@ -392,6 +416,18 @@ private fun parseAndroidHexColor(hex: String): Color? {
 
 private fun combinedScale(globalScale: Float, sectionScale: Float?): Float {
     return (globalScale * (sectionScale ?: 1f)).coerceIn(MIN_THEME_TEXT_SCALE, MAX_THEME_TEXT_SCALE)
+}
+
+private fun ThemeTokenTextScaleGroup.resolveScale(overrides: Map<String, Float>): Float {
+    val globalScale = overrides["fontScale"] ?: 1f
+    val sectionScale = when (this) {
+        ThemeTokenTextScaleGroup.DISPLAY -> overrides["displayScale"]
+        ThemeTokenTextScaleGroup.HEADLINE -> overrides["headlineScale"]
+        ThemeTokenTextScaleGroup.TITLE -> overrides["titleScale"]
+        ThemeTokenTextScaleGroup.BODY -> overrides["bodyScale"]
+        ThemeTokenTextScaleGroup.LABEL -> overrides["labelScale"]
+    }
+    return combinedScale(globalScale, sectionScale)
 }
 
 private fun TextStyle.scaled(scale: Float): TextStyle {

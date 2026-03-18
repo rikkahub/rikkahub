@@ -5,10 +5,12 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 class CustomThemeTest {
     @Test
@@ -158,5 +160,41 @@ class CustomThemeTest {
         assertEquals(base.headlineSmall.fontSize * 1.10f, updated.headlineSmall.fontSize)
         assertEquals(base.bodyMedium.fontSize * 0.99f, updated.bodyMedium.fontSize)
         assertEquals(base.titleMedium.fontSize * 1.32f, updated.titleMedium.fontSize)
+    }
+
+    @Test
+    fun themed_rounded_shape_uses_override_when_available() {
+        val result = parseThemeTokenSource("shapeLarge: 28dp;")
+
+        assertEquals(
+            RoundedCornerShape(28.dp),
+            result.themedRoundedShape(tokenKey = "shapeLarge", fallback = 24.dp),
+        )
+        assertEquals(
+            RoundedCornerShape(12.dp),
+            result.themedRoundedShape(tokenKey = "shapeSmall", fallback = 12.dp),
+        )
+    }
+
+    @Test
+    fun apply_theme_token_text_scale_scales_custom_text_styles() {
+        val result = parseThemeTokenSource(
+            """
+            fontScale: 1.10;
+            bodyScale: 90%;
+            titleScale: 120%;
+            """.trimIndent()
+        )
+        val bodyStyle = TextStyle(fontSize = 12.sp, lineHeight = 16.sp)
+        val titleStyle = TextStyle(fontSize = 18.sp, lineHeight = 24.sp)
+
+        assertEquals(
+            bodyStyle.fontSize * 0.99f,
+            result.applyThemeTokenTextScale(bodyStyle, ThemeTokenTextScaleGroup.BODY).fontSize,
+        )
+        assertEquals(
+            titleStyle.lineHeight * 1.32f,
+            result.applyThemeTokenTextScale(titleStyle, ThemeTokenTextScaleGroup.TITLE).lineHeight,
+        )
     }
 }

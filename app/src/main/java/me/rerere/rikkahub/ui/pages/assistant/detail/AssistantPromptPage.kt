@@ -31,7 +31,6 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -55,6 +54,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -86,6 +86,9 @@ import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TextArea
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
+import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
+import me.rerere.rikkahub.ui.theme.ThemeTokenTextScaleGroup
+import me.rerere.rikkahub.ui.theme.applyThemeTokenTextScale
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.insertAtCursor
 import me.rerere.rikkahub.utils.onError
@@ -140,6 +143,7 @@ private fun AssistantPromptContent(
 ) {
     val context = LocalContext.current
     val templateTransformer = koinInject<TemplateTransformer>()
+    val themeTokens = LocalThemeTokenOverrides.current
 
     Column(
         modifier = modifier
@@ -221,10 +225,15 @@ private fun AssistantPromptContent(
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 5,
                         maxLines = 15,
-                        textStyle = LocalTextStyle.current.copy(
-                            fontSize = 12.sp,
+                        textStyle = themeTokens.applyThemeTokenTextScale(
+                            style = TextStyle(
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp,
+                                fontFamily = JetbrainsMono,
+                            ),
+                            group = ThemeTokenTextScaleGroup.BODY,
+                        ).copy(
                             fontFamily = JetbrainsMono,
-                            lineHeight = 16.sp
                         )
                     )
                 },

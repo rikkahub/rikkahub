@@ -28,6 +28,7 @@ private val ExtendDarkColors = darkExtendColors()
 val LocalExtendColors = compositionLocalOf { ExtendLightColors }
 
 val LocalDarkMode = compositionLocalOf { false }
+val LocalThemeTokenOverrides = compositionLocalOf { ThemeTokenParseResult(overrides = emptyMap()) }
 
 private val AMOLED_DARK_BACKGROUND = Color(0xFF000000)
 
@@ -117,6 +118,7 @@ fun RikkahubTheme(
     CompositionLocalProvider(
         LocalDarkMode provides darkTheme,
         LocalExtendColors provides extendColors,
+        LocalThemeTokenOverrides provides parsedThemeTokens,
     ) {
         if (parsedThemeTokens.shapeOverrides.isEmpty()) {
             MaterialExpressiveTheme(
