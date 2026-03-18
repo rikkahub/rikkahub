@@ -46,6 +46,8 @@ import me.rerere.rikkahub.ui.pages.setting.components.CustomThemeSection
 import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
 import me.rerere.rikkahub.ui.theme.findPresetTheme
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
+import me.rerere.rikkahub.ui.theme.themedRoundedShape
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -90,6 +92,11 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
         permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setOf(
             PermissionNotification
         ) else emptySet(),
+    )
+    val themeTokens = LocalThemeTokenOverrides.current
+    val settingsPanelShape = themeTokens.themedRoundedShape(
+        tokenKey = "shapeLarge",
+        fallback = 20.dp,
     )
     PermissionManager(permissionState = permissionState)
 
@@ -405,7 +412,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                         modifier = Modifier
                             .padding(horizontal = 8.dp)
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(settingsPanelShape)
                             .background(MaterialTheme.colorScheme.surfaceBright)
                     ) {
                         ListItem(
@@ -493,7 +500,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(settingsPanelShape)
                         .background(MaterialTheme.colorScheme.surfaceBright)
                 ) {
                     ListItem(
@@ -657,7 +664,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             modifier = Modifier
                                 .padding(horizontal = 8.dp)
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(20.dp))
+                                .clip(settingsPanelShape)
                                 .background(MaterialTheme.colorScheme.surfaceBright)
                         ) {
                             ListItem(

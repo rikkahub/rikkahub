@@ -96,3 +96,11 @@
   background (`TermuxRunCommandRequest.background = true`) and must not foreground-launch the Termux UI.
 - Only use foreground Termux execution when the feature explicitly requires user-visible interactive Termux UI, not for
   routine app-side checks.
+
+## Agent Delegation
+
+- Default allow Codex to use sub-agents in this repository when parallel delegation materially improves efficiency.
+- Codex does not need per-task confirmation to spawn sub-agents for exploration, implementation, or verification work.
+- Codex should still avoid unnecessary delegation when the task is small, tightly coupled, or on the critical path.
+- If the user does not explicitly specify a sub-agent model, Codex must default to `gpt-5.4` with `xhigh`
+  reasoning effort for sub-agents.

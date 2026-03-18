@@ -25,15 +25,16 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Shapes as MaterialShapes
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Typography as MaterialTypography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -42,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
@@ -52,6 +54,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.CustomThemeSetting
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.TextArea
+import me.rerere.rikkahub.ui.theme.AppShapes
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.LocalExtendColors
 import me.rerere.rikkahub.ui.theme.Typography
@@ -215,8 +218,14 @@ private fun CustomThemeEditorDialog(
     val currentSource = if (selectedMode == ThemeEditorMode.LIGHT) lightSource else darkSource
     val currentParseResult = remember(currentSource) { parseThemeTokenSource(currentSource) }
     val currentBaseScheme = if (selectedMode == ThemeEditorMode.LIGHT) defaultLightScheme else defaultDarkScheme
-    val currentPreviewScheme = remember(currentBaseScheme, currentSource) {
-        currentBaseScheme.applyThemeTokenOverrides(currentSource)
+    val currentPreviewScheme = remember(currentBaseScheme, currentParseResult) {
+        currentBaseScheme.applyThemeTokenOverrides(currentParseResult)
+    }
+    val currentPreviewShapes = remember(currentParseResult) {
+        AppShapes.applyThemeTokenOverrides(currentParseResult)
+    }
+    val currentPreviewTypography = remember(currentParseResult) {
+        Typography.applyThemeTokenOverrides(currentParseResult)
     }
 
     BasicAlertDialog(
@@ -303,6 +312,8 @@ private fun CustomThemeEditorDialog(
                 ) {
                     ThemePreviewCard(
                         colorScheme = currentPreviewScheme,
+                        shapes = currentPreviewShapes,
+                        typography = currentPreviewTypography,
                         darkMode = selectedMode == ThemeEditorMode.DARK,
                     )
 
@@ -447,6 +458,8 @@ private fun CustomThemeEditorDialog(
 @Composable
 private fun ThemePreviewCard(
     colorScheme: ColorScheme,
+    shapes: MaterialShapes,
+    typography: MaterialTypography,
     darkMode: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -458,29 +471,27 @@ private fun ThemePreviewCard(
     ) {
         MaterialExpressiveTheme(
             colorScheme = colorScheme,
-            typography = Typography,
-            motionScheme = MotionScheme.expressive(),
+            shapes = shapes,
+            typography = typography,
         ) {
             Surface(
                 modifier = modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
+                shape = MaterialTheme.shapes.extraLarge,
                 color = MaterialTheme.colorScheme.background,
             ) {
                 Column(
                     modifier = Modifier
+                        .clip(MaterialTheme.shapes.extraLarge)
                         .border(
                             width = 1.dp,
                             color = MaterialTheme.colorScheme.outlineVariant,
-                            shape = RoundedCornerShape(24.dp),
+                            shape = MaterialTheme.shapes.extraLarge,
                         )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                color = MaterialTheme.colorScheme.surfaceContainer,
-                                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                            )
+                            .background(color = MaterialTheme.colorScheme.surfaceContainer)
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
@@ -531,7 +542,7 @@ private fun ThemePreviewCard(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(18.dp),
+                            shape = MaterialTheme.shapes.medium,
                             color = MaterialTheme.colorScheme.surfaceContainerLow,
                         ) {
                             Column(
@@ -556,7 +567,7 @@ private fun ThemePreviewCard(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(18.dp),
+                                shape = MaterialTheme.shapes.large,
                                 color = MaterialTheme.colorScheme.primaryContainer,
                             ) {
                                 Text(
@@ -572,7 +583,7 @@ private fun ThemePreviewCard(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(999.dp),
+                                shape = MaterialTheme.shapes.small,
                                 color = MaterialTheme.colorScheme.surfaceVariant,
                             ) {
                                 Text(
@@ -583,7 +594,7 @@ private fun ThemePreviewCard(
                                 )
                             }
                             Surface(
-                                shape = RoundedCornerShape(999.dp),
+                                shape = MaterialTheme.shapes.small,
                                 color = MaterialTheme.colorScheme.secondaryContainer,
                             ) {
                                 Text(
@@ -602,7 +613,7 @@ private fun ThemePreviewCard(
                         ) {
                             Surface(
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(22.dp),
+                                shape = MaterialTheme.shapes.large,
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             ) {
                                 Text(

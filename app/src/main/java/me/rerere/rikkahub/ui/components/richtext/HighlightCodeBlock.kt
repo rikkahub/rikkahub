@@ -73,6 +73,10 @@ import me.rerere.rikkahub.ui.theme.AtomOneDarkPalette
 import me.rerere.rikkahub.ui.theme.AtomOneLightPalette
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
+import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
+import me.rerere.rikkahub.ui.theme.ThemeTokenParseResult
+import me.rerere.rikkahub.ui.theme.ThemeTokenTextScaleGroup
+import me.rerere.rikkahub.ui.theme.applyThemeTokenTextScale
 import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.toDp
 import kotlin.time.Clock
@@ -100,10 +104,7 @@ fun HighlightCodeBlock(
     language: String,
     modifier: Modifier = Modifier,
     completeCodeBlock: Boolean = true,
-    style: TextStyle? = TextStyle(
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-    ),
+    style: TextStyle? = null,
 ) {
     val darkMode = LocalDarkMode.current
     val colorPalette = if (darkMode) AtomOneDarkPalette else AtomOneLightPalette
@@ -113,6 +114,7 @@ fun HighlightCodeBlock(
     val navController = LocalNavController.current
     val context = LocalContext.current
     val settings = LocalSettings.current
+    val themeTokens = LocalThemeTokenOverrides.current
 
     var isExpanded by remember(settings.displaySetting.codeBlockAutoCollapse) {
         mutableStateOf(!settings.displaySetting.codeBlockAutoCollapse)
@@ -161,6 +163,7 @@ fun HighlightCodeBlock(
                 code = code,
                 createDocumentLauncher = createDocumentLauncher,
                 navController = navController,
+                themeTokens = themeTokens,
             )
         }
         Column(
@@ -174,7 +177,15 @@ fun HighlightCodeBlock(
                     )
                 }
                 else -> {
-                    val textStyle = LocalTextStyle.current.merge(style)
+                    val baseCodeStyle = remember(style, themeTokens) {
+                        themeTokens.applyThemeTokenTextScale(
+                            style = (style ?: TextStyle(fontSize = 12.sp, lineHeight = 16.sp)).copy(
+                                fontFamily = JetbrainsMono,
+                            ),
+                            group = ThemeTokenTextScaleGroup.BODY,
+                        )
+                    }
+                    val textStyle = LocalTextStyle.current.merge(baseCodeStyle)
                     val codeLines = remember(normalizedCode) { normalizedCode.lines() }
                     val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
                     val displayCode = if (isExpanded) normalizedCode else collapsedCode
@@ -353,9 +364,16 @@ private fun HighlightCodeActions(
     code: String,
     createDocumentLauncher: ManagedActivityResultLauncher<String, Uri?>,
     navController: Navigator,
+    themeTokens: ThemeTokenParseResult,
 ) {
     val previewTarget = remember(language, code) {
         CodeBlockRenderResolver.resolve(language = language, code = code)
+    }
+    val actionTextStyle = remember(themeTokens) {
+        themeTokens.applyThemeTokenTextScale(
+            style = TextStyle(fontSize = 12.sp, lineHeight = 12.sp),
+            group = ThemeTokenTextScaleGroup.LABEL,
+        )
     }
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -363,8 +381,8 @@ private fun HighlightCodeActions(
     ) {
         Text(
             text = language,
-            fontSize = 12.sp,
-            lineHeight = 12.sp,
+            fontSize = actionTextStyle.fontSize,
+            lineHeight = actionTextStyle.lineHeight,
             color = MaterialTheme.colorScheme.onSurfaceVariant
                 .copy(alpha = 0.5f),
         )
@@ -385,8 +403,8 @@ private fun HighlightCodeActions(
         ) {
             Text(
                 text = stringResource(id = R.string.chat_page_save),
-                fontSize = 12.sp,
-                lineHeight = 12.sp,
+                fontSize = actionTextStyle.fontSize,
+                lineHeight = actionTextStyle.lineHeight,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.clickable {
                     val extension = when (language.lowercase()) {
@@ -418,8 +436,8 @@ private fun HighlightCodeActions(
 
             Text(
                 text = stringResource(id = R.string.code_block_copy),
-                fontSize = 12.sp,
-                lineHeight = 12.sp,
+                fontSize = actionTextStyle.fontSize,
+                lineHeight = actionTextStyle.lineHeight,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.clickable {
                     scope.launch {
@@ -431,8 +449,8 @@ private fun HighlightCodeActions(
             if (previewTarget != null) {
                 Text(
                     text = stringResource(id = R.string.code_block_preview),
-                    fontSize = 12.sp,
-                    lineHeight = 12.sp,
+                    fontSize = actionTextStyle.fontSize,
+                    lineHeight = actionTextStyle.lineHeight,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier
                         .clickable {

@@ -77,6 +77,9 @@ import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
+import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
+import me.rerere.rikkahub.ui.theme.ThemeTokenTextScaleGroup
+import me.rerere.rikkahub.ui.theme.applyThemeTokenTextScale
 import me.rerere.rikkahub.utils.toDp
 import org.intellij.markdown.IElementType
 import org.intellij.markdown.MarkdownElementTypes
@@ -323,30 +326,49 @@ private fun dumpAst(node: ASTNode, text: String, indent: String = "") {
     }
 }
 
-object HeaderStyle {
-    val H1 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 24.sp
-    )
+@Composable
+private fun markdownHeaderStyle(type: IElementType): TextStyle {
+    val themeTokens = LocalThemeTokenOverrides.current
+    val (baseStyle, scaleGroup) = when (type) {
+        MarkdownElementTypes.ATX_1 -> TextStyle(
+            fontStyle = FontStyle.Normal,
+            fontWeight = FontWeight.Bold,
+            fontSize = 24.sp,
+        ) to ThemeTokenTextScaleGroup.HEADLINE
 
-    val H2 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 22.sp
-    )
+        MarkdownElementTypes.ATX_2 -> TextStyle(
+            fontStyle = FontStyle.Normal,
+            fontWeight = FontWeight.Bold,
+            fontSize = 22.sp,
+        ) to ThemeTokenTextScaleGroup.HEADLINE
 
-    val H3 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 20.sp
-    )
+        MarkdownElementTypes.ATX_3 -> TextStyle(
+            fontStyle = FontStyle.Normal,
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+        ) to ThemeTokenTextScaleGroup.HEADLINE
 
-    val H4 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 18.sp
-    )
+        MarkdownElementTypes.ATX_4 -> TextStyle(
+            fontStyle = FontStyle.Normal,
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+        ) to ThemeTokenTextScaleGroup.TITLE
 
-    val H5 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 16.sp
-    )
+        MarkdownElementTypes.ATX_5 -> TextStyle(
+            fontStyle = FontStyle.Normal,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
+        ) to ThemeTokenTextScaleGroup.TITLE
 
-    val H6 = TextStyle(
-        fontStyle = FontStyle.Normal, fontWeight = FontWeight.Bold, fontSize = 14.sp
-    )
+        MarkdownElementTypes.ATX_6 -> TextStyle(
+            fontStyle = FontStyle.Normal,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+        ) to ThemeTokenTextScaleGroup.TITLE
+
+        else -> error("Unknown header type: $type")
+    }
+    return themeTokens.applyThemeTokenTextScale(baseStyle, scaleGroup)
 }
 
 @Composable
@@ -385,15 +407,7 @@ private fun MarkdownNode(
 
         // 标题
         MarkdownElementTypes.ATX_1, MarkdownElementTypes.ATX_2, MarkdownElementTypes.ATX_3, MarkdownElementTypes.ATX_4, MarkdownElementTypes.ATX_5, MarkdownElementTypes.ATX_6 -> {
-            val style = when (node.type) {
-                MarkdownElementTypes.ATX_1 -> HeaderStyle.H1
-                MarkdownElementTypes.ATX_2 -> HeaderStyle.H2
-                MarkdownElementTypes.ATX_3 -> HeaderStyle.H3
-                MarkdownElementTypes.ATX_4 -> HeaderStyle.H4
-                MarkdownElementTypes.ATX_5 -> HeaderStyle.H5
-                MarkdownElementTypes.ATX_6 -> HeaderStyle.H6
-                else -> throw IllegalArgumentException("Unknown header type")
-            }
+            val style = markdownHeaderStyle(node.type)
             val headingPadding = when (node.type) {
                 MarkdownElementTypes.ATX_1 -> 16.dp
                 MarkdownElementTypes.ATX_2 -> 14.dp

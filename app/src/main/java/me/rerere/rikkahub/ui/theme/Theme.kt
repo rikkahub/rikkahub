@@ -5,7 +5,6 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -29,6 +28,7 @@ private val ExtendDarkColors = darkExtendColors()
 val LocalExtendColors = compositionLocalOf { ExtendLightColors }
 
 val LocalDarkMode = compositionLocalOf { false }
+val LocalThemeTokenOverrides = compositionLocalOf { ThemeTokenParseResult(overrides = emptyMap()) }
 
 private val AMOLED_DARK_BACKGROUND = Color(0xFF000000)
 
@@ -61,13 +61,28 @@ fun RikkahubTheme(
         darkTheme -> findPresetTheme(settings.themeId).getColorScheme(dark = true)
         else -> findPresetTheme(settings.themeId).getColorScheme(dark = false)
     }
+    val themeTokenSource = remember(
+        darkTheme,
+        settings.customThemeSetting.enabled,
+        settings.customThemeSetting.light,
+        settings.customThemeSetting.dark,
+    ) {
+        if (!settings.customThemeSetting.enabled) {
+            ""
+        } else if (darkTheme) {
+            settings.customThemeSetting.dark
+        } else {
+            settings.customThemeSetting.light
+        }
+    }
+    val parsedThemeTokens = remember(themeTokenSource) {
+        parseThemeTokenSource(themeTokenSource)
+    }
     val colorSchemeConverted = remember(
         darkTheme,
         amoledDarkMode,
         baseColorScheme,
-        settings.customThemeSetting.enabled,
-        settings.customThemeSetting.light,
-        settings.customThemeSetting.dark,
+        parsedThemeTokens,
     ) {
         val amoledAdjusted = if (darkTheme && amoledDarkMode) {
             baseColorScheme.copy(
@@ -78,16 +93,13 @@ fun RikkahubTheme(
             baseColorScheme
         }
 
-        if (settings.customThemeSetting.enabled) {
-            val tokenSource = if (darkTheme) {
-                settings.customThemeSetting.dark
-            } else {
-                settings.customThemeSetting.light
-            }
-            amoledAdjusted.applyThemeTokenOverrides(tokenSource)
-        } else {
-            amoledAdjusted
-        }
+        amoledAdjusted.applyThemeTokenOverrides(parsedThemeTokens)
+    }
+    val themeShapes = remember(parsedThemeTokens) {
+        AppShapes.applyThemeTokenOverrides(parsedThemeTokens)
+    }
+    val themeTypography = remember(parsedThemeTokens) {
+        Typography.applyThemeTokenOverrides(parsedThemeTokens)
     }
     val extendColors = if (darkTheme) ExtendDarkColors else ExtendLightColors
 
@@ -106,13 +118,22 @@ fun RikkahubTheme(
     CompositionLocalProvider(
         LocalDarkMode provides darkTheme,
         LocalExtendColors provides extendColors,
+        LocalThemeTokenOverrides provides parsedThemeTokens,
     ) {
-        MaterialExpressiveTheme(
-            colorScheme = colorSchemeConverted,
-            typography = Typography,
-            content = content,
-            // motionScheme = MotionScheme.expressive()
-        )
+        if (parsedThemeTokens.shapeOverrides.isEmpty()) {
+            MaterialExpressiveTheme(
+                colorScheme = colorSchemeConverted,
+                typography = themeTypography,
+                content = content,
+            )
+        } else {
+            MaterialExpressiveTheme(
+                colorScheme = colorSchemeConverted,
+                shapes = themeShapes,
+                typography = themeTypography,
+                content = content,
+            )
+        }
     }
 }
 

@@ -1,7 +1,15 @@
 package me.rerere.rikkahub.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.Shapes as MaterialShapes
+import androidx.compose.material3.Typography as MaterialTypography
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.utils.toCssHex
 
 private val THEME_TOKEN_LINE_REGEX = Regex(
@@ -9,6 +17,12 @@ private val THEME_TOKEN_LINE_REGEX = Regex(
     options = setOf(RegexOption.MULTILINE),
 )
 private val THEME_TOKEN_NORMALIZE_REGEX = Regex("""[\s_-]""")
+private val THEME_DP_VALUE_REGEX = Regex("""^(-?\d+(?:\.\d+)?)(dp)?$""", RegexOption.IGNORE_CASE)
+private val THEME_SCALE_VALUE_REGEX = Regex("""^(-?\d+(?:\.\d+)?)(%)?$""", RegexOption.IGNORE_CASE)
+
+private const val MIN_THEME_TEXT_SCALE = 0.7f
+private const val MAX_THEME_TEXT_SCALE = 1.6f
+private val MAX_THEME_RADIUS = 96.dp
 
 val COMMON_THEME_TOKEN_KEYS = listOf(
     "primary",
@@ -21,19 +35,60 @@ val COMMON_THEME_TOKEN_KEYS = listOf(
     "outline",
 )
 
-fun buildThemeTokenTemplate(colorScheme: ColorScheme): String {
-    return COMMON_THEME_TOKEN_KEYS.joinToString(separator = "\n") { key ->
-        "$key: ${colorScheme.themeTokenColor(key).toCssHex()};"
-    }
+private val COMMON_THEME_STYLE_TEMPLATE_LINES = listOf(
+    "// shapeMedium: 16dp;",
+    "// shapeLarge: 24dp;",
+    "// shapeExtraLarge: 32dp;",
+    "// fontScale: 1.05;",
+    "// headlineScale: 1.10;",
+    "// titleScale: 1.08;",
+    "// bodyScale: 0.98;",
+    "// labelScale: 0.95;",
+)
+
+private enum class ThemeTokenType {
+    COLOR,
+    SHAPE,
+    SCALE,
 }
+
+enum class ThemeTokenTextScaleGroup {
+    DISPLAY,
+    HEADLINE,
+    TITLE,
+    BODY,
+    LABEL,
+}
+
+private data class ThemeTokenDescriptor(
+    val key: String,
+    val type: ThemeTokenType,
+)
 
 data class ThemeTokenParseResult(
     val overrides: Map<String, Color>,
+    val shapeOverrides: Map<String, Dp> = emptyMap(),
+    val scaleOverrides: Map<String, Float> = emptyMap(),
     val unsupportedKeys: Set<String> = emptySet(),
     val invalidEntries: List<String> = emptyList(),
 ) {
     val validCount: Int
-        get() = overrides.size
+        get() = overrides.size + shapeOverrides.size + scaleOverrides.size
+
+    val hasStyleOverrides: Boolean
+        get() = shapeOverrides.isNotEmpty() || scaleOverrides.isNotEmpty()
+}
+
+fun buildThemeTokenTemplate(colorScheme: ColorScheme): String {
+    val colorLines = COMMON_THEME_TOKEN_KEYS.map { key ->
+        "$key: ${colorScheme.themeTokenColor(key).toCssHex()};"
+    }
+    return buildList {
+        addAll(colorLines)
+        add("")
+        add("// Shape and typography tokens")
+        addAll(COMMON_THEME_STYLE_TEMPLATE_LINES)
+    }.joinToString(separator = "\n").trim()
 }
 
 fun parseThemeTokenSource(source: String): ThemeTokenParseResult {
@@ -42,30 +97,55 @@ fun parseThemeTokenSource(source: String): ThemeTokenParseResult {
     }
 
     val overrides = linkedMapOf<String, Color>()
+    val shapeOverrides = linkedMapOf<String, Dp>()
+    val scaleOverrides = linkedMapOf<String, Float>()
     val unsupportedKeys = linkedSetOf<String>()
     val invalidEntries = mutableListOf<String>()
 
     THEME_TOKEN_LINE_REGEX.findAll(source).forEach { match ->
         val rawKey = match.groupValues[1]
         val rawValue = match.groupValues[2].trim()
-        val canonicalKey = normalizeThemeTokenKey(rawKey)
+        val descriptor = normalizeThemeTokenKey(rawKey)
 
-        if (canonicalKey == null) {
+        if (descriptor == null) {
             unsupportedKeys += rawKey
             return@forEach
         }
 
-        val color = parseThemeColor(rawValue)
-        if (color == null) {
-            invalidEntries += match.value.trim()
-            return@forEach
-        }
+        when (descriptor.type) {
+            ThemeTokenType.COLOR -> {
+                val color = parseThemeColor(rawValue)
+                if (color == null) {
+                    invalidEntries += match.value.trim()
+                    return@forEach
+                }
+                overrides[descriptor.key] = color
+            }
 
-        overrides[canonicalKey] = color
+            ThemeTokenType.SHAPE -> {
+                val shapeValue = parseThemeDimension(rawValue)
+                if (shapeValue == null) {
+                    invalidEntries += match.value.trim()
+                    return@forEach
+                }
+                shapeOverrides[descriptor.key] = shapeValue
+            }
+
+            ThemeTokenType.SCALE -> {
+                val scaleValue = parseThemeScale(rawValue)
+                if (scaleValue == null) {
+                    invalidEntries += match.value.trim()
+                    return@forEach
+                }
+                scaleOverrides[descriptor.key] = scaleValue
+            }
+        }
     }
 
     return ThemeTokenParseResult(
         overrides = overrides,
+        shapeOverrides = shapeOverrides,
+        scaleOverrides = scaleOverrides,
         unsupportedKeys = unsupportedKeys,
         invalidEntries = invalidEntries,
     )
@@ -80,32 +160,12 @@ fun upsertThemeTokenSource(
     key: String,
     color: Color?,
 ): String {
-    val canonicalKey = normalizeThemeTokenKey(key) ?: key
-    var found = false
-
-    val updatedLines = source.lines().mapNotNull { rawLine ->
-        val match = THEME_TOKEN_LINE_REGEX.matchEntire(rawLine)
-        val matchedKey = match?.groupValues?.getOrNull(1)?.let(::normalizeThemeTokenKey)
-        if (matchedKey == canonicalKey) {
-            if (found || color == null) {
-                null
-            } else {
-                found = true
-                serializeThemeTokenLine(canonicalKey, color)
-            }
-        } else {
-            rawLine
-        }
-    }.toMutableList()
-
-    if (!found && color != null) {
-        if (updatedLines.isNotEmpty() && updatedLines.last().isNotBlank()) {
-            updatedLines += ""
-        }
-        updatedLines += serializeThemeTokenLine(canonicalKey, color)
-    }
-
-    return updatedLines.joinToString(separator = "\n").trim()
+    val canonicalKey = normalizeThemeTokenKey(key)?.key ?: key.trim().removePrefix("--")
+    return upsertThemeTokenValueSource(
+        source = source,
+        key = canonicalKey,
+        value = color?.toCssHex(),
+    )
 }
 
 fun removeThemeTokenSource(source: String, key: String): String {
@@ -113,7 +173,11 @@ fun removeThemeTokenSource(source: String, key: String): String {
 }
 
 fun ColorScheme.applyThemeTokenOverrides(source: String): ColorScheme {
-    val overrides = parseThemeTokenSource(source).overrides
+    return applyThemeTokenOverrides(parseThemeTokenSource(source))
+}
+
+fun ColorScheme.applyThemeTokenOverrides(parseResult: ThemeTokenParseResult): ColorScheme {
+    val overrides = parseResult.overrides
     if (overrides.isEmpty()) {
         return this
     }
@@ -157,14 +221,144 @@ fun ColorScheme.applyThemeTokenOverrides(source: String): ColorScheme {
     )
 }
 
-private fun normalizeThemeTokenKey(rawKey: String): String? {
+fun MaterialShapes.applyThemeTokenOverrides(source: String): MaterialShapes {
+    return applyThemeTokenOverrides(parseThemeTokenSource(source))
+}
+
+fun MaterialShapes.applyThemeTokenOverrides(parseResult: ThemeTokenParseResult): MaterialShapes {
+    val overrides = parseResult.shapeOverrides
+    if (overrides.isEmpty()) {
+        return this
+    }
+
+    return copy(
+        extraSmall = overrides["shapeExtraSmall"]?.let(::themeRoundedShape) ?: extraSmall,
+        small = overrides["shapeSmall"]?.let(::themeRoundedShape) ?: small,
+        medium = overrides["shapeMedium"]?.let(::themeRoundedShape) ?: medium,
+        large = overrides["shapeLarge"]?.let(::themeRoundedShape) ?: large,
+        extraLarge = overrides["shapeExtraLarge"]?.let(::themeRoundedShape) ?: extraLarge,
+        largeIncreased = overrides["shapeLargeIncreased"]?.let(::themeRoundedShape) ?: largeIncreased,
+        extraLargeIncreased = overrides["shapeExtraLargeIncreased"]?.let(::themeRoundedShape) ?: extraLargeIncreased,
+        extraExtraLarge = overrides["shapeExtraExtraLarge"]?.let(::themeRoundedShape) ?: extraExtraLarge,
+    )
+}
+
+fun MaterialTypography.applyThemeTokenOverrides(source: String): MaterialTypography {
+    return applyThemeTokenOverrides(parseThemeTokenSource(source))
+}
+
+fun MaterialTypography.applyThemeTokenOverrides(parseResult: ThemeTokenParseResult): MaterialTypography {
+    val overrides = parseResult.scaleOverrides
+    if (overrides.isEmpty()) {
+        return this
+    }
+
+    val displayScale = ThemeTokenTextScaleGroup.DISPLAY.resolveScale(overrides)
+    val headlineScale = ThemeTokenTextScaleGroup.HEADLINE.resolveScale(overrides)
+    val titleScale = ThemeTokenTextScaleGroup.TITLE.resolveScale(overrides)
+    val bodyScale = ThemeTokenTextScaleGroup.BODY.resolveScale(overrides)
+    val labelScale = ThemeTokenTextScaleGroup.LABEL.resolveScale(overrides)
+
+    return copy(
+        displayLarge = displayLarge.scaled(displayScale),
+        displayMedium = displayMedium.scaled(displayScale),
+        displaySmall = displaySmall.scaled(displayScale),
+        headlineLarge = headlineLarge.scaled(headlineScale),
+        headlineMedium = headlineMedium.scaled(headlineScale),
+        headlineSmall = headlineSmall.scaled(headlineScale),
+        titleLarge = titleLarge.scaled(titleScale),
+        titleMedium = titleMedium.scaled(titleScale),
+        titleSmall = titleSmall.scaled(titleScale),
+        bodyLarge = bodyLarge.scaled(bodyScale),
+        bodyMedium = bodyMedium.scaled(bodyScale),
+        bodySmall = bodySmall.scaled(bodyScale),
+        labelLarge = labelLarge.scaled(labelScale),
+        labelMedium = labelMedium.scaled(labelScale),
+        labelSmall = labelSmall.scaled(labelScale),
+        displayLargeEmphasized = displayLargeEmphasized.scaled(displayScale),
+        displayMediumEmphasized = displayMediumEmphasized.scaled(displayScale),
+        displaySmallEmphasized = displaySmallEmphasized.scaled(displayScale),
+        headlineLargeEmphasized = headlineLargeEmphasized.scaled(headlineScale),
+        headlineMediumEmphasized = headlineMediumEmphasized.scaled(headlineScale),
+        headlineSmallEmphasized = headlineSmallEmphasized.scaled(headlineScale),
+        titleLargeEmphasized = titleLargeEmphasized.scaled(titleScale),
+        titleMediumEmphasized = titleMediumEmphasized.scaled(titleScale),
+        titleSmallEmphasized = titleSmallEmphasized.scaled(titleScale),
+        bodyLargeEmphasized = bodyLargeEmphasized.scaled(bodyScale),
+        bodyMediumEmphasized = bodyMediumEmphasized.scaled(bodyScale),
+        bodySmallEmphasized = bodySmallEmphasized.scaled(bodyScale),
+        labelLargeEmphasized = labelLargeEmphasized.scaled(labelScale),
+        labelMediumEmphasized = labelMediumEmphasized.scaled(labelScale),
+        labelSmallEmphasized = labelSmallEmphasized.scaled(labelScale),
+    )
+}
+
+fun ThemeTokenParseResult.themedRoundedShape(
+    tokenKey: String,
+    fallback: Dp,
+): RoundedCornerShape {
+    return themeRoundedShape(shapeOverrides[tokenKey] ?: fallback)
+}
+
+fun ThemeTokenParseResult.applyThemeTokenTextScale(
+    style: TextStyle,
+    group: ThemeTokenTextScaleGroup,
+): TextStyle {
+    if (scaleOverrides.isEmpty()) {
+        return style
+    }
+    return style.scaled(group.resolveScale(scaleOverrides))
+}
+
+private fun upsertThemeTokenValueSource(
+    source: String,
+    key: String,
+    value: String?,
+): String {
+    var found = false
+
+    val updatedLines = source.lines().mapNotNull { rawLine ->
+        val match = THEME_TOKEN_LINE_REGEX.matchEntire(rawLine)
+        val matchedKey = match?.groupValues?.getOrNull(1)?.let(::normalizeThemeTokenKey)?.key
+        if (matchedKey == key) {
+            if (found || value == null) {
+                null
+            } else {
+                found = true
+                serializeThemeTokenLine(key, value)
+            }
+        } else {
+            rawLine
+        }
+    }.toMutableList()
+
+    if (!found && value != null) {
+        if (updatedLines.isNotEmpty() && updatedLines.last().isNotBlank()) {
+            updatedLines += ""
+        }
+        updatedLines += serializeThemeTokenLine(key, value)
+    }
+
+    return updatedLines.joinToString(separator = "\n").trim()
+}
+
+private fun normalizeThemeTokenKey(rawKey: String): ThemeTokenDescriptor? {
     val normalized = rawKey
         .trim()
         .removePrefix("--")
         .replace(THEME_TOKEN_NORMALIZE_REGEX, "")
         .lowercase()
 
-    return SUPPORTED_THEME_TOKEN_KEYS[normalized]
+    SUPPORTED_THEME_COLOR_TOKEN_KEYS[normalized]?.let { key ->
+        return ThemeTokenDescriptor(key = key, type = ThemeTokenType.COLOR)
+    }
+    SUPPORTED_THEME_SHAPE_TOKEN_KEYS[normalized]?.let { key ->
+        return ThemeTokenDescriptor(key = key, type = ThemeTokenType.SHAPE)
+    }
+    SUPPORTED_THEME_SCALE_TOKEN_KEYS[normalized]?.let { key ->
+        return ThemeTokenDescriptor(key = key, type = ThemeTokenType.SCALE)
+    }
+    return null
 }
 
 private fun parseThemeColor(value: String): Color? {
@@ -174,6 +368,18 @@ private fun parseThemeColor(value: String): Color? {
         trimmed.startsWith("0x", ignoreCase = true) -> parseAndroidHexColor(trimmed.drop(2))
         else -> null
     }
+}
+
+private fun parseThemeDimension(value: String): Dp? {
+    val match = THEME_DP_VALUE_REGEX.matchEntire(value.trim()) ?: return null
+    val rawNumber = match.groupValues[1].toFloatOrNull() ?: return null
+    return rawNumber.dp
+}
+
+private fun parseThemeScale(value: String): Float? {
+    val match = THEME_SCALE_VALUE_REGEX.matchEntire(value.trim()) ?: return null
+    val rawNumber = match.groupValues[1].toFloatOrNull() ?: return null
+    return if (match.groupValues[2] == "%") rawNumber / 100f else rawNumber
 }
 
 private fun parseCssHexColor(hex: String): Color? {
@@ -208,8 +414,45 @@ private fun parseAndroidHexColor(hex: String): Color? {
     return Color(red, green, blue, alpha)
 }
 
+private fun combinedScale(globalScale: Float, sectionScale: Float?): Float {
+    return (globalScale * (sectionScale ?: 1f)).coerceIn(MIN_THEME_TEXT_SCALE, MAX_THEME_TEXT_SCALE)
+}
+
+private fun ThemeTokenTextScaleGroup.resolveScale(overrides: Map<String, Float>): Float {
+    val globalScale = overrides["fontScale"] ?: 1f
+    val sectionScale = when (this) {
+        ThemeTokenTextScaleGroup.DISPLAY -> overrides["displayScale"]
+        ThemeTokenTextScaleGroup.HEADLINE -> overrides["headlineScale"]
+        ThemeTokenTextScaleGroup.TITLE -> overrides["titleScale"]
+        ThemeTokenTextScaleGroup.BODY -> overrides["bodyScale"]
+        ThemeTokenTextScaleGroup.LABEL -> overrides["labelScale"]
+    }
+    return combinedScale(globalScale, sectionScale)
+}
+
+private fun TextStyle.scaled(scale: Float): TextStyle {
+    val safeScale = scale.coerceIn(MIN_THEME_TEXT_SCALE, MAX_THEME_TEXT_SCALE)
+    return copy(
+        fontSize = fontSize.scaleBy(safeScale),
+        lineHeight = lineHeight.scaleBy(safeScale),
+        letterSpacing = letterSpacing.scaleBy(safeScale),
+    )
+}
+
+private fun TextUnit.scaleBy(scale: Float): TextUnit {
+    return if (type == TextUnitType.Unspecified) this else this * scale
+}
+
+private fun themeRoundedShape(radius: Dp): RoundedCornerShape {
+    return RoundedCornerShape(radius.coerceIn(0.dp, MAX_THEME_RADIUS))
+}
+
 private fun serializeThemeTokenLine(key: String, color: Color): String {
-    return "$key: ${color.toCssHex()};"
+    return serializeThemeTokenLine(key, color.toCssHex())
+}
+
+private fun serializeThemeTokenLine(key: String, value: String): String {
+    return "$key: $value;"
 }
 
 fun ColorScheme.themeTokenColor(key: String): Color {
@@ -226,7 +469,7 @@ fun ColorScheme.themeTokenColor(key: String): Color {
     }
 }
 
-private val SUPPORTED_THEME_TOKEN_KEYS = mapOf(
+private val SUPPORTED_THEME_COLOR_TOKEN_KEYS = mapOf(
     "primary" to "primary",
     "onprimary" to "onPrimary",
     "primarycontainer" to "primaryContainer",
@@ -262,4 +505,35 @@ private val SUPPORTED_THEME_TOKEN_KEYS = mapOf(
     "surfacecontainerhighest" to "surfaceContainerHighest",
     "surfacecontainerlow" to "surfaceContainerLow",
     "surfacecontainerlowest" to "surfaceContainerLowest",
+)
+
+private val SUPPORTED_THEME_SHAPE_TOKEN_KEYS = mapOf(
+    "shapeextrasmall" to "shapeExtraSmall",
+    "radiusextrasmall" to "shapeExtraSmall",
+    "cornerextrasmall" to "shapeExtraSmall",
+    "shapesmall" to "shapeSmall",
+    "radiussmall" to "shapeSmall",
+    "cornersmall" to "shapeSmall",
+    "shapemedium" to "shapeMedium",
+    "radiusmedium" to "shapeMedium",
+    "cornermedium" to "shapeMedium",
+    "shapelarge" to "shapeLarge",
+    "radiuslarge" to "shapeLarge",
+    "cornerlarge" to "shapeLarge",
+    "shapeextralarge" to "shapeExtraLarge",
+    "radiusextralarge" to "shapeExtraLarge",
+    "cornerextralarge" to "shapeExtraLarge",
+    "shapelargeincreased" to "shapeLargeIncreased",
+    "shapeextralargeincreased" to "shapeExtraLargeIncreased",
+    "shapeextraextralarge" to "shapeExtraExtraLarge",
+)
+
+private val SUPPORTED_THEME_SCALE_TOKEN_KEYS = mapOf(
+    "fontscale" to "fontScale",
+    "textscale" to "fontScale",
+    "displayscale" to "displayScale",
+    "headlinescale" to "headlineScale",
+    "titlescale" to "titleScale",
+    "bodyscale" to "bodyScale",
+    "labelscale" to "labelScale",
 )
