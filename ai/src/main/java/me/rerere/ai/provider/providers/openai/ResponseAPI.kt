@@ -22,6 +22,7 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
@@ -235,6 +236,22 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                                 )
                             )
                         })
+                    }
+                }
+            }
+            // built-in tools
+            if (params.model.tools.isNotEmpty()) {
+                putJsonArray("tools") {
+                    params.model.tools.forEach { builtInTool ->
+                        when (builtInTool) {
+                            BuiltInTools.Search -> {
+                                add(buildJsonObject {
+                                    put("type", "web_search")
+                                })
+                            }
+
+                            BuiltInTools.UrlContext -> {} // not supported
+                        }
                     }
                 }
             }

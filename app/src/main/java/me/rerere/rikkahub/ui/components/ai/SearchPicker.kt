@@ -152,7 +152,7 @@ private fun SearchPicker(
     val navBackStack = LocalNavController.current
 
     // 模型内置搜索
-    if (model != null && ModelRegistry.GEMINI_SERIES.match(model.modelId)) {
+    if (model != null && (ModelRegistry.GEMINI_SERIES.match(model.modelId) || model.modelId.contains("gpt-"))) {
         BuiltInSearchSetting(model = model)
     }
 
