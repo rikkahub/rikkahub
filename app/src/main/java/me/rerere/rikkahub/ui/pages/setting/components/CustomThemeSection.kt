@@ -486,107 +486,52 @@ private fun CustomThemeEditorDialog(
                 },
                 containerColor = MaterialTheme.colorScheme.surface,
             ) { paddingValues ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    ThemeEditorSummaryCard(
-                        enabled = enabled,
-                        lightTokenCount = lightParseResult.validCount,
-                        darkTokenCount = darkParseResult.validCount,
-                        onEnabledChange = { enabled = it },
-                    )
-
-                    PrimaryTabRow(selectedTabIndex = selectedMode.ordinal) {
-                        ThemeEditorMode.entries.forEach { mode ->
-                            Tab(
-                                selected = selectedMode == mode,
-                                onClick = {
-                                    selectedMode = mode
-                                },
-                                text = {
-                                    Text(
-                                        text = if (mode == ThemeEditorMode.LIGHT) {
-                                            stringResource(R.string.setting_display_page_custom_theme_light_label)
-                                        } else {
-                                            stringResource(R.string.setting_display_page_custom_theme_dark_label)
-                                        }
-                                    )
-                                },
+                when (selectedTab) {
+                    ThemeEditorTab.CODE -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues)
+                                .padding(horizontal = 20.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            ThemeEditorSummaryCard(
+                                enabled = enabled,
+                                lightTokenCount = lightParseResult.validCount,
+                                darkTokenCount = darkParseResult.validCount,
+                                onEnabledChange = { enabled = it },
                             )
-                        }
-                    }
 
-                    ThemeEditorTabRow(
-                        selectedTab = selectedTab,
-                        onTabSelected = { selectedTab = it },
-                    )
-
-                    if (selectedTab != ThemeEditorTab.CODE) {
-                        ThemePreviewCard(
-                            colorScheme = currentPreviewScheme,
-                            shapes = currentPreviewShapes,
-                            typography = currentPreviewTypography,
-                            darkMode = selectedMode == ThemeEditorMode.DARK,
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                    ) {
-                        when (selectedTab) {
-                            ThemeEditorTab.COLORS -> {
-                                ThemeColorsTab(
-                                    parseResult = currentParseResult,
-                                    baseScheme = currentBaseScheme,
-                                    onPickColor = { token ->
-                                        activeColorPicker = ActiveColorPicker(
-                                            mode = selectedMode,
-                                            token = token,
-                                        )
-                                    },
-                                    onResetColor = { token ->
-                                        updateSource(
-                                            upsertThemeTokenSource(
-                                                source = currentSource,
-                                                key = token.key,
-                                                color = null,
+                            PrimaryTabRow(selectedTabIndex = selectedMode.ordinal) {
+                                ThemeEditorMode.entries.forEach { mode ->
+                                    Tab(
+                                        selected = selectedMode == mode,
+                                        onClick = {
+                                            selectedMode = mode
+                                        },
+                                        text = {
+                                            Text(
+                                                text = if (mode == ThemeEditorMode.LIGHT) {
+                                                    stringResource(R.string.setting_display_page_custom_theme_light_label)
+                                                } else {
+                                                    stringResource(R.string.setting_display_page_custom_theme_dark_label)
+                                                }
                                             )
-                                        )
-                                    },
-                                )
+                                        },
+                                    )
+                                }
                             }
 
-                            ThemeEditorTab.STYLE -> {
-                                ThemeStyleTab(
-                                    parseResult = currentParseResult,
-                                    onShapeChange = { key, value ->
-                                        updateSource(
-                                            upsertThemeTokenSource(
-                                                source = currentSource,
-                                                key = key,
-                                                value = value?.let(::formatThemeDimensionTokenValue),
-                                            )
-                                        )
-                                    },
-                                    onScaleChange = { key, value ->
-                                        updateSource(
-                                            upsertThemeTokenSource(
-                                                source = currentSource,
-                                                key = key,
-                                                value = value?.let(::formatThemeScaleTokenValue),
-                                            )
-                                        )
-                                    },
-                                )
-                            }
+                            ThemeEditorTabRow(
+                                selectedTab = selectedTab,
+                                onTabSelected = { selectedTab = it },
+                            )
 
-                            ThemeEditorTab.CODE -> {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                            ) {
                                 ThemeCodeTab(
                                     mode = selectedMode,
                                     source = currentSource,
@@ -594,6 +539,106 @@ private fun CustomThemeEditorDialog(
                                     baseScheme = currentBaseScheme,
                                     onSourceChange = ::updateSource,
                                 )
+                            }
+                        }
+                    }
+
+                    else -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(paddingValues)
+                                .padding(horizontal = 20.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            ThemeEditorSummaryCard(
+                                enabled = enabled,
+                                lightTokenCount = lightParseResult.validCount,
+                                darkTokenCount = darkParseResult.validCount,
+                                onEnabledChange = { enabled = it },
+                            )
+
+                            PrimaryTabRow(selectedTabIndex = selectedMode.ordinal) {
+                                ThemeEditorMode.entries.forEach { mode ->
+                                    Tab(
+                                        selected = selectedMode == mode,
+                                        onClick = {
+                                            selectedMode = mode
+                                        },
+                                        text = {
+                                            Text(
+                                                text = if (mode == ThemeEditorMode.LIGHT) {
+                                                    stringResource(R.string.setting_display_page_custom_theme_light_label)
+                                                } else {
+                                                    stringResource(R.string.setting_display_page_custom_theme_dark_label)
+                                                }
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+
+                            ThemeEditorTabRow(
+                                selectedTab = selectedTab,
+                                onTabSelected = { selectedTab = it },
+                            )
+
+                            ThemePreviewCard(
+                                colorScheme = currentPreviewScheme,
+                                shapes = currentPreviewShapes,
+                                typography = currentPreviewTypography,
+                                darkMode = selectedMode == ThemeEditorMode.DARK,
+                            )
+
+                            when (selectedTab) {
+                                ThemeEditorTab.COLORS -> {
+                                    ThemeColorsTab(
+                                        parseResult = currentParseResult,
+                                        baseScheme = currentBaseScheme,
+                                        onPickColor = { token ->
+                                            activeColorPicker = ActiveColorPicker(
+                                                mode = selectedMode,
+                                                token = token,
+                                            )
+                                        },
+                                        onResetColor = { token ->
+                                            updateSource(
+                                                upsertThemeTokenSource(
+                                                    source = currentSource,
+                                                    key = token.key,
+                                                    color = null,
+                                                )
+                                            )
+                                        },
+                                    )
+                                }
+
+                                ThemeEditorTab.STYLE -> {
+                                    ThemeStyleTab(
+                                        parseResult = currentParseResult,
+                                        onShapeChange = { key, value ->
+                                            updateSource(
+                                                upsertThemeTokenSource(
+                                                    source = currentSource,
+                                                    key = key,
+                                                    value = value?.let(::formatThemeDimensionTokenValue),
+                                                )
+                                            )
+                                        },
+                                        onScaleChange = { key, value ->
+                                            updateSource(
+                                                upsertThemeTokenSource(
+                                                    source = currentSource,
+                                                    key = key,
+                                                    value = value?.let(::formatThemeScaleTokenValue),
+                                                )
+                                            )
+                                        },
+                                    )
+                                }
+
+                                ThemeEditorTab.CODE -> Unit
                             }
                         }
                     }
@@ -773,9 +818,6 @@ private fun ThemeColorsTab(
     onResetColor: (CommonThemeToken) -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         VISUAL_THEME_COLOR_GROUPS.forEach { group ->
@@ -954,9 +996,6 @@ private fun ThemeStyleTab(
     onScaleChange: (String, Float?) -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ThemeSliderCard(
