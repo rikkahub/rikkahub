@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.utils.toCssHex
+import java.util.Locale
 
 private val THEME_TOKEN_LINE_REGEX = Regex(
     pattern = """^\s*([A-Za-z-][A-Za-z0-9_-]*)\s*:\s*([^;]+?)\s*;?\s*$""",
@@ -160,16 +161,42 @@ fun upsertThemeTokenSource(
     key: String,
     color: Color?,
 ): String {
-    val canonicalKey = normalizeThemeTokenKey(key)?.key ?: key.trim().removePrefix("--")
-    return upsertThemeTokenValueSource(
+    return upsertThemeTokenSource(
         source = source,
-        key = canonicalKey,
+        key = key,
         value = color?.toCssHex(),
     )
 }
 
+fun upsertThemeTokenSource(
+    source: String,
+    key: String,
+    value: String?,
+): String {
+    val canonicalKey = normalizeThemeTokenKey(key)?.key ?: key.trim().removePrefix("--")
+    return upsertThemeTokenValueSource(
+        source = source,
+        key = canonicalKey,
+        value = value?.takeIf(String::isNotBlank),
+    )
+}
+
 fun removeThemeTokenSource(source: String, key: String): String {
-    return upsertThemeTokenSource(source = source, key = key, color = null)
+    return upsertThemeTokenSource(source = source, key = key, value = null)
+}
+
+fun formatThemeDimensionTokenValue(value: Dp): String {
+    val rawValue = value.value
+    val formatted = if (rawValue % 1f == 0f) {
+        rawValue.toInt().toString()
+    } else {
+        String.format(Locale.US, "%.1f", rawValue).trimEnd('0').trimEnd('.')
+    }
+    return "${formatted}dp"
+}
+
+fun formatThemeScaleTokenValue(value: Float): String {
+    return String.format(Locale.US, "%.2f", value).trimEnd('0').trimEnd('.')
 }
 
 fun ColorScheme.applyThemeTokenOverrides(source: String): ColorScheme {
@@ -458,13 +485,40 @@ private fun serializeThemeTokenLine(key: String, value: String): String {
 fun ColorScheme.themeTokenColor(key: String): Color {
     return when (key) {
         "primary" -> primary
+        "onPrimary" -> onPrimary
         "primaryContainer" -> primaryContainer
+        "onPrimaryContainer" -> onPrimaryContainer
+        "inversePrimary" -> inversePrimary
+        "secondary" -> secondary
+        "onSecondary" -> onSecondary
+        "secondaryContainer" -> secondaryContainer
+        "onSecondaryContainer" -> onSecondaryContainer
+        "tertiary" -> tertiary
+        "onTertiary" -> onTertiary
+        "tertiaryContainer" -> tertiaryContainer
+        "onTertiaryContainer" -> onTertiaryContainer
         "background" -> background
+        "onBackground" -> onBackground
         "surface" -> surface
+        "onSurface" -> onSurface
         "surfaceContainer" -> surfaceContainer
+        "surfaceContainerLowest" -> surfaceContainerLowest
+        "surfaceContainerLow" -> surfaceContainerLow
         "surfaceContainerHigh" -> surfaceContainerHigh
+        "surfaceContainerHighest" -> surfaceContainerHighest
+        "surfaceBright" -> surfaceBright
+        "surfaceDim" -> surfaceDim
         "surfaceVariant" -> surfaceVariant
+        "onSurfaceVariant" -> onSurfaceVariant
+        "inverseSurface" -> inverseSurface
+        "inverseOnSurface" -> inverseOnSurface
+        "error" -> error
+        "onError" -> onError
+        "errorContainer" -> errorContainer
+        "onErrorContainer" -> onErrorContainer
         "outline" -> outline
+        "outlineVariant" -> outlineVariant
+        "scrim" -> scrim
         else -> error("Unsupported common theme token key: $key")
     }
 }

@@ -126,6 +126,18 @@ class CustomThemeTest {
     }
 
     @Test
+    fun upsert_theme_token_source_accepts_non_color_values() {
+        val updated = upsertThemeTokenSource(
+            source = "shapeLarge: 24dp;",
+            key = "bodyScale",
+            value = "0.92",
+        )
+
+        assertTrue(updated.contains("shapeLarge: 24dp;"))
+        assertTrue(updated.contains("bodyScale: 0.92;"))
+    }
+
+    @Test
     fun apply_theme_shape_token_overrides_updates_matching_shape_slots() {
         val base = Shapes()
 
@@ -196,5 +208,28 @@ class CustomThemeTest {
             titleStyle.lineHeight * 1.32f,
             result.applyThemeTokenTextScale(titleStyle, ThemeTokenTextScaleGroup.TITLE).lineHeight,
         )
+    }
+
+    @Test
+    fun format_theme_token_helpers_return_compact_strings() {
+        assertEquals("24dp", formatThemeDimensionTokenValue(24.dp))
+        assertEquals("18.5dp", formatThemeDimensionTokenValue(18.5.dp))
+        assertEquals("1.08", formatThemeScaleTokenValue(1.08f))
+        assertEquals("1.1", formatThemeScaleTokenValue(1.10f))
+    }
+
+    @Test
+    fun theme_token_color_supports_advanced_keys() {
+        val scheme = lightColorScheme(
+            onSurface = Color(1, 2, 3),
+            surfaceContainerLowest = Color(4, 5, 6),
+            outlineVariant = Color(7, 8, 9),
+            errorContainer = Color(10, 11, 12),
+        )
+
+        assertEquals(Color(1, 2, 3), scheme.themeTokenColor("onSurface"))
+        assertEquals(Color(4, 5, 6), scheme.themeTokenColor("surfaceContainerLowest"))
+        assertEquals(Color(7, 8, 9), scheme.themeTokenColor("outlineVariant"))
+        assertEquals(Color(10, 11, 12), scheme.themeTokenColor("errorContainer"))
     }
 }

@@ -8,38 +8,48 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.rememberTextFieldState
-import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Shapes as MaterialShapes
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Typography as MaterialTypography
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,30 +58,40 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogProperties
+import kotlin.math.roundToInt
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.CustomThemeSetting
 import me.rerere.rikkahub.ui.components.ui.CardGroup
-import me.rerere.rikkahub.ui.components.ui.TextArea
 import me.rerere.rikkahub.ui.theme.AppShapes
+import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.LocalExtendColors
 import me.rerere.rikkahub.ui.theme.Typography
 import me.rerere.rikkahub.ui.theme.applyThemeTokenOverrides
 import me.rerere.rikkahub.ui.theme.buildThemeTokenTemplate
 import me.rerere.rikkahub.ui.theme.darkExtendColors
+import me.rerere.rikkahub.ui.theme.formatThemeDimensionTokenValue
+import me.rerere.rikkahub.ui.theme.formatThemeScaleTokenValue
 import me.rerere.rikkahub.ui.theme.lightExtendColors
 import me.rerere.rikkahub.ui.theme.parseThemeColorString
 import me.rerere.rikkahub.ui.theme.parseThemeTokenSource
 import me.rerere.rikkahub.ui.theme.themeTokenColor
 import me.rerere.rikkahub.ui.theme.upsertThemeTokenSource
 import me.rerere.rikkahub.utils.toCssHex
-import kotlin.math.roundToInt
 
 private enum class ThemeEditorMode {
     LIGHT,
     DARK,
+}
+
+private enum class ThemeEditorTab {
+    COLORS,
+    STYLE,
+    CODE,
 }
 
 private data class CommonThemeToken(
@@ -84,14 +104,190 @@ private data class ActiveColorPicker(
     val token: CommonThemeToken,
 )
 
-private val VISUAL_THEME_TOKENS = listOf(
-    CommonThemeToken(key = "primary", label = "Primary"),
-    CommonThemeToken(key = "primaryContainer", label = "Primary Container"),
-    CommonThemeToken(key = "background", label = "Background"),
-    CommonThemeToken(key = "surface", label = "Surface"),
-    CommonThemeToken(key = "surfaceContainer", label = "Surface Container"),
-    CommonThemeToken(key = "surfaceVariant", label = "Surface Variant"),
-    CommonThemeToken(key = "outline", label = "Outline"),
+private data class ThemeColorTokenGroup(
+    val id: String,
+    val title: String,
+    val description: String,
+    val tokens: List<CommonThemeToken>,
+    val expandedByDefault: Boolean,
+)
+
+private data class ThemeShapeToken(
+    val key: String,
+    val label: String,
+    val description: String,
+    val defaultValue: Dp,
+    val range: ClosedFloatingPointRange<Float>,
+)
+
+private data class ThemeScaleToken(
+    val key: String,
+    val label: String,
+    val description: String,
+    val defaultValue: Float,
+    val range: ClosedFloatingPointRange<Float>,
+)
+
+private val PREVIEW_SWATCH_KEYS = listOf("primary", "surface", "surfaceContainerHigh", "outline")
+
+private val VISUAL_THEME_COLOR_GROUPS = listOf(
+    ThemeColorTokenGroup(
+        id = "brand",
+        title = "Brand",
+        description = "Primary emphasis colors and their readable foregrounds.",
+        expandedByDefault = true,
+        tokens = listOf(
+            CommonThemeToken("primary", "Primary"),
+            CommonThemeToken("onPrimary", "On Primary"),
+            CommonThemeToken("primaryContainer", "Primary Container"),
+            CommonThemeToken("onPrimaryContainer", "On Primary Container"),
+            CommonThemeToken("inversePrimary", "Inverse Primary"),
+        ),
+    ),
+    ThemeColorTokenGroup(
+        id = "supporting",
+        title = "Secondary And Tertiary",
+        description = "Supporting accents for chips, cards, and alternate callouts.",
+        expandedByDefault = false,
+        tokens = listOf(
+            CommonThemeToken("secondary", "Secondary"),
+            CommonThemeToken("onSecondary", "On Secondary"),
+            CommonThemeToken("secondaryContainer", "Secondary Container"),
+            CommonThemeToken("onSecondaryContainer", "On Secondary Container"),
+            CommonThemeToken("tertiary", "Tertiary"),
+            CommonThemeToken("onTertiary", "On Tertiary"),
+            CommonThemeToken("tertiaryContainer", "Tertiary Container"),
+            CommonThemeToken("onTertiaryContainer", "On Tertiary Container"),
+        ),
+    ),
+    ThemeColorTokenGroup(
+        id = "surface",
+        title = "Surfaces",
+        description = "Background layers and text colors used across the UI.",
+        expandedByDefault = true,
+        tokens = listOf(
+            CommonThemeToken("background", "Background"),
+            CommonThemeToken("onBackground", "On Background"),
+            CommonThemeToken("surface", "Surface"),
+            CommonThemeToken("onSurface", "On Surface"),
+            CommonThemeToken("surfaceVariant", "Surface Variant"),
+            CommonThemeToken("onSurfaceVariant", "On Surface Variant"),
+            CommonThemeToken("surfaceContainerLowest", "Surface Container Lowest"),
+            CommonThemeToken("surfaceContainerLow", "Surface Container Low"),
+            CommonThemeToken("surfaceContainer", "Surface Container"),
+            CommonThemeToken("surfaceContainerHigh", "Surface Container High"),
+            CommonThemeToken("surfaceContainerHighest", "Surface Container Highest"),
+            CommonThemeToken("surfaceBright", "Surface Bright"),
+            CommonThemeToken("surfaceDim", "Surface Dim"),
+        ),
+    ),
+    ThemeColorTokenGroup(
+        id = "utility",
+        title = "Utility And Feedback",
+        description = "Error colors, outlines, scrims, and inverse surfaces.",
+        expandedByDefault = false,
+        tokens = listOf(
+            CommonThemeToken("inverseSurface", "Inverse Surface"),
+            CommonThemeToken("inverseOnSurface", "Inverse On Surface"),
+            CommonThemeToken("error", "Error"),
+            CommonThemeToken("onError", "On Error"),
+            CommonThemeToken("errorContainer", "Error Container"),
+            CommonThemeToken("onErrorContainer", "On Error Container"),
+            CommonThemeToken("outline", "Outline"),
+            CommonThemeToken("outlineVariant", "Outline Variant"),
+            CommonThemeToken("scrim", "Scrim"),
+        ),
+    ),
+)
+
+private val VISUAL_THEME_SHAPE_TOKENS = listOf(
+    ThemeShapeToken(
+        key = "shapeSmall",
+        label = "Small radius",
+        description = "Compact chips and small inputs.",
+        defaultValue = 12.dp,
+        range = 0f..32f,
+    ),
+    ThemeShapeToken(
+        key = "shapeMedium",
+        label = "Medium radius",
+        description = "Standard cards and mid-sized surfaces.",
+        defaultValue = 16.dp,
+        range = 0f..40f,
+    ),
+    ThemeShapeToken(
+        key = "shapeLarge",
+        label = "Large radius",
+        description = "Message bubbles and large cards.",
+        defaultValue = 24.dp,
+        range = 0f..64f,
+    ),
+    ThemeShapeToken(
+        key = "shapeExtraLarge",
+        label = "Extra large radius",
+        description = "Hero containers and prominent panels.",
+        defaultValue = 32.dp,
+        range = 0f..80f,
+    ),
+    ThemeShapeToken(
+        key = "shapeLargeIncreased",
+        label = "Large increased",
+        description = "Expressive variants used by larger controls.",
+        defaultValue = 28.dp,
+        range = 0f..80f,
+    ),
+    ThemeShapeToken(
+        key = "shapeExtraLargeIncreased",
+        label = "Extra large increased",
+        description = "Extra expressive radius for large panels.",
+        defaultValue = 36.dp,
+        range = 0f..96f,
+    ),
+)
+
+private val VISUAL_THEME_SCALE_TOKENS = listOf(
+    ThemeScaleToken(
+        key = "fontScale",
+        label = "Global scale",
+        description = "Scales every text style before per-group adjustments.",
+        defaultValue = 1f,
+        range = 0.8f..1.4f,
+    ),
+    ThemeScaleToken(
+        key = "displayScale",
+        label = "Display scale",
+        description = "Huge marketing or splash typography.",
+        defaultValue = 1f,
+        range = 0.8f..1.4f,
+    ),
+    ThemeScaleToken(
+        key = "headlineScale",
+        label = "Headline scale",
+        description = "Large section titles and dialogs.",
+        defaultValue = 1f,
+        range = 0.8f..1.4f,
+    ),
+    ThemeScaleToken(
+        key = "titleScale",
+        label = "Title scale",
+        description = "Card titles and compact section headers.",
+        defaultValue = 1f,
+        range = 0.8f..1.4f,
+    ),
+    ThemeScaleToken(
+        key = "bodyScale",
+        label = "Body scale",
+        description = "Most chat and settings copy.",
+        defaultValue = 1f,
+        range = 0.8f..1.4f,
+    ),
+    ThemeScaleToken(
+        key = "labelScale",
+        label = "Label scale",
+        description = "Chips, helper text, and small labels.",
+        defaultValue = 1f,
+        range = 0.8f..1.4f,
+    ),
 )
 
 private val PRESET_PICKER_COLORS = listOf(
@@ -117,15 +313,17 @@ fun CustomThemeSection(
     var showEditor by remember { mutableStateOf(false) }
     val lightResult = remember(value.light) { parseThemeTokenSource(value.light) }
     val darkResult = remember(value.dark) { parseThemeTokenSource(value.dark) }
-    val previewColors = remember(value.enabled, value.light, value.dark, defaultLightScheme, defaultDarkScheme) {
-        val lightSource = if (value.enabled) value.light else ""
-        val darkSource = if (value.enabled) value.dark else ""
-        listOf(
-            parseThemeTokenSource(lightSource).overrides["primary"] ?: defaultLightScheme.themeTokenColor("primary"),
-            parseThemeTokenSource(lightSource).overrides["surface"] ?: defaultLightScheme.themeTokenColor("surface"),
-            parseThemeTokenSource(darkSource).overrides["primary"] ?: defaultDarkScheme.themeTokenColor("primary"),
-            parseThemeTokenSource(darkSource).overrides["surface"] ?: defaultDarkScheme.themeTokenColor("surface"),
-        )
+    val previewColors = remember(value.enabled, lightResult, darkResult, defaultLightScheme, defaultDarkScheme) {
+        val lightOverrides = if (value.enabled) lightResult.overrides else emptyMap()
+        val darkOverrides = if (value.enabled) darkResult.overrides else emptyMap()
+        buildList {
+            PREVIEW_SWATCH_KEYS.forEach { key ->
+                add(lightOverrides[key] ?: defaultLightScheme.themeTokenColor(key))
+            }
+            PREVIEW_SWATCH_KEYS.forEach { key ->
+                add(darkOverrides[key] ?: defaultDarkScheme.themeTokenColor(key))
+            }
+        }
     }
 
     CardGroup(
@@ -209,14 +407,16 @@ private fun CustomThemeEditorDialog(
     onSave: (CustomThemeSetting) -> Unit,
 ) {
     var enabled by remember(initialValue.enabled) { mutableStateOf(initialValue.enabled) }
-    var selectedMode by remember { mutableStateOf(ThemeEditorMode.LIGHT) }
+    var selectedMode by rememberSaveable { mutableStateOf(ThemeEditorMode.LIGHT) }
+    var selectedTab by rememberSaveable { mutableStateOf(ThemeEditorTab.COLORS) }
     var lightSource by remember(initialValue.light) { mutableStateOf(initialValue.light) }
     var darkSource by remember(initialValue.dark) { mutableStateOf(initialValue.dark) }
     var activeColorPicker by remember { mutableStateOf<ActiveColorPicker?>(null) }
-    var showRawEditor by remember { mutableStateOf(false) }
 
+    val lightParseResult = remember(lightSource) { parseThemeTokenSource(lightSource) }
+    val darkParseResult = remember(darkSource) { parseThemeTokenSource(darkSource) }
     val currentSource = if (selectedMode == ThemeEditorMode.LIGHT) lightSource else darkSource
-    val currentParseResult = remember(currentSource) { parseThemeTokenSource(currentSource) }
+    val currentParseResult = if (selectedMode == ThemeEditorMode.LIGHT) lightParseResult else darkParseResult
     val currentBaseScheme = if (selectedMode == ThemeEditorMode.LIGHT) defaultLightScheme else defaultDarkScheme
     val currentPreviewScheme = remember(currentBaseScheme, currentParseResult) {
         currentBaseScheme.applyThemeTokenOverrides(currentParseResult)
@@ -228,174 +428,172 @@ private fun CustomThemeEditorDialog(
         Typography.applyThemeTokenOverrides(currentParseResult)
     }
 
+    fun updateSource(newSource: String) {
+        if (selectedMode == ThemeEditorMode.LIGHT) {
+            lightSource = newSource
+        } else {
+            darkSource = newSource
+        }
+    }
+
     BasicAlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            shape = MaterialTheme.shapes.extraLarge,
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .imePadding()
+                .padding(top = 8.dp),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             color = MaterialTheme.colorScheme.surface,
         ) {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 760.dp)
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.setting_display_page_custom_theme_dialog_title),
-                        style = MaterialTheme.typography.headlineSmall,
-                    )
-                    Text(
-                        text = stringResource(R.string.setting_display_page_custom_theme_dialog_desc),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.setting_display_page_custom_theme_enabled_title),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            text = stringResource(R.string.setting_display_page_custom_theme_enabled_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = enabled,
-                        onCheckedChange = { enabled = it },
-                    )
-                }
-
-                PrimaryTabRow(selectedTabIndex = selectedMode.ordinal) {
-                    ThemeEditorMode.entries.forEach { mode ->
-                        Tab(
-                            selected = selectedMode == mode,
-                            onClick = {
-                                selectedMode = mode
-                            },
-                            text = {
-                                Text(
-                                    text = if (mode == ThemeEditorMode.LIGHT) {
-                                        stringResource(R.string.setting_display_page_custom_theme_light_label)
-                                    } else {
-                                        stringResource(R.string.setting_display_page_custom_theme_dark_label)
-                                    }
-                                )
-                            },
-                        )
-                    }
-                }
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    ThemePreviewCard(
-                        colorScheme = currentPreviewScheme,
-                        shapes = currentPreviewShapes,
-                        typography = currentPreviewTypography,
-                        darkMode = selectedMode == ThemeEditorMode.DARK,
-                    )
-
-                    VISUAL_THEME_TOKENS.forEach { token ->
-                        val overrideColor = currentParseResult.overrides[token.key]
-                        val effectiveColor = overrideColor ?: currentBaseScheme.themeTokenColor(token.key)
-                        ListItem(
-                            headlineContent = {
-                                Text(token.label)
-                            },
-                            supportingContent = {
-                                Text(
-                                    buildString {
-                                        append(
-                                            if (overrideColor != null) {
-                                                stringResource(R.string.setting_display_page_custom_theme_state_custom)
-                                            } else {
-                                                stringResource(R.string.setting_display_page_custom_theme_state_default)
-                                            }
-                                        )
-                                        append(" · ")
-                                        append(effectiveColor.toCssHex())
-                                    }
-                                )
-                            },
-                            trailingContent = {
-                                ColorSwatch(
-                                    color = effectiveColor,
-                                    size = 32.dp,
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    activeColorPicker = ActiveColorPicker(
-                                        mode = selectedMode,
-                                        token = token,
-                                    )
-                                },
-                        )
-                    }
-                }
-
-                Text(
-                    text = stringResource(
-                        R.string.setting_display_page_custom_theme_parse_hint,
-                        currentParseResult.validCount,
-                        currentParseResult.unsupportedKeys.size + currentParseResult.invalidEntries.size,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(
-                        onClick = {
-                            showRawEditor = true
-                        }
-                    ) {
-                        Text(stringResource(R.string.setting_display_page_custom_theme_advanced_edit))
-                    }
-
-                    Row {
-                        TextButton(onClick = onDismiss) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                        TextButton(
-                            onClick = {
-                                onSave(
-                                    initialValue.copy(
-                                        enabled = enabled,
-                                        light = lightSource.trim(),
-                                        dark = darkSource.trim(),
-                                    )
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Text(stringResource(R.string.setting_display_page_custom_theme_dialog_title))
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onDismiss) {
+                                Icon(
+                                    imageVector = HugeIcons.Cancel01,
+                                    contentDescription = stringResource(R.string.cancel),
                                 )
                             }
-                        ) {
-                            Text(stringResource(R.string.save))
+                        },
+                        actions = {
+                            TextButton(
+                                onClick = {
+                                    onSave(
+                                        initialValue.copy(
+                                            enabled = enabled,
+                                            light = lightSource.trim(),
+                                            dark = darkSource.trim(),
+                                        )
+                                    )
+                                }
+                            ) {
+                                Text(stringResource(R.string.save))
+                            }
+                        },
+                    )
+                },
+                containerColor = MaterialTheme.colorScheme.surface,
+            ) { paddingValues ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    ThemeEditorSummaryCard(
+                        enabled = enabled,
+                        lightTokenCount = lightParseResult.validCount,
+                        darkTokenCount = darkParseResult.validCount,
+                        onEnabledChange = { enabled = it },
+                    )
+
+                    PrimaryTabRow(selectedTabIndex = selectedMode.ordinal) {
+                        ThemeEditorMode.entries.forEach { mode ->
+                            Tab(
+                                selected = selectedMode == mode,
+                                onClick = {
+                                    selectedMode = mode
+                                },
+                                text = {
+                                    Text(
+                                        text = if (mode == ThemeEditorMode.LIGHT) {
+                                            stringResource(R.string.setting_display_page_custom_theme_light_label)
+                                        } else {
+                                            stringResource(R.string.setting_display_page_custom_theme_dark_label)
+                                        }
+                                    )
+                                },
+                            )
+                        }
+                    }
+
+                    ThemeEditorTabRow(
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it },
+                    )
+
+                    if (selectedTab != ThemeEditorTab.CODE) {
+                        ThemePreviewCard(
+                            colorScheme = currentPreviewScheme,
+                            shapes = currentPreviewShapes,
+                            typography = currentPreviewTypography,
+                            darkMode = selectedMode == ThemeEditorMode.DARK,
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                    ) {
+                        when (selectedTab) {
+                            ThemeEditorTab.COLORS -> {
+                                ThemeColorsTab(
+                                    parseResult = currentParseResult,
+                                    baseScheme = currentBaseScheme,
+                                    onPickColor = { token ->
+                                        activeColorPicker = ActiveColorPicker(
+                                            mode = selectedMode,
+                                            token = token,
+                                        )
+                                    },
+                                    onResetColor = { token ->
+                                        updateSource(
+                                            upsertThemeTokenSource(
+                                                source = currentSource,
+                                                key = token.key,
+                                                color = null,
+                                            )
+                                        )
+                                    },
+                                )
+                            }
+
+                            ThemeEditorTab.STYLE -> {
+                                ThemeStyleTab(
+                                    parseResult = currentParseResult,
+                                    onShapeChange = { key, value ->
+                                        updateSource(
+                                            upsertThemeTokenSource(
+                                                source = currentSource,
+                                                key = key,
+                                                value = value?.let(::formatThemeDimensionTokenValue),
+                                            )
+                                        )
+                                    },
+                                    onScaleChange = { key, value ->
+                                        updateSource(
+                                            upsertThemeTokenSource(
+                                                source = currentSource,
+                                                key = key,
+                                                value = value?.let(::formatThemeScaleTokenValue),
+                                            )
+                                        )
+                                    },
+                                )
+                            }
+
+                            ThemeEditorTab.CODE -> {
+                                ThemeCodeTab(
+                                    mode = selectedMode,
+                                    source = currentSource,
+                                    parseResult = currentParseResult,
+                                    baseScheme = currentBaseScheme,
+                                    onSourceChange = ::updateSource,
+                                )
+                            }
                         }
                     }
                 }
@@ -410,7 +608,7 @@ private fun CustomThemeEditorDialog(
         val overrideColor = parseResult.overrides[picker.token.key]
         val effectiveColor = overrideColor ?: targetBaseScheme.themeTokenColor(picker.token.key)
 
-        ThemeColorPickerDialog(
+        ThemeColorPickerSheet(
             title = picker.token.label,
             initialColor = effectiveColor,
             defaultColor = targetBaseScheme.themeTokenColor(picker.token.key),
@@ -428,30 +626,626 @@ private fun CustomThemeEditorDialog(
             },
             onReset = {
                 if (picker.mode == ThemeEditorMode.LIGHT) {
-                    lightSource = upsertThemeTokenSource(lightSource, picker.token.key, null)
+                    lightSource = upsertThemeTokenSource(lightSource, picker.token.key, color = null)
                 } else {
-                    darkSource = upsertThemeTokenSource(darkSource, picker.token.key, null)
+                    darkSource = upsertThemeTokenSource(darkSource, picker.token.key, color = null)
                 }
                 activeColorPicker = null
             },
         )
     }
+}
 
-    if (showRawEditor) {
-        RawThemeTokenEditorDialog(
-            initialLight = lightSource,
-            initialDark = darkSource,
-            defaultLightScheme = defaultLightScheme,
-            defaultDarkScheme = defaultDarkScheme,
-            onDismiss = {
-                showRawEditor = false
+@Composable
+private fun ThemeEditorSummaryCard(
+    enabled: Boolean,
+    lightTokenCount: Int,
+    darkTokenCount: Int,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = MaterialTheme.shapes.large,
+            ),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.setting_display_page_custom_theme_enabled_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "Edit colors, radius, and type in one place without leaving the preview.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onEnabledChange,
+                )
+            }
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ThemeCountPill(label = "Light", value = "$lightTokenCount tokens")
+                ThemeCountPill(label = "Dark", value = "$darkTokenCount tokens")
+                ThemeCountPill(label = "Modes", value = "Visual and code")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeCountPill(
+    label: String,
+    value: String,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeEditorTabRow(
+    selectedTab: ThemeEditorTab,
+    onTabSelected: (ThemeEditorTab) -> Unit,
+) {
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        ThemeEditorTab.entries.forEachIndexed { index, tab ->
+            SegmentedButton(
+                shape = SegmentedButtonDefaults.itemShape(
+                    index = index,
+                    count = ThemeEditorTab.entries.size,
+                ),
+                selected = selectedTab == tab,
+                onClick = {
+                    onTabSelected(tab)
+                },
+                label = {
+                    Text(
+                        text = when (tab) {
+                            ThemeEditorTab.COLORS -> "Colors"
+                            ThemeEditorTab.STYLE -> "Style"
+                            ThemeEditorTab.CODE -> "Code"
+                        }
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeColorsTab(
+    parseResult: me.rerere.rikkahub.ui.theme.ThemeTokenParseResult,
+    baseScheme: ColorScheme,
+    onPickColor: (CommonThemeToken) -> Unit,
+    onResetColor: (CommonThemeToken) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        VISUAL_THEME_COLOR_GROUPS.forEach { group ->
+            ThemeColorGroupCard(
+                group = group,
+                parseResult = parseResult,
+                baseScheme = baseScheme,
+                onPickColor = onPickColor,
+                onResetColor = onResetColor,
+            )
+        }
+
+        ThemeParseStatusCard(parseResult = parseResult)
+    }
+}
+
+@Composable
+private fun ThemeColorGroupCard(
+    group: ThemeColorTokenGroup,
+    parseResult: me.rerere.rikkahub.ui.theme.ThemeTokenParseResult,
+    baseScheme: ColorScheme,
+    onPickColor: (CommonThemeToken) -> Unit,
+    onResetColor: (CommonThemeToken) -> Unit,
+) {
+    var expanded by rememberSaveable(group.id) { mutableStateOf(group.expandedByDefault) }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = MaterialTheme.shapes.large,
+            ),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = group.title,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = group.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        expanded = !expanded
+                    }
+                ) {
+                    Text(if (expanded) "Hide" else "Show")
+                }
+            }
+
+            if (expanded) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    group.tokens.forEach { token ->
+                        val overrideColor = parseResult.overrides[token.key]
+                        val effectiveColor = overrideColor ?: baseScheme.themeTokenColor(token.key)
+                        ThemeColorTokenRow(
+                            token = token,
+                            color = effectiveColor,
+                            isCustom = overrideColor != null,
+                            onClick = {
+                                onPickColor(token)
+                            },
+                            onReset = if (overrideColor != null) {
+                                {
+                                    onResetColor(token)
+                                }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeColorTokenRow(
+    token: CommonThemeToken,
+    color: Color,
+    isCustom: Boolean,
+    onClick: () -> Unit,
+    onReset: (() -> Unit)?,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        color = if (isCustom) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = token.label,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = buildString {
+                        append(if (isCustom) "Custom" else "Default")
+                        append(" · ")
+                        append(color.toCssHex())
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (onReset != null) {
+                    TextButton(onClick = onReset) {
+                        Text("Reset")
+                    }
+                }
+                ColorSwatch(
+                    color = color,
+                    size = 30.dp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeStyleTab(
+    parseResult: me.rerere.rikkahub.ui.theme.ThemeTokenParseResult,
+    onShapeChange: (String, Dp?) -> Unit,
+    onScaleChange: (String, Float?) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        ThemeSliderCard(
+            title = "Corner radius",
+            description = "These sliders expose the shape tokens that were previously only reachable in raw code.",
+        ) {
+            VISUAL_THEME_SHAPE_TOKENS.forEach { token ->
+                ThemeShapeSliderRow(
+                    token = token,
+                    value = parseResult.shapeOverrides[token.key],
+                    onValueChange = { onShapeChange(token.key, it) },
+                )
+            }
+        }
+
+        ThemeSliderCard(
+            title = "Typography scale",
+            description = "Scale the entire type ramp or just one text group.",
+        ) {
+            VISUAL_THEME_SCALE_TOKENS.forEach { token ->
+                ThemeScaleSliderRow(
+                    token = token,
+                    value = parseResult.scaleOverrides[token.key],
+                    onValueChange = { onScaleChange(token.key, it) },
+                )
+            }
+        }
+
+        ThemeParseStatusCard(parseResult = parseResult)
+    }
+}
+
+@Composable
+private fun ThemeSliderCard(
+    title: String,
+    description: String,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = MaterialTheme.shapes.large,
+            ),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ThemeShapeSliderRow(
+    token: ThemeShapeToken,
+    value: Dp?,
+    onValueChange: (Dp?) -> Unit,
+) {
+    val effectiveValue = value ?: token.defaultValue
+    Column(
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = token.label,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = buildString {
+                        append(token.description)
+                        append(" · ")
+                        append(if (value != null) "Custom" else "Default")
+                        append(" · ")
+                        append(formatThemeDimensionTokenValue(effectiveValue))
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (value != null) {
+                TextButton(onClick = { onValueChange(null) }) {
+                    Text("Reset")
+                }
+            }
+        }
+        Slider(
+            value = effectiveValue.value,
+            onValueChange = { sliderValue ->
+                onValueChange(sliderValue.roundToInt().dp)
             },
-            onSave = { light, dark ->
-                lightSource = light
-                darkSource = dark
-                showRawEditor = false
-            },
+            valueRange = token.range,
+            steps = (token.range.endInclusive - token.range.start).roundToInt().coerceAtLeast(1) - 1,
         )
+    }
+}
+
+@Composable
+private fun ThemeScaleSliderRow(
+    token: ThemeScaleToken,
+    value: Float?,
+    onValueChange: (Float?) -> Unit,
+) {
+    val effectiveValue = value ?: token.defaultValue
+    Column(
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = token.label,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = buildString {
+                        append(token.description)
+                        append(" · ")
+                        append(if (value != null) "Custom" else "Default")
+                        append(" · ")
+                        append((effectiveValue * 100).roundToInt())
+                        append("%")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (value != null) {
+                TextButton(onClick = { onValueChange(null) }) {
+                    Text("Reset")
+                }
+            }
+        }
+        Slider(
+            value = effectiveValue,
+            onValueChange = { sliderValue ->
+                val snappedValue = (sliderValue * 100f).roundToInt() / 100f
+                onValueChange(snappedValue)
+            },
+            valueRange = token.range,
+            steps = 59,
+        )
+    }
+}
+
+@Composable
+private fun ThemeCodeTab(
+    mode: ThemeEditorMode,
+    source: String,
+    parseResult: me.rerere.rikkahub.ui.theme.ThemeTokenParseResult,
+    baseScheme: ColorScheme,
+    onSourceChange: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    shape = MaterialTheme.shapes.large,
+                ),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = if (mode == ThemeEditorMode.LIGHT) {
+                        "Light token source"
+                    } else {
+                        "Dark token source"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "Use raw editing when you need exact token names, comments, or overrides not surfaced visually.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(
+                        onClick = {
+                            onSourceChange(buildThemeTokenTemplate(baseScheme))
+                        }
+                    ) {
+                        Text("Insert template")
+                    }
+                    if (source.isNotBlank()) {
+                        TextButton(
+                            onClick = {
+                                onSourceChange("")
+                            }
+                        ) {
+                            Text("Clear")
+                        }
+                    }
+                }
+            }
+        }
+
+        ThemeParseStatusCard(parseResult = parseResult)
+
+        OutlinedTextField(
+            value = source,
+            onValueChange = onSourceChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            placeholder = {
+                Text(
+                    text = buildThemeTokenTemplate(baseScheme),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetbrainsMono),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetbrainsMono),
+        )
+    }
+}
+
+@Composable
+private fun ThemeParseStatusCard(
+    parseResult: me.rerere.rikkahub.ui.theme.ThemeTokenParseResult,
+) {
+    val ignoredCount = parseResult.unsupportedKeys.size + parseResult.invalidEntries.size
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = MaterialTheme.shapes.large,
+            ),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Parser status",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(
+                    R.string.setting_display_page_custom_theme_parse_hint,
+                    parseResult.validCount,
+                    ignoredCount,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (parseResult.unsupportedKeys.isNotEmpty()) {
+                Text(
+                    text = "Unsupported: ${parseResult.unsupportedKeys.take(6).joinToString()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (parseResult.invalidEntries.isNotEmpty()) {
+                Text(
+                    text = "Invalid: ${parseResult.invalidEntries.take(3).joinToString(" | ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -555,7 +1349,7 @@ private fun ThemePreviewCard(
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                    text = "The visual editor is applying your theme tokens in real time.",
+                                    text = "The visual editor now covers colors, radius, and typography in one screen.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
@@ -571,7 +1365,7 @@ private fun ThemePreviewCard(
                                 color = MaterialTheme.colorScheme.primaryContainer,
                             ) {
                                 Text(
-                                    text = "Looks better already.",
+                                    text = "Editing finally feels usable.",
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -645,7 +1439,7 @@ private fun ThemePreviewCard(
 }
 
 @Composable
-private fun ThemeColorPickerDialog(
+private fun ThemeColorPickerSheet(
     title: String,
     initialColor: Color,
     defaultColor: Color,
@@ -664,269 +1458,149 @@ private fun ThemeColorPickerDialog(
         hexError = false
     }
 
-    BasicAlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Surface(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surface,
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+            )
+
+            Box(
                 modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = MaterialTheme.shapes.large,
+                    )
+                    .background(
+                        color = pickerColor,
+                        shape = MaterialTheme.shapes.large,
+                    ),
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineSmall,
+                    text = pickerColor.toCssHex(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (pickerColor.luminance() > 0.4f) Color.Black else Color.White,
                 )
+            }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            shape = MaterialTheme.shapes.large,
-                        )
-                        .background(
-                            color = pickerColor,
-                            shape = MaterialTheme.shapes.large,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = pickerColor.toCssHex(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (pickerColor.luminance() > 0.55f) Color.Black else Color.White,
-                    )
-                }
-
-                OutlinedTextField(
-                    value = hexInput,
-                    onValueChange = { value ->
-                        hexInput = value
-                        val parsed = parseThemeColorString(value)
-                        if (parsed != null) {
-                            pickerColor = parsed
-                            hexError = false
-                        } else {
-                            hexError = value.isNotBlank()
-                        }
-                    },
-                    label = {
-                        Text(stringResource(R.string.setting_display_page_custom_theme_hex_label))
-                    },
-                    placeholder = {
-                        Text("#RRGGBBAA")
-                    },
-                    isError = hexError,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-
-                ThemeColorChannelSlider(
-                    label = "R",
-                    value = colorComponent(pickerColor.red),
-                    onValueChange = { value ->
-                        updateColor(pickerColor.copy(red = value / 255f))
-                    },
-                )
-                ThemeColorChannelSlider(
-                    label = "G",
-                    value = colorComponent(pickerColor.green),
-                    onValueChange = { value ->
-                        updateColor(pickerColor.copy(green = value / 255f))
-                    },
-                )
-                ThemeColorChannelSlider(
-                    label = "B",
-                    value = colorComponent(pickerColor.blue),
-                    onValueChange = { value ->
-                        updateColor(pickerColor.copy(blue = value / 255f))
-                    },
-                )
-                ThemeColorChannelSlider(
-                    label = "A",
-                    value = colorComponent(pickerColor.alpha),
-                    onValueChange = { value ->
-                        updateColor(pickerColor.copy(alpha = value / 255f))
-                    },
-                )
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.setting_display_page_custom_theme_presets),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        (listOf(defaultColor) + PRESET_PICKER_COLORS).forEach { preset ->
-                            ColorSwatch(
-                                color = preset,
-                                size = 32.dp,
-                                selected = sameColor(pickerColor, preset),
-                                onClick = {
-                                    updateColor(preset)
-                                },
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    if (hasOverride) {
-                        TextButton(onClick = onReset) {
-                            Text(stringResource(R.string.setting_display_page_custom_theme_reset))
-                        }
+            OutlinedTextField(
+                value = hexInput,
+                onValueChange = { value ->
+                    hexInput = value
+                    val parsed = parseThemeColorString(value)
+                    if (parsed != null) {
+                        pickerColor = parsed
+                        hexError = false
                     } else {
-                        Box(modifier = Modifier)
+                        hexError = value.isNotBlank()
                     }
+                },
+                label = {
+                    Text(stringResource(R.string.setting_display_page_custom_theme_hex_label))
+                },
+                placeholder = {
+                    Text("#RRGGBBAA")
+                },
+                isError = hexError,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
 
-                    Row {
-                        TextButton(onClick = onDismiss) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                        TextButton(
+            ThemeColorChannelSlider(
+                label = "R",
+                value = colorComponent(pickerColor.red),
+                onValueChange = { value ->
+                    updateColor(pickerColor.copy(red = value / 255f))
+                },
+            )
+            ThemeColorChannelSlider(
+                label = "G",
+                value = colorComponent(pickerColor.green),
+                onValueChange = { value ->
+                    updateColor(pickerColor.copy(green = value / 255f))
+                },
+            )
+            ThemeColorChannelSlider(
+                label = "B",
+                value = colorComponent(pickerColor.blue),
+                onValueChange = { value ->
+                    updateColor(pickerColor.copy(blue = value / 255f))
+                },
+            )
+            ThemeColorChannelSlider(
+                label = "A",
+                value = colorComponent(pickerColor.alpha),
+                onValueChange = { value ->
+                    updateColor(pickerColor.copy(alpha = value / 255f))
+                },
+            )
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.setting_display_page_custom_theme_presets),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    (listOf(defaultColor) + PRESET_PICKER_COLORS).forEach { preset ->
+                        ColorSwatch(
+                            color = preset,
+                            size = 32.dp,
+                            selected = sameColor(pickerColor, preset),
                             onClick = {
-                                if (!hexError) {
-                                    onApply(pickerColor)
-                                }
-                            }
-                        ) {
-                            Text(stringResource(R.string.save))
-                        }
+                                updateColor(preset)
+                            },
+                        )
                     }
                 }
             }
-        }
-    }
-}
 
-@Composable
-private fun RawThemeTokenEditorDialog(
-    initialLight: String,
-    initialDark: String,
-    defaultLightScheme: ColorScheme,
-    defaultDarkScheme: ColorScheme,
-    onDismiss: () -> Unit,
-    onSave: (String, String) -> Unit,
-) {
-    val lightState = rememberTextFieldState(initialText = initialLight)
-    val darkState = rememberTextFieldState(initialText = initialDark)
-
-    BasicAlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 760.dp)
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    text = stringResource(R.string.setting_display_page_custom_theme_raw_editor_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                )
+                if (hasOverride) {
+                    TextButton(onClick = onReset) {
+                        Text(stringResource(R.string.setting_display_page_custom_theme_reset))
+                    }
+                } else {
+                    Box(modifier = Modifier)
+                }
 
-                Text(
-                    text = stringResource(R.string.setting_display_page_custom_theme_format_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                ThemeTemplateInsertButtons(
-                    lightState = lightState,
-                    darkState = darkState,
-                    defaultLightScheme = defaultLightScheme,
-                    defaultDarkScheme = defaultDarkScheme,
-                )
-
-                TextArea(
-                    state = lightState,
-                    label = stringResource(R.string.setting_display_page_custom_theme_light_label),
-                    placeholder = buildThemeTokenTemplate(defaultLightScheme),
-                    minLines = 6,
-                    maxLines = 10,
-                )
-
-                TextArea(
-                    state = darkState,
-                    label = stringResource(R.string.setting_display_page_custom_theme_dark_label),
-                    placeholder = buildThemeTokenTemplate(defaultDarkScheme),
-                    minLines = 6,
-                    maxLines = 10,
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
+                Row {
                     TextButton(onClick = onDismiss) {
                         Text(stringResource(R.string.cancel))
                     }
                     TextButton(
                         onClick = {
-                            onSave(
-                                lightState.text.toString().trim(),
-                                darkState.text.toString().trim(),
-                            )
+                            if (!hexError) {
+                                onApply(pickerColor)
+                            }
                         }
                     ) {
                         Text(stringResource(R.string.save))
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ThemeTemplateInsertButtons(
-    lightState: TextFieldState,
-    darkState: TextFieldState,
-    defaultLightScheme: ColorScheme,
-    defaultDarkScheme: ColorScheme,
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        TextButton(
-            onClick = {
-                lightState.setTextAndPlaceCursorAtEnd(buildThemeTokenTemplate(defaultLightScheme))
-            }
-        ) {
-            Text(stringResource(R.string.setting_display_page_custom_theme_insert_light_template))
-        }
-        TextButton(
-            onClick = {
-                darkState.setTextAndPlaceCursorAtEnd(buildThemeTokenTemplate(defaultDarkScheme))
-            }
-        ) {
-            Text(stringResource(R.string.setting_display_page_custom_theme_insert_dark_template))
         }
     }
 }
@@ -960,7 +1634,7 @@ private fun ThemeColorChannelSlider(
 @Composable
 private fun ColorSwatch(
     color: Color,
-    size: androidx.compose.ui.unit.Dp,
+    size: Dp,
     selected: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
@@ -979,7 +1653,7 @@ private fun ColorSwatch(
                 } else {
                     Modifier
                 }
-            )
+            ),
     )
 }
 
@@ -987,9 +1661,9 @@ private fun colorComponent(value: Float): Int {
     return (value * 255f).roundToInt().coerceIn(0, 255)
 }
 
-private fun sameColor(left: Color, right: Color): Boolean {
-    return colorComponent(left.red) == colorComponent(right.red) &&
-        colorComponent(left.green) == colorComponent(right.green) &&
-        colorComponent(left.blue) == colorComponent(right.blue) &&
-        colorComponent(left.alpha) == colorComponent(right.alpha)
+private fun sameColor(first: Color, second: Color): Boolean {
+    return colorComponent(first.red) == colorComponent(second.red) &&
+        colorComponent(first.green) == colorComponent(second.green) &&
+        colorComponent(first.blue) == colorComponent(second.blue) &&
+        colorComponent(first.alpha) == colorComponent(second.alpha)
 }
