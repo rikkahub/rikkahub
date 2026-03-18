@@ -1274,4 +1274,5 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="safe_mode_crash_report">クラッシュレポート</string>
   <string name="safe_mode_copy">コピー</string>
   <string name="safe_mode_assistants">アシスタント</string>
+  <string name="title_activity_safe_mode">セーフモード</string>
 </resources>

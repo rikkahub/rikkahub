@@ -1274,4 +1274,5 @@
   <string name="safe_mode_crash_report">Отчёт о сбое</string>
   <string name="safe_mode_copy">Копировать</string>
   <string name="safe_mode_assistants">Помощники</string>
+  <string name="title_activity_safe_mode">Безопасный режим</string>
 </resources>

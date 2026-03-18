@@ -1266,4 +1266,5 @@
   <string name="safe_mode_crash_report">當機報告</string>
   <string name="safe_mode_copy">複製</string>
   <string name="safe_mode_assistants">助理</string>
+  <string name="title_activity_safe_mode">安全模式</string>
 </resources>
