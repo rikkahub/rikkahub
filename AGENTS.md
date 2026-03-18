@@ -104,5 +104,3 @@
 - Codex should still avoid unnecessary delegation when the task is small, tightly coupled, or on the critical path.
 - If the user does not explicitly specify a sub-agent model, Codex must default to `gpt-5.4` with `xhigh`
   reasoning effort for sub-agents.
-- Codex must not choose a different sub-agent model or reasoning effort on its own unless the user explicitly requests
-  it.
