@@ -790,11 +790,11 @@ private fun XAITTSConfiguration(
     // Voice ID
     var voiceExpanded by remember { mutableStateOf(false) }
     val voices = listOf(
-        "eve" to "Eve - Energetic, upbeat",
-        "ara" to "Ara - Warm, friendly",
-        "rex" to "Rex - Confident, clear",
-        "sal" to "Sal - Smooth, balanced",
-        "leo" to "Leo - Authoritative, strong"
+        "eve" to "Eve",
+        "ara" to "Ara",
+        "rex" to "Rex",
+        "sal" to "Sal",
+        "leo" to "Leo"
     )
 
     FormItem(
@@ -860,7 +860,6 @@ private fun XAITTSConfiguration(
 
     FormItem(
         label = { Text("Language") },
-        description = { Text("Language for TTS synthesis (BCP-47 code)") }
     ) {
         ExposedDropdownMenuBox(
             expanded = languageExpanded,
