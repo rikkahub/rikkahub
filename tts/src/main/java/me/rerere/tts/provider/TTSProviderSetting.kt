@@ -141,6 +141,27 @@ sealed class TTSProviderSetting {
         }
     }
 
+    @Serializable
+    @SerialName("xai")
+    data class XAI(
+        override var id: Uuid = Uuid.random(),
+        override var name: String = "xAI TTS",
+        val apiKey: String = "",
+        val baseUrl: String = "https://api.x.ai/v1",
+        val voiceId: String = "eve",
+        val language: String = "auto"
+    ) : TTSProviderSetting() {
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+        ): TTSProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -150,6 +171,7 @@ sealed class TTSProviderSetting {
                 MiniMax::class,
                 Qwen::class,
                 Groq::class,
+                XAI::class,
             )
         }
     }
