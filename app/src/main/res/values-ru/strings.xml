@@ -967,5 +967,9 @@
   <string name="safe_mode_crash_report">Отчёт о сбое</string>
   <string name="safe_mode_copy">Копировать</string>
   <string name="safe_mode_assistants">Помощники</string>
+  <string name="setting_display_page_chat_font_family_title">Шрифт чата</string>
+  <string name="setting_display_page_chat_font_family_default">По умолчанию</string>
+  <string name="setting_display_page_chat_font_family_serif">С засечками</string>
+  <string name="setting_display_page_chat_font_family_monospace">Моноширинный</string>
 </resources>
 

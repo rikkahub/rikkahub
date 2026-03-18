@@ -388,7 +388,7 @@
   <string name="setting_display_page_developer_mode_desc">Show more debugging features. Not recommended for general users.</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_desc">Enable haptic feedback when messages are being generated</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">Message Generation Haptic Effect</string>
-  <string name="setting_display_page_font_size_preview">This is a **sample** chat text</string>
+  <string name="setting_display_page_font_size_preview">At four in the morning, I saw the begonia flowers still awake. I am often like this — lying awake alone in the quiet night, thinking: if someone is thinking of me at this moment, that would be wonderful.</string>
   <string name="setting_display_page_font_size_title">Chat Font Size</string>
   <string name="setting_display_page_message_jumper_position_desc">Move  Message Jumper to left side</string>
   <string name="setting_display_page_message_jumper_position_title">Message Jumper Position</string>
@@ -979,5 +979,9 @@
   <string name="safe_mode_crash_report">Crash Report</string>
   <string name="safe_mode_copy">Copy</string>
   <string name="safe_mode_assistants">Assistants</string>
+  <string name="setting_display_page_chat_font_family_title">Chat Font</string>
+  <string name="setting_display_page_chat_font_family_default">Default</string>
+  <string name="setting_display_page_chat_font_family_serif">Serif</string>
+  <string name="setting_display_page_chat_font_family_monospace">Monospace</string>
 </resources>
 

@@ -17,6 +17,9 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -31,9 +34,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.ChatFontFamily
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -338,45 +343,75 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 )
                             },
                         )
-                    }
-                    Column(
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp)
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(MaterialTheme.colorScheme.surfaceBright)
-                    ) {
-                        ListItem(
-                            headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
-                            colors = CustomColors.listItemColors,
+                        val chatFontFamilyOptions = listOf(
+                            ChatFontFamily.DEFAULT to stringResource(R.string.setting_display_page_chat_font_family_default),
+                            ChatFontFamily.SERIF to stringResource(R.string.setting_display_page_chat_font_family_serif),
+                            ChatFontFamily.MONOSPACE to stringResource(R.string.setting_display_page_chat_font_family_monospace),
                         )
-                        Row(
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Slider(
-                                value = displaySetting.fontSizeRatio,
-                                onValueChange = {
-                                    updateDisplaySetting(displaySetting.copy(fontSizeRatio = it))
-                                },
-                                valueRange = 0.5f..2f,
-                                steps = 11,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = "${(displaySetting.fontSizeRatio * 100).toInt()}%",
-                            )
-                        }
-                        MarkdownBlock(
-                            content = stringResource(R.string.setting_display_page_font_size_preview),
-                            modifier = Modifier.padding(8.dp),
-                            style = LocalTextStyle.current.copy(
-                                fontSize = LocalTextStyle.current.fontSize * displaySetting.fontSizeRatio,
-                                lineHeight = LocalTextStyle.current.lineHeight * displaySetting.fontSizeRatio,
-                            )
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_chat_font_family_title)) },
+                            supportingContent = {
+                                SingleChoiceSegmentedButtonRow(
+                                    modifier = Modifier
+                                        .padding(top = 4.dp)
+                                        .fillMaxWidth()
+                                ) {
+                                    chatFontFamilyOptions.forEachIndexed { index, (family, label) ->
+                                        SegmentedButton(
+                                            selected = displaySetting.chatFontFamily == family,
+                                            onClick = { updateDisplaySetting(displaySetting.copy(chatFontFamily = family)) },
+                                            shape = SegmentedButtonDefaults.itemShape(
+                                                index,
+                                                chatFontFamilyOptions.size
+                                            ),
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                fontFamily = when (family) {
+                                                    ChatFontFamily.DEFAULT -> FontFamily.Default
+                                                    ChatFontFamily.SERIF -> FontFamily.Serif
+                                                    ChatFontFamily.MONOSPACE -> FontFamily.Monospace
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
+                            supportingContent = {
+                                Column {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Slider(
+                                            value = displaySetting.fontSizeRatio,
+                                            onValueChange = {
+                                                updateDisplaySetting(displaySetting.copy(fontSizeRatio = it))
+                                            },
+                                            valueRange = 0.5f..2f,
+                                            steps = 11,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(text = "${(displaySetting.fontSizeRatio * 100).toInt()}%")
+                                    }
+                                    MarkdownBlock(
+                                        content = stringResource(R.string.setting_display_page_font_size_preview),
+                                        style = LocalTextStyle.current.copy(
+                                            fontSize = LocalTextStyle.current.fontSize * displaySetting.fontSizeRatio,
+                                            lineHeight = LocalTextStyle.current.lineHeight * displaySetting.fontSizeRatio,
+                                            fontFamily = when (displaySetting.chatFontFamily) {
+                                                ChatFontFamily.DEFAULT -> FontFamily.Default
+                                                ChatFontFamily.SERIF -> FontFamily.Serif
+                                                ChatFontFamily.MONOSPACE -> FontFamily.Monospace
+                                            }
+                                        )
+                                    )
+                                }
+                            }
                         )
                     }
                 }

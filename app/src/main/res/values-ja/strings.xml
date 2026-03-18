@@ -376,7 +376,7 @@
   <string name="setting_display_page_developer_mode_desc">デバッグ機能を追加で表示します。一般ユーザーへの推奨しません。</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_desc">メッセージ生成時に触覚フィードバックを有効にする</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">メッセージ生成時の触覚効果</string>
-  <string name="setting_display_page_font_size_preview">これは**サンプル**のチャットテキストです</string>
+  <string name="setting_display_page_font_size_preview">午前4時、海棠の花がまだ眠っていないのを見た。私はよくこうして、誰もいない夜にひとり目を覚まし、思う——もし今この瞬間、誰かが私のことを思っていてくれたなら、それだけでいい。</string>
   <string name="setting_display_page_font_size_title">チャットフォントサイズ</string>
   <string name="setting_display_page_message_jumper_position_desc">メッセージジャンパーを左側に移動</string>
   <string name="setting_display_page_message_jumper_position_title">メッセージジャンパーの位置</string>
@@ -974,5 +974,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="safe_mode_crash_report">クラッシュレポート</string>
   <string name="safe_mode_copy">コピー</string>
   <string name="safe_mode_assistants">アシスタント</string>
+  <string name="setting_display_page_chat_font_family_title">チャットフォント</string>
+  <string name="setting_display_page_chat_font_family_default">デフォルト</string>
+  <string name="setting_display_page_chat_font_family_serif">明朝体</string>
+  <string name="setting_display_page_chat_font_family_monospace">等幅</string>
 </resources>
 
