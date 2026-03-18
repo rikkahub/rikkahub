@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.theme
 
 import android.app.Activity
 import android.os.Build
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
@@ -88,12 +89,13 @@ fun RikkahubTheme(
     CompositionLocalProvider(
         LocalDarkMode provides darkTheme,
         LocalExtendColors provides extendColors,
+        LocalOverscrollFactory provides null
     ) {
         MaterialExpressiveTheme(
             colorScheme = colorSchemeConverted,
             typography = Typography,
             content = content,
-            // motionScheme = MotionScheme.expressive()
+            motionScheme = MotionScheme.expressive()
         )
     }
 }
