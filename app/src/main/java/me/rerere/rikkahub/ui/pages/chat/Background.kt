@@ -24,7 +24,9 @@ fun AssistantBackground(setting: Settings) {
     val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
     val backgroundBlur = assistant.backgroundBlur.coerceIn(0f, 40f)
 
-    Box {
+    Box(modifier = Modifier.fillMaxSize()) {
+        LuneBackdrop(modifier = Modifier.fillMaxSize())
+
         if (assistant.background != null) {
             AsyncImage(
                 model = assistant.background,
@@ -36,11 +38,9 @@ fun AssistantBackground(setting: Settings) {
                         radius = backgroundBlur.dp,
                         edgeTreatment = BlurredEdgeTreatment.Rectangle
                     )
-                    .alpha(backgroundOpacity * 0.72f)
+                    .alpha(backgroundOpacity)
             )
         }
-
-        LuneBackdrop(modifier = Modifier.fillMaxSize())
 
         Box(
             modifier = Modifier

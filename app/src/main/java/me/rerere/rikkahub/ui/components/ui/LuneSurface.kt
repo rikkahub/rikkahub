@@ -19,6 +19,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlin.math.min
+import me.rerere.rikkahub.ui.theme.LocalAmoledDarkMode
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 
 private data class LuneStar(
@@ -72,24 +73,49 @@ fun LuneBackdrop(
     modifier: Modifier = Modifier,
 ) {
     val dark = LocalDarkMode.current
-    val verticalColors = if (dark) {
-        listOf(
-            Color(0xFF070A11),
-            Color(0xFF0A0D14),
-            Color(0xFF101624),
-            Color(0xFF121A2B),
+    val amoledDarkMode = LocalAmoledDarkMode.current
+    val colorScheme = MaterialTheme.colorScheme
+    val pureBlackBackdrop = dark && (
+        amoledDarkMode ||
+            (colorScheme.background == Color.Black && colorScheme.surface == Color.Black)
         )
-    } else {
-        listOf(
-            Color(0xFFF8FBFF),
-            Color(0xFFF1F5FD),
-            Color(0xFFE9EFFA),
-            Color(0xFFE6EEF8),
-        )
+
+    val verticalColors = when {
+        pureBlackBackdrop -> {
+            List(4) { colorScheme.background }
+        }
+        dark -> {
+            listOf(
+                colorScheme.background,
+                colorScheme.surface,
+                colorScheme.surfaceContainerLow,
+                colorScheme.surfaceContainer,
+            )
+        }
+        else -> {
+            listOf(
+                colorScheme.background,
+                colorScheme.surface,
+                colorScheme.surfaceContainerLow,
+                colorScheme.surfaceContainerHigh,
+            )
+        }
     }
-    val moonGlow = if (dark) Color(0xFFF8E8BF).copy(alpha = 0.14f) else Color(0xFFFDF6D9).copy(alpha = 0.56f)
-    val blueGlow = if (dark) Color(0xFF8FB8FF).copy(alpha = 0.16f) else Color(0xFFBFD8FF).copy(alpha = 0.32f)
-    val horizonGlow = if (dark) Color(0xFF4A6CB5).copy(alpha = 0.10f) else Color(0xFFB6CFF5).copy(alpha = 0.24f)
+    val moonGlow = when {
+        pureBlackBackdrop -> Color.Transparent
+        dark -> colorScheme.tertiary.copy(alpha = 0.14f)
+        else -> colorScheme.tertiaryContainer.copy(alpha = 0.56f)
+    }
+    val blueGlow = when {
+        pureBlackBackdrop -> Color.Transparent
+        dark -> colorScheme.primary.copy(alpha = 0.16f)
+        else -> colorScheme.primaryContainer.copy(alpha = 0.32f)
+    }
+    val horizonGlow = when {
+        pureBlackBackdrop -> Color.Transparent
+        dark -> colorScheme.secondary.copy(alpha = 0.10f)
+        else -> colorScheme.secondaryContainer.copy(alpha = 0.24f)
+    }
 
     Canvas(modifier = modifier.fillMaxSize()) {
         drawRect(
@@ -98,29 +124,31 @@ fun LuneBackdrop(
 
         val radiusBase = min(size.width, size.height)
 
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(moonGlow, Color.Transparent),
-                center = Offset(size.width * 0.82f, size.height * 0.12f),
-                radius = radiusBase * 0.45f,
+        if (!pureBlackBackdrop) {
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(moonGlow, Color.Transparent),
+                    center = Offset(size.width * 0.82f, size.height * 0.12f),
+                    radius = radiusBase * 0.45f,
+                )
             )
-        )
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(blueGlow, Color.Transparent),
-                center = Offset(size.width * 0.12f, size.height * 0.06f),
-                radius = radiusBase * 0.52f,
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(blueGlow, Color.Transparent),
+                    center = Offset(size.width * 0.12f, size.height * 0.06f),
+                    radius = radiusBase * 0.52f,
+                )
             )
-        )
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(horizonGlow, Color.Transparent),
-                center = Offset(size.width * 0.26f, size.height * 0.95f),
-                radius = radiusBase * 0.78f,
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(horizonGlow, Color.Transparent),
+                    center = Offset(size.width * 0.26f, size.height * 0.95f),
+                    radius = radiusBase * 0.78f,
+                )
             )
-        )
+        }
 
-        if (dark) {
+        if (dark && !pureBlackBackdrop) {
             luneStars.forEach { star ->
                 drawCircle(
                     color = Color.White.copy(alpha = star.alpha),
