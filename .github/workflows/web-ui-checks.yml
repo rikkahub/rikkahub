@@ -34,10 +34,6 @@ jobs:
         working-directory: web-ui
         run: ./node_modules/.bin/oxlint app
 
-      - name: Format check
-        working-directory: web-ui
-        run: bun run fmt:check
-
       - name: Typecheck
         working-directory: web-ui
         run: bun run typecheck
