@@ -267,6 +267,7 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     var previewMode by rememberSaveable { mutableStateOf(false) }
     var topBarVisible by rememberSaveable { mutableStateOf(true) }
+    val enableGlassBlur = setting.displaySetting.enableBlurEffect
     val hazeState = rememberHazeState()
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
@@ -285,7 +286,7 @@ private fun ChatPageContent(
                         exit = fadeOut() + scaleOut(targetScale = 0.96f),
                     ) {
                         LuneTopBarSurface(
-                            hazeState = hazeState,
+                            hazeState = if (enableGlassBlur) hazeState else null,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         ) {
                             TopBar(

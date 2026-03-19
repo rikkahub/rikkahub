@@ -229,7 +229,6 @@ fun ChatInput(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(composerShape)
-                    .animateContentSize(animationSpec = luneSizeSpring())
                     .then(
                         if (settings.displaySetting.enableBlurEffect) {
                             Modifier.hazeEffect(
@@ -246,7 +245,9 @@ fun ChatInput(
                 border = BorderStroke(1.dp, luneGlassBorderColor()),
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .animateContentSize(animationSpec = luneSizeSpring())
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     if (state.messageContent.isNotEmpty()) {

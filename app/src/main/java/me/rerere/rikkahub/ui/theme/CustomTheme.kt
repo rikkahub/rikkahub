@@ -24,6 +24,16 @@ private val THEME_SCALE_VALUE_REGEX = Regex("""^(-?\d+(?:\.\d+)?)(%)?$""", Regex
 private const val MIN_THEME_TEXT_SCALE = 0.7f
 private const val MAX_THEME_TEXT_SCALE = 1.6f
 private val MAX_THEME_RADIUS = 96.dp
+private val SURFACE_FAMILY_TOKEN_KEYS = listOf(
+    "surface",
+    "surfaceBright",
+    "surfaceDim",
+    "surfaceContainerLowest",
+    "surfaceContainerLow",
+    "surfaceContainer",
+    "surfaceContainerHigh",
+    "surfaceContainerHighest",
+)
 
 val COMMON_THEME_TOKEN_KEYS = listOf(
     "primary",
@@ -209,42 +219,128 @@ fun ColorScheme.applyThemeTokenOverrides(parseResult: ThemeTokenParseResult): Co
         return this
     }
 
+    fun resolvedColor(key: String, fallback: Color): Color = overrides[key] ?: fallback
+
+    fun resolvedOnColor(
+        onKey: String,
+        fallback: Color,
+        autoColor: Color,
+        shouldAutoResolve: Boolean,
+    ): Color {
+        return overrides[onKey] ?: if (shouldAutoResolve) autoColor.preferredContentColor() else fallback
+    }
+
+    val resolvedPrimary = resolvedColor("primary", primary)
+    val resolvedPrimaryContainer = resolvedColor("primaryContainer", primaryContainer)
+    val resolvedSecondary = resolvedColor("secondary", secondary)
+    val resolvedSecondaryContainer = resolvedColor("secondaryContainer", secondaryContainer)
+    val resolvedTertiary = resolvedColor("tertiary", tertiary)
+    val resolvedTertiaryContainer = resolvedColor("tertiaryContainer", tertiaryContainer)
+    val resolvedBackground = resolvedColor("background", background)
+    val resolvedSurface = resolvedColor("surface", surface)
+    val resolvedSurfaceVariant = resolvedColor("surfaceVariant", surfaceVariant)
+    val resolvedInverseSurface = resolvedColor("inverseSurface", inverseSurface)
+    val resolvedError = resolvedColor("error", error)
+    val resolvedErrorContainer = resolvedColor("errorContainer", errorContainer)
+    val resolvedSurfaceContentBase = SURFACE_FAMILY_TOKEN_KEYS.firstNotNullOfOrNull(overrides::get) ?: resolvedSurface
+    val hasSurfaceFamilyOverride = SURFACE_FAMILY_TOKEN_KEYS.any(overrides::containsKey)
+
     return copy(
-        primary = overrides["primary"] ?: primary,
-        onPrimary = overrides["onPrimary"] ?: onPrimary,
-        primaryContainer = overrides["primaryContainer"] ?: primaryContainer,
-        onPrimaryContainer = overrides["onPrimaryContainer"] ?: onPrimaryContainer,
-        inversePrimary = overrides["inversePrimary"] ?: inversePrimary,
-        secondary = overrides["secondary"] ?: secondary,
-        onSecondary = overrides["onSecondary"] ?: onSecondary,
-        secondaryContainer = overrides["secondaryContainer"] ?: secondaryContainer,
-        onSecondaryContainer = overrides["onSecondaryContainer"] ?: onSecondaryContainer,
-        tertiary = overrides["tertiary"] ?: tertiary,
-        onTertiary = overrides["onTertiary"] ?: onTertiary,
-        tertiaryContainer = overrides["tertiaryContainer"] ?: tertiaryContainer,
-        onTertiaryContainer = overrides["onTertiaryContainer"] ?: onTertiaryContainer,
-        background = overrides["background"] ?: background,
-        onBackground = overrides["onBackground"] ?: onBackground,
-        surface = overrides["surface"] ?: surface,
-        onSurface = overrides["onSurface"] ?: onSurface,
-        surfaceVariant = overrides["surfaceVariant"] ?: surfaceVariant,
-        onSurfaceVariant = overrides["onSurfaceVariant"] ?: onSurfaceVariant,
-        inverseSurface = overrides["inverseSurface"] ?: inverseSurface,
-        inverseOnSurface = overrides["inverseOnSurface"] ?: inverseOnSurface,
-        error = overrides["error"] ?: error,
-        onError = overrides["onError"] ?: onError,
-        errorContainer = overrides["errorContainer"] ?: errorContainer,
-        onErrorContainer = overrides["onErrorContainer"] ?: onErrorContainer,
-        outline = overrides["outline"] ?: outline,
-        outlineVariant = overrides["outlineVariant"] ?: outlineVariant,
-        scrim = overrides["scrim"] ?: scrim,
-        surfaceBright = overrides["surfaceBright"] ?: surfaceBright,
-        surfaceDim = overrides["surfaceDim"] ?: surfaceDim,
-        surfaceContainer = overrides["surfaceContainer"] ?: surfaceContainer,
-        surfaceContainerHigh = overrides["surfaceContainerHigh"] ?: surfaceContainerHigh,
-        surfaceContainerHighest = overrides["surfaceContainerHighest"] ?: surfaceContainerHighest,
-        surfaceContainerLow = overrides["surfaceContainerLow"] ?: surfaceContainerLow,
-        surfaceContainerLowest = overrides["surfaceContainerLowest"] ?: surfaceContainerLowest,
+        primary = resolvedPrimary,
+        onPrimary = resolvedOnColor(
+            onKey = "onPrimary",
+            fallback = onPrimary,
+            autoColor = resolvedPrimary,
+            shouldAutoResolve = overrides.containsKey("primary"),
+        ),
+        primaryContainer = resolvedPrimaryContainer,
+        onPrimaryContainer = resolvedOnColor(
+            onKey = "onPrimaryContainer",
+            fallback = onPrimaryContainer,
+            autoColor = resolvedPrimaryContainer,
+            shouldAutoResolve = overrides.containsKey("primaryContainer"),
+        ),
+        inversePrimary = resolvedColor("inversePrimary", inversePrimary),
+        secondary = resolvedSecondary,
+        onSecondary = resolvedOnColor(
+            onKey = "onSecondary",
+            fallback = onSecondary,
+            autoColor = resolvedSecondary,
+            shouldAutoResolve = overrides.containsKey("secondary"),
+        ),
+        secondaryContainer = resolvedSecondaryContainer,
+        onSecondaryContainer = resolvedOnColor(
+            onKey = "onSecondaryContainer",
+            fallback = onSecondaryContainer,
+            autoColor = resolvedSecondaryContainer,
+            shouldAutoResolve = overrides.containsKey("secondaryContainer"),
+        ),
+        tertiary = resolvedTertiary,
+        onTertiary = resolvedOnColor(
+            onKey = "onTertiary",
+            fallback = onTertiary,
+            autoColor = resolvedTertiary,
+            shouldAutoResolve = overrides.containsKey("tertiary"),
+        ),
+        tertiaryContainer = resolvedTertiaryContainer,
+        onTertiaryContainer = resolvedOnColor(
+            onKey = "onTertiaryContainer",
+            fallback = onTertiaryContainer,
+            autoColor = resolvedTertiaryContainer,
+            shouldAutoResolve = overrides.containsKey("tertiaryContainer"),
+        ),
+        background = resolvedBackground,
+        onBackground = resolvedOnColor(
+            onKey = "onBackground",
+            fallback = onBackground,
+            autoColor = resolvedBackground,
+            shouldAutoResolve = overrides.containsKey("background"),
+        ),
+        surface = resolvedSurface,
+        onSurface = resolvedOnColor(
+            onKey = "onSurface",
+            fallback = onSurface,
+            autoColor = resolvedSurfaceContentBase,
+            shouldAutoResolve = hasSurfaceFamilyOverride,
+        ),
+        surfaceVariant = resolvedSurfaceVariant,
+        onSurfaceVariant = resolvedOnColor(
+            onKey = "onSurfaceVariant",
+            fallback = onSurfaceVariant,
+            autoColor = resolvedSurfaceVariant,
+            shouldAutoResolve = overrides.containsKey("surfaceVariant"),
+        ),
+        inverseSurface = resolvedInverseSurface,
+        inverseOnSurface = resolvedOnColor(
+            onKey = "inverseOnSurface",
+            fallback = inverseOnSurface,
+            autoColor = resolvedInverseSurface,
+            shouldAutoResolve = overrides.containsKey("inverseSurface"),
+        ),
+        error = resolvedError,
+        onError = resolvedOnColor(
+            onKey = "onError",
+            fallback = onError,
+            autoColor = resolvedError,
+            shouldAutoResolve = overrides.containsKey("error"),
+        ),
+        errorContainer = resolvedErrorContainer,
+        onErrorContainer = resolvedOnColor(
+            onKey = "onErrorContainer",
+            fallback = onErrorContainer,
+            autoColor = resolvedErrorContainer,
+            shouldAutoResolve = overrides.containsKey("errorContainer"),
+        ),
+        outline = resolvedColor("outline", outline),
+        outlineVariant = resolvedColor("outlineVariant", outlineVariant),
+        scrim = resolvedColor("scrim", scrim),
+        surfaceBright = resolvedColor("surfaceBright", surfaceBright),
+        surfaceDim = resolvedColor("surfaceDim", surfaceDim),
+        surfaceContainer = resolvedColor("surfaceContainer", surfaceContainer),
+        surfaceContainerHigh = resolvedColor("surfaceContainerHigh", surfaceContainerHigh),
+        surfaceContainerHighest = resolvedColor("surfaceContainerHighest", surfaceContainerHighest),
+        surfaceContainerLow = resolvedColor("surfaceContainerLow", surfaceContainerLow),
+        surfaceContainerLowest = resolvedColor("surfaceContainerLowest", surfaceContainerLowest),
     )
 }
 

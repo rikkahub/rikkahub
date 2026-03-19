@@ -14,8 +14,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -104,6 +102,7 @@ import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.luneGlassBorderColor
 import me.rerere.rikkahub.ui.components.ui.luneGlassContainerColor
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
+import me.rerere.rikkahub.ui.theme.preferredContentColor
 import me.rerere.rikkahub.utils.plus
 import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
@@ -150,7 +149,7 @@ fun ChatList(
         targetState = previewMode,
         label = "ChatListMode",
         transitionSpec = {
-            (fadeIn() + scaleIn(initialScale = 0.8f) togetherWith fadeOut() + scaleOut(targetScale = 0.8f))
+            fadeIn() togetherWith fadeOut()
         }
     ) { target ->
         if (target) {
@@ -221,6 +220,7 @@ private fun ChatListNormal(
     var isRecentScroll by remember { mutableStateOf(false) }
     val conversationUpdated by rememberUpdatedState(conversation)
     val density = LocalDensity.current
+    val enableGlassBlur = settings.displaySetting.enableBlurEffect
 
     fun List<LazyListItemInfo>.isAtBottom(): Boolean {
         val lastItem = lastOrNull() ?: return false
@@ -291,7 +291,13 @@ private fun ChatListNormal(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(state = hazeState)
+                .then(
+                    if (enableGlassBlur) {
+                        Modifier.hazeSource(state = hazeState)
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
             itemsIndexed(
                 items = conversation.messageNodes,
@@ -561,7 +567,7 @@ private fun buildHighlightedText(
             withStyle(
                 style = SpanStyle(
                     background = highlightColor,
-                    color = Color.Black
+                    color = highlightColor.preferredContentColor()
                 )
             ) {
                 append(text.substring(index, index + query.length))
