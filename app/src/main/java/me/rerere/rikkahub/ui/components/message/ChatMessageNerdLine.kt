@@ -44,7 +44,7 @@ fun ChatMessageNerdLine(
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
-                modifier = modifier.padding(horizontal = 4.dp),
+                modifier = modifier,
             ) {
                 val usage = message.usage
                 if (settings.showTokenUsage && usage != null) {

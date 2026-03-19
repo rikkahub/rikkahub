@@ -71,124 +71,120 @@ fun ColumnScope.ChatMessageActionButtons(
     onUpdate: (MessageNode) -> Unit,
     onRegenerate: () -> Unit,
     onOpenActionSheet: () -> Unit,
+    showPrimaryActions: Boolean = true,
     onTranslate: ((UIMessage, Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
 ) {
     val context = LocalContext.current
-    var isPendingDelete by remember { mutableStateOf(false) }
     var showTranslateDialog by remember { mutableStateOf(false) }
     var showRegenerateConfirm by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isPendingDelete) {
-        if (isPendingDelete) {
-            delay(3000) // 3秒后自动取消
-            isPendingDelete = false
-        }
-    }
-
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = HugeIcons.Copy01,
-            contentDescription = stringResource(R.string.copy),
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable { context.copyMessageToClipboard(message) }
-                .padding(8.dp)
-                .size(16.dp)
-        )
-
-        Icon(
-            imageVector = HugeIcons.Refresh03,
-            contentDescription = stringResource(R.string.regenerate),
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable {
-                    if (message.role == MessageRole.USER) {
-                        showRegenerateConfirm = true
-                    } else {
-                        onRegenerate()
-                    }
-                }
-                .padding(8.dp)
-                .size(16.dp)
-        )
-
-        if (message.role == MessageRole.ASSISTANT) {
-            val tts = LocalTTSState.current
-            val settings = LocalSettings.current
-            val isSpeaking by tts.isSpeaking.collectAsState()
-            val isAvailable by tts.isAvailable.collectAsState()
+        if (showPrimaryActions) {
             Icon(
-                imageVector = if (isSpeaking) HugeIcons.StopCircle else HugeIcons.VolumeHigh,
-                contentDescription = stringResource(R.string.tts),
+                imageVector = HugeIcons.Copy01,
+                contentDescription = stringResource(R.string.copy),
                 modifier = Modifier
                     .clip(CircleShape)
-                    .clickable(
-                        enabled = isAvailable,
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = LocalIndication.current,
-                        onClick = {
-                            if (!isSpeaking) {
-                                val text = message.toText()
-                                val textToSpeak = if (settings.displaySetting.ttsOnlyReadQuoted) {
-                                    text.extractQuotedContentAsText() ?: text
-                                } else {
-                                    text
-                                }
-                                tts.speak(textToSpeak)
-                            } else {
-                                tts.stop()
-                            }
-                        }
-                    )
-                    .padding(8.dp)
+                    .clickable { context.copyMessageToClipboard(message) }
+                    .padding(6.dp)
                     .size(16.dp),
-                tint = if (isAvailable) LocalContentColor.current else LocalContentColor.current.copy(alpha = 0.38f)
             )
 
-            // Translation button
-            if (onTranslate != null) {
+            Icon(
+                imageVector = HugeIcons.Refresh03,
+                contentDescription = stringResource(R.string.regenerate),
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable {
+                        if (message.role == MessageRole.USER) {
+                            showRegenerateConfirm = true
+                        } else {
+                            onRegenerate()
+                        }
+                    }
+                    .padding(6.dp)
+                    .size(16.dp)
+            )
+
+            if (message.role == MessageRole.ASSISTANT) {
+                val tts = LocalTTSState.current
+                val settings = LocalSettings.current
+                val isSpeaking by tts.isSpeaking.collectAsState()
+                val isAvailable by tts.isAvailable.collectAsState()
                 Icon(
-                    imageVector = HugeIcons.Translate,
-                    contentDescription = stringResource(R.string.translate),
+                    imageVector = if (isSpeaking) HugeIcons.StopCircle else HugeIcons.VolumeHigh,
+                    contentDescription = stringResource(R.string.tts),
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable(
+                            enabled = isAvailable,
                             interactionSource = remember { MutableInteractionSource() },
                             indication = LocalIndication.current,
                             onClick = {
-                                showTranslateDialog = true
+                                if (!isSpeaking) {
+                                    val text = message.toText()
+                                    val textToSpeak = if (settings.displaySetting.ttsOnlyReadQuoted) {
+                                        text.extractQuotedContentAsText() ?: text
+                                    } else {
+                                        text
+                                    }
+                                    tts.speak(textToSpeak)
+                                } else {
+                                    tts.stop()
+                                }
                             }
                         )
-                        .padding(8.dp)
-                        .size(16.dp)
+                        .padding(6.dp)
+                        .size(16.dp),
+                    tint = if (isAvailable) LocalContentColor.current else LocalContentColor.current.copy(alpha = 0.38f)
                 )
+
+                if (onTranslate != null) {
+                    Icon(
+                        imageVector = HugeIcons.Translate,
+                        contentDescription = stringResource(R.string.translate),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = LocalIndication.current,
+                                onClick = {
+                                    showTranslateDialog = true
+                                }
+                            )
+                            .padding(6.dp)
+                            .size(16.dp)
+                    )
+                }
             }
+
+            Icon(
+                imageVector = HugeIcons.MoreVertical,
+                contentDescription = stringResource(R.string.more_options),
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = LocalIndication.current,
+                        onClick = {
+                            onOpenActionSheet()
+                        }
+                    )
+                    .padding(6.dp)
+                    .size(16.dp)
+            )
         }
 
-        Icon(
-            imageVector = HugeIcons.MoreVertical,
-            contentDescription = stringResource(R.string.more_options),
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = LocalIndication.current,
-                    onClick = {
-                        onOpenActionSheet()
-                    }
-                )
-                .padding(8.dp)
-                .size(16.dp)
-        )
-
-        ChatMessageBranchSelector(
-            node = node,
-            onUpdate = onUpdate,
-        )
+        if (node.messages.size > 1) {
+            ChatMessageBranchSelector(
+                node = node,
+                onUpdate = onUpdate,
+            )
+        }
     }
 
     // Translation dialog

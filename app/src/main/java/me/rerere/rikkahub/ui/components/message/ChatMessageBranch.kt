@@ -32,7 +32,7 @@ fun ChatMessageBranchSelector(
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (node.messages.size > 1) {
             Icon(
@@ -54,7 +54,7 @@ fun ChatMessageBranchSelector(
                             }
                         }
                     )
-                    .padding(8.dp)
+                    .padding(6.dp)
                     .size(16.dp)
             )
 
@@ -82,7 +82,7 @@ fun ChatMessageBranchSelector(
                             }
                         }
                     )
-                    .padding(8.dp)
+                    .padding(6.dp)
                     .size(16.dp),
             )
         }

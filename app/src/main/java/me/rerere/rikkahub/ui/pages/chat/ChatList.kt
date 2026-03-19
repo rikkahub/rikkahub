@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
@@ -275,19 +276,35 @@ private fun ChatListNormal(
 
         LazyColumn(
             state = state,
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                top = 8.dp + innerPadding.calculateTopPadding(),
+                end = 12.dp,
+                bottom = 20.dp + innerPadding.calculateBottomPadding(),
+            ),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(state = hazeState)
-                .padding(top = innerPadding.calculateTopPadding()),
         ) {
             itemsIndexed(
                 items = conversation.messageNodes,
                 key = { index, item -> item.id },
             ) { index, node ->
-                Column {
+                val previousMessage = conversation.messageNodes.getOrNull(index - 1)?.currentMessage
+                val groupedWithPrevious = previousMessage?.role == node.currentMessage.role
+                val topPadding = when {
+                    index == 0 -> 0.dp
+                    groupedWithPrevious -> 4.dp
+                    else -> 14.dp
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = topPadding),
+                    contentAlignment = Alignment.Center,
+                ) {
                     ListSelectableItem(
                         key = node.id,
                         onSelectChange = {
@@ -302,6 +319,9 @@ private fun ChatListNormal(
                     ) {
                         ChatMessage(
                             node = node,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 920.dp),
                             model = node.currentMessage.modelId?.let { settings.findModelById(it) },
                             assistant = settings.getAssistantById(conversation.assistantId),
                             loading = loading && index == conversation.messageNodes.lastIndex,
@@ -335,6 +355,8 @@ private fun ChatListNormal(
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
                             lastMessage = index == conversation.messageNodes.lastIndex,
+                            showIdentity = !groupedWithPrevious,
+                            showMetadata = index == conversation.messageNodes.lastIndex,
                             messageDepthFromEnd = conversation.messageNodes.size - index,
                         )
                     }
@@ -670,8 +692,8 @@ private fun ChatSuggestionsRow(
     LazyRow(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         items(conversation.chatSuggestions) { suggestion ->
@@ -682,7 +704,7 @@ private fun ChatSuggestionsRow(
                         onClickSuggestion(suggestion)
                     }
                     .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-                    .padding(vertical = 4.dp, horizontal = 8.dp),
+                    .padding(vertical = 4.dp, horizontal = 10.dp),
             ) {
                 Text(
                     text = suggestion,

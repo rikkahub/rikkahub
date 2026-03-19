@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -111,6 +113,8 @@ fun ChatMessage(
     model: Model? = null,
     assistant: Assistant? = null,
     lastMessage: Boolean = false,
+    showIdentity: Boolean = true,
+    showMetadata: Boolean = false,
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
@@ -141,86 +145,137 @@ fun ChatMessage(
     val navController = LocalNavController.current
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
+    val assistantAvatarSlotWidth = if (message.role == MessageRole.ASSISTANT && settings.showModelIcon) 32.dp else 0.dp
+    val userAvatarSlotWidth = if (message.role == MessageRole.USER && settings.showUserAvatar) 36.dp else 0.dp
+    val avatarGap = 8.dp
+    val showPrimaryActions = lastMessage && !loading && !message.parts.isEmptyUIMessage()
+    val showAccessoryRow = showPrimaryActions || node.messages.size > 1
+
+    @Composable
+    fun MessageContentColumn(horizontalAlignment: Alignment.Horizontal) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 820.dp)
+                .animateContentSize(),
+            horizontalAlignment = horizontalAlignment,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (showIdentity) {
+                ChatMessageIdentityLabel(
+                    message = message,
+                    model = model,
+                    assistant = assistant,
+                )
+            }
+
+            ProvideTextStyle(textStyle) {
+                MessagePartsBlock(
+                    assistant = assistant,
+                    role = message.role,
+                    parts = message.parts,
+                    annotations = message.annotations,
+                    loading = loading,
+                    model = model,
+                    onToolApproval = onToolApproval,
+                    messageDepthFromEnd = messageDepthFromEnd,
+                    onToolAnswer = onToolAnswer,
+                    onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
+                )
+
+                message.translation?.let { translation ->
+                    CollapsibleTranslationText(
+                        content = translation,
+                        onClickCitation = {},
+                        messageDepthFromEnd = messageDepthFromEnd,
+                    )
+                }
+            }
+
+            if (showAccessoryRow) {
+                AnimatedVisibility(
+                    visible = true,
+                    enter = slideInVertically { it / 2 } + fadeIn(),
+                    exit = slideOutVertically { it / 2 } + fadeOut()
+                ) {
+                    Column(
+                        modifier = Modifier.animateContentSize()
+                    ) {
+                        ChatMessageActionButtons(
+                            message = message,
+                            onRegenerate = onRegenerate,
+                            node = node,
+                            onUpdate = onUpdate,
+                            onOpenActionSheet = {
+                                showActionsSheet = true
+                            },
+                            showPrimaryActions = showPrimaryActions,
+                            onTranslate = onTranslate,
+                            onClearTranslation = onClearTranslation
+                        )
+                    }
+                }
+            }
+
+            if (showMetadata) {
+                ProvideTextStyle(textStyle) {
+                    ChatMessageNerdLine(message = message)
+                }
+            }
+        }
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        if (!message.parts.isEmptyUIMessage()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            ) {
-                ChatMessageAssistantAvatar(
-                    message = message,
-                    model = model,
-                    assistant = assistant,
-                    loading = loading,
-                    modifier = Modifier.weight(1f)
-                )
-                ChatMessageUserAvatar(
-                    message = message,
-                    avatar = settings.userAvatar,
-                    nickname = settings.userNickname,
-                    modifier = Modifier.weight(1f)
-                )
+        when (message.role) {
+            MessageRole.ASSISTANT -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.Start,
+                ) {
+                    if (assistantAvatarSlotWidth > 0.dp) {
+                        if (showIdentity) {
+                            ChatMessageAssistantAvatar(
+                                model = model,
+                                assistant = assistant,
+                                loading = loading,
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.width(assistantAvatarSlotWidth))
+                        }
+                        Spacer(modifier = Modifier.width(avatarGap))
+                    }
+                    MessageContentColumn(horizontalAlignment = Alignment.Start)
+                }
             }
-        }
-        ProvideTextStyle(textStyle) {
-            MessagePartsBlock(
-                assistant = assistant,
-                role = message.role,
-                parts = message.parts,
-                annotations = message.annotations,
-                loading = loading,
-                model = model,
-                onToolApproval = onToolApproval,
-                messageDepthFromEnd = messageDepthFromEnd,
-                onToolAnswer = onToolAnswer,
-                onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
-            )
 
-            message.translation?.let { translation ->
-                CollapsibleTranslationText(
-                    content = translation,
-                    onClickCitation = {},
-                    messageDepthFromEnd = messageDepthFromEnd,
-                )
+            MessageRole.USER -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    MessageContentColumn(horizontalAlignment = Alignment.End)
+                    if (userAvatarSlotWidth > 0.dp) {
+                        Spacer(modifier = Modifier.width(avatarGap))
+                        if (showIdentity) {
+                            ChatMessageUserAvatar(
+                                avatar = settings.userAvatar,
+                                nickname = settings.userNickname,
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.width(userAvatarSlotWidth))
+                        }
+                    }
+                }
             }
-        }
 
-        val showActions = if (lastMessage) {
-            !loading
-        } else {
-            message.parts.isEmptyUIMessage().not()
-        }
-
-        AnimatedVisibility(
-            visible = showActions,
-            enter = slideInVertically { it / 2 } + fadeIn(),
-            exit = slideOutVertically { it / 2 } + fadeOut()
-        ) {
-            Column(
-                modifier = Modifier.animateContentSize()
-            ) {
-                ChatMessageActionButtons(
-                    message = message,
-                    onRegenerate = onRegenerate,
-                    node = node,
-                    onUpdate = onUpdate,
-                    onOpenActionSheet = {
-                        showActionsSheet = true
-                    },
-                    onTranslate = onTranslate,
-                    onClearTranslation = onClearTranslation
-                )
+            else -> {
+                MessageContentColumn(horizontalAlignment = Alignment.Start)
             }
-        }
-
-        ProvideTextStyle(textStyle) {
-            ChatMessageNerdLine(message = message)
         }
     }
     if (showActionsSheet) {
