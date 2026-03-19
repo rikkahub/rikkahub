@@ -54,6 +54,7 @@ fun TTSProviderConfigure(
                         is TTSProviderSetting.MiniMax -> "MiniMax"
                         is TTSProviderSetting.Qwen -> "Qwen"
                         is TTSProviderSetting.Groq -> "Groq"
+                        is TTSProviderSetting.XAI -> "xAI"
                     },
                     onValueChange = {},
                     readOnly = true,
@@ -79,6 +80,7 @@ fun TTSProviderConfigure(
                                         TTSProviderSetting.MiniMax::class -> "MiniMax"
                                         TTSProviderSetting.Qwen::class -> "Qwen"
                                         TTSProviderSetting.Groq::class -> "Groq"
+                                        TTSProviderSetting.XAI::class -> "xAI"
                                         else -> providerClass.simpleName ?: "Unknown"
                                     }
                                 )
@@ -116,6 +118,11 @@ fun TTSProviderConfigure(
                                         name = "Groq TTS"
                                     )
 
+                                    TTSProviderSetting.XAI::class -> TTSProviderSetting.XAI(
+                                        id = setting.id,
+                                        name = "xAI TTS"
+                                    )
+
                                     else -> setting
                                 }
                                 onValueChange(newSetting)
@@ -149,6 +156,7 @@ fun TTSProviderConfigure(
             is TTSProviderSetting.SystemTTS -> SystemTTSConfiguration(setting, onValueChange)
             is TTSProviderSetting.Qwen -> QwenTTSConfiguration(setting, onValueChange)
             is TTSProviderSetting.Groq -> GroqTTSConfiguration(setting, onValueChange)
+            is TTSProviderSetting.XAI -> XAITTSConfiguration(setting, onValueChange)
         }
     }
 }
@@ -736,6 +744,149 @@ private fun GroqTTSConfiguration(
                         onClick = {
                             voiceExpanded = false
                             onValueChange(setting.copy(voice = voice))
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun XAITTSConfiguration(
+    setting: TTSProviderSetting.XAI,
+    onValueChange: (TTSProviderSetting) -> Unit
+) {
+    // API Key
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
+        description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.apiKey,
+            onValueChange = { newApiKey ->
+                onValueChange(setting.copy(apiKey = newApiKey))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("xai-xxx") },
+        )
+    }
+
+    // Base URL
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
+        description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.baseUrl,
+            onValueChange = { newBaseUrl ->
+                onValueChange(setting.copy(baseUrl = newBaseUrl))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("https://api.x.ai/v1") }
+        )
+    }
+
+    // Voice ID
+    var voiceExpanded by remember { mutableStateOf(false) }
+    val voices = listOf(
+        "eve" to "Eve",
+        "ara" to "Ara",
+        "rex" to "Rex",
+        "sal" to "Sal",
+        "leo" to "Leo"
+    )
+
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_voice)) },
+        description = { Text(stringResource(R.string.setting_tts_page_voice_description)) }
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = voiceExpanded,
+            onExpandedChange = { voiceExpanded = !voiceExpanded }
+        ) {
+            OutlinedTextField(
+                value = setting.voiceId,
+                onValueChange = { newVoiceId ->
+                    onValueChange(setting.copy(voiceId = newVoiceId))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = voiceExpanded)
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = voiceExpanded,
+                onDismissRequest = { voiceExpanded = false }
+            ) {
+                voices.forEach { (voiceId, description) ->
+                    DropdownMenuItem(
+                        text = { Text(description) },
+                        onClick = {
+                            voiceExpanded = false
+                            onValueChange(setting.copy(voiceId = voiceId))
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // Language
+    var languageExpanded by remember { mutableStateOf(false) }
+    val languages = listOf(
+        "auto" to "Auto-detect",
+        "en" to "English",
+        "zh" to "Chinese (Simplified)",
+        "ja" to "Japanese",
+        "ko" to "Korean",
+        "fr" to "French",
+        "de" to "German",
+        "es-ES" to "Spanish (Spain)",
+        "es-MX" to "Spanish (Mexico)",
+        "pt-BR" to "Portuguese (Brazil)",
+        "pt-PT" to "Portuguese (Portugal)",
+        "it" to "Italian",
+        "ru" to "Russian",
+        "ar-EG" to "Arabic (Egypt)",
+        "hi" to "Hindi",
+        "tr" to "Turkish",
+        "vi" to "Vietnamese",
+        "id" to "Indonesian",
+        "bn" to "Bengali"
+    )
+
+    FormItem(
+        label = { Text("Language") },
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = languageExpanded,
+            onExpandedChange = { languageExpanded = !languageExpanded }
+        ) {
+            OutlinedTextField(
+                value = setting.language,
+                onValueChange = { newLanguage ->
+                    onValueChange(setting.copy(language = newLanguage))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageExpanded)
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = languageExpanded,
+                onDismissRequest = { languageExpanded = false }
+            ) {
+                languages.forEach { (code, displayName) ->
+                    DropdownMenuItem(
+                        text = { Text("$displayName ($code)") },
+                        onClick = {
+                            languageExpanded = false
+                            onValueChange(setting.copy(language = code))
                         }
                     )
                 }

@@ -1370,5 +1370,8 @@
   <string name="setting_display_page_custom_theme_scale_body_desc">Большая часть текста чатов и настроек.</string>
   <string name="setting_display_page_custom_theme_scale_label_label">Масштаб меток</string>
   <string name="setting_display_page_custom_theme_scale_label_desc">Чипы, вспомогательный текст и маленькие подписи.</string>
+  <string name="setting_display_page_chat_font_family_title">Шрифт чата</string>
+  <string name="setting_display_page_chat_font_family_default">По умолчанию</string>
+  <string name="setting_display_page_chat_font_family_serif">С засечками</string>
+  <string name="setting_display_page_chat_font_family_monospace">Моноширинный</string>
 </resources>
-

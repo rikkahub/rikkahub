@@ -10,6 +10,7 @@ import me.rerere.tts.provider.providers.MiniMaxTTSProvider
 import me.rerere.tts.provider.providers.OpenAITTSProvider
 import me.rerere.tts.provider.providers.QwenTTSProvider
 import me.rerere.tts.provider.providers.SystemTTSProvider
+import me.rerere.tts.provider.providers.XAITTSProvider
 
 class TTSManager(private val context: Context) {
     private val openAIProvider = OpenAITTSProvider()
@@ -18,6 +19,7 @@ class TTSManager(private val context: Context) {
     private val miniMaxProvider = MiniMaxTTSProvider()
     private val qwenProvider = QwenTTSProvider()
     private val groqProvider = GroqTTSProvider()
+    private val xaiProvider = XAITTSProvider()
 
     fun generateSpeech(
         providerSetting: TTSProviderSetting,
@@ -30,6 +32,7 @@ class TTSManager(private val context: Context) {
             is TTSProviderSetting.MiniMax -> miniMaxProvider.generateSpeech(context, providerSetting, request)
             is TTSProviderSetting.Qwen -> qwenProvider.generateSpeech(context, providerSetting, request)
             is TTSProviderSetting.Groq -> groqProvider.generateSpeech(context, providerSetting, request)
+            is TTSProviderSetting.XAI -> xaiProvider.generateSpeech(context, providerSetting, request)
         }
     }
 }

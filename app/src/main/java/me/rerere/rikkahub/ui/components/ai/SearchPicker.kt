@@ -41,6 +41,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.GlobalSearch
+import me.rerere.hugeicons.stroke.AiSearch02
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.R
@@ -84,7 +85,12 @@ fun SearchPickerButton(
                 modifier = Modifier.size(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (enableSearch && currentService != null) {
+                if (model?.tools?.contains(BuiltInTools.Search) == true) {
+                    Icon(
+                        imageVector = HugeIcons.AiSearch02,
+                        contentDescription = stringResource(R.string.use_web_search),
+                    )
+                } else if (enableSearch && currentService != null) {
                     AutoAIIcon(
                         name = SearchServiceOptions.TYPES[currentService::class] ?: "Search",
                         color = Color.Transparent
@@ -152,7 +158,7 @@ private fun SearchPicker(
     val navBackStack = LocalNavController.current
 
     // 模型内置搜索
-    if (model != null && ModelRegistry.GEMINI_SERIES.match(model.modelId)) {
+    if (model != null && (ModelRegistry.GEMINI_SERIES.match(model.modelId) || model.modelId.contains("gpt-"))) {
         BuiltInSearchSetting(model = model)
     }
 
