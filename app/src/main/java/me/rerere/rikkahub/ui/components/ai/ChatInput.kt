@@ -147,7 +147,10 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
+import me.rerere.rikkahub.ui.theme.luneSizeSpring
 import me.rerere.rikkahub.ui.theme.themedRoundedShape
+import me.rerere.rikkahub.ui.components.ui.luneGlassBorderColor
+import me.rerere.rikkahub.ui.components.ui.luneGlassContainerColor
 import org.koin.compose.koinInject
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
@@ -180,7 +183,7 @@ fun ChatInput(
     val filesManager: FilesManager = koinInject()
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
-    val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
+    val hazeTintColor = luneGlassContainerColor()
 
     val keyboardController = LocalSoftwareKeyboardController.current
     var showControls by remember { mutableStateOf(false) }
@@ -210,6 +213,7 @@ fun ChatInput(
         tokenKey = "shapeLarge",
         fallback = 24.dp,
     )
+    val hasMessageContent = !state.isEmpty() || state.messageContent.isNotEmpty()
 
     Surface(
         color = Color.Transparent,
@@ -218,14 +222,14 @@ fun ChatInput(
             modifier = modifier
                 .imePadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 4.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(composerShape)
-                    .animateContentSize()
+                    .animateContentSize(animationSpec = luneSizeSpring())
                     .then(
                         if (settings.displaySetting.enableBlurEffect) {
                             Modifier.hazeEffect(
@@ -239,10 +243,11 @@ fun ChatInput(
                 shape = composerShape,
                 tonalElevation = 0.dp,
                 color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
+                border = BorderStroke(1.dp, luneGlassBorderColor()),
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     if (state.messageContent.isNotEmpty()) {
                         MediaFileInputRow(state = state)
@@ -255,7 +260,7 @@ fun ChatInput(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         TextInputRow(
                             state = state,
@@ -279,10 +284,10 @@ fun ChatInput(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
                                 .combinedClickable(
-                                    enabled = loading || !state.isEmpty(),
+                                    enabled = loading || hasMessageContent,
                                     onClick = {
                                         dismissFilesPicker()
                                         sendMessage()
@@ -294,18 +299,26 @@ fun ChatInput(
                         ) {
                             val containerColor = when {
                                 loading -> MaterialTheme.colorScheme.errorContainer // 加载时，红色
-                                state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh // 禁用时(输入为空)，灰色
+                                !hasMessageContent -> MaterialTheme.colorScheme.surfaceContainerHigh // 禁用时(输入为空)，灰色
                                 else -> MaterialTheme.colorScheme.primary // 启用时(输入非空)，绿色/主题色
                             }
                             val contentColor = when {
                                 loading -> MaterialTheme.colorScheme.onErrorContainer
-                                state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) // 禁用时，内容用带透明度的灰色
+                                !hasMessageContent -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) // 禁用时，内容用带透明度的灰色
                                 else -> MaterialTheme.colorScheme.onPrimary
                             }
                             Surface(
                                 modifier = Modifier.fillMaxSize(),
                                 shape = CircleShape,
                                 color = containerColor,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (loading) {
+                                        MaterialTheme.colorScheme.error.copy(alpha = 0.22f)
+                                    } else {
+                                        luneGlassBorderColor()
+                                    }
+                                ),
                                 content = {}
                             )
                             if (loading) {
@@ -329,9 +342,9 @@ fun ChatInput(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 2.dp),
+                                .padding(start = 4.dp, end = 2.dp, bottom = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             IconButton(
                                 onClick = {
@@ -348,7 +361,7 @@ fun ChatInput(
                                 modifier = Modifier
                                     .weight(1f)
                                     .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 ModelSelector(
                                     modelId = assistant.chatModelId ?: settings.chatModelId,
@@ -530,7 +543,7 @@ private fun TextInputRow(
             placeholder = {
                 Text(stringResource(R.string.chat_input_placeholder))
             },
-            lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 4),
+            lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 6),
             keyboardOptions = KeyboardOptions(
                 imeAction = if (settings.displaySetting.sendOnEnter) ImeAction.Send else ImeAction.Default
             ),
@@ -542,8 +555,8 @@ private fun TextInputRow(
             colors = TextFieldDefaults.colors().copy(
                 unfocusedIndicatorColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
             ),
             trailingIcon = {
                 if (isFocused) {
@@ -787,8 +800,8 @@ private fun AttachmentChip(
         ),
         tonalElevation = 1.dp,
         shadowElevation = 0.dp,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+        color = luneGlassContainerColor(),
+        border = BorderStroke(1.dp, luneGlassBorderColor().copy(alpha = 0.9f))
     ) {
         Row(
             modifier = Modifier

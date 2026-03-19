@@ -7,8 +7,10 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.TopAppBarColors
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 data class ExtendColors(
     val red1: Color,
@@ -174,18 +176,33 @@ object CustomColors {
 
     val topBarColors: TopAppBarColors
         @Composable get() {
-            return if (!LocalDarkMode.current) TopAppBarDefaults.topAppBarColors(
-                containerColor = colorScheme.surfaceContainer,
-                scrolledContainerColor = colorScheme.surfaceContainer
-            ) else TopAppBarDefaults.topAppBarColors()
+            val container = colorScheme.surfaceColorAtElevation(4.dp).copy(
+                alpha = if (LocalDarkMode.current) 0.76f else 0.92f
+            )
+            return TopAppBarDefaults.topAppBarColors(
+                containerColor = container,
+                scrolledContainerColor = container
+            )
         }
 
     val cardColors: CardColors
-        @Composable get() = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainer)
+        @Composable get() = CardDefaults.cardColors(
+            containerColor = colorScheme.surfaceColorAtElevation(3.dp).copy(
+                alpha = if (LocalDarkMode.current) 0.76f else 0.94f
+            )
+        )
 
     val cardColorsOnSurfaceContainer: CardColors
-        @Composable get() = CardDefaults.cardColors(containerColor = colorScheme.surfaceBright)
+        @Composable get() = CardDefaults.cardColors(
+            containerColor = colorScheme.surfaceColorAtElevation(2.dp).copy(
+                alpha = if (LocalDarkMode.current) 0.72f else 0.92f
+            )
+        )
 
     val listItemColors: ListItemColors
-        @Composable get() = ListItemDefaults.colors(containerColor = colorScheme.surfaceBright)
+        @Composable get() = ListItemDefaults.colors(
+            containerColor = colorScheme.surfaceColorAtElevation(1.dp).copy(
+                alpha = if (LocalDarkMode.current) 0.52f else 0.88f
+            )
+        )
 }

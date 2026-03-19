@@ -2,11 +2,11 @@ package me.rerere.rikkahub.ui.components.message
 
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +30,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.util.fastAll
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
@@ -131,9 +133,20 @@ fun ChatMessage(
 ) {
     val message = node.messages[node.selectIndex]
     val settings = LocalSettings.current.displaySetting
+    val baseFontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio
+    val scaledLineHeight = if (LocalTextStyle.current.lineHeight.isSpecified) {
+        LocalTextStyle.current.lineHeight * settings.fontSizeRatio
+    } else {
+        baseFontSize * 1.6f
+    }
+    val comfortableLineHeight = if (scaledLineHeight < baseFontSize * 1.55f) {
+        baseFontSize * 1.55f
+    } else {
+        scaledLineHeight
+    }
     val textStyle = LocalTextStyle.current.copy(
-        fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
-        lineHeight = LocalTextStyle.current.lineHeight * settings.fontSizeRatio,
+        fontSize = baseFontSize,
+        lineHeight = comfortableLineHeight,
         fontFamily = when (settings.chatFontFamily) {
             ChatFontFamily.DEFAULT -> FontFamily.Default
             ChatFontFamily.SERIF -> FontFamily.Serif
@@ -155,10 +168,9 @@ fun ChatMessage(
     fun MessageContentColumn(horizontalAlignment: Alignment.Horizontal) {
         Column(
             modifier = Modifier
-                .widthIn(max = 820.dp)
-                .animateContentSize(),
+                .widthIn(max = 680.dp),
             horizontalAlignment = horizontalAlignment,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             if (showIdentity) {
                 ChatMessageIdentityLabel(
@@ -198,8 +210,7 @@ fun ChatMessage(
                     exit = slideOutVertically { it / 2 } + fadeOut()
                 ) {
                     Column(
-                        modifier = Modifier.animateContentSize(),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         if (showAccessoryRow) {
                             ChatMessageActionButtons(
@@ -230,7 +241,7 @@ fun ChatMessage(
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         when (message.role) {
             MessageRole.ASSISTANT -> {
@@ -385,7 +396,7 @@ private fun MessagePartsBlock(
                 if (block.steps.isNotEmpty()) {
                     val isReasoningOnlyBlock = block.steps.fastAll { it is ThinkingStep.ReasoningStep }
                     ChainOfThought(
-                        modifier = Modifier.animateContentSize(),
+                        modifier = Modifier,
                         steps = block.steps,
                         collapsedAdaptiveWidth = isReasoningOnlyBlock,
                     ) { step ->
@@ -426,16 +437,19 @@ private fun MessagePartsBlock(
                                 if (shellOutput != null) {
                                     UserShellCommandCard(
                                         output = shellOutput,
-                                        modifier = Modifier.animateContentSize()
+                                        modifier = Modifier
                                     )
                                 } else {
                                     Surface(
-                                        modifier = Modifier.animateContentSize(),
-                                        shape = MaterialTheme.shapes.medium,
-                                        tonalElevation = 2.dp,
+                                        shape = RoundedCornerShape(22.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.24f),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                        ),
                                         onClick = { onUserMessageClick?.invoke() },
                                     ) {
-                                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                             MarkdownBlock(
                                                 content = part.text.replaceRegexes(
                                                     assistant = assistant,
@@ -452,11 +466,14 @@ private fun MessagePartsBlock(
                             } else {
                                 if (settings.displaySetting.showAssistantBubble) {
                                     Surface(
-                                        modifier = Modifier.animateContentSize(),
-                                        shape = MaterialTheme.shapes.medium,
-                                        tonalElevation = 2.dp,
+                                        shape = RoundedCornerShape(22.dp),
+                                        color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.78f),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                                        ),
                                     ) {
-                                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                             MarkdownBlock(
                                                 content = part.text.replaceRegexes(
                                                     assistant = assistant,
@@ -479,7 +496,7 @@ private fun MessagePartsBlock(
                                         ),
                                         messageDepthFromEnd = messageDepthFromEnd,
                                         onClickCitation = handleClickCitation,
-                                        modifier = Modifier.animateContentSize()
+                                        modifier = Modifier
                                     )
                                 }
                             }
@@ -634,7 +651,7 @@ private fun MessagePartsBlock(
     // Annotations (always rendered at the end)
     if (annotations.isNotEmpty()) {
         Column(
-            modifier = Modifier.animateContentSize(),
+            modifier = Modifier,
         ) {
             var expand by remember { mutableStateOf(false) }
             if (expand) {

@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ListItemColors
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.tooling.preview.Preview
@@ -33,9 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.rikkahub.ui.theme.CustomColors
 
-private val CardGroupCorner = 20.dp
-private val CardGroupItemSpacing = 2.dp
-private val CardGroupInnerCorner = 4.dp
+private val CardGroupCorner = 24.dp
+private val CardGroupInnerCorner = 10.dp
 
 data class CardGroupItem(
     val onClick: (() -> Unit)?,
@@ -122,7 +124,7 @@ private fun CardGroupListItem(
         supportingContent = item.supportingContent,
         leadingContent = item.leadingContent,
         trailingContent = item.trailingContent,
-        colors = item.colors ?: CustomColors.listItemColors,
+        colors = item.colors ?: ListItemDefaults.colors(containerColor = Color.Transparent),
     )
 }
 
@@ -145,11 +147,19 @@ fun CardGroup(
                 }
             }
         }
-        val count = scope.items.size
-        scope.items.fastForEachIndexed { index, item ->
-            CardGroupListItem(item = item, count = count, index = index)
-            if (index != count - 1) {
-                Spacer(modifier = Modifier.height(CardGroupItemSpacing))
+        LuneSection {
+            Column {
+                val count = scope.items.size
+                scope.items.fastForEachIndexed { index, item ->
+                    CardGroupListItem(item = item, count = count, index = index)
+                    if (index != count - 1) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                            thickness = 0.8.dp,
+                        )
+                    }
+                }
             }
         }
     }

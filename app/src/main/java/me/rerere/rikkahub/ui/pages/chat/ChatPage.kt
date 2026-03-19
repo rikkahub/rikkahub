@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -63,6 +65,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
+import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -79,6 +82,9 @@ import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.components.ui.LuneTopBarSurface
+import me.rerere.rikkahub.ui.components.ui.luneGlassBorderColor
+import me.rerere.rikkahub.ui.components.ui.luneGlassContainerColor
 import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.navigateToChatPage
 import org.koin.androidx.compose.koinViewModel
@@ -278,25 +284,30 @@ private fun ChatPageContent(
                         enter = fadeIn() + scaleIn(initialScale = 0.96f),
                         exit = fadeOut() + scaleOut(targetScale = 0.96f),
                     ) {
-                        TopBar(
-                            settings = setting,
-                            conversation = conversation,
-                            bigScreen = bigScreen,
-                            drawerState = drawerState,
-                            previewMode = previewMode,
-                            onNewChat = {
-                                navigateToChatPage(navController)
-                            },
-                            onClickMenu = {
-                                previewMode = !previewMode
-                            },
-                            onUpdateTitle = {
-                                vm.updateTitle(it)
-                            },
-                            onHideTopBar = {
-                                topBarVisible = false
-                            }
-                        )
+                        LuneTopBarSurface(
+                            hazeState = hazeState,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            TopBar(
+                                settings = setting,
+                                conversation = conversation,
+                                bigScreen = bigScreen,
+                                drawerState = drawerState,
+                                previewMode = previewMode,
+                                onNewChat = {
+                                    navigateToChatPage(navController)
+                                },
+                                onClickMenu = {
+                                    previewMode = !previewMode
+                                },
+                                onUpdateTitle = {
+                                    vm.updateTitle(it)
+                                },
+                                onHideTopBar = {
+                                    topBarVisible = false
+                                }
+                            )
+                        }
                     }
                 },
                 bottomBar = {
@@ -477,6 +488,9 @@ private fun ChatPageContent(
                     onToggleFavorite = { node ->
                         vm.toggleMessageFavorite(node)
                     },
+                    showSuggestions = !inputState.isEditing() &&
+                        inputState.textContent.text.isEmpty() &&
+                        inputState.messageContent.isEmpty(),
                 )
             }
 
@@ -494,7 +508,8 @@ private fun ChatPageContent(
                         topBarVisible = true
                     },
                     shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp).copy(alpha = 0.92f),
+                    color = luneGlassContainerColor(),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, luneGlassBorderColor()),
                 ) {
                     Icon(
                         imageVector = HugeIcons.ArrowDownDouble,
@@ -530,6 +545,7 @@ private fun TopBar(
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color.Transparent,
+            scrolledContainerColor = Color.Transparent,
         ),
         navigationIcon = {
             if (!bigScreen) {
@@ -565,24 +581,51 @@ private fun TopBar(
         actions = {
             IconButton(
                 onClick = {
-                    onClickMenu()
-                }
-            ) {
-                Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
-            }
-
-            IconButton(
-                onClick = {
                     onNewChat()
                 }
             ) {
                 Icon(HugeIcons.MessageAdd01, "New Message")
             }
 
-            IconButton(
-                onClick = onHideTopBar
+            var showOverflowMenu by rememberSaveable { mutableStateOf(false) }
+            IconButton(onClick = { showOverflowMenu = true }) {
+                Icon(HugeIcons.MoreVertical, stringResource(R.string.more_options))
+            }
+            DropdownMenu(
+                expanded = showOverflowMenu,
+                onDismissRequest = { showOverflowMenu = false },
             ) {
-                Icon(HugeIcons.ArrowUpDouble, "Hide Top Bar")
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (previewMode) {
+                                stringResource(R.string.chat_page_back_to_conversation)
+                            } else {
+                                stringResource(R.string.chat_page_search_chats)
+                            }
+                        )
+                    },
+                    onClick = {
+                        showOverflowMenu = false
+                        onClickMenu()
+                    },
+                    leadingIcon = {
+                        Icon(
+                            if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet,
+                            null
+                        )
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.chat_page_hide_top_bar)) },
+                    onClick = {
+                        showOverflowMenu = false
+                        onHideTopBar()
+                    },
+                    leadingIcon = {
+                        Icon(HugeIcons.ArrowUpDouble, null)
+                    }
+                )
             }
         },
     )

@@ -6,6 +6,7 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Cancel01
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -56,6 +58,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -65,9 +69,14 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.LuneBackdrop
+import me.rerere.rikkahub.ui.components.ui.LuneSection
+import me.rerere.rikkahub.ui.components.ui.LuneTopBarSurface
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.components.ui.luneGlassBorderColor
+import me.rerere.rikkahub.ui.components.ui.luneGlassContainerColor
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.EditState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
@@ -75,7 +84,6 @@ import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
-import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -97,6 +105,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     var selectedTagIds by remember { mutableStateOf(emptySet<Uuid>()) }
     // 操作菜单状态
     var actionSheetAssistant by remember { mutableStateOf<Assistant?>(null) }
+    val hazeState = rememberHazeState()
 
     // 根据搜索关键词和选中的标签过滤助手
     val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery) {
@@ -109,38 +118,48 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
         }
     }
 
-    Scaffold(
-        topBar = {
-            LargeFlexibleTopAppBar(
-                title = {
-                    Text(stringResource(R.string.assistant_page_title))
-                },
-                navigationIcon = {
-                    BackButton()
-                },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            createState.open(Assistant())
-                        }) {
-                        Icon(HugeIcons.Add01, stringResource(R.string.assistant_page_add))
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = CustomColors.topBarColors,
-            )
-        },
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = CustomColors.topBarColors.containerColor,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(it)
-                .padding(top = 16.dp)
-                .consumeWindowInsets(it),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+    Box(modifier = Modifier.fillMaxSize()) {
+        LuneBackdrop()
+        Scaffold(
+            topBar = {
+                LuneTopBarSurface(
+                    hazeState = hazeState,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    LargeFlexibleTopAppBar(
+                        title = {
+                            Text(stringResource(R.string.assistant_page_title))
+                        },
+                        navigationIcon = {
+                            BackButton()
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = {
+                                    createState.open(Assistant())
+                                }) {
+                                Icon(HugeIcons.Add01, stringResource(R.string.assistant_page_add))
+                            }
+                        },
+                        scrollBehavior = scrollBehavior,
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent,
+                        ),
+                    )
+                }
+            },
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            containerColor = Color.Transparent,
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(it)
+                    .padding(top = 16.dp)
+                    .consumeWindowInsets(it),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
             val lazyListState = rememberLazyListState()
             val isFiltering = selectedTagIds.isNotEmpty() || searchQuery.isNotBlank()
             val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -154,26 +173,32 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
             val haptic = LocalHapticFeedback.current
 
             // 搜索框
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                placeholder = { Text(stringResource(R.string.assistant_page_search_placeholder)) },
-                leadingIcon = {
-                    Icon(HugeIcons.Search01, contentDescription = null)
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotBlank()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(HugeIcons.Cancel01, contentDescription = null)
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
+                LuneSection(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 4.dp),
+                        placeholder = { Text(stringResource(R.string.assistant_page_search_placeholder)) },
+                        leadingIcon = {
+                            Icon(HugeIcons.Search01, contentDescription = null)
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotBlank()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(HugeIcons.Cancel01, contentDescription = null)
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                }
 
             // 标签过滤器
             AssistantTagsFilterRow(
@@ -188,9 +213,10 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .imePadding(),
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .imePadding()
+                    .hazeSource(state = hazeState),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 state = lazyListState,
             ) {
                 lazyItems(filteredAssistants, key = { assistant -> assistant.id }) { assistant ->
@@ -233,6 +259,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     }
                 }
             }
+        }
         }
     }
 
@@ -401,8 +428,9 @@ private fun AssistantItem(
         modifier = modifier.fillMaxWidth(),
         onClick = onEdit,
         colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor
-        )
+            containerColor = luneGlassContainerColor()
+        ),
+        border = BorderStroke(1.dp, luneGlassBorderColor()),
     ) {
         Row(
             modifier = Modifier

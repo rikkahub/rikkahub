@@ -272,6 +272,8 @@
   <string name="chat_page_history">Chat History</string>
   <string name="chat_page_move_to_assistant">Move to Assistant</string>
   <string name="chat_page_new_chat">New Chat</string>
+  <string name="chat_page_back_to_conversation">Back to conversation</string>
+  <string name="chat_page_hide_top_bar">Hide top bar</string>
   <string name="chat_page_new_message">New message</string>
   <string name="chat_page_nickname_placeholder">Please enter nickname</string>
   <string name="chat_page_no_conversations">No conversations</string>
@@ -707,6 +709,7 @@
   <string name="test_tts">Test TTS</string>
   <string name="theme_name_autumn">Autumn Yellow</string>
   <string name="theme_name_black">Neutral Black</string>
+  <string name="theme_name_lune">Moonlit Lune</string>
   <string name="theme_name_ocean">Ocean Blue</string>
   <string name="theme_name_sakura">Sakura Pink</string>
   <string name="theme_name_spring">Meadow Green</string>

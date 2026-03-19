@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,6 +67,8 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
 import me.rerere.rikkahub.ui.components.ui.Greeting
+import me.rerere.rikkahub.ui.components.ui.LuneBackdrop
+import me.rerere.rikkahub.ui.components.ui.LuneSection
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
@@ -118,12 +122,15 @@ fun ChatDrawerContent(
     var showMenuPopup by remember { mutableStateOf(false) }
 
     ModalDrawerSheet(
-        modifier = Modifier.width(300.dp)
+        modifier = Modifier.width(320.dp),
+        drawerContainerColor = Color.Transparent,
     ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            LuneBackdrop()
+            Column(
+                modifier = Modifier.padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
             if (settings.displaySetting.showUpdates && !isPlayStore) {
                 UpdateCard(vm)
             }
@@ -134,59 +141,63 @@ fun ChatDrawerContent(
             )
 
             // 用户头像和昵称自定义区域
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            LuneSection(
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                UIAvatar(
-                    name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
-                    value = settings.displaySetting.userAvatar,
-                    onUpdate = { newAvatar ->
-                        vm.updateSettings(
-                            settings.copy(
-                                displaySetting = settings.displaySetting.copy(
-                                    userAvatar = newAvatar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    UIAvatar(
+                        name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+                        value = settings.displaySetting.userAvatar,
+                        onUpdate = { newAvatar ->
+                            vm.updateSettings(
+                                settings.copy(
+                                    displaySetting = settings.displaySetting.copy(
+                                        userAvatar = newAvatar
+                                    )
                                 )
                             )
-                        )
-                    },
-                    modifier = Modifier.size(50.dp),
-                )
+                        },
+                        modifier = Modifier.size(52.dp),
+                    )
 
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text(
-                            text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.clickable {
-                                nicknameEditState.open(settings.displaySetting.userNickname)
-                            }
-                        )
-
-                        Icon(
-                            imageVector = HugeIcons.PencilEdit01,
-                            contentDescription = "Edit",
-                            modifier = Modifier
-                                .onClick {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clickable {
                                     nicknameEditState.open(settings.displaySetting.userNickname)
                                 }
-                                .size(LocalTextStyle.current.fontSize.toDp())
+                            )
+
+                            Icon(
+                                imageVector = HugeIcons.PencilEdit01,
+                                contentDescription = "Edit",
+                                modifier = Modifier
+                                    .onClick {
+                                        nicknameEditState.open(settings.displaySetting.userNickname)
+                                    }
+                                    .size(LocalTextStyle.current.fontSize.toDp())
+                            )
+                        }
+                        Greeting(
+                            style = MaterialTheme.typography.labelMedium,
                         )
                     }
-                    Greeting(
-                        style = MaterialTheme.typography.labelMedium,
-                    )
                 }
             }
 
@@ -342,6 +353,7 @@ fun ChatDrawerContent(
                         navController.navigate(Screen.Setting)
                     },
                 )
+            }
             }
         }
     }

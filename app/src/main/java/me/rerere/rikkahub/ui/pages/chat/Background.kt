@@ -15,15 +15,17 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.ui.components.ui.LuneBackdrop
 
 @Composable
 fun AssistantBackground(setting: Settings) {
     val assistant = setting.getCurrentAssistant()
-    if (assistant.background != null) {
-        val backgroundColor = MaterialTheme.colorScheme.background
-        val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
-        val backgroundBlur = assistant.backgroundBlur.coerceIn(0f, 40f)
-        Box {
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
+    val backgroundBlur = assistant.backgroundBlur.coerceIn(0f, 40f)
+
+    Box {
+        if (assistant.background != null) {
             AsyncImage(
                 model = assistant.background,
                 contentDescription = null,
@@ -34,22 +36,24 @@ fun AssistantBackground(setting: Settings) {
                         radius = backgroundBlur.dp,
                         edgeTreatment = BlurredEdgeTreatment.Rectangle
                     )
-                    .alpha(backgroundOpacity)
-            )
-
-            // 全屏渐变遮罩
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                backgroundColor.copy(alpha = 0.2f),
-                                backgroundColor.copy(alpha = 0.5f)
-                            )
-                        )
-                    )
+                    .alpha(backgroundOpacity * 0.72f)
             )
         }
+
+        LuneBackdrop(modifier = Modifier.fillMaxSize())
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            backgroundColor.copy(alpha = 0.05f),
+                            backgroundColor.copy(alpha = 0.28f),
+                            backgroundColor.copy(alpha = 0.44f)
+                        )
+                    )
+                )
+        )
     }
 }

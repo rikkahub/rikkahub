@@ -21,6 +21,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -100,6 +101,8 @@ import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
 import me.rerere.rikkahub.ui.components.ui.ListSelectableItem
 import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.Tooltip
+import me.rerere.rikkahub.ui.components.ui.luneGlassBorderColor
+import me.rerere.rikkahub.ui.components.ui.luneGlassContainerColor
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.rikkahub.utils.plus
 import kotlin.math.roundToInt
@@ -141,6 +144,7 @@ fun ChatList(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
+    showSuggestions: Boolean = true,
 ) {
     AnimatedContent(
         targetState = previewMode,
@@ -181,6 +185,7 @@ fun ChatList(
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
                 onToggleFavorite = onToggleFavorite,
+                showSuggestions = showSuggestions,
             )
         }
     }
@@ -209,6 +214,7 @@ private fun ChatListNormal(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
+    showSuggestions: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -277,10 +283,10 @@ private fun ChatListNormal(
         LazyColumn(
             state = state,
             contentPadding = PaddingValues(
-                start = 12.dp,
-                top = 4.dp + innerPadding.calculateTopPadding(),
-                end = 12.dp,
-                bottom = 10.dp + innerPadding.calculateBottomPadding(),
+                start = 16.dp,
+                top = 12.dp + innerPadding.calculateTopPadding(),
+                end = 16.dp,
+                bottom = 18.dp + innerPadding.calculateBottomPadding(),
             ),
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -295,14 +301,15 @@ private fun ChatListNormal(
                 val groupedWithPrevious = previousMessage?.role == node.currentMessage.role
                 val topPadding = when {
                     index == 0 -> 0.dp
-                    groupedWithPrevious -> 2.dp
-                    else -> 8.dp
+                    groupedWithPrevious -> 4.dp
+                    else -> 14.dp
                 }
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = topPadding),
+                        .padding(top = topPadding)
+                        .animateItem(),
                     contentAlignment = Alignment.Center,
                 ) {
                     ListSelectableItem(
@@ -321,7 +328,7 @@ private fun ChatListNormal(
                             node = node,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .widthIn(max = 920.dp),
+                                .widthIn(max = 760.dp),
                             model = node.currentMessage.modelId?.let { settings.findModelById(it) },
                             assistant = settings.getAssistantById(conversation.assistantId),
                             loading = loading && index == conversation.messageNodes.lastIndex,
@@ -365,11 +372,16 @@ private fun ChatListNormal(
 
             if (loading) {
                 item(LoadingIndicatorKey) {
-                    RabbitLoadingIndicator(
+                    Box(
                         modifier = Modifier
-                            .padding(8.dp)
-                            .size(28.dp)
-                    )
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        RabbitLoadingIndicator(
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
                 }
             }
 
@@ -403,7 +415,7 @@ private fun ChatListNormal(
                 visible = selecting,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .offset(y = -(48).dp),
+                    .offset(y = -(56).dp),
                 enter = slideInVertically(
                     initialOffsetY = { it * 2 },
                 ),
@@ -488,13 +500,13 @@ private fun ChatListNormal(
             )
 
             // Suggestion
-            if (conversation.chatSuggestions.isNotEmpty() && !captureProgress) {
+            if (showSuggestions && conversation.chatSuggestions.isNotEmpty() && !captureProgress) {
                 ChatSuggestionsRow(
                     conversation = conversation,
                     onClickSuggestion = onClickSuggestion,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 4.dp)
+                        .padding(bottom = 8.dp)
                 )
             }
         }
@@ -694,8 +706,8 @@ private fun ChatSuggestionsRow(
     LazyRow(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         items(conversation.chatSuggestions) { suggestion ->
@@ -704,14 +716,16 @@ private fun ChatSuggestionsRow(
                     onClickSuggestion(suggestion)
                 },
                 shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp).copy(alpha = 0.96f),
+                color = luneGlassContainerColor().copy(alpha = 0.88f),
+                border = BorderStroke(1.dp, luneGlassBorderColor().copy(alpha = 0.8f)),
             ) {
                 Text(
                     text = suggestion,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
         }
@@ -747,9 +761,8 @@ private fun BoxScope.MessageJumper(
                 },
                 shape = CircleShape,
                 tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
+                color = luneGlassContainerColor(),
+                border = BorderStroke(1.dp, luneGlassBorderColor())
             ) {
                 Icon(
                     imageVector = HugeIcons.ArrowUpDouble,
@@ -770,9 +783,8 @@ private fun BoxScope.MessageJumper(
                 },
                 shape = CircleShape,
                 tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
+                color = luneGlassContainerColor(),
+                border = BorderStroke(1.dp, luneGlassBorderColor())
             ) {
                 Icon(
                     imageVector = HugeIcons.ArrowUp01,
@@ -788,9 +800,8 @@ private fun BoxScope.MessageJumper(
                     }
                 },
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
+                color = luneGlassContainerColor(),
+                border = BorderStroke(1.dp, luneGlassBorderColor())
             ) {
                 Icon(
                     imageVector = HugeIcons.ArrowDown01,
@@ -806,9 +817,8 @@ private fun BoxScope.MessageJumper(
                     }
                 },
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f),
+                color = luneGlassContainerColor(),
+                border = BorderStroke(1.dp, luneGlassBorderColor()),
             ) {
                 Icon(
                     imageVector = HugeIcons.ArrowDownDouble,

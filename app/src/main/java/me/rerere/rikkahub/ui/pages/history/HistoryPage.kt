@@ -5,9 +5,10 @@ import me.rerere.hugeicons.stroke.Pin
 import me.rerere.hugeicons.stroke.PinOff
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.Delete01
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -33,7 +35,6 @@ import androidx.compose.material3.SwipeToDismissBoxState
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,11 +48,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.LuneBackdrop
+import me.rerere.rikkahub.ui.components.ui.LuneTopBarSurface
+import me.rerere.rikkahub.ui.components.ui.luneGlassBorderColor
+import me.rerere.rikkahub.ui.components.ui.luneGlassContainerColor
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
@@ -66,73 +73,88 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
     var showDeleteAllDialog by remember { mutableStateOf(false) }
 
     val conversations by vm.conversations.collectAsStateWithLifecycle()
+    val hazeState = rememberHazeState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(stringResource(R.string.history_page_title))
-                },
-                navigationIcon = {
-                    BackButton()
-                },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            navController.navigate(Screen.MessageSearch)
-                        }
-                    ) {
-                        Icon(
-                            HugeIcons.GlobalSearch,
-                            contentDescription = stringResource(R.string.history_page_search_messages)
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            showDeleteAllDialog = true
-                        }
-                    ) {
-                        Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.history_page_delete_all))
-                    }
-                }
-            )
-        },
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
-        }
-    ) { contentPadding ->
-        val snackMessageDeleted = stringResource(R.string.history_page_conversation_deleted)
-        val snackMessageUndo = stringResource(R.string.history_page_undo)
-        LazyColumn(
-            contentPadding = contentPadding + PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(conversations, key = { it.id }) { conversation ->
-                SwipeableConversationItem(
-                    conversation = conversation,
-                    onClick = {
-                        navigateToChatPage(navController, conversation.id)
-                    },
-                    onDelete = {
-                        scope.launch {
-                            // 先获取完整的对话数据（包含 messageNodes），用于撤销恢复
-                            val fullConversation = vm.getFullConversation(conversation.id) ?: conversation
-                            vm.deleteConversation(conversation)
-                            val result = snackbarHostState.showSnackbar(
-                                message = snackMessageDeleted,
-                                actionLabel = snackMessageUndo,
-                                withDismissAction = true,
-                            )
-                            if (result == SnackbarResult.ActionPerformed) {
-                                vm.restoreConversation(fullConversation)
+    Box(modifier = Modifier.fillMaxSize()) {
+        LuneBackdrop()
+        Scaffold(
+            topBar = {
+                LuneTopBarSurface(
+                    hazeState = hazeState,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    LargeFlexibleTopAppBar(
+                        title = {
+                            Text(stringResource(R.string.history_page_title))
+                        },
+                        navigationIcon = {
+                            BackButton()
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = {
+                                    navController.navigate(Screen.MessageSearch)
+                                }
+                            ) {
+                                Icon(
+                                    HugeIcons.GlobalSearch,
+                                    contentDescription = stringResource(R.string.history_page_search_messages)
+                                )
                             }
-                        }
-                    },
-                    onTogglePin = { vm.togglePinStatus(conversation.id) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateItem()
-                )
+                            IconButton(
+                                onClick = {
+                                    showDeleteAllDialog = true
+                                }
+                            ) {
+                                Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.history_page_delete_all))
+                            }
+                        },
+                        colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                            scrolledContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        ),
+                    )
+                }
+            },
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState)
+            },
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        ) { contentPadding ->
+            val snackMessageDeleted = stringResource(R.string.history_page_conversation_deleted)
+            val snackMessageUndo = stringResource(R.string.history_page_undo)
+            LazyColumn(
+                modifier = Modifier.hazeSource(state = hazeState),
+                contentPadding = contentPadding + PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(conversations, key = { it.id }) { conversation ->
+                    SwipeableConversationItem(
+                        conversation = conversation,
+                        onClick = {
+                            navigateToChatPage(navController, conversation.id)
+                        },
+                        onDelete = {
+                            scope.launch {
+                                // 先获取完整的对话数据（包含 messageNodes），用于撤销恢复
+                                val fullConversation = vm.getFullConversation(conversation.id) ?: conversation
+                                vm.deleteConversation(conversation)
+                                val result = snackbarHostState.showSnackbar(
+                                    message = snackMessageDeleted,
+                                    actionLabel = snackMessageUndo,
+                                    withDismissAction = true,
+                                )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    vm.restoreConversation(fullConversation)
+                                }
+                            }
+                        },
+                        onTogglePin = { vm.togglePinStatus(conversation.id) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItem()
+                    )
+                }
             }
         }
     }
@@ -229,8 +251,10 @@ private fun ConversationItem(
 ) {
     Surface(
         onClick = onClick,
-        tonalElevation = 2.dp,
-        shape = RoundedCornerShape(25),
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(24.dp),
+        color = luneGlassContainerColor(),
+        border = BorderStroke(1.dp, luneGlassBorderColor()),
         modifier = modifier
     ) {
         ListItem(
