@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "**"
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -28,6 +29,14 @@ jobs:
       - name: Install dependencies
         working-directory: web-ui
         run: bun install --frozen-lockfile
+
+      - name: Lint
+        working-directory: web-ui
+        run: ./node_modules/.bin/oxlint app
+
+      - name: Format check
+        working-directory: web-ui
+        run: bun run fmt:check
 
       - name: Typecheck
         working-directory: web-ui

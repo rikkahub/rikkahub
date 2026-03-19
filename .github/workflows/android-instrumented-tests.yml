@@ -1,4 +1,4 @@
-name: Android Lint
+name: Android Instrumented Tests
 
 on:
   push:
@@ -15,8 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
+  instrumented-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +71,23 @@ jobs:
         run: |
           printf '%s' "${PLACEHOLDER_GOOGLE_SERVICES_JSON}" > app/google-services.json
 
-      - name: Run Android lint
-        run: |
-          chmod +x gradlew
-          ./gradlew lint
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            chmod +x gradlew
+            ./gradlew connectedDebugAndroidTest
+
+      - name: Upload instrumented test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-instrumented-test-reports
+          path: |
+            **/build/reports/androidTests/connected/**
+            **/build/outputs/androidTest-results/connected/**
