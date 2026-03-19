@@ -80,7 +80,7 @@ fun ColumnScope.ChatMessageActionButtons(
     var showRegenerateConfirm by remember { mutableStateOf(false) }
 
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         if (showPrimaryActions) {
@@ -90,8 +90,8 @@ fun ColumnScope.ChatMessageActionButtons(
                 modifier = Modifier
                     .clip(CircleShape)
                     .clickable { context.copyMessageToClipboard(message) }
-                    .padding(6.dp)
-                    .size(16.dp),
+                    .padding(4.dp)
+                    .size(14.dp),
             )
 
             Icon(
@@ -106,8 +106,8 @@ fun ColumnScope.ChatMessageActionButtons(
                             onRegenerate()
                         }
                     }
-                    .padding(6.dp)
-                    .size(16.dp)
+                    .padding(4.dp)
+                    .size(14.dp)
             )
 
             if (message.role == MessageRole.ASSISTANT) {
@@ -138,8 +138,8 @@ fun ColumnScope.ChatMessageActionButtons(
                                 }
                             }
                         )
-                        .padding(6.dp)
-                        .size(16.dp),
+                        .padding(4.dp)
+                        .size(14.dp),
                     tint = if (isAvailable) LocalContentColor.current else LocalContentColor.current.copy(alpha = 0.38f)
                 )
 
@@ -156,8 +156,8 @@ fun ColumnScope.ChatMessageActionButtons(
                                     showTranslateDialog = true
                                 }
                             )
-                            .padding(6.dp)
-                            .size(16.dp)
+                            .padding(4.dp)
+                            .size(14.dp)
                     )
                 }
             }
@@ -174,8 +174,8 @@ fun ColumnScope.ChatMessageActionButtons(
                             onOpenActionSheet()
                         }
                     )
-                    .padding(6.dp)
-                    .size(16.dp)
+                    .padding(4.dp)
+                    .size(14.dp)
             )
         }
 

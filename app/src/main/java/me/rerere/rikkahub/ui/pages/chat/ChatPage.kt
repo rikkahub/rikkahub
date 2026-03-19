@@ -2,9 +2,18 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -25,6 +34,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,6 +57,8 @@ import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDownDouble
+import me.rerere.hugeicons.stroke.ArrowUpDouble
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
@@ -248,8 +260,8 @@ private fun ChatPageContent(
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     var previewMode by rememberSaveable { mutableStateOf(false) }
+    var topBarVisible by rememberSaveable { mutableStateOf(true) }
     val hazeState = rememberHazeState()
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
@@ -258,206 +270,241 @@ private fun ChatPageContent(
         modifier = Modifier.fillMaxSize()
     ) {
         AssistantBackground(setting = setting)
-        Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-            topBar = {
-                TopBar(
-                    settings = setting,
-                    conversation = conversation,
-                    bigScreen = bigScreen,
-                    drawerState = drawerState,
-                    previewMode = previewMode,
-                    scrollBehavior = scrollBehavior,
-                    onNewChat = {
-                        navigateToChatPage(navController)
-                    },
-                    onClickMenu = {
-                        previewMode = !previewMode
-                    },
-                    onUpdateTitle = {
-                        vm.updateTitle(it)
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                topBar = {
+                    AnimatedVisibility(
+                        visible = topBarVisible,
+                        enter = fadeIn() + scaleIn(initialScale = 0.96f),
+                        exit = fadeOut() + scaleOut(targetScale = 0.96f),
+                    ) {
+                        TopBar(
+                            settings = setting,
+                            conversation = conversation,
+                            bigScreen = bigScreen,
+                            drawerState = drawerState,
+                            previewMode = previewMode,
+                            onNewChat = {
+                                navigateToChatPage(navController)
+                            },
+                            onClickMenu = {
+                                previewMode = !previewMode
+                            },
+                            onUpdateTitle = {
+                                vm.updateTitle(it)
+                            },
+                            onHideTopBar = {
+                                topBarVisible = false
+                            }
+                        )
                     }
-                )
-            },
-            bottomBar = {
-                ChatInput(
-                    state = inputState,
-                    loading = loadingJob != null,
-                    settings = setting,
-                    conversation = conversation,
-                    mcpManager = vm.mcpManager,
-                    hazeState = hazeState,
-                    onCancelClick = {
-                        loadingJob?.cancel()
-                    },
-                    enableSearch = enableWebSearch,
-                    termuxCommandModeEnabled = setting.termuxCommandModeEnabled,
-                    codeBlockRichRenderEnabled = setting.displaySetting.enableCodeBlockRichRender,
-                    onToggleSearch = {
-                        vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
-                    },
-                    onToggleTermuxCommandMode = {
-                        vm.updateSettings(setting.copy(termuxCommandModeEnabled = it))
-                    },
-                    onToggleCodeBlockRichRender = {
-                        vm.updateSettings(
-                            setting.copy(
-                                displaySetting = setting.displaySetting.copy(
-                                    enableCodeBlockRichRender = it
+                },
+                bottomBar = {
+                    ChatInput(
+                        state = inputState,
+                        loading = loadingJob != null,
+                        settings = setting,
+                        conversation = conversation,
+                        mcpManager = vm.mcpManager,
+                        hazeState = hazeState,
+                        onCancelClick = {
+                            loadingJob?.cancel()
+                        },
+                        enableSearch = enableWebSearch,
+                        termuxCommandModeEnabled = setting.termuxCommandModeEnabled,
+                        codeBlockRichRenderEnabled = setting.displaySetting.enableCodeBlockRichRender,
+                        onToggleSearch = {
+                            vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
+                        },
+                        onToggleTermuxCommandMode = {
+                            vm.updateSettings(setting.copy(termuxCommandModeEnabled = it))
+                        },
+                        onToggleCodeBlockRichRender = {
+                            vm.updateSettings(
+                                setting.copy(
+                                    displaySetting = setting.displaySetting.copy(
+                                        enableCodeBlockRichRender = it
+                                    )
                                 )
                             )
-                        )
-                    },
-                    onSendClick = {
-                        val contents = inputState.getContents()
-                        val termuxDirect = if (inputState.isEditing()) {
-                            null
-                        } else {
-                            TermuxDirectCommandParser.parse(
-                                parts = contents,
-                                commandModeEnabled = setting.termuxCommandModeEnabled
-                            )
-                        }
+                        },
+                        onSendClick = {
+                            val contents = inputState.getContents()
+                            val termuxDirect = if (inputState.isEditing()) {
+                                null
+                            } else {
+                                TermuxDirectCommandParser.parse(
+                                    parts = contents,
+                                    commandModeEnabled = setting.termuxCommandModeEnabled
+                                )
+                            }
 
-                        if (currentChatModel == null && termuxDirect?.isDirect != true) {
-                            toaster.show("请先选择模型", type = ToastType.Error)
-                            return@ChatInput
-                        }
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = contents,
-                                messageId = inputState.editingMessage!!,
-                            )
-                        } else {
-                            vm.handleMessageSend(
-                                content = contents,
-                                forceTermuxCommandMode = setting.termuxCommandModeEnabled
-                            )
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                            if (currentChatModel == null && termuxDirect?.isDirect != true) {
+                                toaster.show("请先选择模型", type = ToastType.Error)
+                                return@ChatInput
                             }
-                        }
-                        inputState.clearInput()
-                    },
-                    onLongSendClick = {
-                        val contents = inputState.getContents()
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = contents,
-                                messageId = inputState.editingMessage!!,
-                            )
-                        } else {
-                            vm.handleMessageSend(
-                                content = contents,
-                                answer = false,
-                                forceTermuxCommandMode = setting.termuxCommandModeEnabled
-                            )
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                            if (inputState.isEditing()) {
+                                vm.handleMessageEdit(
+                                    parts = contents,
+                                    messageId = inputState.editingMessage!!,
+                                )
+                            } else {
+                                vm.handleMessageSend(
+                                    content = contents,
+                                    forceTermuxCommandMode = setting.termuxCommandModeEnabled
+                                )
+                                scope.launch {
+                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                }
                             }
+                            inputState.clearInput()
+                        },
+                        onLongSendClick = {
+                            val contents = inputState.getContents()
+                            if (inputState.isEditing()) {
+                                vm.handleMessageEdit(
+                                    parts = contents,
+                                    messageId = inputState.editingMessage!!,
+                                )
+                            } else {
+                                vm.handleMessageSend(
+                                    content = contents,
+                                    answer = false,
+                                    forceTermuxCommandMode = setting.termuxCommandModeEnabled
+                                )
+                                scope.launch {
+                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                }
+                            }
+                            inputState.clearInput()
+                        },
+                        onUpdateChatModel = {
+                            vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
+                        },
+                        onUpdateAssistant = {
+                            vm.updateSettings(
+                                setting.copy(
+                                    assistants = setting.assistants.map { assistant ->
+                                        if (assistant.id == it.id) {
+                                            it
+                                        } else {
+                                            assistant
+                                        }
+                                    }
+                                )
+                            )
+                        },
+                        onUpdateSearchService = { index ->
+                            vm.updateSettings(
+                                setting.copy(
+                                    searchServiceSelected = index
+                                )
+                            )
+                        },
+                        onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
+                            vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+                        },
+                    )
+                },
+                containerColor = Color.Transparent,
+            ) { innerPadding ->
+                ChatList(
+                    innerPadding = innerPadding,
+                    conversation = conversation,
+                    state = chatListState,
+                    loading = loadingJob != null,
+                    previewMode = previewMode,
+                    settings = setting,
+                    hazeState = hazeState,
+                    errors = errors,
+                    onDismissError = onDismissError,
+                    onClearAllErrors = onClearAllErrors,
+                    onRegenerate = {
+                        vm.regenerateAtMessage(it)
+                    },
+                    onEdit = {
+                        inputState.editingMessage = it.id
+                        inputState.setContents(it.parts)
+                    },
+                    onForkMessage = {
+                        scope.launch {
+                            val fork = vm.forkMessage(message = it)
+                            navigateToChatPage(navController, chatId = fork.id)
                         }
-                        inputState.clearInput()
                     },
-                    onUpdateChatModel = {
-                        vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
+                    onDelete = {
+                        if (loadingJob != null) {
+                            vm.showDeleteBlockedWhileGeneratingError()
+                        } else {
+                            vm.deleteMessage(it)
+                        }
                     },
-                    onUpdateAssistant = {
-                        vm.updateSettings(
-                            setting.copy(
-                                assistants = setting.assistants.map { assistant ->
-                                    if (assistant.id == it.id) {
-                                        it
+                    onUpdateMessage = { newNode ->
+                        vm.updateConversation(
+                            conversation.copy(
+                                messageNodes = conversation.messageNodes.map { node ->
+                                    if (node.id == newNode.id) {
+                                        newNode
                                     } else {
-                                        assistant
+                                        node
                                     }
                                 }
-                            )
-                        )
+                            ))
+                        vm.saveConversationAsync()
                     },
-                    onUpdateSearchService = { index ->
-                        vm.updateSettings(
-                            setting.copy(
-                                searchServiceSelected = index
-                            )
-                        )
+                    onClickSuggestion = { suggestion ->
+                        inputState.editingMessage = null
+                        inputState.setMessageText(suggestion)
                     },
-                    onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
-                        vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+                    onTranslate = { message, locale ->
+                        vm.translateMessage(message, locale)
+                    },
+                    onClearTranslation = { message ->
+                        vm.clearTranslationField(message.id)
+                    },
+                    onJumpToMessage = { index ->
+                        previewMode = false
+                        scope.launch {
+                            chatListState.animateScrollToItem(index)
+                        }
+                    },
+                    onToolApproval = { toolCallId, approved, reason ->
+                        vm.handleToolApproval(toolCallId, approved, reason)
+                    },
+                    onToolAnswer = { toolCallId, answer ->
+                        vm.handleToolAnswer(toolCallId, answer)
+                    },
+                    onToggleFavorite = { node ->
+                        vm.toggleMessageFavorite(node)
                     },
                 )
-            },
-            containerColor = Color.Transparent,
-        ) { innerPadding ->
-            ChatList(
-                innerPadding = innerPadding,
-                conversation = conversation,
-                state = chatListState,
-                loading = loadingJob != null,
-                previewMode = previewMode,
-                settings = setting,
-                hazeState = hazeState,
-                errors = errors,
-                onDismissError = onDismissError,
-                onClearAllErrors = onClearAllErrors,
-                onRegenerate = {
-                    vm.regenerateAtMessage(it)
-                },
-                onEdit = {
-                    inputState.editingMessage = it.id
-                    inputState.setContents(it.parts)
-                },
-                onForkMessage = {
-                    scope.launch {
-                        val fork = vm.forkMessage(message = it)
-                        navigateToChatPage(navController, chatId = fork.id)
-                    }
-                },
-                onDelete = {
-                    if (loadingJob != null) {
-                        vm.showDeleteBlockedWhileGeneratingError()
-                    } else {
-                        vm.deleteMessage(it)
-                    }
-                },
-                onUpdateMessage = { newNode ->
-                    vm.updateConversation(
-                        conversation.copy(
-                            messageNodes = conversation.messageNodes.map { node ->
-                                if (node.id == newNode.id) {
-                                    newNode
-                                } else {
-                                    node
-                                }
-                            }
-                        ))
-                    vm.saveConversationAsync()
-                },
-                onClickSuggestion = { suggestion ->
-                    inputState.editingMessage = null
-                    inputState.setMessageText(suggestion)
-                },
-                onTranslate = { message, locale ->
-                    vm.translateMessage(message, locale)
-                },
-                onClearTranslation = { message ->
-                    vm.clearTranslationField(message.id)
-                },
-                onJumpToMessage = { index ->
-                    previewMode = false
-                    scope.launch {
-                        chatListState.animateScrollToItem(index)
-                    }
-                },
-                onToolApproval = { toolCallId, approved, reason ->
-                    vm.handleToolApproval(toolCallId, approved, reason)
-                },
-                onToolAnswer = { toolCallId, answer ->
-                    vm.handleToolAnswer(toolCallId, answer)
-                },
-                onToggleFavorite = { node ->
-                    vm.toggleMessageFavorite(node)
-                },
-            )
+            }
+
+            AnimatedVisibility(
+                visible = !topBarVisible,
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp, end = 12.dp),
+                enter = fadeIn() + scaleIn(initialScale = 0.92f),
+                exit = fadeOut() + scaleOut(targetScale = 0.92f),
+            ) {
+                Surface(
+                    onClick = {
+                        topBarVisible = true
+                    },
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp).copy(alpha = 0.92f),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.ArrowDownDouble,
+                        contentDescription = stringResource(R.string.more_options),
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .size(18.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -469,10 +516,10 @@ private fun TopBar(
     drawerState: DrawerState,
     bigScreen: Boolean,
     previewMode: Boolean,
-    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
-    onUpdateTitle: (String) -> Unit
+    onUpdateTitle: (String) -> Unit,
+    onHideTopBar: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -483,9 +530,7 @@ private fun TopBar(
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color.Transparent,
-            scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         ),
-        scrollBehavior = scrollBehavior,
         navigationIcon = {
             if (!bigScreen) {
                 IconButton(
@@ -532,6 +577,12 @@ private fun TopBar(
                 }
             ) {
                 Icon(HugeIcons.MessageAdd01, "New Message")
+            }
+
+            IconButton(
+                onClick = onHideTopBar
+            ) {
+                Icon(HugeIcons.ArrowUpDouble, "Hide Top Bar")
             }
         },
     )

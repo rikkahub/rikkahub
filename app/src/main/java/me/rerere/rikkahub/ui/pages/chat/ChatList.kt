@@ -278,9 +278,9 @@ private fun ChatListNormal(
             state = state,
             contentPadding = PaddingValues(
                 start = 12.dp,
-                top = 8.dp + innerPadding.calculateTopPadding(),
+                top = 4.dp + innerPadding.calculateTopPadding(),
                 end = 12.dp,
-                bottom = 20.dp + innerPadding.calculateBottomPadding(),
+                bottom = 10.dp + innerPadding.calculateBottomPadding(),
             ),
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -295,8 +295,8 @@ private fun ChatListNormal(
                 val groupedWithPrevious = previousMessage?.role == node.currentMessage.role
                 val topPadding = when {
                     index == 0 -> 0.dp
-                    groupedWithPrevious -> 4.dp
-                    else -> 14.dp
+                    groupedWithPrevious -> 2.dp
+                    else -> 8.dp
                 }
 
                 Box(
@@ -492,7 +492,9 @@ private fun ChatListNormal(
                 ChatSuggestionsRow(
                     conversation = conversation,
                     onClickSuggestion = onClickSuggestion,
-                    modifier = Modifier.align(Alignment.BottomCenter)
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 4.dp)
                 )
             }
         }
@@ -692,23 +694,24 @@ private fun ChatSuggestionsRow(
     LazyRow(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         items(conversation.chatSuggestions) { suggestion ->
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .clickable {
-                        onClickSuggestion(suggestion)
-                    }
-                    .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-                    .padding(vertical = 4.dp, horizontal = 10.dp),
+            Surface(
+                onClick = {
+                    onClickSuggestion(suggestion)
+                },
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp).copy(alpha = 0.96f),
             ) {
                 Text(
                     text = suggestion,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
         }

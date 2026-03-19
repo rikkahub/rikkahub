@@ -147,7 +147,7 @@ fun ChatMessage(
     val colorScheme = MaterialTheme.colorScheme
     val assistantAvatarSlotWidth = if (message.role == MessageRole.ASSISTANT && settings.showModelIcon) 32.dp else 0.dp
     val userAvatarSlotWidth = if (message.role == MessageRole.USER && settings.showUserAvatar) 36.dp else 0.dp
-    val avatarGap = 8.dp
+    val avatarGap = 6.dp
     val showPrimaryActions = lastMessage && !loading && !message.parts.isEmptyUIMessage()
     val showAccessoryRow = showPrimaryActions || node.messages.size > 1
 
@@ -158,7 +158,7 @@ fun ChatMessage(
                 .widthIn(max = 820.dp)
                 .animateContentSize(),
             horizontalAlignment = horizontalAlignment,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             if (showIdentity) {
                 ChatMessageIdentityLabel(
@@ -191,34 +191,37 @@ fun ChatMessage(
                 }
             }
 
-            if (showAccessoryRow) {
+            if (showAccessoryRow || showMetadata) {
                 AnimatedVisibility(
                     visible = true,
                     enter = slideInVertically { it / 2 } + fadeIn(),
                     exit = slideOutVertically { it / 2 } + fadeOut()
                 ) {
                     Column(
-                        modifier = Modifier.animateContentSize()
+                        modifier = Modifier.animateContentSize(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        ChatMessageActionButtons(
-                            message = message,
-                            onRegenerate = onRegenerate,
-                            node = node,
-                            onUpdate = onUpdate,
-                            onOpenActionSheet = {
-                                showActionsSheet = true
-                            },
-                            showPrimaryActions = showPrimaryActions,
-                            onTranslate = onTranslate,
-                            onClearTranslation = onClearTranslation
-                        )
-                    }
-                }
-            }
+                        if (showAccessoryRow) {
+                            ChatMessageActionButtons(
+                                message = message,
+                                onRegenerate = onRegenerate,
+                                node = node,
+                                onUpdate = onUpdate,
+                                onOpenActionSheet = {
+                                    showActionsSheet = true
+                                },
+                                showPrimaryActions = showPrimaryActions,
+                                onTranslate = onTranslate,
+                                onClearTranslation = onClearTranslation
+                            )
+                        }
 
-            if (showMetadata) {
-                ProvideTextStyle(textStyle) {
-                    ChatMessageNerdLine(message = message)
+                        if (showMetadata) {
+                            ProvideTextStyle(textStyle) {
+                                ChatMessageNerdLine(message = message)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -227,7 +230,7 @@ fun ChatMessage(
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         when (message.role) {
             MessageRole.ASSISTANT -> {
@@ -432,7 +435,7 @@ private fun MessagePartsBlock(
                                         tonalElevation = 2.dp,
                                         onClick = { onUserMessageClick?.invoke() },
                                     ) {
-                                        Column(modifier = Modifier.padding(8.dp)) {
+                                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                                             MarkdownBlock(
                                                 content = part.text.replaceRegexes(
                                                     assistant = assistant,
@@ -453,7 +456,7 @@ private fun MessagePartsBlock(
                                         shape = MaterialTheme.shapes.medium,
                                         tonalElevation = 2.dp,
                                     ) {
-                                        Column(modifier = Modifier.padding(8.dp)) {
+                                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                                             MarkdownBlock(
                                                 content = part.text.replaceRegexes(
                                                     assistant = assistant,
