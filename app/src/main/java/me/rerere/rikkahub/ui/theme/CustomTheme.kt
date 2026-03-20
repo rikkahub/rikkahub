@@ -24,16 +24,6 @@ private val THEME_SCALE_VALUE_REGEX = Regex("""^(-?\d+(?:\.\d+)?)(%)?$""", Regex
 private const val MIN_THEME_TEXT_SCALE = 0.7f
 private const val MAX_THEME_TEXT_SCALE = 1.6f
 private val MAX_THEME_RADIUS = 96.dp
-private val SURFACE_FAMILY_TOKEN_KEYS = listOf(
-    "surface",
-    "surfaceBright",
-    "surfaceDim",
-    "surfaceContainerLowest",
-    "surfaceContainerLow",
-    "surfaceContainer",
-    "surfaceContainerHigh",
-    "surfaceContainerHighest",
-)
 
 val COMMON_THEME_TOKEN_KEYS = listOf(
     "primary",
@@ -221,15 +211,6 @@ fun ColorScheme.applyThemeTokenOverrides(parseResult: ThemeTokenParseResult): Co
 
     fun resolvedColor(key: String, fallback: Color): Color = overrides[key] ?: fallback
 
-    fun resolvedOnColor(
-        onKey: String,
-        fallback: Color,
-        autoColor: Color,
-        shouldAutoResolve: Boolean,
-    ): Color {
-        return overrides[onKey] ?: if (shouldAutoResolve) autoColor.preferredContentColor() else fallback
-    }
-
     val resolvedPrimary = resolvedColor("primary", primary)
     val resolvedPrimaryContainer = resolvedColor("primaryContainer", primaryContainer)
     val resolvedSecondary = resolvedColor("secondary", secondary)
@@ -242,95 +223,33 @@ fun ColorScheme.applyThemeTokenOverrides(parseResult: ThemeTokenParseResult): Co
     val resolvedInverseSurface = resolvedColor("inverseSurface", inverseSurface)
     val resolvedError = resolvedColor("error", error)
     val resolvedErrorContainer = resolvedColor("errorContainer", errorContainer)
-    val resolvedSurfaceContentBase = SURFACE_FAMILY_TOKEN_KEYS.firstNotNullOfOrNull(overrides::get) ?: resolvedSurface
-    val hasSurfaceFamilyOverride = SURFACE_FAMILY_TOKEN_KEYS.any(overrides::containsKey)
 
     return copy(
         primary = resolvedPrimary,
-        onPrimary = resolvedOnColor(
-            onKey = "onPrimary",
-            fallback = onPrimary,
-            autoColor = resolvedPrimary,
-            shouldAutoResolve = overrides.containsKey("primary"),
-        ),
+        onPrimary = resolvedColor("onPrimary", onPrimary),
         primaryContainer = resolvedPrimaryContainer,
-        onPrimaryContainer = resolvedOnColor(
-            onKey = "onPrimaryContainer",
-            fallback = onPrimaryContainer,
-            autoColor = resolvedPrimaryContainer,
-            shouldAutoResolve = overrides.containsKey("primaryContainer"),
-        ),
+        onPrimaryContainer = resolvedColor("onPrimaryContainer", onPrimaryContainer),
         inversePrimary = resolvedColor("inversePrimary", inversePrimary),
         secondary = resolvedSecondary,
-        onSecondary = resolvedOnColor(
-            onKey = "onSecondary",
-            fallback = onSecondary,
-            autoColor = resolvedSecondary,
-            shouldAutoResolve = overrides.containsKey("secondary"),
-        ),
+        onSecondary = resolvedColor("onSecondary", onSecondary),
         secondaryContainer = resolvedSecondaryContainer,
-        onSecondaryContainer = resolvedOnColor(
-            onKey = "onSecondaryContainer",
-            fallback = onSecondaryContainer,
-            autoColor = resolvedSecondaryContainer,
-            shouldAutoResolve = overrides.containsKey("secondaryContainer"),
-        ),
+        onSecondaryContainer = resolvedColor("onSecondaryContainer", onSecondaryContainer),
         tertiary = resolvedTertiary,
-        onTertiary = resolvedOnColor(
-            onKey = "onTertiary",
-            fallback = onTertiary,
-            autoColor = resolvedTertiary,
-            shouldAutoResolve = overrides.containsKey("tertiary"),
-        ),
+        onTertiary = resolvedColor("onTertiary", onTertiary),
         tertiaryContainer = resolvedTertiaryContainer,
-        onTertiaryContainer = resolvedOnColor(
-            onKey = "onTertiaryContainer",
-            fallback = onTertiaryContainer,
-            autoColor = resolvedTertiaryContainer,
-            shouldAutoResolve = overrides.containsKey("tertiaryContainer"),
-        ),
+        onTertiaryContainer = resolvedColor("onTertiaryContainer", onTertiaryContainer),
         background = resolvedBackground,
-        onBackground = resolvedOnColor(
-            onKey = "onBackground",
-            fallback = onBackground,
-            autoColor = resolvedBackground,
-            shouldAutoResolve = overrides.containsKey("background"),
-        ),
+        onBackground = resolvedColor("onBackground", onBackground),
         surface = resolvedSurface,
-        onSurface = resolvedOnColor(
-            onKey = "onSurface",
-            fallback = onSurface,
-            autoColor = resolvedSurfaceContentBase,
-            shouldAutoResolve = hasSurfaceFamilyOverride,
-        ),
+        onSurface = resolvedColor("onSurface", onSurface),
         surfaceVariant = resolvedSurfaceVariant,
-        onSurfaceVariant = resolvedOnColor(
-            onKey = "onSurfaceVariant",
-            fallback = onSurfaceVariant,
-            autoColor = resolvedSurfaceVariant,
-            shouldAutoResolve = overrides.containsKey("surfaceVariant"),
-        ),
+        onSurfaceVariant = resolvedColor("onSurfaceVariant", onSurfaceVariant),
         inverseSurface = resolvedInverseSurface,
-        inverseOnSurface = resolvedOnColor(
-            onKey = "inverseOnSurface",
-            fallback = inverseOnSurface,
-            autoColor = resolvedInverseSurface,
-            shouldAutoResolve = overrides.containsKey("inverseSurface"),
-        ),
+        inverseOnSurface = resolvedColor("inverseOnSurface", inverseOnSurface),
         error = resolvedError,
-        onError = resolvedOnColor(
-            onKey = "onError",
-            fallback = onError,
-            autoColor = resolvedError,
-            shouldAutoResolve = overrides.containsKey("error"),
-        ),
+        onError = resolvedColor("onError", onError),
         errorContainer = resolvedErrorContainer,
-        onErrorContainer = resolvedOnColor(
-            onKey = "onErrorContainer",
-            fallback = onErrorContainer,
-            autoColor = resolvedErrorContainer,
-            shouldAutoResolve = overrides.containsKey("errorContainer"),
-        ),
+        onErrorContainer = resolvedColor("onErrorContainer", onErrorContainer),
         outline = resolvedColor("outline", outline),
         outlineVariant = resolvedColor("outlineVariant", outlineVariant),
         scrim = resolvedColor("scrim", scrim),
