@@ -13,11 +13,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -42,6 +43,7 @@ import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,11 +53,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
@@ -90,11 +97,33 @@ import me.rerere.rikkahub.ui.components.ui.LuneTopBarSurface
 import me.rerere.rikkahub.ui.components.ui.luneGlassBorderColor
 import me.rerere.rikkahub.ui.components.ui.luneGlassContainerColor
 import me.rerere.rikkahub.utils.base64Decode
+import me.rerere.rikkahub.utils.getActivity
 import me.rerere.rikkahub.utils.navigateToChatPage
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
+
+@Composable
+private fun ChatStatusBarImmersiveEffect() {
+    val context = LocalContext.current
+    val view = LocalView.current
+
+    DisposableEffect(context, view) {
+        if (view.isInEditMode) return@DisposableEffect onDispose {}
+
+        val activity = context.getActivity() ?: return@DisposableEffect onDispose {}
+        val controller = WindowCompat.getInsetsController(activity.window, view)
+        val previousBehavior = controller.systemBarsBehavior
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.statusBars())
+
+        onDispose {
+            controller.systemBarsBehavior = previousBehavior
+            controller.show(WindowInsetsCompat.Type.statusBars())
+        }
+    }
+}
 
 @Composable
 fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
@@ -275,6 +304,7 @@ private fun ChatPageContent(
     val hazeState = rememberHazeState()
     val activeHazeState = if (enableGlassBlur && !chatListState.isScrollInProgress) hazeState else null
 
+    ChatStatusBarImmersiveEffect()
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     Surface(
@@ -289,6 +319,7 @@ private fun ChatPageContent(
                         visible = topBarVisible,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.displayCutout)
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         enter = fadeIn() + expandVertically(expandFrom = Alignment.Top) + scaleIn(initialScale = 0.96f),
                         exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top) + scaleOut(targetScale = 0.96f),
@@ -427,6 +458,7 @@ private fun ChatPageContent(
                     )
                 },
                 containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
             ) { innerPadding ->
                 ChatList(
                     innerPadding = innerPadding,
@@ -507,7 +539,7 @@ private fun ChatPageContent(
                 visible = !topBarVisible,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .statusBarsPadding()
+                    .windowInsetsPadding(WindowInsets.displayCutout)
                     .padding(top = 8.dp, end = 12.dp),
                 enter = fadeIn() + scaleIn(initialScale = 0.92f),
                 exit = fadeOut() + scaleOut(targetScale = 0.92f),
