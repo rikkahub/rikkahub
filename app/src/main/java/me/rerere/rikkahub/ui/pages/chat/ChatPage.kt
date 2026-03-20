@@ -218,9 +218,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                 drawerContent = {
                     ChatDrawerContent(
                         navController = navController,
-                        current = conversation,
                         vm = vm,
-                        settings = setting
+                        currentConversationId = id,
                     )
                 }
             ) {
@@ -249,9 +248,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                 drawerContent = {
                     ChatDrawerContent(
                         navController = navController,
-                        current = conversation,
                         vm = vm,
-                        settings = setting
+                        currentConversationId = id,
                     )
                 }
             ) {
@@ -330,7 +328,8 @@ private fun ChatPageContent(
                         ) {
                             TopBar(
                                 settings = setting,
-                                conversation = conversation,
+                                conversationTitle = conversation.title,
+                                hasMessages = conversation.messageNodes.isNotEmpty(),
                                 bigScreen = bigScreen,
                                 drawerState = drawerState,
                                 previewMode = previewMode,
@@ -355,7 +354,7 @@ private fun ChatPageContent(
                         state = inputState,
                         loading = loadingJob != null,
                         settings = setting,
-                        conversation = conversation,
+                        messageCount = conversation.messageNodes.size,
                         mcpManager = vm.mcpManager,
                         hazeState = activeHazeState,
                         onCancelClick = {
@@ -568,7 +567,8 @@ private fun ChatPageContent(
 @Composable
 private fun TopBar(
     settings: Settings,
-    conversation: Conversation,
+    conversationTitle: String,
+    hasMessages: Boolean,
     drawerState: DrawerState,
     bigScreen: Boolean,
     previewMode: Boolean,
@@ -604,8 +604,8 @@ private fun TopBar(
             val editTitleWarning = stringResource(R.string.chat_page_edit_title_warning)
             Surface(
                 onClick = {
-                    if (conversation.messageNodes.isNotEmpty()) {
-                        titleState.open(conversation.title)
+                    if (hasMessages) {
+                        titleState.open(conversationTitle)
                     } else {
                         toaster.show(editTitleWarning, type = ToastType.Warning)
                     }
@@ -613,7 +613,7 @@ private fun TopBar(
                 color = Color.Transparent,
             ) {
                 Text(
-                    text = conversation.title.ifBlank { stringResource(R.string.chat_page_new_chat) },
+                    text = conversationTitle.ifBlank { stringResource(R.string.chat_page_new_chat) },
                     maxLines = 1,
                     style = MaterialTheme.typography.titleMedium,
                     overflow = TextOverflow.Ellipsis,

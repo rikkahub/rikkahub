@@ -60,7 +60,6 @@ import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -87,13 +86,13 @@ import kotlin.uuid.Uuid
 fun ChatDrawerContent(
     navController: Navigator,
     vm: ChatVM,
-    settings: Settings,
-    current: Conversation,
+    currentConversationId: Uuid,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
+    val settings by vm.settings.collectAsStateWithLifecycle()
 
     val conversations = vm.conversations.collectAsLazyPagingItems()
     val conversationListState = rememberLazyListState()
@@ -205,7 +204,7 @@ fun ChatDrawerContent(
             }
 
             ConversationList(
-                current = current,
+                currentConversationId = currentConversationId,
                 conversations = conversations,
                 conversationJobs = conversationJobs.keys,
                 listState = conversationListState,
@@ -227,7 +226,7 @@ fun ChatDrawerContent(
                     // This fixes the issue where deleted conversations sometimes remain visible
                     // until manually clicked (issue #747)
                     conversations.refresh()
-                    if (it.id == current.id) {
+                    if (it.id == currentConversationId) {
                         navigateToChatPage(navController)
                     }
                 },
