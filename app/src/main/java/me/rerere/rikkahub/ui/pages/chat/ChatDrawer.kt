@@ -177,6 +177,7 @@ fun ChatDrawerContent(
                             Text(
                                 text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
                                 style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.clickable {
@@ -187,6 +188,7 @@ fun ChatDrawerContent(
                             Icon(
                                 imageVector = HugeIcons.PencilEdit01,
                                 contentDescription = "Edit",
+                                tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier
                                     .onClick {
                                         nicknameEditState.open(settings.displaySetting.userNickname)
@@ -196,6 +198,7 @@ fun ChatDrawerContent(
                         }
                         Greeting(
                             style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -585,6 +588,11 @@ private fun AssistantItem(
         } else {
             MaterialTheme.colorScheme.surface
         },
+        contentColor = if (isCurrentAssistant) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
         tonalElevation = if (isCurrentAssistant) 2.dp else 0.dp
     ) {
         Row(
@@ -606,6 +614,11 @@ private fun AssistantItem(
                 Text(
                     text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
                     style = MaterialTheme.typography.titleMedium,
+                    color = if (isCurrentAssistant) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

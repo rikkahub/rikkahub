@@ -48,6 +48,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.hooks.rememberAvatarShape
+import me.rerere.rikkahub.ui.theme.preferredContentColor
 import org.koin.compose.koinInject
 
 @Composable
@@ -57,6 +58,7 @@ fun TextAvatar(
     loading: Boolean = false,
     color: Color = MaterialTheme.colorScheme.secondaryContainer
 ) {
+    val textColor = if (color.alpha == 0f) LocalContentColor.current else color.preferredContentColor()
     Box(
         modifier = modifier
             .clip(shape = rememberAvatarShape(loading))
@@ -66,7 +68,7 @@ fun TextAvatar(
     ) {
         Text(
             text = text.take(1).uppercase(),
-            color = LocalContentColor.current,
+            color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Clip,
             autoSize = TextAutoSize.StepBased(
@@ -115,6 +117,7 @@ fun UIAvatar(
             },
             tonalElevation = 4.dp,
             color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         ) {
             Box(
                 contentAlignment = Alignment.Center,

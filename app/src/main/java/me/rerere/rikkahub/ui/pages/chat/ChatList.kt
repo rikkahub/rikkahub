@@ -48,6 +48,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -666,6 +667,11 @@ private fun ChatListPreview(
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = if (isUser) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        },
                     ) {
                         Row(
                             modifier = Modifier
@@ -692,6 +698,7 @@ private fun ChatListPreview(
                             Text(
                                 text = highlightedText,
                                 style = MaterialTheme.typography.bodyMedium,
+                                color = LocalContentColor.current,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )

@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import me.rerere.rikkahub.R
@@ -12,7 +13,8 @@ import java.util.Calendar
 @Composable
 fun Greeting(
     modifier: Modifier = Modifier,
-    style: TextStyle = MaterialTheme.typography.headlineMedium
+    style: TextStyle = MaterialTheme.typography.headlineMedium,
+    color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     @Composable
     fun getGreetingMessage(): String {
@@ -28,6 +30,7 @@ fun Greeting(
     Text(
         text = getGreetingMessage(),
         style = style,
+        color = color,
         modifier = modifier
     )
 }
