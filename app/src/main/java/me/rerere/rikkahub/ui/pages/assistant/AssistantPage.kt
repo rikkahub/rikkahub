@@ -432,7 +432,8 @@ private fun AssistantItem(
         modifier = modifier.fillMaxWidth(),
         onClick = onEdit,
         colors = CardDefaults.cardColors(
-            containerColor = luneGlassContainerColor()
+            containerColor = luneGlassContainerColor(),
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ),
         border = BorderStroke(1.dp, luneGlassBorderColor()),
     ) {
