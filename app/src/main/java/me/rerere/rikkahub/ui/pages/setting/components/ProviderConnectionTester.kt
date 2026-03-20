@@ -127,8 +127,12 @@ fun ProviderConnectionTester(
                                     nonStreamingState = UiState.Loading
                                     val chunk = provider.generateText(
                                         providerSetting = internalProvider,
-                                        messages = listOf(UIMessage.user("hello")),
-                                        params = TextGenerationParams(model = model!!)
+                                        messages = listOf(UIMessage.system("You are a helpful assistant"), UIMessage.user("hello")),
+                                        params = TextGenerationParams(
+                                            model = model!!,
+                                            customHeaders = model!!.customHeaders,
+                                            customBody = model!!.customBodies
+                                        )
                                     )
                                     val text = chunk.choices.firstOrNull()?.message?.parts
                                         ?.filterIsInstance<UIMessagePart.Text>()
@@ -141,8 +145,12 @@ fun ProviderConnectionTester(
                                     streamingState = UiState.Loading
                                     val flow = provider.streamText(
                                         providerSetting = internalProvider,
-                                        messages = listOf(UIMessage.user("hello")),
-                                        params = TextGenerationParams(model = model!!)
+                                        messages = listOf(UIMessage.system("You are a helpful assistant"), UIMessage.user("hello")),
+                                        params = TextGenerationParams(
+                                            model = model!!,
+                                            customHeaders = model!!.customHeaders,
+                                            customBody = model!!.customBodies
+                                        )
                                     )
                                     flow.collect { chunk ->
                                         chunk.choices.firstOrNull()?.delta?.parts
@@ -162,10 +170,12 @@ fun ProviderConnectionTester(
                                     )
                                     val chunk = provider.generateText(
                                         providerSetting = internalProvider,
-                                        messages = listOf(UIMessage.user("Use the get_current_time tool.")),
+                                        messages = listOf(UIMessage.system("You are a helpful assistant"), UIMessage.user("Use the get_current_time tool.")),
                                         params = TextGenerationParams(
                                             model = model!!,
-                                            tools = listOf(testTool)
+                                            tools = listOf(testTool),
+                                            customHeaders = model!!.customHeaders,
+                                            customBody = model!!.customBodies
                                         )
                                     )
                                     val message = chunk.choices.firstOrNull()?.message
