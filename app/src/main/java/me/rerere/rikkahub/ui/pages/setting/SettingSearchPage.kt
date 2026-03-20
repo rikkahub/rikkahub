@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -226,9 +225,7 @@ private fun SearchProviderCard(
     var expand by remember { mutableStateOf(false) }
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor
-        )
+        colors = CustomColors.listItemCardColors
     ) {
         Column(
             modifier = Modifier
@@ -551,9 +548,7 @@ private fun CommonOptions(
         mutableStateOf(settings.searchCommonOptions)
     }
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor
-        )
+        colors = CustomColors.listItemCardColors
     ) {
         Column(
             modifier = Modifier
