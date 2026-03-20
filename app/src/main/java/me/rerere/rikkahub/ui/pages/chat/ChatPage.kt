@@ -3,17 +3,18 @@ package me.rerere.rikkahub.ui.pages.chat
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -94,8 +95,6 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
-
-private val ChatTopBarExpandedHeight = 80.dp
 
 @Composable
 fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
@@ -275,10 +274,6 @@ private fun ChatPageContent(
     val enableGlassBlur = setting.displaySetting.enableBlurEffect
     val hazeState = rememberHazeState()
     val activeHazeState = if (enableGlassBlur && !chatListState.isScrollInProgress) hazeState else null
-    val topBarHeight by animateDpAsState(
-        targetValue = if (topBarVisible) ChatTopBarExpandedHeight else 0.dp,
-        label = "ChatTopBarHeight",
-    )
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
@@ -290,43 +285,37 @@ private fun ChatPageContent(
         Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
                 topBar = {
-                    Box(
+                    AnimatedVisibility(
+                        visible = topBarVisible,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(topBarHeight),
-                        contentAlignment = Alignment.TopCenter,
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        enter = fadeIn() + expandVertically(expandFrom = Alignment.Top) + scaleIn(initialScale = 0.96f),
+                        exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top) + scaleOut(targetScale = 0.96f),
                     ) {
-                        AnimatedVisibility(
-                            visible = topBarVisible,
-                            enter = fadeIn() + scaleIn(initialScale = 0.96f),
-                            exit = fadeOut() + scaleOut(targetScale = 0.96f),
+                        LuneTopBarSurface(
+                            hazeState = activeHazeState,
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            LuneTopBarSurface(
-                                hazeState = activeHazeState,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                            ) {
-                                TopBar(
-                                    settings = setting,
-                                    conversation = conversation,
-                                    bigScreen = bigScreen,
-                                    drawerState = drawerState,
-                                    previewMode = previewMode,
-                                    onNewChat = {
-                                        navigateToChatPage(navController)
-                                    },
-                                    onClickMenu = {
-                                        previewMode = !previewMode
-                                    },
-                                    onUpdateTitle = {
-                                        vm.updateTitle(it)
-                                    },
-                                    onHideTopBar = {
-                                        topBarVisible = false
-                                    }
-                                )
-                            }
+                            TopBar(
+                                settings = setting,
+                                conversation = conversation,
+                                bigScreen = bigScreen,
+                                drawerState = drawerState,
+                                previewMode = previewMode,
+                                onNewChat = {
+                                    navigateToChatPage(navController)
+                                },
+                                onClickMenu = {
+                                    previewMode = !previewMode
+                                },
+                                onUpdateTitle = {
+                                    vm.updateTitle(it)
+                                },
+                                onHideTopBar = {
+                                    topBarVisible = false
+                                }
+                            )
                         }
                     }
                 },
@@ -567,6 +556,7 @@ private fun TopBar(
             containerColor = Color.Transparent,
             scrolledContainerColor = Color.Transparent,
         ),
+        windowInsets = WindowInsets(0, 0, 0, 0),
         navigationIcon = {
             if (!bigScreen) {
                 IconButton(

@@ -215,6 +215,7 @@ fun ChatInput(
         fallback = 24.dp,
     )
     val hasMessageContent = !state.isEmpty() || state.messageContent.isNotEmpty()
+    val enableHazeEffect = settings.displaySetting.enableBlurEffect && hazeState != null
 
     Surface(
         color = Color.Transparent,
@@ -223,7 +224,7 @@ fun ChatInput(
             modifier = modifier
                 .imePadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Surface(
@@ -231,10 +232,10 @@ fun ChatInput(
                     .fillMaxWidth()
                     .clip(composerShape)
                     .then(
-                        if (settings.displaySetting.enableBlurEffect && hazeState != null) {
+                        if (enableHazeEffect) {
                             Modifier.hazeEffect(
                                 state = hazeState,
-                                style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
+                                style = HazeMaterials.thin(containerColor = hazeTintColor)
                             )
                         } else {
                             Modifier
@@ -242,14 +243,14 @@ fun ChatInput(
                     ),
                 shape = composerShape,
                 tonalElevation = 0.dp,
-                color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
+                color = if (enableHazeEffect) Color.Transparent else hazeTintColor,
                 border = BorderStroke(1.dp, luneGlassBorderColor()),
             ) {
                 Column(
                     modifier = Modifier
                         .animateContentSize(animationSpec = luneSizeSpring())
-                        .padding(horizontal = 6.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (state.messageContent.isNotEmpty()) {
                         MediaFileInputRow(state = state)
@@ -286,7 +287,7 @@ fun ChatInput(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(48.dp)
+                                .size(44.dp)
                                 .clip(CircleShape)
                                 .combinedClickable(
                                     enabled = loading || hasMessageContent,
