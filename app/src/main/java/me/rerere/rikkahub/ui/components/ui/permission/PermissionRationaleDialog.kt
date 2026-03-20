@@ -31,7 +31,6 @@ import androidx.compose.ui.window.Dialog
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AlertCircle
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.ui.theme.CustomColors
 
 /**
  * 权限请求说明对话框
@@ -172,7 +171,7 @@ private fun PermissionItem(
 ) {
     Card(
         modifier = modifier,
-        colors = CustomColors.cardColorsForContainer(
+        colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         ),
         shape = RoundedCornerShape(8.dp)

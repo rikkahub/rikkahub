@@ -17,9 +17,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.hasMinimumContrastAgainst
 
 @Composable
 fun FormItem(
@@ -29,12 +30,11 @@ fun FormItem(
     tail: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    val readableLabelColor = CustomColors.readableContentColorForContainer(
-        containerColor = MaterialTheme.colorScheme.surface,
-        preferredColor = LocalContentColor.current,
-        backgroundColor = MaterialTheme.colorScheme.background,
-    )
-    val readableDescriptionColor = readableLabelColor.copy(alpha = 0.72f)
+    val labelColor = LocalContentColor.current.takeIf { currentColor ->
+        currentColor != Color.Unspecified &&
+            currentColor.hasMinimumContrastAgainst(MaterialTheme.colorScheme.surface)
+    } ?: MaterialTheme.colorScheme.onSurface
+    val descriptionColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -45,16 +45,16 @@ fun FormItem(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = modifier.weight(1f)
         ) {
-            CompositionLocalProvider(LocalContentColor provides readableLabelColor) {
+            CompositionLocalProvider(LocalContentColor provides labelColor) {
                 ProvideTextStyle(
-                    value = MaterialTheme.typography.titleMedium.copy(color = readableLabelColor)
+                    value = MaterialTheme.typography.titleMedium.copy(color = labelColor)
                 ) {
                     label()
                 }
             }
-            CompositionLocalProvider(LocalContentColor provides readableDescriptionColor) {
+            CompositionLocalProvider(LocalContentColor provides descriptionColor) {
                 ProvideTextStyle(
-                    value = MaterialTheme.typography.labelSmall.copy(color = readableDescriptionColor)
+                    value = MaterialTheme.typography.labelSmall.copy(color = descriptionColor)
                 ) {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(4.dp),

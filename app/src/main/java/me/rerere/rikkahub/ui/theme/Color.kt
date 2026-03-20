@@ -174,33 +174,6 @@ fun darkExtendColors(): ExtendColors = ExtendColors(
 object CustomColors {
     var black = false
 
-    fun readableContentColorForContainer(
-        containerColor: Color,
-        preferredColor: Color,
-        backgroundColor: Color,
-    ): Color {
-        val effectiveContainer = containerColor.compositeAgainst(backgroundColor)
-        return if (preferredColor.hasMinimumContrastAgainst(effectiveContainer)) {
-            preferredColor
-        } else {
-            effectiveContainer.preferredContentColor()
-        }
-    }
-
-    @Composable
-    fun cardColorsForContainer(
-        containerColor: Color,
-        contentColor: Color? = null,
-        backgroundColor: Color = colorScheme.surface,
-    ): CardColors = CardDefaults.cardColors(
-        containerColor = containerColor,
-        contentColor = contentColor ?: readableContentColorForContainer(
-            containerColor = containerColor,
-            preferredColor = colorScheme.onSurface,
-            backgroundColor = backgroundColor,
-        ),
-    )
-
     val topBarColors: TopAppBarColors
         @Composable get() {
             val container = colorScheme.surfaceColorAtElevation(4.dp).copy(
@@ -213,22 +186,17 @@ object CustomColors {
         }
 
     val cardColors: CardColors
-        @Composable get() = cardColorsForContainer(
+        @Composable get() = CardDefaults.cardColors(
             containerColor = colorScheme.surfaceColorAtElevation(3.dp).copy(
                 alpha = if (LocalDarkMode.current) 0.76f else 0.94f
             )
         )
 
     val cardColorsOnSurfaceContainer: CardColors
-        @Composable get() = cardColorsForContainer(
+        @Composable get() = CardDefaults.cardColors(
             containerColor = colorScheme.surfaceColorAtElevation(2.dp).copy(
                 alpha = if (LocalDarkMode.current) 0.72f else 0.92f
             )
-        )
-
-    val listItemCardColors: CardColors
-        @Composable get() = cardColorsForContainer(
-            containerColor = listItemColors.containerColor
         )
 
     val listItemColors: ListItemColors

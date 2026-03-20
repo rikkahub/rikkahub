@@ -37,6 +37,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
@@ -269,7 +270,9 @@ private fun McpServerItem(
         modifier = modifier
     ) {
         Card(
-            colors = CustomColors.listItemCardColors
+            colors = CardDefaults.cardColors(
+                containerColor = CustomColors.listItemColors.containerColor
+            )
         ) {
             Row(
                 modifier = Modifier
@@ -797,7 +800,9 @@ private fun McpToolCard(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Card(
-        colors = CustomColors.listItemCardColors
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor
+        )
     ) {
         Column(
             modifier = Modifier

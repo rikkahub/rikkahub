@@ -40,6 +40,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
@@ -362,7 +363,9 @@ private fun ModeInjectionCard(
         modifier = modifier
     ) {
         Card(
-            colors = CustomColors.listItemCardColors
+            colors = CardDefaults.cardColors(
+                containerColor = CustomColors.listItemColors.containerColor
+            )
         ) {
             Row(
                 modifier = Modifier
@@ -759,7 +762,9 @@ private fun LorebookCard(
         modifier = modifier
     ) {
         Card(
-            colors = CustomColors.listItemCardColors
+            colors = CardDefaults.cardColors(
+                containerColor = CustomColors.listItemColors.containerColor
+            )
         ) {
             Row(
                 modifier = Modifier
