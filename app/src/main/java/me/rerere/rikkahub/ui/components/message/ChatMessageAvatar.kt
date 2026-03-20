@@ -80,13 +80,14 @@ fun ChatMessageAssistantAvatar(
 ) {
     val settings = LocalSettings.current
     val showIcon = settings.displaySetting.showModelIcon
-    if (message.role == MessageRole.ASSISTANT && model != null) {
+    val useAssistantAvatar = assistant?.useAssistantAvatar == true
+    if (message.role == MessageRole.ASSISTANT && (model != null || useAssistantAvatar)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = modifier
         ) {
-            if (assistant?.useAssistantAvatar == true) {
+            if (useAssistantAvatar) {
                 if (showIcon) {
                     UIAvatar(
                         name = assistant.name,
@@ -114,7 +115,7 @@ fun ChatMessageAssistantAvatar(
                         }
                     }
                 }
-            } else {
+            } else if (model != null) {
                 if (showIcon) {
                     AutoAIIcon(
                         name = model.modelId,
