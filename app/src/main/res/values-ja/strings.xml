@@ -1377,5 +1377,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_back_to_conversation">会話に戻る</string>
   <string name="chat_page_hide_top_bar">トップバーを隠す</string>
   <string name="theme_name_lune">ムーンライトLune</string>
+  <string name="setting_display_page_custom_theme_state_auto">自動</string>
+  <string name="setting_display_page_custom_theme_auto_on_colors_title">on* 色を自動生成</string>
+  <string name="setting_display_page_custom_theme_auto_on_colors_desc">対になるベース色の token が変わったとき、対応する on* 前景色を自動的に導出します。on* token が明示的に設定されている場合は、その値を保持します。</string>
 </resources>
 
