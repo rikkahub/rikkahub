@@ -87,12 +87,8 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
           script: |
             adb wait-for-device
-            until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do
-              sleep 5
-            done
-            until adb shell pm path android >/dev/null 2>&1; do
-              sleep 5
-            done
+            while [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" != "1" ]; do sleep 5; done
+            while ! adb shell pm path android >/dev/null 2>&1; do sleep 5; done
             chmod +x gradlew
             ./gradlew connectedDebugAndroidTest
 
