@@ -123,9 +123,8 @@ private fun RequestLogCard(log: LogEntry.RequestLog, onClick: () -> Unit) {
     val dateFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
         Column(

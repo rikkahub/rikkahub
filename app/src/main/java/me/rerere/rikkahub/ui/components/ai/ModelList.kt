@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -610,6 +611,7 @@ private fun ModelItem(
             Row(
                 modifier = Modifier
                     .weight(1f)
+                    .clip(MaterialTheme.shapes.medium)
                     .combinedClickable(
                         enabled = true,
                         onLongClick = {

@@ -241,11 +241,11 @@ private fun EmojiItem(
     Box(
         modifier = Modifier
             .size(40.dp)
+            .clip(RoundedCornerShape(8.dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .clip(RoundedCornerShape(8.dp))
             .background(
                 MaterialTheme.colorScheme.surfaceVariant.copy(
                     alpha = if (hasVariants) 0.5f else 0.3f
