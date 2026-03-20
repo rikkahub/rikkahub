@@ -189,14 +189,16 @@ object CustomColors {
         @Composable get() = CardDefaults.cardColors(
             containerColor = colorScheme.surfaceColorAtElevation(3.dp).copy(
                 alpha = if (LocalDarkMode.current) 0.76f else 0.94f
-            )
+            ),
+            contentColor = colorScheme.onSurface
         )
 
     val cardColorsOnSurfaceContainer: CardColors
         @Composable get() = CardDefaults.cardColors(
             containerColor = colorScheme.surfaceColorAtElevation(2.dp).copy(
                 alpha = if (LocalDarkMode.current) 0.72f else 0.92f
-            )
+            ),
+            contentColor = colorScheme.onSurface
         )
 
     val listItemColors: ListItemColors

@@ -14,13 +14,10 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import me.rerere.rikkahub.ui.theme.hasMinimumContrastAgainst
 
 @Composable
 fun FormItem(
@@ -30,12 +27,6 @@ fun FormItem(
     tail: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    val labelColor = LocalContentColor.current.takeIf { currentColor ->
-        currentColor != Color.Unspecified &&
-            currentColor.hasMinimumContrastAgainst(MaterialTheme.colorScheme.surface)
-    } ?: MaterialTheme.colorScheme.onSurface
-    val descriptionColor = MaterialTheme.colorScheme.onSurfaceVariant
-
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -45,22 +36,20 @@ fun FormItem(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = modifier.weight(1f)
         ) {
-            CompositionLocalProvider(LocalContentColor provides labelColor) {
-                ProvideTextStyle(
-                    value = MaterialTheme.typography.titleMedium.copy(color = labelColor)
-                ) {
-                    label()
-                }
+            ProvideTextStyle(
+                value = MaterialTheme.typography.titleMedium
+            ) {
+                label()
             }
-            CompositionLocalProvider(LocalContentColor provides descriptionColor) {
-                ProvideTextStyle(
-                    value = MaterialTheme.typography.labelSmall.copy(color = descriptionColor)
+            ProvideTextStyle(
+                value = MaterialTheme.typography.labelSmall.copy(
+                    color = LocalContentColor.current.copy(alpha = 0.6f)
+                )
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        description?.invoke()
-                    }
+                    description?.invoke()
                 }
             }
             content()
