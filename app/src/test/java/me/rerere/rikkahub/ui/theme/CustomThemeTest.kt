@@ -58,6 +58,44 @@ class CustomThemeTest {
     }
 
     @Test
+    fun apply_theme_token_overrides_can_auto_generate_matching_on_colors_when_enabled() {
+        val base = lightColorScheme(
+            primary = Color(1, 1, 1),
+            onPrimary = Color(2, 2, 2),
+            background = Color(3, 3, 3),
+        )
+
+        val updated = base.applyThemeTokenOverrides(
+            parseResult = parseThemeTokenSource("primary: #F4F4F4;"),
+            autoGenerateContentColors = true,
+        )
+
+        assertEquals(Color(244, 244, 244, 255), updated.primary)
+        assertEquals(Color.Black, updated.onPrimary)
+        assertEquals(base.background, updated.background)
+    }
+
+    @Test
+    fun explicit_on_color_override_wins_over_auto_generated_content_color() {
+        val base = lightColorScheme(
+            primary = Color(1, 1, 1),
+            onPrimary = Color(2, 2, 2),
+        )
+
+        val updated = base.applyThemeTokenOverrides(
+            parseResult = parseThemeTokenSource(
+                """
+                primary: #F4F4F4;
+                onPrimary: #01020304;
+                """.trimIndent()
+            ),
+            autoGenerateContentColors = true,
+        )
+
+        assertEquals(Color(1, 2, 3, 4), updated.onPrimary)
+    }
+
+    @Test
     fun parse_theme_color_string_accepts_uppercase_android_hex_prefix() {
         assertEquals(Color(170, 187, 204, 255), parseThemeColorString("0XFFAABBCC"))
     }

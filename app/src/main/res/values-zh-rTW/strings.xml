@@ -1257,6 +1257,7 @@
   <string name="setting_display_page_custom_theme_insert_light_template">插入亮色範本</string>
   <string name="setting_display_page_custom_theme_insert_dark_template">插入暗色範本</string>
   <string name="setting_display_page_custom_theme_state_default">預設</string>
+  <string name="setting_display_page_custom_theme_state_auto">自動</string>
   <string name="setting_display_page_custom_theme_state_custom">自訂</string>
   <string name="safe_mode_title">安全模式</string>
   <string name="safe_mode_description">應用程式在上次啟動時崩潰。您可以切換到其他助理來解決此問題。</string>
@@ -1268,6 +1269,8 @@
   <string name="safe_mode_assistants">助理</string>
   <string name="title_activity_safe_mode">安全模式</string>
   <string name="setting_display_page_custom_theme_editor_summary_desc">不必離開預覽畫面，就能在同一處編輯顏色、圓角和字型。</string>
+  <string name="setting_display_page_custom_theme_auto_on_colors_title">自動產生 on* 顏色</string>
+  <string name="setting_display_page_custom_theme_auto_on_colors_desc">當成對的底色 token 改變時，自動推導對應的 on* 前景色；若已明確設定 on* token，則保留明確值。</string>
   <string name="setting_display_page_custom_theme_mode_light">淺色</string>
   <string name="setting_display_page_custom_theme_mode_dark">深色</string>
   <string name="setting_display_page_custom_theme_count_tokens">%1$d 個 tokens</string>
@@ -1376,4 +1379,3 @@
   <string name="provider_share_sheet_qr_unavailable">所選內容過多，無法產生 QR Code，請改用系統分享。</string>
   <string name="theme_name_lune">月輝 Lune</string>
 </resources>
-

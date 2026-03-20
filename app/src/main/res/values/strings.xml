@@ -1266,6 +1266,7 @@
   <string name="setting_display_page_custom_theme_insert_light_template">Insert light template</string>
   <string name="setting_display_page_custom_theme_insert_dark_template">Insert dark template</string>
   <string name="setting_display_page_custom_theme_state_default">Default</string>
+  <string name="setting_display_page_custom_theme_state_auto">Auto</string>
   <string name="setting_display_page_custom_theme_state_custom">Custom</string>
   <string name="title_activity_safe_mode">Safe Mode</string>
   <string name="safe_mode_title">Safe Mode</string>
@@ -1277,6 +1278,8 @@
   <string name="safe_mode_copy">Copy</string>
   <string name="safe_mode_assistants">Assistants</string>
   <string name="setting_display_page_custom_theme_editor_summary_desc">Edit colors, radius, and type in one place without leaving the preview.</string>
+  <string name="setting_display_page_custom_theme_auto_on_colors_title">Auto-generate on-colors</string>
+  <string name="setting_display_page_custom_theme_auto_on_colors_desc">Derive matching on* foreground colors when a paired base color changes, unless that on* token is set explicitly.</string>
   <string name="setting_display_page_custom_theme_mode_light">Light</string>
   <string name="setting_display_page_custom_theme_mode_dark">Dark</string>
   <string name="setting_display_page_custom_theme_count_tokens">%1$d tokens</string>
