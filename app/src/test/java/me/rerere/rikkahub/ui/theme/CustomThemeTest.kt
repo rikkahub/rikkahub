@@ -7,6 +7,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import androidx.compose.ui.unit.dp
@@ -93,6 +94,36 @@ class CustomThemeTest {
         )
 
         assertEquals(Color(1, 2, 3, 4), updated.onPrimary)
+    }
+
+    @Test
+    fun with_accessible_content_colors_generates_missing_on_color_when_override_breaks_contrast() {
+        val base = lightColorScheme(
+            surface = Color.White,
+            onSurface = Color.Black,
+        )
+
+        val result = parseThemeTokenSource("surface: #111111;").withAccessibleContentColors(
+            baseScheme = base,
+            autoGenerateContentColors = false,
+        )
+
+        assertEquals(Color.White, result.overrides["onSurface"])
+    }
+
+    @Test
+    fun with_accessible_content_colors_keeps_readable_base_on_color_when_contrast_is_still_good() {
+        val base = lightColorScheme(
+            surface = Color.White,
+            onSurface = Color.Black,
+        )
+
+        val result = parseThemeTokenSource("surface: #F6F6F6;").withAccessibleContentColors(
+            baseScheme = base,
+            autoGenerateContentColors = false,
+        )
+
+        assertFalse(result.overrides.containsKey("onSurface"))
     }
 
     @Test
