@@ -55,6 +55,7 @@ fun TTSProviderConfigure(
                         is TTSProviderSetting.Qwen -> "Qwen"
                         is TTSProviderSetting.Groq -> "Groq"
                         is TTSProviderSetting.XAI -> "xAI"
+                        is TTSProviderSetting.MiMo -> "MiMo"
                     },
                     onValueChange = {},
                     readOnly = true,
@@ -81,6 +82,7 @@ fun TTSProviderConfigure(
                                         TTSProviderSetting.Qwen::class -> "Qwen"
                                         TTSProviderSetting.Groq::class -> "Groq"
                                         TTSProviderSetting.XAI::class -> "xAI"
+                                        TTSProviderSetting.MiMo::class -> "MiMo"
                                         else -> providerClass.simpleName ?: "Unknown"
                                     }
                                 )
@@ -123,6 +125,11 @@ fun TTSProviderConfigure(
                                         name = "xAI TTS"
                                     )
 
+                                    TTSProviderSetting.MiMo::class -> TTSProviderSetting.MiMo(
+                                        id = setting.id,
+                                        name = "MiMo TTS"
+                                    )
+
                                     else -> setting
                                 }
                                 onValueChange(newSetting)
@@ -157,6 +164,7 @@ fun TTSProviderConfigure(
             is TTSProviderSetting.Qwen -> QwenTTSConfiguration(setting, onValueChange)
             is TTSProviderSetting.Groq -> GroqTTSConfiguration(setting, onValueChange)
             is TTSProviderSetting.XAI -> XAITTSConfiguration(setting, onValueChange)
+            is TTSProviderSetting.MiMo -> MiMoTTSConfiguration(setting, onValueChange)
         }
     }
 }
@@ -250,6 +258,73 @@ private fun OpenAITTSConfiguration(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MiMoTTSConfiguration(
+    setting: TTSProviderSetting.MiMo,
+    onValueChange: (TTSProviderSetting) -> Unit
+) {
+    // MiMo 配置均为自由输入 默认值只是占位
+    // API Key
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
+        description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.apiKey,
+            onValueChange = { newApiKey ->
+                onValueChange(setting.copy(apiKey = newApiKey))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("mimo-xxx") },
+        )
+    }
+
+    // Base URL
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
+        description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.baseUrl,
+            onValueChange = { newBaseUrl ->
+                onValueChange(setting.copy(baseUrl = newBaseUrl))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("https://api.xiaomimimo.com/v1") }
+        )
+    }
+
+    // Model
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_model)) },
+        description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.model,
+            onValueChange = { newModel ->
+                onValueChange(setting.copy(model = newModel))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("mimo-v2-tts") }
+        )
+    }
+
+    // Voice
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_voice)) },
+        description = { Text(stringResource(R.string.setting_tts_page_voice_description)) }
+    ) {
+        OutlinedTextField(
+            value = setting.voice,
+            onValueChange = { newVoice ->
+                onValueChange(setting.copy(voice = newVoice))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("mimo_default") }
+        )
     }
 }
 
