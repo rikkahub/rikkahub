@@ -467,7 +467,7 @@ class GenerationHandler(
                 messages = messages,
                 params = TextGenerationParams(
                     model = model,
-                    temperature = 0.3f,
+                    thinkingBudget = settings.translateThinkingBudget,
                 ),
             ).collect { chunk ->
                 messages = messages.handleMessageChunk(chunk)
