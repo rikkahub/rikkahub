@@ -76,7 +76,8 @@ fun AssistantDetailPage(id: String) {
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = CustomColors.topBarColors.containerColor
+        containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
