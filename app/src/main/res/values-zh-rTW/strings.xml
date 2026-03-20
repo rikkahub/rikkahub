@@ -1366,4 +1366,14 @@
   <string name="setting_display_page_chat_font_family_default">預設</string>
   <string name="setting_display_page_chat_font_family_serif">Serif</string>
   <string name="setting_display_page_chat_font_family_monospace">等寬字體</string>
+  <string name="chat_page_back_to_conversation">返回對話</string>
+  <string name="chat_page_hide_top_bar">隱藏頂部欄</string>
+  <string name="setting_provider_page_import_success_count">已匯入 %1$d 個提供商</string>
+  <string name="setting_provider_page_selected">已選擇</string>
+  <string name="setting_provider_page_selected_count">已選擇 %1$d 個</string>
+  <string name="setting_provider_page_deselect_all">取消全選</string>
+  <string name="provider_share_sheet_models_not_included">分享的提供商設定不包含模型清單。</string>
+  <string name="provider_share_sheet_qr_unavailable">所選內容過多，無法產生 QR Code，請改用系統分享。</string>
+  <string name="theme_name_lune">月輝 Lune</string>
 </resources>
+

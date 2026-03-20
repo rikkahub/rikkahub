@@ -1374,4 +1374,8 @@
   <string name="setting_display_page_chat_font_family_default">По умолчанию</string>
   <string name="setting_display_page_chat_font_family_serif">С засечками</string>
   <string name="setting_display_page_chat_font_family_monospace">Моноширинный</string>
+  <string name="chat_page_back_to_conversation">Вернуться к беседе</string>
+  <string name="chat_page_hide_top_bar">Скрыть верхнюю панель</string>
+  <string name="theme_name_lune">Лунный свет Lune</string>
 </resources>
+

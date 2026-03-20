@@ -1374,4 +1374,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_chat_font_family_default">デフォルト</string>
   <string name="setting_display_page_chat_font_family_serif">明朝体</string>
   <string name="setting_display_page_chat_font_family_monospace">等幅</string>
+  <string name="chat_page_back_to_conversation">会話に戻る</string>
+  <string name="chat_page_hide_top_bar">トップバーを隠す</string>
+  <string name="theme_name_lune">ムーンライトLune</string>
 </resources>
+
