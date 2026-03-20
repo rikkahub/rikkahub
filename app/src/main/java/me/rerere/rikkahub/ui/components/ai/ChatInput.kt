@@ -65,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -163,7 +164,7 @@ fun ChatInput(
     conversation: Conversation,
     settings: Settings,
     mcpManager: McpManager,
-    hazeState: HazeState,
+    hazeState: HazeState?,
     enableSearch: Boolean,
     termuxCommandModeEnabled: Boolean,
     codeBlockRichRenderEnabled: Boolean,
@@ -230,7 +231,7 @@ fun ChatInput(
                     .fillMaxWidth()
                     .clip(composerShape)
                     .then(
-                        if (settings.displaySetting.enableBlurEffect) {
+                        if (settings.displaySetting.enableBlurEffect && hazeState != null) {
                             Modifier.hazeEffect(
                                 state = hazeState,
                                 style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
@@ -285,7 +286,7 @@ fun ChatInput(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
                                 .combinedClickable(
                                     enabled = loading || hasMessageContent,
@@ -340,12 +341,12 @@ fun ChatInput(
                         enter = expandVertically() + fadeIn(),
                         exit = shrinkVertically() + fadeOut(),
                     ) {
-                        Row(
+                        FlowRow(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(start = 4.dp, end = 2.dp, bottom = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             IconButton(
                                 onClick = {
@@ -358,87 +359,80 @@ fun ChatInput(
                                 )
                             }
 
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                ModelSelector(
-                                    modelId = assistant.chatModelId ?: settings.chatModelId,
-                                    providers = settings.providers,
-                                    onSelect = {
-                                        onUpdateChatModel(it)
-                                        dismissFilesPicker()
+                            ModelSelector(
+                                modelId = assistant.chatModelId ?: settings.chatModelId,
+                                providers = settings.providers,
+                                onSelect = {
+                                    onUpdateChatModel(it)
+                                    dismissFilesPicker()
+                                },
+                                type = ModelType.CHAT,
+                                onlyIcon = true,
+                                modifier = Modifier,
+                            )
+
+                            val enableSearchMsg = stringResource(R.string.web_search_enabled)
+                            val disableSearchMsg = stringResource(R.string.web_search_disabled)
+                            val effectiveChatModel = assistant.chatModelId?.let { settings.findModelById(it) }
+                                ?: settings.getCurrentChatModel()
+                            SearchPickerButton(
+                                enableSearch = enableSearch,
+                                settings = settings,
+                                onToggleSearch = { enabled ->
+                                    onToggleSearch(enabled)
+                                    toaster.show(
+                                        message = if (enabled) enableSearchMsg else disableSearchMsg,
+                                        duration = 1.seconds,
+                                        type = if (enabled) {
+                                            ToastType.Success
+                                        } else {
+                                            ToastType.Normal
+                                        }
+                                    )
+                                },
+                                onUpdateSearchService = onUpdateSearchService,
+                                model = effectiveChatModel,
+                            )
+
+                            val model = effectiveChatModel
+                            if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
+                                ReasoningButton(
+                                    reasoningTokens = assistant.thinkingBudget ?: 0,
+                                    onUpdateReasoningTokens = {
+                                        onUpdateAssistant(assistant.copy(thinkingBudget = it))
                                     },
-                                    type = ModelType.CHAT,
+                                    openAIReasoningEffort = assistant.openAIReasoningEffort,
+                                    onUpdateOpenAIReasoningEffort = {
+                                        onUpdateAssistant(assistant.copy(openAIReasoningEffort = it))
+                                    },
                                     onlyIcon = true,
-                                    modifier = Modifier,
                                 )
+                            }
 
-                                val enableSearchMsg = stringResource(R.string.web_search_enabled)
-                                val disableSearchMsg = stringResource(R.string.web_search_disabled)
-                                val effectiveChatModel = assistant.chatModelId?.let { settings.findModelById(it) }
-                                    ?: settings.getCurrentChatModel()
-                                SearchPickerButton(
-                                    enableSearch = enableSearch,
-                                    settings = settings,
-                                    onToggleSearch = { enabled ->
-                                        onToggleSearch(enabled)
-                                        toaster.show(
-                                            message = if (enabled) enableSearchMsg else disableSearchMsg,
-                                            duration = 1.seconds,
-                                            type = if (enabled) {
-                                                ToastType.Success
-                                            } else {
-                                                ToastType.Normal
-                                            }
-                                        )
-                                    },
-                                    onUpdateSearchService = onUpdateSearchService,
-                                    model = effectiveChatModel,
-                                )
+                            LocalToolsPickerButton(
+                                assistant = assistant,
+                                onUpdateAssistant = {
+                                    onUpdateAssistant(it)
+                                },
+                            )
 
-                                val model = effectiveChatModel
-                                if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
-                                    ReasoningButton(
-                                        reasoningTokens = assistant.thinkingBudget ?: 0,
-                                        onUpdateReasoningTokens = {
-                                            onUpdateAssistant(assistant.copy(thinkingBudget = it))
-                                        },
-                                        openAIReasoningEffort = assistant.openAIReasoningEffort,
-                                        onUpdateOpenAIReasoningEffort = {
-                                            onUpdateAssistant(assistant.copy(openAIReasoningEffort = it))
-                                        },
-                                        onlyIcon = true,
-                                    )
-                                }
+                            SkillsPickerButton(
+                                assistant = assistant,
+                                modelSupportsTools = model?.abilities?.contains(ModelAbility.TOOL) == true,
+                                onUpdateAssistant = {
+                                    onUpdateAssistant(it)
+                                },
+                            )
 
-                                LocalToolsPickerButton(
+                            if (settings.mcpServers.isNotEmpty()) {
+                                McpPickerButton(
                                     assistant = assistant,
+                                    servers = settings.mcpServers,
+                                    mcpManager = mcpManager,
                                     onUpdateAssistant = {
                                         onUpdateAssistant(it)
                                     },
                                 )
-
-                                SkillsPickerButton(
-                                    assistant = assistant,
-                                    modelSupportsTools = model?.abilities?.contains(ModelAbility.TOOL) == true,
-                                    onUpdateAssistant = {
-                                        onUpdateAssistant(it)
-                                    },
-                                )
-
-                                if (settings.mcpServers.isNotEmpty()) {
-                                    McpPickerButton(
-                                        assistant = assistant,
-                                        servers = settings.mcpServers,
-                                        mcpManager = mcpManager,
-                                        onUpdateAssistant = {
-                                            onUpdateAssistant(it)
-                                        },
-                                    )
-                                }
                             }
                         }
                     }
@@ -821,14 +815,15 @@ private fun AttachmentChip(
             )
             Box(
                 modifier = Modifier
+                    .minimumInteractiveComponentSize()
                     .clip(CircleShape)
-                    .size(26.dp)
+                    .size(40.dp)
                     .clickable(onClick = onRemove),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = HugeIcons.Cancel01,
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.chat_page_delete),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )

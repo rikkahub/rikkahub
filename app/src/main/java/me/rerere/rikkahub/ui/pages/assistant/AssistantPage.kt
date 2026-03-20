@@ -66,7 +66,6 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.LuneBackdrop
@@ -93,11 +92,13 @@ import androidx.compose.foundation.lazy.items as lazyItems
 @Composable
 fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val assistantMemoryCounts by vm.assistantMemoryCounts.collectAsStateWithLifecycle()
     val createState = useEditState<Assistant> {
         vm.addAssistant(it)
     }
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val lazyListState = rememberLazyListState()
 
     // 搜索关键词状态
     var searchQuery by remember { mutableStateOf("") }
@@ -106,6 +107,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     // 操作菜单状态
     var actionSheetAssistant by remember { mutableStateOf<Assistant?>(null) }
     val hazeState = rememberHazeState()
+    val enableGlassBlur = settings.displaySetting.enableBlurEffect && !lazyListState.isScrollInProgress
 
     // 根据搜索关键词和选中的标签过滤助手
     val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery) {
@@ -123,7 +125,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
         Scaffold(
             topBar = {
                 LuneTopBarSurface(
-                    hazeState = hazeState,
+                    hazeState = if (enableGlassBlur) hazeState else null,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     LargeFlexibleTopAppBar(
@@ -160,7 +162,6 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     .consumeWindowInsets(it),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-            val lazyListState = rememberLazyListState()
             val isFiltering = selectedTagIds.isNotEmpty() || searchQuery.isNotBlank()
             val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
                 if (!isFiltering) {
@@ -214,7 +215,13 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 modifier = Modifier
                     .fillMaxSize()
                     .imePadding()
-                    .hazeSource(state = hazeState),
+                    .then(
+                        if (enableGlassBlur) {
+                            Modifier.hazeSource(state = hazeState)
+                        } else {
+                            Modifier
+                        }
+                    ),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 state = lazyListState,
@@ -224,13 +231,10 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                         state = reorderableState,
                         key = assistant.id,
                     ) { isDragging ->
-                        val memories by vm.getMemories(assistant).collectAsStateWithLifecycle(
-                            initialValue = emptyList(),
-                        )
                         AssistantItem(
                             assistant = assistant,
                             settings = settings,
-                            memories = memories,
+                            memoryCount = assistantMemoryCounts[assistant.id] ?: 0,
                             onEdit = {
                                 navController.navigate(Screen.AssistantDetail(id = assistant.id.toString()))
                             },
@@ -420,7 +424,7 @@ private fun AssistantItem(
     assistant: Assistant,
     settings: Settings,
     modifier: Modifier = Modifier,
-    memories: List<AssistantMemory>,
+    memoryCount: Int,
     onEdit: () -> Unit,
     onShowActions: () -> Unit,
 ) {
@@ -465,7 +469,7 @@ private fun AssistantItem(
                 ) {
                     if (assistant.enableMemory) {
                         Tag(type = TagType.SUCCESS) {
-                            Text(stringResource(R.string.assistant_page_memory_count, memories.size))
+                            Text(stringResource(R.string.assistant_page_memory_count, memoryCount))
                         }
                     }
 

@@ -3,14 +3,17 @@ package me.rerere.rikkahub.ui.pages.chat
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -91,6 +94,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
+
+private val ChatTopBarExpandedHeight = 80.dp
 
 @Composable
 fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
@@ -269,6 +274,11 @@ private fun ChatPageContent(
     var topBarVisible by rememberSaveable { mutableStateOf(true) }
     val enableGlassBlur = setting.displaySetting.enableBlurEffect
     val hazeState = rememberHazeState()
+    val activeHazeState = if (enableGlassBlur && !chatListState.isScrollInProgress) hazeState else null
+    val topBarHeight by animateDpAsState(
+        targetValue = if (topBarVisible) ChatTopBarExpandedHeight else 0.dp,
+        label = "ChatTopBarHeight",
+    )
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
@@ -280,34 +290,43 @@ private fun ChatPageContent(
         Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
                 topBar = {
-                    AnimatedVisibility(
-                        visible = topBarVisible,
-                        enter = fadeIn() + scaleIn(initialScale = 0.96f),
-                        exit = fadeOut() + scaleOut(targetScale = 0.96f),
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(topBarHeight),
+                        contentAlignment = Alignment.TopCenter,
                     ) {
-                        LuneTopBarSurface(
-                            hazeState = if (enableGlassBlur) hazeState else null,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        AnimatedVisibility(
+                            visible = topBarVisible,
+                            enter = fadeIn() + scaleIn(initialScale = 0.96f),
+                            exit = fadeOut() + scaleOut(targetScale = 0.96f),
                         ) {
-                            TopBar(
-                                settings = setting,
-                                conversation = conversation,
-                                bigScreen = bigScreen,
-                                drawerState = drawerState,
-                                previewMode = previewMode,
-                                onNewChat = {
-                                    navigateToChatPage(navController)
-                                },
-                                onClickMenu = {
-                                    previewMode = !previewMode
-                                },
-                                onUpdateTitle = {
-                                    vm.updateTitle(it)
-                                },
-                                onHideTopBar = {
-                                    topBarVisible = false
-                                }
-                            )
+                            LuneTopBarSurface(
+                                hazeState = activeHazeState,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                            ) {
+                                TopBar(
+                                    settings = setting,
+                                    conversation = conversation,
+                                    bigScreen = bigScreen,
+                                    drawerState = drawerState,
+                                    previewMode = previewMode,
+                                    onNewChat = {
+                                        navigateToChatPage(navController)
+                                    },
+                                    onClickMenu = {
+                                        previewMode = !previewMode
+                                    },
+                                    onUpdateTitle = {
+                                        vm.updateTitle(it)
+                                    },
+                                    onHideTopBar = {
+                                        topBarVisible = false
+                                    }
+                                )
+                            }
                         }
                     }
                 },
@@ -318,7 +337,7 @@ private fun ChatPageContent(
                         settings = setting,
                         conversation = conversation,
                         mcpManager = vm.mcpManager,
-                        hazeState = hazeState,
+                        hazeState = activeHazeState,
                         onCancelClick = {
                             loadingJob?.cancel()
                         },
@@ -498,7 +517,7 @@ private fun ChatPageContent(
             AnimatedVisibility(
                 visible = !topBarVisible,
                 modifier = Modifier
-                    .align(androidx.compose.ui.Alignment.TopEnd)
+                    .align(Alignment.TopEnd)
                     .statusBarsPadding()
                     .padding(top = 8.dp, end = 12.dp),
                 enter = fadeIn() + scaleIn(initialScale = 0.92f),

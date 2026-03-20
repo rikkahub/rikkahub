@@ -56,15 +56,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -217,19 +216,17 @@ private fun ChatListNormal(
     showSuggestions: Boolean,
 ) {
     val scope = rememberCoroutineScope()
-    val loadingState by rememberUpdatedState(loading)
     var isRecentScroll by remember { mutableStateOf(false) }
-    val conversationUpdated by rememberUpdatedState(conversation)
     val density = LocalDensity.current
-    val enableGlassBlur = settings.displaySetting.enableBlurEffect
-
-    fun List<LazyListItemInfo>.isAtBottom(): Boolean {
-        val lastItem = lastOrNull() ?: return false
-        val inputBarHeight = with(density) { innerPadding.calculateBottomPadding().toPx() }
-        val lastPos = lastItem.offset + lastItem.size
-        val inputPos = (state.layoutInfo.viewportEndOffset - inputBarHeight.roundToInt())
-        // println("lastPos = $lastPos, inputPos = $inputPos  | ${lastPos <= inputPos - 8}")
-        return lastPos <= inputPos - 8
+    val enableGlassBlur = settings.displaySetting.enableBlurEffect && !state.isScrollInProgress
+    val isAtBottom by remember(state, density, innerPadding) {
+        derivedStateOf {
+            val lastItem = state.layoutInfo.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf false
+            val inputBarHeight = with(density) { innerPadding.calculateBottomPadding().toPx() }
+            val lastPos = lastItem.offset + lastItem.size
+            val inputPos = state.layoutInfo.viewportEndOffset - inputBarHeight.roundToInt()
+            lastPos <= inputPos - 8
+        }
     }
 
     // 聊天选择
@@ -256,15 +253,14 @@ private fun ChatListNormal(
     ) {
         // 自动滚动到底部
         if (settings.displaySetting.enableAutoScroll) {
-            LaunchedEffect(state) {
-                snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
-                    // println("is bottom = ${visibleItemsInfo.isAtBottom()}, scroll = ${state.isScrollInProgress}, can_scroll = ${state.canScrollForward}, loading = $loading")
-                    if (!state.isScrollInProgress && loadingState) {
-                        if (visibleItemsInfo.isAtBottom()) {
-                            state.requestScrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
-                            // Log.i(TAG, "ChatList: scroll to ${conversationUpdated.messageNodes.lastIndex}")
-                        }
-                    }
+            LaunchedEffect(
+                isAtBottom,
+                loading,
+                state.isScrollInProgress,
+                conversation.messageNodes.lastIndex,
+            ) {
+                if (loading && !state.isScrollInProgress && isAtBottom && conversation.messageNodes.isNotEmpty()) {
+                    state.requestScrollToItem(conversation.messageNodes.lastIndex + 10)
                 }
             }
         }
@@ -772,6 +768,7 @@ private fun BoxScope.MessageJumper(
                         state.scrollToItem(0)
                     }
                 },
+                modifier = Modifier.size(48.dp),
                 shape = CircleShape,
                 tonalElevation = 4.dp,
                 color = luneGlassContainerColor(),
@@ -794,6 +791,7 @@ private fun BoxScope.MessageJumper(
                         )
                     }
                 },
+                modifier = Modifier.size(48.dp),
                 shape = CircleShape,
                 tonalElevation = 4.dp,
                 color = luneGlassContainerColor(),
@@ -812,6 +810,7 @@ private fun BoxScope.MessageJumper(
                         state.animateScrollToItem(state.firstVisibleItemIndex + 1)
                     }
                 },
+                modifier = Modifier.size(48.dp),
                 shape = CircleShape,
                 color = luneGlassContainerColor(),
                 border = BorderStroke(1.dp, luneGlassBorderColor())
@@ -829,6 +828,7 @@ private fun BoxScope.MessageJumper(
                         state.scrollToItem(state.layoutInfo.totalItemsCount - 1)
                     }
                 },
+                modifier = Modifier.size(48.dp),
                 shape = CircleShape,
                 color = luneGlassContainerColor(),
                 border = BorderStroke(1.dp, luneGlassBorderColor()),
