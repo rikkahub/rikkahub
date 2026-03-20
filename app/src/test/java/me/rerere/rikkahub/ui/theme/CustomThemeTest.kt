@@ -77,6 +77,22 @@ class CustomThemeTest {
     }
 
     @Test
+    fun apply_theme_token_overrides_uses_composited_color_when_auto_generating_on_colors() {
+        val base = lightColorScheme(
+            surface = Color.White,
+            onSurface = Color.Black,
+        )
+
+        val updated = base.applyThemeTokenOverrides(
+            parseResult = parseThemeTokenSource("surface: #00000010;"),
+            autoGenerateContentColors = true,
+        )
+
+        assertEquals(Color(0, 0, 0, 16), updated.surface)
+        assertEquals(Color.Black, updated.onSurface)
+    }
+
+    @Test
     fun explicit_on_color_override_wins_over_auto_generated_content_color() {
         val base = lightColorScheme(
             primary = Color(1, 1, 1),
@@ -109,6 +125,21 @@ class CustomThemeTest {
         )
 
         assertEquals(Color.White, result.overrides["onSurface"])
+    }
+
+    @Test
+    fun with_accessible_content_colors_keeps_readable_base_on_color_for_translucent_override() {
+        val base = lightColorScheme(
+            surface = Color.White,
+            onSurface = Color.Black,
+        )
+
+        val result = parseThemeTokenSource("surface: #00000010;").withAccessibleContentColors(
+            baseScheme = base,
+            autoGenerateContentColors = false,
+        )
+
+        assertFalse(result.overrides.containsKey("onSurface"))
     }
 
     @Test

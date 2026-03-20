@@ -24,6 +24,33 @@ fun Color.hasMinimumContrastAgainst(
     return contrastRatioAgainst(background) >= minimumRatio
 }
 
+fun Color.compositeAgainst(background: Color): Color {
+    if (alpha >= 1f) {
+        return this
+    }
+
+    val foregroundAlpha = alpha
+    val backgroundAlpha = background.alpha
+    val resultAlpha = foregroundAlpha + backgroundAlpha * (1f - foregroundAlpha)
+    if (resultAlpha <= 0f) {
+        return Color.Transparent
+    }
+
+    fun compositeChannel(foreground: Float, backgroundChannel: Float): Float {
+        return (
+            foreground * foregroundAlpha +
+                backgroundChannel * backgroundAlpha * (1f - foregroundAlpha)
+            ) / resultAlpha
+    }
+
+    return Color(
+        red = compositeChannel(red, background.red),
+        green = compositeChannel(green, background.green),
+        blue = compositeChannel(blue, background.blue),
+        alpha = resultAlpha,
+    )
+}
+
 fun Color.preferredContentColor(): Color {
     val blackContrast = contrastRatio(Color.Black, this)
     val whiteContrast = contrastRatio(Color.White, this)

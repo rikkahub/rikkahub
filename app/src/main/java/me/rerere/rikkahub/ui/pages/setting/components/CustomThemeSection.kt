@@ -74,6 +74,7 @@ import me.rerere.rikkahub.ui.theme.LocalExtendColors
 import me.rerere.rikkahub.ui.theme.Typography
 import me.rerere.rikkahub.ui.theme.applyThemeTokenOverrides
 import me.rerere.rikkahub.ui.theme.buildThemeTokenTemplate
+import me.rerere.rikkahub.ui.theme.compositeAgainst
 import me.rerere.rikkahub.ui.theme.darkExtendColors
 import me.rerere.rikkahub.ui.theme.formatThemeDimensionTokenValue
 import me.rerere.rikkahub.ui.theme.formatThemeScaleTokenValue
@@ -470,6 +471,12 @@ private fun CustomThemeEditorDialog(
             autoGenerateContentColors = autoGenerateOnColors,
         )
     }
+    val lightPreviewScheme = remember(defaultLightScheme, lightEffectiveParseResult) {
+        defaultLightScheme.applyThemeTokenOverrides(lightEffectiveParseResult)
+    }
+    val darkPreviewScheme = remember(defaultDarkScheme, darkEffectiveParseResult) {
+        defaultDarkScheme.applyThemeTokenOverrides(darkEffectiveParseResult)
+    }
     val currentSource = if (selectedMode == ThemeEditorMode.LIGHT) lightSource else darkSource
     val currentParseResult = if (selectedMode == ThemeEditorMode.LIGHT) lightParseResult else darkParseResult
     val currentEffectiveParseResult = if (selectedMode == ThemeEditorMode.LIGHT) {
@@ -478,9 +485,7 @@ private fun CustomThemeEditorDialog(
         darkEffectiveParseResult
     }
     val currentBaseScheme = if (selectedMode == ThemeEditorMode.LIGHT) defaultLightScheme else defaultDarkScheme
-    val currentPreviewScheme = remember(currentBaseScheme, currentEffectiveParseResult) {
-        currentBaseScheme.applyThemeTokenOverrides(currentEffectiveParseResult)
-    }
+    val currentPreviewScheme = if (selectedMode == ThemeEditorMode.LIGHT) lightPreviewScheme else darkPreviewScheme
     val currentPreviewShapes = remember(currentParseResult) {
         AppShapes.applyThemeTokenOverrides(currentParseResult)
     }
@@ -713,11 +718,11 @@ private fun CustomThemeEditorDialog(
     }
 
     activeColorPicker?.let { picker ->
-        val targetSource = if (picker.mode == ThemeEditorMode.LIGHT) lightSource else darkSource
         val targetBaseScheme = if (picker.mode == ThemeEditorMode.LIGHT) defaultLightScheme else defaultDarkScheme
-        val parseResult = remember(targetSource) { parseThemeTokenSource(targetSource) }
-        val overrideColor = parseResult.overrides[picker.token.key]
-        val effectiveColor = overrideColor ?: targetBaseScheme.themeTokenColor(picker.token.key)
+        val targetParseResult = if (picker.mode == ThemeEditorMode.LIGHT) lightParseResult else darkParseResult
+        val targetPreviewScheme = if (picker.mode == ThemeEditorMode.LIGHT) lightPreviewScheme else darkPreviewScheme
+        val overrideColor = targetParseResult.overrides[picker.token.key]
+        val effectiveColor = targetPreviewScheme.themeTokenColor(picker.token.key)
 
         ThemeColorPickerSheet(
             title = stringResource(picker.token.labelRes),
@@ -1650,6 +1655,10 @@ private fun ThemeColorPickerSheet(
     var pickerColor by remember(initialColor) { mutableStateOf(initialColor) }
     var hexInput by remember(initialColor) { mutableStateOf(initialColor.toCssHex()) }
     var hexError by remember { mutableStateOf(false) }
+    val sheetSurface = MaterialTheme.colorScheme.surface
+    val previewBackground = remember(pickerColor, sheetSurface) {
+        pickerColor.compositeAgainst(sheetSurface)
+    }
 
     fun updateColor(newColor: Color) {
         pickerColor = newColor
@@ -1693,7 +1702,7 @@ private fun ThemeColorPickerSheet(
                     text = pickerColor.toCssHex(),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (pickerColor.luminance() > 0.4f) Color.Black else Color.White,
+                    color = if (previewBackground.luminance() > 0.4f) Color.Black else Color.White,
                 )
             }
 
