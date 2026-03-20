@@ -18,6 +18,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
@@ -47,6 +48,13 @@ import java.util.Locale
 import kotlin.time.Clock
 
 private const val TAG = "GenerationHandler"
+
+internal fun Model.disableReasoningForTranslation(): Model {
+    if (abilities.none { it == ModelAbility.REASONING }) return this
+    return copy(
+        abilities = abilities.filterNot { it == ModelAbility.REASONING }
+    )
+}
 
 @Serializable
 sealed interface GenerationChunk {
@@ -447,7 +455,8 @@ class GenerationHandler(
     ): Flow<String> = flow {
         val model = settings.providers.findModelById(settings.translateModeId)
             ?: error("Translation model not found")
-        val provider = model.findProvider(settings.providers)
+        val translationModel = model.disableReasoningForTranslation()
+        val provider = translationModel.findProvider(settings.providers)
             ?: error("Translation provider not found")
 
         val providerHandler = providerManager.getProviderByType(provider)
@@ -466,7 +475,7 @@ class GenerationHandler(
                 providerSetting = provider,
                 messages = messages,
                 params = TextGenerationParams(
-                    model = model,
+                    model = translationModel,
                     temperature = 0.3f,
                 ),
             ).collect { chunk ->
@@ -485,7 +494,7 @@ class GenerationHandler(
                 providerSetting = provider,
                 messages = messages,
                 params = TextGenerationParams(
-                    model = model,
+                    model = translationModel,
                     temperature = 0.3f,
                     topP = 0.95f,
                     customBody = listOf(
