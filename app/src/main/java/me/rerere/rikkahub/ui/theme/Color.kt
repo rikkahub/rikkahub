@@ -174,13 +174,31 @@ fun darkExtendColors(): ExtendColors = ExtendColors(
 object CustomColors {
     var black = false
 
+    fun readableContentColorForContainer(
+        containerColor: Color,
+        preferredColor: Color,
+        backgroundColor: Color,
+    ): Color {
+        val effectiveContainer = containerColor.compositeAgainst(backgroundColor)
+        return if (preferredColor.hasMinimumContrastAgainst(effectiveContainer)) {
+            preferredColor
+        } else {
+            effectiveContainer.preferredContentColor()
+        }
+    }
+
     @Composable
     fun cardColorsForContainer(
         containerColor: Color,
-        contentColor: Color = colorScheme.onSurface,
+        contentColor: Color? = null,
+        backgroundColor: Color = colorScheme.surface,
     ): CardColors = CardDefaults.cardColors(
         containerColor = containerColor,
-        contentColor = contentColor,
+        contentColor = contentColor ?: readableContentColorForContainer(
+            containerColor = containerColor,
+            preferredColor = colorScheme.onSurface,
+            backgroundColor = backgroundColor,
+        ),
     )
 
     val topBarColors: TopAppBarColors

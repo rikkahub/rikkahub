@@ -332,4 +332,26 @@ class CustomThemeTest {
         assertEquals(Color(7, 8, 9), scheme.themeTokenColor("outlineVariant"))
         assertEquals(Color(10, 11, 12), scheme.themeTokenColor("errorContainer"))
     }
+
+    @Test
+    fun readable_content_color_for_container_keeps_preferred_color_when_contrast_is_sufficient() {
+        val result = CustomColors.readableContentColorForContainer(
+            containerColor = Color(0xFF202020),
+            preferredColor = Color(0xFFE7EDF7),
+            backgroundColor = Color.Black,
+        )
+
+        assertEquals(Color(0xFFE7EDF7), result)
+    }
+
+    @Test
+    fun readable_content_color_for_container_falls_back_when_preferred_color_loses_contrast() {
+        val result = CustomColors.readableContentColorForContainer(
+            containerColor = Color(0xFF202020),
+            preferredColor = Color.Black,
+            backgroundColor = Color.Black,
+        )
+
+        assertEquals(Color.White, result)
+    }
 }
