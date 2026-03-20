@@ -259,6 +259,8 @@ private fun ConversationItem(
     } else {
         luneGlassContainerColor().copy(alpha = 0.72f)
     }
+    val titleColor = MaterialTheme.colorScheme.onSurface
+    val metadataColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
     var showDropdownMenu by remember {
         mutableStateOf(false)
     }
@@ -287,13 +289,14 @@ private fun ConversationItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium,
+                    color = titleColor,
                 )
                 Text(
                     text = conversation.createAt.toLocalDateTime(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f),
+                    color = metadataColor,
                 )
             }
             Spacer(Modifier.size(8.dp))
