@@ -186,6 +186,19 @@ val DEFAULT_PROVIDERS = listOf(
         )
     ),
     ProviderSetting.OpenAI(
+        id = Uuid.parse("386e0f29-8228-4512-affe-8fd8add82d88"),
+        name = "Vercel AI Gateway",
+        baseUrl = "https://ai-gateway.vercel.sh/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        balanceOption = BalanceOption(
+            enabled = true,
+            apiPath = "/credits",
+            resultPath = "balance",
+        )
+    ),
+    ProviderSetting.OpenAI(
         id = Uuid.parse("da020a90-f7b3-4c29-b90e-c511a0630630"),
         name = "小马算力",
         baseUrl = "https://api.tokenpony.cn/v1",
