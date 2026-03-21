@@ -983,5 +983,14 @@
   <string name="setting_display_page_chat_font_family_default">Default</string>
   <string name="setting_display_page_chat_font_family_serif">Serif</string>
   <string name="setting_display_page_chat_font_family_monospace">Monospace</string>
+  <string name="skill_detail_page_delete_file">Delete File</string>
+  <string name="skill_detail_page_delete_failed">Delete failed</string>
+  <string name="skill_detail_page_delete_confirm">Are you sure you want to delete file "%s"?</string>
+  <string name="skill_detail_page_content">Content</string>
+  <string name="skill_detail_page_save">Save</string>
+  <string name="skill_detail_page_new_file">New File</string>
+  <string name="skill_detail_page_file_name">File Name</string>
+  <string name="skill_detail_page_file_name_invalid">Invalid file name</string>
+  <string name="skill_detail_page_create">Create</string>
 </resources>
 

@@ -978,5 +978,14 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_chat_font_family_default">デフォルト</string>
   <string name="setting_display_page_chat_font_family_serif">明朝体</string>
   <string name="setting_display_page_chat_font_family_monospace">等幅</string>
+  <string name="skill_detail_page_delete_file">ファイルを削除</string>
+  <string name="skill_detail_page_delete_failed">削除に失敗しました</string>
+  <string name="skill_detail_page_delete_confirm">ファイル"%s"を削除してもよろしいですか？</string>
+  <string name="skill_detail_page_content">コンテンツ</string>
+  <string name="skill_detail_page_save">保存</string>
+  <string name="skill_detail_page_new_file">新規ファイル</string>
+  <string name="skill_detail_page_file_name">ファイル名</string>
+  <string name="skill_detail_page_file_name_invalid">無効なファイル名</string>
+  <string name="skill_detail_page_create">作成</string>
 </resources>
 

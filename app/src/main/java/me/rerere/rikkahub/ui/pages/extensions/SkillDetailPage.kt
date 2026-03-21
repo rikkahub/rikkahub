@@ -35,10 +35,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
+import me.rerere.rikkahub.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
@@ -68,6 +70,7 @@ fun SkillDetailPage(skillName: String) {
     var editingFile by remember { mutableStateOf<SkillFile?>(null) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillFile?>(null) }
+    val deleteFailedMsg = stringResource(R.string.skill_detail_page_delete_failed)
 
     Scaffold(
         topBar = {
@@ -129,20 +132,20 @@ fun SkillDetailPage(skillName: String) {
 
     RikkaConfirmDialog(
         show = deleteTarget != null,
-        title = "删除文件",
-        confirmText = "删除",
-        dismissText = "取消",
+        title = stringResource(R.string.skill_detail_page_delete_file),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
         onConfirm = {
             deleteTarget?.let { skillFile ->
                 vm.deleteFile(skillFile) { success ->
-                    if (!success) toaster.show("删除失败")
+                    if (!success) toaster.show(deleteFailedMsg)
                 }
             }
             deleteTarget = null
         },
         onDismiss = { deleteTarget = null },
     ) {
-        Text("确定要删除文件 \"${deleteTarget?.relativePath}\" 吗？")
+        Text(stringResource(R.string.skill_detail_page_delete_confirm, deleteTarget?.relativePath ?: ""))
     }
 }
 
@@ -211,7 +214,7 @@ private fun FileItem(
             IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
                 Icon(
                     imageVector = Lucide.FilePen,
-                    contentDescription = "编辑",
+                    contentDescription = stringResource(R.string.edit),
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -219,7 +222,7 @@ private fun FileItem(
                 IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = Lucide.Trash2,
-                        contentDescription = "删除",
+                        contentDescription = stringResource(R.string.delete),
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.error,
                     )
@@ -301,7 +304,7 @@ private fun EditFileDialog(
             OutlinedTextField(
                 value = content,
                 onValueChange = { content = it },
-                label = { Text("内容") },
+                label = { Text(stringResource(R.string.skill_detail_page_content)) },
                 minLines = 10,
                 maxLines = 20,
                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
@@ -309,10 +312,10 @@ private fun EditFileDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(content) }) { Text("保存") }
+            TextButton(onClick = { onConfirm(content) }) { Text(stringResource(R.string.skill_detail_page_save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
 }
@@ -328,17 +331,17 @@ private fun AddFileDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("新建文件") },
+        title = { Text(stringResource(R.string.skill_detail_page_new_file)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = fileName,
                     onValueChange = { fileName = it },
-                    label = { Text("文件名") },
+                    label = { Text(stringResource(R.string.skill_detail_page_file_name)) },
                     placeholder = { Text("examples/basic.md", fontFamily = FontFamily.Monospace) },
                     supportingText = {
                         if (fileNameError) Text(
-                            "文件名不合法",
+                            stringResource(R.string.skill_detail_page_file_name_invalid),
                             color = MaterialTheme.colorScheme.error,
                         )
                     },
@@ -351,7 +354,7 @@ private fun AddFileDialog(
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    label = { Text("内容") },
+                    label = { Text(stringResource(R.string.skill_detail_page_content)) },
                     minLines = 6,
                     maxLines = 14,
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
@@ -364,11 +367,11 @@ private fun AddFileDialog(
                 onClick = { onConfirm(fileName.trim(), content) },
                 enabled = fileName.isNotBlank() && !fileNameError,
             ) {
-                Text("创建")
+                Text(stringResource(R.string.skill_detail_page_create))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
 }

@@ -971,5 +971,14 @@
   <string name="setting_display_page_chat_font_family_default">По умолчанию</string>
   <string name="setting_display_page_chat_font_family_serif">С засечками</string>
   <string name="setting_display_page_chat_font_family_monospace">Моноширинный</string>
+  <string name="skill_detail_page_delete_file">Удалить файл</string>
+  <string name="skill_detail_page_delete_failed">Не удалось удалить</string>
+  <string name="skill_detail_page_delete_confirm">Вы уверены, что хотите удалить файл "%s"?</string>
+  <string name="skill_detail_page_content">Контент</string>
+  <string name="skill_detail_page_save">Сохранить</string>
+  <string name="skill_detail_page_new_file">Новый файл</string>
+  <string name="skill_detail_page_file_name">Имя файла</string>
+  <string name="skill_detail_page_file_name_invalid">Неверное имя файла</string>
+  <string name="skill_detail_page_create">Создать</string>
 </resources>
 

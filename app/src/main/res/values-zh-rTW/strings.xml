@@ -976,5 +976,14 @@
   <string name="setting_display_page_chat_font_family_default">預設</string>
   <string name="setting_display_page_chat_font_family_serif">Serif</string>
   <string name="setting_display_page_chat_font_family_monospace">等寬字體</string>
+  <string name="skill_detail_page_delete_file">刪除檔案</string>
+  <string name="skill_detail_page_delete_failed">刪除失敗</string>
+  <string name="skill_detail_page_delete_confirm">確定要刪除檔案「%s」嗎？</string>
+  <string name="skill_detail_page_content">內容</string>
+  <string name="skill_detail_page_save">儲存</string>
+  <string name="skill_detail_page_new_file">新增檔案</string>
+  <string name="skill_detail_page_file_name">檔案名稱</string>
+  <string name="skill_detail_page_file_name_invalid">檔案名稱無效</string>
+  <string name="skill_detail_page_create">建立</string>
 </resources>
 
