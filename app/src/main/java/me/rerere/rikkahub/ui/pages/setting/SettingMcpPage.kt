@@ -271,7 +271,8 @@ private fun McpServerItem(
     ) {
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = CustomColors.listItemColors.containerColor
+                containerColor = CustomColors.listItemColors.containerColor,
+                contentColor = MaterialTheme.colorScheme.onSurface,
             )
         ) {
             Row(
@@ -801,7 +802,8 @@ private fun McpToolCard(
     var expanded by remember { mutableStateOf(false) }
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor
+            containerColor = CustomColors.listItemColors.containerColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         )
     ) {
         Column(

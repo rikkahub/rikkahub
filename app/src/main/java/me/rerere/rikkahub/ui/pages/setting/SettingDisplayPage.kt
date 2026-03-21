@@ -125,7 +125,8 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = CustomColors.topBarColors.containerColor
+        containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { contentPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

@@ -182,6 +182,7 @@ fun SettingWebPage() {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

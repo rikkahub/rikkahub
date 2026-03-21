@@ -205,6 +205,11 @@ object CustomColors {
         @Composable get() = ListItemDefaults.colors(
             containerColor = colorScheme.surfaceColorAtElevation(1.dp).copy(
                 alpha = if (LocalDarkMode.current) 0.52f else 0.88f
-            )
+            ),
+            headlineColor = colorScheme.onSurface,
+            overlineColor = colorScheme.onSurfaceVariant,
+            supportingColor = colorScheme.onSurfaceVariant,
+            leadingIconColor = colorScheme.onSurfaceVariant,
+            trailingIconColor = colorScheme.onSurfaceVariant,
         )
 }

@@ -229,6 +229,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -608,7 +609,14 @@ private fun ProviderItem(
         colors = CardDefaults.cardColors(
             containerColor = if (provider.enabled) {
                 CustomColors.listItemColors.containerColor
-            } else MaterialTheme.colorScheme.errorContainer,
+            } else {
+                MaterialTheme.colorScheme.errorContainer
+            },
+            contentColor = if (provider.enabled) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onErrorContainer
+            },
         ),
         onClick = {
             onClick()

@@ -657,7 +657,8 @@ private fun ModelFeatureCard(
     OutlinedCard(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.outlinedCardColors(
-            containerColor = CustomColors.listItemColors.containerColor
+            containerColor = CustomColors.listItemColors.containerColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         )
     ) {
         Column(

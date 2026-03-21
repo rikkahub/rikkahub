@@ -79,6 +79,7 @@ fun AssistantMemoryPage(id: String) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         AssistantMemoryContent(
             modifier = Modifier.padding(innerPadding),

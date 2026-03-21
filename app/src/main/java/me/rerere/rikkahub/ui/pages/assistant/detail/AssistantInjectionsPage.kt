@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -49,6 +50,7 @@ fun AssistantInjectionsPage(id: String) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         InjectionSelector(
             modifier = Modifier

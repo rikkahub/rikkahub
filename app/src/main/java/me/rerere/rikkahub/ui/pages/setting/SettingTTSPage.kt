@@ -103,6 +103,7 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         val lazyListState = rememberLazyListState()
         val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -334,7 +335,12 @@ private fun TTSProviderItem(
                 MaterialTheme.colorScheme.primaryContainer
             } else {
                 CustomColors.listItemColors.containerColor
-            }
+            },
+            contentColor = if (isSelected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
         )
     ) {
         Column(

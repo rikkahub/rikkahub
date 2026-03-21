@@ -195,7 +195,10 @@ private fun FileItem(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = CustomColors.listItemColors.containerColor)
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
     ) {
         Column {
             Box(

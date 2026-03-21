@@ -89,6 +89,7 @@ fun SettingAboutPage() {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         EmojiBurstHost(
             modifier = Modifier.fillMaxSize(),

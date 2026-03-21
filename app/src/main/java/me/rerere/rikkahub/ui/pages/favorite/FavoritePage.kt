@@ -78,6 +78,7 @@ fun FavoritePage(vm: FavoriteVM = koinViewModel()) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         if (favorites.isEmpty()) {
             Box(

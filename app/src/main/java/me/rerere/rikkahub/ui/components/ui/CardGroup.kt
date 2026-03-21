@@ -178,6 +178,7 @@ private fun CardGroupPreview() {
             )
         },
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         Column(
             modifier = Modifier

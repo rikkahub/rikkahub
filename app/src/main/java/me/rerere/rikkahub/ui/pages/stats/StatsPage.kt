@@ -68,6 +68,7 @@ fun StatsPage(vm: StatsVM = koinViewModel()) {
             )
         },
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { padding ->
         if (stats.isLoading) {
             Box(

@@ -227,7 +227,8 @@ private fun SearchProviderCard(
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor
+            containerColor = CustomColors.listItemColors.containerColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         )
     ) {
         Column(
@@ -552,7 +553,8 @@ private fun CommonOptions(
     }
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor
+            containerColor = CustomColors.listItemColors.containerColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         )
     ) {
         Column(
