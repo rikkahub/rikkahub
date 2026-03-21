@@ -52,8 +52,10 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
@@ -61,6 +63,7 @@ import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun SkillsPage() {
+    val navController = LocalNavController.current
     val vm = koinViewModel<SkillsVM>()
     val skills by vm.skills.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -135,6 +138,7 @@ fun SkillsPage() {
             items(skills, key = { it.name }) { skill ->
                 SkillCard(
                     skill = skill,
+                    onClick = { navController.navigate(Screen.SkillDetail(skill.name)) },
                     onDelete = { deleteTarget = skill },
                 )
             }
@@ -189,11 +193,13 @@ fun SkillsPage() {
 @Composable
 private fun SkillCard(
     skill: SkillMetadata,
+    onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {

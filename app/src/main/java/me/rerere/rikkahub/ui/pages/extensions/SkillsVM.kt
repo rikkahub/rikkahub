@@ -10,6 +10,8 @@ import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
+import java.util.LinkedHashMap
+import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -51,33 +53,100 @@ class SkillsVM(
     fun importSkillFromGitHub(repoUrl: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val rawUrl = parseGitHubUrl(repoUrl) ?: run {
+                val info = parseGitHubUrl(repoUrl) ?: run {
                     withContext(Dispatchers.Main) { onResult(false, "无效的 GitHub 仓库链接") }
                     return@launch
                 }
-                val content = downloadText(rawUrl) ?: run {
-                    withContext(Dispatchers.Main) { onResult(false, "下载失败，请检查链接或网络") }
+
+                // Collect all files recursively via GitHub Contents API
+                val files = mutableListOf<Pair<String, String>>() // relativePath -> downloadUrl
+                val listed = listFilesRecursively(info.owner, info.repo, info.branch, info.path, info.path, files)
+                if (!listed) {
+                    withContext(Dispatchers.Main) { onResult(false, "读取 GitHub 目录失败") }
                     return@launch
                 }
-                val frontmatter = SkillFrontmatterParser.parse(content)
+
+                val skillMdEntry = files.find { it.first == "SKILL.md" } ?: run {
+                    withContext(Dispatchers.Main) { onResult(false, "目录中未找到 SKILL.md") }
+                    return@launch
+                }
+
+                val skillMdContent = downloadText(skillMdEntry.second) ?: run {
+                    withContext(Dispatchers.Main) { onResult(false, "下载 SKILL.md 失败，请检查链接或网络") }
+                    return@launch
+                }
+
+                val frontmatter = SkillFrontmatterParser.parse(skillMdContent)
                 val name = frontmatter["name"]
                 if (name.isNullOrBlank()) {
                     withContext(Dispatchers.Main) { onResult(false, "SKILL.md 格式错误：缺少 name 字段") }
                     return@launch
                 }
-                val result = skillManager.saveSkill(name, content)
-                _skills.value = skillManager.listSkills()
-                withContext(Dispatchers.Main) {
-                    if (result != null) onResult(true, name)
-                    else onResult(false, "保存失败")
+
+                val fileContents = LinkedHashMap<String, String>()
+                for ((relativePath, downloadUrl) in files) {
+                    val content = downloadText(downloadUrl)
+                    if (content == null) {
+                        withContext(Dispatchers.Main) { onResult(false, "下载文件失败：$relativePath") }
+                        return@launch
+                    }
+                    fileContents[relativePath] = content
                 }
+
+                val saved = skillManager.saveSkillFilesAtomically(name, fileContents)
+                if (!saved) {
+                    withContext(Dispatchers.Main) { onResult(false, "保存失败") }
+                    return@launch
+                }
+
+                _skills.value = skillManager.listSkills()
+                withContext(Dispatchers.Main) { onResult(true, name) }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) { onResult(false, e.message ?: "未知错误") }
             }
         }
     }
 
-    private fun parseGitHubUrl(url: String): String? {
+    private fun listFilesRecursively(
+        owner: String,
+        repo: String,
+        branch: String,
+        dirPath: String,
+        basePath: String,
+        result: MutableList<Pair<String, String>>,
+    ): Boolean {
+        val apiUrl = "https://api.github.com/repos/$owner/$repo/contents/$dirPath?ref=$branch"
+        val json = downloadText(apiUrl) ?: return false
+        val array = JSONArray(json)
+        for (i in 0 until array.length()) {
+            val item = array.getJSONObject(i)
+            val type = item.getString("type")
+            val itemPath = item.getString("path")
+            val relativePath = itemPath.removePrefix("$basePath/").removePrefix(basePath)
+            when (type) {
+                "file" -> {
+                    val downloadUrl = item.optString("download_url").takeIf { it.isNotBlank() }
+                        ?: return false
+                    result.add(relativePath to downloadUrl)
+                }
+
+                "dir" -> {
+                    val ok = listFilesRecursively(owner, repo, branch, itemPath, basePath, result)
+                    if (!ok) return false
+                }
+            }
+        }
+        return true
+    }
+
+    private data class GitHubRepoInfo(
+        val owner: String,
+        val repo: String,
+        val branch: String,
+        val path: String,
+    )
+
+    private fun parseGitHubUrl(url: String): GitHubRepoInfo? {
         val trimmed = url.trim().trimEnd('/')
         // https://github.com/owner/repo
         // https://github.com/owner/repo/tree/branch
@@ -88,14 +157,14 @@ class SkillsVM(
         val repo = match.groupValues[2]
         val branch = match.groupValues[3].ifBlank { "HEAD" }
         val subPath = match.groupValues[4].trimStart('/')
-        val skillPath = if (subPath.isBlank()) "SKILL.md" else "$subPath/SKILL.md"
-        return "https://raw.githubusercontent.com/$owner/$repo/$branch/$skillPath"
+        return GitHubRepoInfo(owner, repo, branch, subPath)
     }
 
     private fun downloadText(url: String): String? {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = 10_000
-        connection.readTimeout = 10_000
+        connection.readTimeout = 30_000
+        connection.setRequestProperty("Accept", "application/vnd.github+json")
         return try {
             if (connection.responseCode == 200) connection.inputStream.bufferedReader().readText()
             else null

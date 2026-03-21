@@ -72,6 +72,67 @@ class SkillManager(
         deleted
     }
 
+    fun getSkillDir(skillName: String): File? = resolveSkillDir(skillName)
+
+    fun saveSkillFile(skillName: String, relativePath: String, content: String): Boolean {
+        val skillDir = resolveSkillDir(skillName) ?: return false
+        val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
+        target.parentFile?.mkdirs()
+        target.writeText(content)
+        return true
+    }
+
+    fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
+        val skillsDir = getSkillsDir()
+        val targetDir = resolveSkillDir(skillName) ?: return false
+        val stagingDir = createTempSkillDir(skillsDir, skillName, "staging") ?: return false
+        var backupDir: File? = null
+
+        try {
+            for ((relativePath, content) in files) {
+                val target = SkillPaths.resolveSkillFile(stagingDir, relativePath) ?: return false
+                target.parentFile?.mkdirs()
+                target.writeText(content)
+            }
+
+            if (!stagingDir.resolve("SKILL.md").exists()) return false
+
+            if (targetDir.exists()) {
+                backupDir = createTempSkillDir(skillsDir, skillName, "backup") ?: return false
+                if (!targetDir.renameTo(backupDir)) return false
+            }
+
+            if (!stagingDir.renameTo(targetDir)) {
+                if (backupDir != null && !targetDir.exists()) {
+                    backupDir.renameTo(targetDir)
+                }
+                return false
+            }
+
+            backupDir?.deleteRecursively()
+            return true
+        } catch (e: Exception) {
+            Log.w(TAG, "saveSkillFilesAtomically: Failed to save $skillName", e)
+            if (backupDir != null && !targetDir.exists()) {
+                backupDir.renameTo(targetDir)
+            }
+            return false
+        } finally {
+            if (stagingDir.exists()) {
+                stagingDir.deleteRecursively()
+            }
+            if (backupDir?.exists() == true && targetDir.exists()) {
+                backupDir.deleteRecursively()
+            }
+        }
+    }
+
+    fun deleteSkillFile(skillName: String, relativePath: String): Boolean {
+        val skillDir = resolveSkillDir(skillName) ?: return false
+        val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
+        return target.delete()
+    }
+
     fun resolveSkillFile(skillName: String, relativePath: String): File? {
         val skillDir = resolveSkillDir(skillName) ?: return null
         return SkillPaths.resolveSkillFile(skillDir, relativePath)
@@ -79,6 +140,16 @@ class SkillManager(
 
     private fun resolveSkillDir(skillName: String): File? {
         return SkillPaths.resolveSkillDir(getSkillsDir(), skillName)
+    }
+
+    private fun createTempSkillDir(skillsRoot: File, skillName: String, suffix: String): File? {
+        repeat(100) { attempt ->
+            val candidate = skillsRoot.resolve(".$skillName.$suffix.$attempt.tmp")
+            if (!candidate.exists() && candidate.mkdirs()) {
+                return candidate
+            }
+        }
+        return null
     }
 
     private fun parseSkillFile(skillFile: File, skillDir: File): SkillMetadata? {

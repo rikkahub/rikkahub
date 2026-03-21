@@ -82,6 +82,7 @@ import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
+import me.rerere.rikkahub.ui.pages.extensions.SkillDetailPage
 import me.rerere.rikkahub.ui.pages.extensions.SkillsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
@@ -422,6 +423,10 @@ class RouteActivity : ComponentActivity() {
                                 SkillsPage()
                             }
 
+                            entry<Screen.SkillDetail> { key ->
+                                SkillDetailPage(skillName = key.skillName)
+                            }
+
                             entry<Screen.MessageSearch> {
                                 SearchPage()
                             }
@@ -592,6 +597,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Skills : Screen
+
+    @Serializable
+    data class SkillDetail(val skillName: String) : Screen
 
     @Serializable
     data object MessageSearch : Screen
