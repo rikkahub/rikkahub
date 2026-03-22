@@ -76,7 +76,7 @@ sealed class ConversationListItem {
 
 @Composable
 fun ColumnScope.ConversationList(
-    currentConversationId: Uuid,
+    current: Conversation,
     conversations: LazyPagingItems<ConversationListItem>,
     conversationJobs: Collection<Uuid>,
     listState: LazyListState,
@@ -88,12 +88,12 @@ fun ColumnScope.ConversationList(
     onPin: (Conversation) -> Unit = {},
     onMoveToAssistant: (Conversation) -> Unit = {}
 ) {
-    var hasScrolledToCurrent by remember(currentConversationId) { mutableStateOf(false) }
+    var hasScrolledToCurrent by remember(current.id) { mutableStateOf(false) }
 
-    LaunchedEffect(currentConversationId, conversations.itemCount, hasScrolledToCurrent) {
+    LaunchedEffect(current.id, conversations.itemCount, hasScrolledToCurrent) {
         if (hasScrolledToCurrent) return@LaunchedEffect
         val currentIndex = conversations.itemSnapshotList.items.indexOfFirst {
-            (it as? ConversationListItem.Item)?.conversation?.id == currentConversationId
+            (it as? ConversationListItem.Item)?.conversation?.id == current.id
         }
         if (currentIndex >= 0) {
             val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == currentIndex }
@@ -162,7 +162,7 @@ fun ColumnScope.ConversationList(
                 is ConversationListItem.Item -> {
                     ConversationItem(
                         conversation = item.conversation,
-                        selected = item.conversation.id == currentConversationId,
+                        selected = item.conversation.id == current.id,
                         loading = item.conversation.id in conversationJobs,
                         onClick = onClick,
                         onDelete = onDelete,

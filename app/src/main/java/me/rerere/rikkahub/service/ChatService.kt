@@ -815,11 +815,7 @@ class ChatService(
                     },
                     updateAt = Instant.now()
                 )
-                updateConversation(
-                    conversationId = conversationId,
-                    conversation = updatedConversation,
-                    checkDeletedFiles = false,
-                )
+                updateConversation(conversationId, updatedConversation)
                 val hasPendingToolApproval =
                     findPendingApprovalTool(updatedConversation.currentMessages) != null
 
@@ -840,11 +836,7 @@ class ChatService(
                             findPendingApprovalTool(getConversationFlow(conversationId).value.currentMessages)?.toolCallId
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunk.messages)
-                        updateConversation(
-                            conversationId = conversationId,
-                            conversation = updatedConversation,
-                            checkDeletedFiles = false,
-                        )
+                        updateConversation(conversationId, updatedConversation)
                         val pendingTool = findPendingApprovalTool(updatedConversation.currentMessages)
                         when {
                             pendingTool == null -> cancelToolApprovalNotification(conversationId)
@@ -1292,16 +1284,10 @@ class ChatService(
 
     // ---- 对话状态更新 ----
 
-    private fun updateConversation(
-        conversationId: Uuid,
-        conversation: Conversation,
-        checkDeletedFiles: Boolean = true,
-    ) {
+    private fun updateConversation(conversationId: Uuid, conversation: Conversation) {
         if (conversation.id != conversationId) return
         val session = getOrCreateSession(conversationId)
-        if (checkDeletedFiles) {
-            checkFilesDelete(conversation, session.state.value)
-        }
+        checkFilesDelete(conversation, session.state.value)
         session.state.value = conversation
     }
 

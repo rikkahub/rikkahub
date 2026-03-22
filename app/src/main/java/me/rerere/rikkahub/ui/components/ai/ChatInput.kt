@@ -136,6 +136,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.ui.InjectionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
@@ -160,7 +161,7 @@ import kotlin.uuid.Uuid
 fun ChatInput(
     state: ChatInputState,
     loading: Boolean,
-    messageCount: Int,
+    conversation: Conversation,
     settings: Settings,
     mcpManager: McpManager,
     hazeState: HazeState?,
@@ -452,7 +453,7 @@ fun ChatInput(
                     .fillMaxHeight(0.7f)
             ) {
                 FilesPicker(
-                    messageCount = messageCount,
+                    conversation = conversation,
                     state = state,
                     assistant = assistant,
                     onCompressContext = onCompressContext,
@@ -883,7 +884,7 @@ private fun attachmentNameFromUrl(
 
 @Composable
 private fun FilesPicker(
-    messageCount: Int,
+    conversation: Conversation,
     assistant: Assistant,
     state: ChatInputState,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
@@ -992,9 +993,9 @@ private fun FilesPicker(
                 Text(stringResource(R.string.chat_page_compress_context))
             },
             trailingContent = {
-                if (messageCount > 0) {
+                if (conversation.messageNodes.isNotEmpty()) {
                     Text(
-                        text = stringResource(R.string.chat_page_message_count, messageCount),
+                        text = stringResource(R.string.chat_page_message_count, conversation.messageNodes.size),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

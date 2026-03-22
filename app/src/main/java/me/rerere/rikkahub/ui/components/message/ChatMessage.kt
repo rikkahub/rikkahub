@@ -378,14 +378,11 @@ private fun MessagePartsBlock(
             }
         }
     }
-    LaunchedEffect(loading, settings.displaySetting.enableMessageGenerationHapticEffect) {
-        if (!loading || !settings.displaySetting.enableMessageGenerationHapticEffect) {
-            return@LaunchedEffect
-        }
+    LaunchedEffect(settings.displaySetting) {
         snapshotFlow { partsState }
             .debounce(50.milliseconds)
             .collect { parts ->
-                if (parts.isNotEmpty()) {
+                if (parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.KeyboardTap)
                 }
             }

@@ -82,15 +82,14 @@ import androidx.compose.ui.zIndex
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
@@ -219,15 +218,7 @@ private fun ChatListNormal(
     val scope = rememberCoroutineScope()
     var isRecentScroll by remember { mutableStateOf(false) }
     val density = LocalDensity.current
-    val enableGlassBlur = settings.displaySetting.enableBlurEffect
-    val currentAssistant = remember(settings.assistants, conversation.assistantId) {
-        settings.getAssistantById(conversation.assistantId)
-    }
-    val modelsById = remember(settings.providers) {
-        settings.providers
-            .flatMap { provider -> provider.models }
-            .associateBy { model -> model.id }
-    }
+    val enableGlassBlur = settings.displaySetting.enableBlurEffect && !state.isScrollInProgress
     val isAtBottom by remember(state, density, innerPadding) {
         derivedStateOf {
             val lastItem = state.layoutInfo.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf false
@@ -341,8 +332,8 @@ private fun ChatListNormal(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .widthIn(max = 760.dp),
-                            model = node.currentMessage.modelId?.let(modelsById::get),
-                            assistant = currentAssistant,
+                            model = node.currentMessage.modelId?.let { settings.findModelById(it) },
+                            assistant = settings.getAssistantById(conversation.assistantId),
                             loading = loading && index == conversation.messageNodes.lastIndex,
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)
@@ -600,22 +591,14 @@ private fun ChatListPreview(
     onJumpToMessage: (Int) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    var filteredMessages by remember(conversation.messageNodes) {
-        mutableStateOf(conversation.messageNodes.mapIndexed { index, node -> index to node })
-    }
 
-    // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找。
-    LaunchedEffect(conversation.messageNodes, searchQuery) {
-        val query = searchQuery.trim()
-        filteredMessages = withContext(Dispatchers.Default) {
-            val indexedMessages = conversation.messageNodes.mapIndexed { index, node -> index to node }
-            if (query.isBlank()) {
-                indexedMessages
-            } else {
-                indexedMessages.filter { (_, node) ->
-                    node.currentMessage.previewText().contains(query, ignoreCase = true)
-                }
-            }
+    // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找
+    val filteredMessages = remember(conversation.messageNodes, searchQuery) {
+        if (searchQuery.isBlank()) {
+            conversation.messageNodes.mapIndexed { index, node -> index to node }
+        } else {
+            conversation.messageNodes.mapIndexed { index, node -> index to node }
+                .filter { (_, node) -> node.currentMessage.previewText().contains(searchQuery, ignoreCase = true) }
         }
     }
 
