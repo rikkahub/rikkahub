@@ -80,10 +80,13 @@ import me.rerere.rikkahub.ui.components.ui.LuneBackdrop
 import me.rerere.rikkahub.ui.components.ui.LuneSection
 import me.rerere.rikkahub.ui.components.ui.LuneTopBarSurface
 import me.rerere.rikkahub.ui.components.ui.Select
+import me.rerere.rikkahub.ui.components.ui.icons.DiscordIcon
+import me.rerere.rikkahub.ui.components.ui.icons.TencentQQIcon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
 import me.rerere.rikkahub.ui.theme.ColorMode
+import me.rerere.rikkahub.utils.joinQQGroup
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -502,6 +505,35 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                                 item(
                                     onClick = { navController.navigate(Screen.SettingAbout) },
                                     leadingContent = { Icon(HugeIcons.Clapping01, null) },
+                                    trailingContent = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    context.joinQQGroup("Qsm0whzbPsm1UyNpR683ulLyMZ2Pqrw0")
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = TencentQQIcon,
+                                                    contentDescription = "QQ",
+                                                    tint = MaterialTheme.colorScheme.secondary,
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    context.openUrl("https://discord.gg/9weBqxe5c4")
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = DiscordIcon,
+                                                    contentDescription = "Discord",
+                                                    tint = MaterialTheme.colorScheme.secondary,
+                                                )
+                                            }
+                                        }
+                                    },
                                     supportingContent = { Text(aboutDesc) },
                                     headlineContent = { Text(aboutTitle) },
                                 )

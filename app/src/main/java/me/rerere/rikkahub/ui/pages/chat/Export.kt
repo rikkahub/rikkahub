@@ -248,7 +248,7 @@ private fun exportToMarkdown(
     conversation: Conversation,
     messages: List<UIMessage>
 ) {
-    val filename = "chat-export-${LocalDateTime.now().toLocalString()}.md"
+    val filename = "chat-export-${LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))}.md"
 
     val sb = buildAnnotatedString {
         append("# ${conversation.title}\n\n")
@@ -403,7 +403,7 @@ private suspend fun exportToImage(
     settings: Settings,
     options: ImageExportOptions = ImageExportOptions()
 ) {
-    val filename = "chat-export-${LocalDateTime.now().toLocalString()}.png"
+    val filename = "chat-export-${LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))}.png"
     val composer = BitmapComposer(scope)
     val activity = context.getActivity()
     if (activity == null) {
