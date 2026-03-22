@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import java.io.BufferedInputStream
 import java.io.InputStream
+import java.nio.charset.CodingErrorAction
 import java.util.Base64
 import java.util.UUID
 import java.util.zip.ZipInputStream
@@ -476,7 +477,7 @@ class SkillsRepository(
             require(parts.size == 3) { "Failed to parse file content" }
             val sizeBytes = parts[0].trim().toLongOrNull() ?: 0L
             val name = decodeBase64Utf8(parts[1])
-            val content = decodeBase64Utf8(parts[2])
+            val content = decodeBase64Utf8Strict(parts[2])
 
             WorkdirTextFileDocument(
                 name = name,
@@ -1061,14 +1062,10 @@ class SkillsRepository(
               echo "File is too large to edit in-app (${WORKDIR_TEXT_EDIT_MAX_BYTES} bytes max)" >&2
               exit 1
             fi
-            if [ -s "${'$'}FILE_REAL" ] && ! grep -Iq . "${'$'}FILE_REAL"; then
-              echo "Binary files are not supported for in-app editing" >&2
-              exit 1
-            fi
             printf '%s\t%s\t%s' \
               "${'$'}SIZE" \
-              "${'$'}(basename "${'$'}FILE_REAL" | base64 | tr -d '\n')" \
-              "${'$'}(base64 < "${'$'}FILE_REAL" | tr -d '\n')"
+              "${'$'}(printf '%s' "$(basename "${'$'}FILE_REAL")" | base64 | tr -d '\r\n')" \
+              "${'$'}(base64 < "${'$'}FILE_REAL" | tr -d '\r\n')"
         """.trimIndent()
     }
 
@@ -1327,6 +1324,18 @@ class SkillsRepository(
 
 private fun decodeBase64Utf8(encodedValue: String): String {
     return String(Base64.getDecoder().decode(encodedValue), Charsets.UTF_8)
+}
+
+private fun decodeBase64Utf8Strict(encodedValue: String): String {
+    val decoder = Charsets.UTF_8
+        .newDecoder()
+        .onMalformedInput(CodingErrorAction.REPORT)
+        .onUnmappableCharacter(CodingErrorAction.REPORT)
+    return try {
+        decoder.decode(java.nio.ByteBuffer.wrap(Base64.getDecoder().decode(encodedValue))).toString()
+    } catch (_: Throwable) {
+        error("Binary files are not supported for in-app editing")
+    }
 }
 
 private fun decodeSkillMarkdownPreview(encodedPreview: String): String {
