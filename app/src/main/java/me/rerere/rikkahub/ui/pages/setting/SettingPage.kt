@@ -309,7 +309,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                             ) {
                                 IconButton(
                                     onClick = {
-                                        context.joinQQGroup("wMdqlDETtzIz6o49HrBR2TeQlwcX6RH9")
+                                        context.joinQQGroup("Qsm0whzbPsm1UyNpR683ulLyMZ2Pqrw0")
                                     }
                                 ) {
                                     Icon(
