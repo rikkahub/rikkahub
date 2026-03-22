@@ -20,6 +20,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
@@ -473,11 +476,14 @@ class SkillsRepository(
                 label = "RikkaHub read workdir text file",
             )
 
-            val parts = result.stdout.split('\t', limit = 3)
-            require(parts.size == 3) { "Failed to parse file content" }
-            val sizeBytes = parts[0].trim().toLongOrNull() ?: 0L
-            val name = decodeBase64Utf8(parts[1])
-            val content = decodeBase64Utf8Strict(parts[2])
+            val payload = Json.parseToJsonElement(result.stdout.trim()).jsonObject
+            val sizeBytes = payload["size"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
+            val name = decodeBase64Utf8(
+                payload["name"]?.jsonPrimitive?.content.orEmpty()
+            )
+            val content = decodeBase64Utf8Strict(
+                payload["content"]?.jsonPrimitive?.content.orEmpty()
+            )
 
             WorkdirTextFileDocument(
                 name = name,
@@ -1062,10 +1068,15 @@ class SkillsRepository(
               echo "File is too large to edit in-app (${WORKDIR_TEXT_EDIT_MAX_BYTES} bytes max)" >&2
               exit 1
             fi
-            printf '%s\t%s\t%s' \
+            encode_base64_no_wrap() {
+              base64 | awk 'BEGIN { ORS="" } { print }'
+            }
+            NAME_B64="${'$'}(printf '%s' "$(basename "${'$'}FILE_REAL")" | encode_base64_no_wrap)"
+            CONTENT_B64="${'$'}(base64 < "${'$'}FILE_REAL" | awk 'BEGIN { ORS="" } { print }')"
+            printf '{"size":%s,"name":"%s","content":"%s"}' \
               "${'$'}SIZE" \
-              "${'$'}(printf '%s' "$(basename "${'$'}FILE_REAL")" | base64 | tr -d '\r\n')" \
-              "${'$'}(base64 < "${'$'}FILE_REAL" | tr -d '\r\n')"
+              "${'$'}NAME_B64" \
+              "${'$'}CONTENT_B64"
         """.trimIndent()
     }
 
@@ -1323,7 +1334,7 @@ class SkillsRepository(
 }
 
 private fun decodeBase64Utf8(encodedValue: String): String {
-    return String(Base64.getDecoder().decode(encodedValue), Charsets.UTF_8)
+    return String(Base64.getMimeDecoder().decode(encodedValue.trim()), Charsets.UTF_8)
 }
 
 private fun decodeBase64Utf8Strict(encodedValue: String): String {
@@ -1332,7 +1343,7 @@ private fun decodeBase64Utf8Strict(encodedValue: String): String {
         .onMalformedInput(CodingErrorAction.REPORT)
         .onUnmappableCharacter(CodingErrorAction.REPORT)
     return try {
-        decoder.decode(java.nio.ByteBuffer.wrap(Base64.getDecoder().decode(encodedValue))).toString()
+        decoder.decode(java.nio.ByteBuffer.wrap(Base64.getMimeDecoder().decode(encodedValue.trim()))).toString()
     } catch (_: Throwable) {
         error("Binary files are not supported for in-app editing")
     }
