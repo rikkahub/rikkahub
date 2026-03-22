@@ -3,6 +3,8 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -16,12 +18,16 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.composables.icons.lucide.FolderOpen
+import com.composables.icons.lucide.Lucide
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.ui.components.ai.SkillsPicker
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -37,6 +43,7 @@ fun AssistantSkillsPage(id: String) {
     val skillsState by vm.skillsState.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val navController = LocalNavController.current
     val model = assistant.chatModelId?.let { settings.findModelById(it) } ?: settings.getCurrentChatModel()
     val modelSupportsTools = model?.abilities?.contains(ModelAbility.TOOL) == true
 
@@ -54,6 +61,18 @@ fun AssistantSkillsPage(id: String) {
                 },
                 navigationIcon = {
                     BackButton()
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            navController.navigate(Screen.WorkdirBrowser())
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Lucide.FolderOpen,
+                            contentDescription = stringResource(R.string.assistant_page_skills_browse_workdir),
+                        )
+                    }
                 },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,

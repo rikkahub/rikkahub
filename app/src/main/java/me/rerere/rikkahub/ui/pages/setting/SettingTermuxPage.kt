@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -49,6 +50,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtySessionInfo
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtySessionManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxProtocol
@@ -58,6 +60,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.utils.plus
 import org.koin.compose.koinInject
@@ -104,6 +107,7 @@ fun SettingTermuxPage() {
     var ptySessionsChecked by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val navController = LocalNavController.current
     val clipboardManager = LocalClipboardManager.current
     val toaster = LocalToaster.current
     val copiedText = stringResource(R.string.copied)
@@ -180,17 +184,29 @@ fun SettingTermuxPage() {
                         label = { Text(stringResource(R.string.setting_termux_page_workdir_title)) },
                         description = { Text(stringResource(R.string.setting_termux_page_workdir_desc)) },
                         content = {
-                            OutlinedTextField(
-                                modifier = Modifier.fillMaxWidth(),
-                                value = workdirText,
-                                onValueChange = { value ->
-                                    workdirText = value
-                                    scope.launch {
-                                        settingsStore.update { it.copy(termuxWorkdir = value) }
-                                    }
-                                },
-                                singleLine = true,
-                            )
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                OutlinedTextField(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    value = workdirText,
+                                    onValueChange = { value ->
+                                        workdirText = value
+                                        scope.launch {
+                                            settingsStore.update { it.copy(termuxWorkdir = value) }
+                                        }
+                                    },
+                                    singleLine = true,
+                                )
+                                TextButton(
+                                    modifier = Modifier.align(Alignment.End),
+                                    onClick = {
+                                        navController.navigate(Screen.WorkdirBrowser())
+                                    },
+                                ) {
+                                    Text(stringResource(R.string.assistant_page_skills_browse_workdir))
+                                }
+                            }
                         },
                     )
                 }

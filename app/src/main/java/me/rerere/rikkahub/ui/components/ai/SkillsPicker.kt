@@ -64,6 +64,7 @@ import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.skills.SkillCatalogEntry
@@ -74,7 +75,9 @@ import me.rerere.rikkahub.data.skills.SkillsCatalogState
 import me.rerere.rikkahub.data.skills.SkillsRepository
 import me.rerere.rikkahub.data.skills.sanitizeSkillDirectoryName
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.icons.Lucide
 import org.koin.compose.koinInject
 
 @Composable
@@ -182,6 +185,7 @@ fun SkillsPicker(
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val navController = LocalNavController.current
     val skillsRepository = koinInject<SkillsRepository>()
     val termuxToolEnabled = assistant.localTools.contains(LocalToolOption.TermuxExec)
     val missingSelections = remember(assistant.selectedSkills, skillsState.entryNames) {
@@ -356,6 +360,18 @@ fun SkillsPicker(
                                 }
                             )
                         }
+                    }
+
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !actionInProgress,
+                        onClick = {
+                            navController.navigate(Screen.WorkdirBrowser())
+                        },
+                    ) {
+                        Icon(Lucide.Files, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Box(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.assistant_page_skills_browse_workdir))
                     }
 
                     Row(

@@ -90,6 +90,7 @@ import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
+import me.rerere.rikkahub.ui.pages.extensions.WorkdirBrowserPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
@@ -542,6 +543,10 @@ class RouteActivity : ComponentActivity() {
                                 PromptPage()
                             }
 
+                            entry<Screen.WorkdirBrowser> { key ->
+                                WorkdirBrowserPage(relativePath = key.relativePath)
+                            }
+
                             entry<Screen.MessageSearch> {
                                 SearchPage()
                             }
@@ -729,6 +734,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Prompts : Screen
+
+    @Serializable
+    data class WorkdirBrowser(val relativePath: String = "") : Screen
 
     @Serializable
     data object MessageSearch : Screen
