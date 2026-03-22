@@ -271,6 +271,21 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                                             put("type", "string")
                                         })
                                     })
+                                    put("selection_type", buildJsonObject {
+                                        put("type", "string")
+                                        put(
+                                            "enum",
+                                            kotlinx.serialization.json.buildJsonArray {
+                                                add("text")
+                                                add("single")
+                                                add("multi")
+                                            }
+                                        )
+                                        put(
+                                            "description",
+                                            "Answer type: text (free text input, default), single (select exactly one option), multi (select one or more options)"
+                                        )
+                                    })
                                 })
                                 put("required", kotlinx.serialization.json.buildJsonArray {
                                     add("id")

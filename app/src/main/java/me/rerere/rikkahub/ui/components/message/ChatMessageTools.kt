@@ -714,14 +714,17 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                 AskUserQuestion(
                     id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "",
                     question = obj["question"]?.jsonPrimitive?.contentOrNull ?: "",
-                    options = obj["options"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
+                    options = obj["options"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
+                    selectionType = obj["selection_type"]?.jsonPrimitive?.contentOrNull ?: "text"
                 )
             } ?: emptyList()
         }.getOrElse { emptyList() }
     }
 
-    // Track answers for each question
+    // Track answers for text/single questions
     val answers = remember { mutableStateMapOf<String, String>() }
+    // Track selected options for multi questions
+    val multiAnswers = remember { mutableStateMapOf<String, Set<String>>() }
 
     val firstQuestion = questions.firstOrNull()?.question ?: "..."
 
@@ -769,37 +772,91 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                         )
 
                         if (isPending && onToolAnswer != null) {
-                            // Show options as chips
-                            if (q.options.isNotEmpty()) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    q.options.forEach { option ->
-                                        FilterChip(
-                                            selected = answers[q.id] == option,
-                                            onClick = { answers[q.id] = option },
-                                            label = {
-                                                Text(
-                                                    text = option,
-                                                    style = MaterialTheme.typography.labelSmall,
+                            when (q.selectionType) {
+                                "single" -> {
+                                    // Single select: chips only, no text input
+                                    if (q.options.isNotEmpty()) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            q.options.forEach { option ->
+                                                FilterChip(
+                                                    selected = answers[q.id] == option,
+                                                    onClick = { answers[q.id] = option },
+                                                    label = {
+                                                        Text(
+                                                            text = option,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                        )
+                                                    },
                                                 )
-                                            },
-                                        )
+                                            }
+                                        }
                                     }
                                 }
-                            }
+                                "multi" -> {
+                                    // Multi select: chips only, multiple can be selected
+                                    if (q.options.isNotEmpty()) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            q.options.forEach { option ->
+                                                val selectedSet = multiAnswers[q.id] ?: emptySet()
+                                                FilterChip(
+                                                    selected = selectedSet.contains(option),
+                                                    onClick = {
+                                                        val current = selectedSet.toMutableSet()
+                                                        if (current.contains(option)) current.remove(option)
+                                                        else current.add(option)
+                                                        multiAnswers[q.id] = current
+                                                    },
+                                                    label = {
+                                                        Text(
+                                                            text = option,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                else -> {
+                                    // Text (default): optional option chips + free text input
+                                    if (q.options.isNotEmpty()) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            q.options.forEach { option ->
+                                                FilterChip(
+                                                    selected = answers[q.id] == option,
+                                                    onClick = { answers[q.id] = option },
+                                                    label = {
+                                                        Text(
+                                                            text = option,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
 
-                            // Free text input
-                            OutlinedTextField(
-                                value = answers[q.id] ?: "",
-                                onValueChange = { answers[q.id] = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = MaterialTheme.typography.bodySmall,
-                                singleLine = false,
-                                minLines = 1,
-                                maxLines = 3,
-                            )
+                                    // Free text input
+                                    OutlinedTextField(
+                                        value = answers[q.id] ?: "",
+                                        onValueChange = { answers[q.id] = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textStyle = MaterialTheme.typography.bodySmall,
+                                        singleLine = false,
+                                        minLines = 1,
+                                        maxLines = 3,
+                                    )
+                                }
+                            }
                         } else if (isAnswered) {
                             // Show the user's answer
                             val answeredState = tool.approvalState as ToolApprovalState.Answered
@@ -825,13 +882,21 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                             val answerPayload = buildJsonObject {
                                 put("answers", buildJsonObject {
                                     questions.forEach { q ->
-                                        put(q.id, JsonPrimitive(answers[q.id] ?: ""))
+                                        when (q.selectionType) {
+                                            "multi" -> put(q.id, JsonPrimitive(multiAnswers[q.id]?.joinToString(", ") ?: ""))
+                                            else -> put(q.id, JsonPrimitive(answers[q.id] ?: ""))
+                                        }
                                     }
                                 })
                             }
                             onToolAnswer(tool.toolCallId, answerPayload.toString())
                         },
-                        enabled = questions.all { q -> !answers[q.id].isNullOrBlank() },
+                        enabled = questions.all { q ->
+                            when (q.selectionType) {
+                                "multi" -> !multiAnswers[q.id].isNullOrEmpty()
+                                else -> !answers[q.id].isNullOrBlank()
+                            }
+                        },
                         modifier = Modifier.align(Alignment.End),
                     ) {
                         Icon(
@@ -854,6 +919,7 @@ private data class AskUserQuestion(
     val id: String,
     val question: String,
     val options: List<String>,
+    val selectionType: String = "text", // "text" | "single" | "multi"
 )
 
 @Composable
