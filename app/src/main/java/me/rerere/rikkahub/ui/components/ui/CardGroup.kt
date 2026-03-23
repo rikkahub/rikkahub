@@ -147,7 +147,7 @@ fun CardGroup(
                 }
             }
         }
-        LuneSection {
+        LuneSection(border = null) {
             Column {
                 val count = scope.items.size
                 scope.items.fastForEachIndexed { index, item ->

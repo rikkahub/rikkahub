@@ -126,6 +126,7 @@ fun LuneBackdrop(
 @Composable
 fun LuneSection(
     modifier: Modifier = Modifier,
+    border: BorderStroke? = BorderStroke(1.dp, luneGlassBorderColor()),
     content: @Composable BoxScope.() -> Unit,
 ) {
     Surface(
@@ -133,7 +134,7 @@ fun LuneSection(
         shape = RoundedCornerShape(24.dp),
         color = luneGlassContainerColor(),
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, luneGlassBorderColor()),
+        border = border,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
@@ -145,6 +146,7 @@ fun LuneSection(
 fun LuneTopBarSurface(
     modifier: Modifier = Modifier,
     hazeState: HazeState? = null,
+    border: BorderStroke? = BorderStroke(1.dp, luneGlassBorderColor()),
     content: @Composable () -> Unit,
 ) {
     val hazeModifier = if (hazeState != null) {
@@ -160,7 +162,7 @@ fun LuneTopBarSurface(
         shape = RoundedCornerShape(24.dp),
         color = luneGlassContainerColor(),
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, luneGlassBorderColor()),
+        border = border,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {

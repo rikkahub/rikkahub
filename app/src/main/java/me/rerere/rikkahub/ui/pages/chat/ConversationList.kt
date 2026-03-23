@@ -123,7 +123,6 @@ fun ColumnScope.ConversationList(
                         .padding(16.dp),
                     shape = RoundedCornerShape(20.dp),
                     color = luneGlassContainerColor(),
-                    border = BorderStroke(1.dp, luneGlassBorderColor()),
                 ) {
                     Text(
                         text = stringResource(id = R.string.chat_page_no_conversations),
@@ -193,7 +192,6 @@ private fun DateHeaderItem(
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = luneGlassContainerColor().copy(alpha = 0.84f),
-            border = BorderStroke(1.dp, luneGlassBorderColor()),
         ) {
             Text(
                 text = label,
@@ -217,7 +215,6 @@ private fun PinnedHeader(
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = luneGlassContainerColor().copy(alpha = 0.84f),
-            border = BorderStroke(1.dp, luneGlassBorderColor()),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),

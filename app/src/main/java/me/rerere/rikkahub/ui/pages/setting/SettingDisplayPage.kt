@@ -103,6 +103,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
         tokenKey = "shapeLarge",
         fallback = 20.dp,
     )
+    val settingsPanelInnerCorner = 12.dp
     PermissionManager(permissionState = permissionState)
 
     fun ensureNotificationPermissionIfNeeded(enabled: Boolean) {
@@ -151,8 +152,8 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 RoundedCornerShape(
                                     topStart = 20.dp,
                                     topEnd = 20.dp,
-                                    bottomStart = 4.dp,
-                                    bottomEnd = 4.dp
+                                    bottomStart = settingsPanelInnerCorner,
+                                    bottomEnd = settingsPanelInnerCorner
                                 )
                             ),
                         headlineContent = { Text(stringResource(R.string.setting_page_dynamic_color)) },
@@ -169,8 +170,8 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.surfaceBright)
+                                .clip(RoundedCornerShape(settingsPanelInnerCorner))
+                                .background(CustomColors.listItemColors.containerColor)
                         ) {
                             PresetThemeButtonGroup(
                                 themeId = settings.themeId,
@@ -184,8 +185,8 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             .fillMaxWidth()
                             .clip(
                                 RoundedCornerShape(
-                                    topStart = 4.dp,
-                                    topEnd = 4.dp,
+                                    topStart = settingsPanelInnerCorner,
+                                    topEnd = settingsPanelInnerCorner,
                                     bottomStart = 20.dp,
                                     bottomEnd = 20.dp
                                 )
