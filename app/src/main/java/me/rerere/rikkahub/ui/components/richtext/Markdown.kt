@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
 import android.content.Intent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -306,6 +307,7 @@ fun MarkdownBlock(
         Column(
             modifier = modifier
                 .padding(start = 4.dp)
+                .animateContentSize()
         ) {
             astTree.children.fastForEach { child ->
                 MarkdownNode(
