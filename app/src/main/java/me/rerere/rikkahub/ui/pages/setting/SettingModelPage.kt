@@ -62,6 +62,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.hooks.rememberDebouncedTextState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -199,15 +200,15 @@ private fun DefaultTranslationModelSetting(
                         Text(stringResource(R.string.setting_model_page_translate_prompt_vars))
                     }
                 ) {
-                    OutlinedTextField(
+                    val translatePromptState = rememberDebouncedTextState(
                         value = settings.translatePrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    translatePrompt = it
-                                )
-                            )
-                        },
+                        onDebouncedValueChange = {
+                            vm.updateSettings(settings.copy(translatePrompt = it))
+                        }
+                    )
+                    OutlinedTextField(
+                        value = translatePromptState.value,
+                        onValueChange = { translatePromptState.value = it },
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 10,
                     )
@@ -296,15 +297,15 @@ private fun DefaultSuggestionModelSetting(
                         Text(stringResource(R.string.setting_model_page_suggestion_prompt_vars))
                     }
                 ) {
-                    OutlinedTextField(
+                    val suggestionPromptState = rememberDebouncedTextState(
                         value = settings.suggestionPrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    suggestionPrompt = it
-                                )
-                            )
-                        },
+                        onDebouncedValueChange = {
+                            vm.updateSettings(settings.copy(suggestionPrompt = it))
+                        }
+                    )
+                    OutlinedTextField(
+                        value = suggestionPromptState.value,
+                        onValueChange = { suggestionPromptState.value = it },
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 8
                     )
@@ -390,15 +391,15 @@ private fun DefaultTitleModelSetting(
                         Text(stringResource(R.string.setting_model_page_suggestion_prompt_vars))
                     }
                 ) {
-                    OutlinedTextField(
+                    val titlePromptState = rememberDebouncedTextState(
                         value = settings.titlePrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    titlePrompt = it
-                                )
-                            )
-                        },
+                        onDebouncedValueChange = {
+                            vm.updateSettings(settings.copy(titlePrompt = it))
+                        }
+                    )
+                    OutlinedTextField(
+                        value = titlePromptState.value,
+                        onValueChange = { titlePromptState.value = it },
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 8
                     )
@@ -521,15 +522,15 @@ private fun DefaultOcrModelSetting(
                         Text(stringResource(R.string.setting_model_page_ocr_prompt_vars))
                     }
                 ) {
-                    OutlinedTextField(
+                    val ocrPromptState = rememberDebouncedTextState(
                         value = settings.ocrPrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    ocrPrompt = it
-                                )
-                            )
-                        },
+                        onDebouncedValueChange = {
+                            vm.updateSettings(settings.copy(ocrPrompt = it))
+                        }
+                    )
+                    OutlinedTextField(
+                        value = ocrPromptState.value,
+                        onValueChange = { ocrPromptState.value = it },
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 10,
                     )
@@ -617,15 +618,15 @@ private fun DefaultCompressModelSetting(
                         Text(stringResource(R.string.setting_model_page_compress_prompt_vars))
                     }
                 ) {
-                    OutlinedTextField(
+                    val compressPromptState = rememberDebouncedTextState(
                         value = settings.compressPrompt,
-                        onValueChange = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    compressPrompt = it
-                                )
-                            )
-                        },
+                        onDebouncedValueChange = {
+                            vm.updateSettings(settings.copy(compressPrompt = it))
+                        }
+                    )
+                    OutlinedTextField(
+                        value = compressPromptState.value,
+                        onValueChange = { compressPromptState.value = it },
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 10,
                     )

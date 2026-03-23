@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -84,6 +85,7 @@ import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TextArea
+import me.rerere.rikkahub.ui.hooks.rememberDebouncedTextState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
@@ -96,6 +98,8 @@ import me.rerere.rikkahub.utils.onSuccess
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.FlowPreview
 import kotlin.uuid.Uuid
 
 @Composable
@@ -135,6 +139,7 @@ fun AssistantPromptPage(id: String) {
     }
 }
 
+@OptIn(FlowPreview::class)
 @Composable
 private fun AssistantPromptContent(
     modifier: Modifier = Modifier,
@@ -145,6 +150,8 @@ private fun AssistantPromptContent(
     val context = LocalContext.current
     val templateTransformer = koinInject<TemplateTransformer>()
     val themeTokens = LocalThemeTokenOverrides.current
+    val latestAssistant by rememberUpdatedState(assistant)
+    val latestOnUpdate by rememberUpdatedState(onUpdate)
 
     Column(
         modifier = modifier
@@ -165,12 +172,24 @@ private fun AssistantPromptContent(
                     initialText = assistant.systemPrompt,
                 )
                 LaunchedEffect(Unit) {
-                    snapshotFlow { systemPromptValue.text }.collect {
-                        onUpdate(
-                            assistant.copy(
-                                systemPrompt = it.toString()
-                            )
-                        )
+                    snapshotFlow { systemPromptValue.text.toString() }
+                        .debounce(400)
+                        .collect { text ->
+                            if (text != latestAssistant.systemPrompt) {
+                                latestOnUpdate(
+                                    latestAssistant.copy(
+                                        systemPrompt = text
+                                    )
+                                )
+                            }
+                        }
+                }
+                LaunchedEffect(assistant.systemPrompt) {
+                    val currentText = systemPromptValue.text.toString()
+                    if (currentText != assistant.systemPrompt) {
+                        systemPromptValue.edit {
+                            replace(0, length, assistant.systemPrompt)
+                        }
                     }
                 }
 
@@ -208,6 +227,16 @@ private fun AssistantPromptContent(
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
+            val messageTemplateState = rememberDebouncedTextState(
+                value = assistant.messageTemplate,
+                onDebouncedValueChange = { value ->
+                    latestOnUpdate(
+                        latestAssistant.copy(
+                            messageTemplate = value
+                        )
+                    )
+                }
+            )
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
@@ -215,14 +244,8 @@ private fun AssistantPromptContent(
                 },
                 content = {
                     OutlinedTextField(
-                        value = assistant.messageTemplate,
-                        onValueChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    messageTemplate = it
-                                )
-                            )
-                        },
+                        value = messageTemplateState.value,
+                        onValueChange = { messageTemplateState.value = it },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 5,
                         maxLines = 15,

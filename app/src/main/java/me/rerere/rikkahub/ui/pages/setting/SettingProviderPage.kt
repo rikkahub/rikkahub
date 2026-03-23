@@ -103,11 +103,14 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedProviderIds by remember { mutableStateOf(emptySet<Uuid>()) }
     val lazyListState = rememberLazyStaggeredGridState()
+    val isFiltering = searchQuery.isNotBlank()
     val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
-        val newProviders = settings.providers.toMutableList().apply {
-            add(to.index, removeAt(from.index))
+        if (!isFiltering) {
+            val newProviders = settings.providers.toMutableList().apply {
+                add(to.index, removeAt(from.index))
+            }
+            vm.updateSettings(settings.copy(providers = newProviders))
         }
-        vm.updateSettings(settings.copy(providers = newProviders))
     }
 
     val filteredProviders = remember(settings.providers, searchQuery) {
@@ -258,67 +261,118 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 shape = CircleShape,
             )
 
-
-            LazyVerticalStaggeredGrid(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .imePadding(),
-                contentPadding = PaddingValues(16.dp),
-                verticalItemSpacing = 8.dp,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                state = lazyListState,
-                columns = StaggeredGridCells.Fixed(2)
-            ) {
-                items(filteredProviders, key = { it.id }) { provider ->
-                    ReorderableItem(
-                        state = reorderableState,
-                        key = provider.id
-                    ) { isDragging ->
-                        ProviderItem(
-                            modifier = Modifier
-                                .scale(if (isDragging) 0.95f else 1f)
-                                .fillMaxWidth(),
-                            provider = provider,
-                            selected = provider.id in selectedProviderIds,
-                            selectionMode = isSelectionMode,
-                            dragHandle = if (!isSelectionMode) {
-                                {
-                                    val haptic = LocalHapticFeedback.current
-                                    IconButton(
-                                        onClick = {},
-                                        modifier = Modifier
-                                            .longPressDraggableHandle(
-                                                onDragStarted = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                                },
-                                                onDragStopped = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                                }
+            if (filteredProviders.isEmpty()) {
+                ProviderEmptyState(
+                    isFiltering = isFiltering,
+                    onClearSearch = { searchQuery = "" },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                )
+            } else {
+                LazyVerticalStaggeredGrid(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .imePadding(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalItemSpacing = 8.dp,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    state = lazyListState,
+                    columns = StaggeredGridCells.Fixed(2)
+                ) {
+                    items(filteredProviders, key = { it.id }) { provider ->
+                        ReorderableItem(
+                            state = reorderableState,
+                            key = provider.id
+                        ) { isDragging ->
+                            ProviderItem(
+                                modifier = Modifier
+                                    .scale(if (isDragging) 0.95f else 1f)
+                                    .fillMaxWidth(),
+                                provider = provider,
+                                selected = provider.id in selectedProviderIds,
+                                selectionMode = isSelectionMode,
+                                dragHandle = if (!isSelectionMode && !isFiltering) {
+                                    {
+                                        val haptic = LocalHapticFeedback.current
+                                        IconButton(
+                                            onClick = {},
+                                            modifier = Modifier
+                                                .longPressDraggableHandle(
+                                                    onDragStarted = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                                    },
+                                                    onDragStopped = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                                    }
+                                                )
+                                        ) {
+                                            Icon(
+                                                imageVector = HugeIcons.DragDropHorizontal,
+                                                contentDescription = null
                                             )
-                                    ) {
-                                        Icon(
-                                            imageVector = HugeIcons.DragDropHorizontal,
-                                            contentDescription = null
-                                        )
-                                    }
-                                }
-                            } else {
-                                null
-                            },
-                            onClick = {
-                                if (isSelectionMode) {
-                                    selectedProviderIds = if (provider.id in selectedProviderIds) {
-                                        selectedProviderIds - provider.id
-                                    } else {
-                                        selectedProviderIds + provider.id
+                                        }
                                     }
                                 } else {
-                                    navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
+                                    null
+                                },
+                                onClick = {
+                                    if (isSelectionMode) {
+                                        selectedProviderIds = if (provider.id in selectedProviderIds) {
+                                            selectedProviderIds - provider.id
+                                        } else {
+                                            selectedProviderIds + provider.id
+                                        }
+                                    } else {
+                                        navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProviderEmptyState(
+    isFiltering: Boolean,
+    onClearSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor,
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = if (isFiltering) "没有匹配的 Provider" else "还没有 Provider",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = if (isFiltering) {
+                    "尝试换个关键词，或先清空搜索。"
+                } else {
+                    "点击右上角新增或导入后，这里会显示所有可配置的 Provider。"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (isFiltering) {
+                TextButton(
+                    onClick = onClearSearch,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text("清空搜索")
                 }
             }
         }

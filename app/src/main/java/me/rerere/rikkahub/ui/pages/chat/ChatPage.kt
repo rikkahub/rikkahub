@@ -302,7 +302,7 @@ private fun ChatPageContent(
     var topBarVisible by rememberSaveable { mutableStateOf(true) }
     val enableGlassBlur = setting.displaySetting.enableBlurEffect
     val hazeState = rememberHazeState()
-    val activeHazeState = if (enableGlassBlur && !chatListState.isScrollInProgress) hazeState else null
+    val activeHazeState = if (enableGlassBlur) hazeState else null
 
     ChatStatusBarImmersiveEffect()
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)

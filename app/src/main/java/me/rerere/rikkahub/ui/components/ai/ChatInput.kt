@@ -274,7 +274,11 @@ fun ChatInput(
 
                         IconButton(
                             onClick = {
-                                showControls = !showControls
+                                val nextShowControls = !showControls
+                                showControls = nextShowControls
+                                if (nextShowControls) {
+                                    keyboardController?.hide()
+                                }
                             }
                         ) {
                             Icon(
@@ -342,12 +346,13 @@ fun ChatInput(
                         enter = expandVertically() + fadeIn(),
                         exit = shrinkVertically() + fadeOut(),
                     ) {
-                        FlowRow(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
                                 .padding(start = 4.dp, end = 2.dp, bottom = 2.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             IconButton(
                                 onClick = {

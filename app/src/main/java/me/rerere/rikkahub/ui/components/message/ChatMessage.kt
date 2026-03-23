@@ -39,7 +39,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,8 +63,6 @@ import androidx.compose.ui.util.fastForEachIndexed
 import androidx.core.content.FileProvider
 import androidx.core.net.toFile
 import androidx.core.net.toUri
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -105,7 +102,6 @@ import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.urlDecode
 import java.util.Locale
-import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun ChatMessage(
@@ -335,7 +331,6 @@ fun ChatMessage(
     }
 }
 
-@OptIn(FlowPreview::class)
 @Composable
 private fun MessagePartsBlock(
     assistant: Assistant?,
@@ -356,11 +351,9 @@ private fun MessagePartsBlock(
     // 消息输出HapticFeedback
     val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
-    val partsState by rememberUpdatedState(parts)
-
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
-            partsState.forEach { part ->
+            parts.forEach { part ->
                 if (part is UIMessagePart.Tool && part.toolName == "search_web" && part.isExecuted) {
                     val outputText = part.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
                     val items =
@@ -378,14 +371,17 @@ private fun MessagePartsBlock(
             }
         }
     }
-    LaunchedEffect(settings.displaySetting) {
-        snapshotFlow { partsState }
-            .debounce(50.milliseconds)
-            .collect { parts ->
-                if (parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.KeyboardTap)
-                }
-            }
+    var previousLoading by remember { mutableStateOf(loading) }
+    LaunchedEffect(loading, parts.isNotEmpty(), settings.displaySetting.enableMessageGenerationHapticEffect) {
+        if (
+            settings.displaySetting.enableMessageGenerationHapticEffect &&
+            previousLoading &&
+            !loading &&
+            parts.isNotEmpty()
+        ) {
+            hapticFeedback.performHapticFeedback(HapticFeedbackType.KeyboardTap)
+        }
+        previousLoading = loading
     }
 
     // Render parts in original order (group thinking/tool as chain-of-thought)
@@ -431,74 +427,73 @@ private fun MessagePartsBlock(
             is MessagePartBlock.ContentBlock -> key(block.index) {
                 when (val part = block.part) {
                     is UIMessagePart.Text -> {
-                        SelectionContainer {
-                            if (role == MessageRole.USER) {
-                                val shellOutput = TermuxUserShellCommandCodec.extractOutput(role, part)
-                                if (shellOutput != null) {
-                                    UserShellCommandCard(
-                                        output = shellOutput,
-                                        modifier = Modifier
+                        if (role == MessageRole.USER) {
+                            val shellOutput = TermuxUserShellCommandCodec.extractOutput(role, part)
+                            if (shellOutput != null) {
+                                UserShellCommandCard(
+                                    output = shellOutput,
+                                    modifier = Modifier
+                                )
+                            } else {
+                                val renderedText = remember(part.text, assistant, messageDepthFromEnd) {
+                                    part.text.replaceRegexes(
+                                        assistant = assistant,
+                                        scope = AssistantAffectScope.USER,
+                                        phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+                                        messageDepthFromEnd = messageDepthFromEnd,
                                     )
-                                } else {
-                                    Surface(
-                                        shape = RoundedCornerShape(22.dp),
-                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.24f),
-                                        border = BorderStroke(
-                                            width = 1.dp,
-                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                                        ),
-                                        onClick = { onUserMessageClick?.invoke() },
-                                    ) {
-                                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                            MarkdownBlock(
-                                                content = part.text.replaceRegexes(
-                                                    assistant = assistant,
-                                                    scope = AssistantAffectScope.USER,
-                                                    phase = AssistantRegexApplyPhase.VISUAL_ONLY,
-                                                    messageDepthFromEnd = messageDepthFromEnd,
-                                                ),
-                                                messageDepthFromEnd = messageDepthFromEnd,
-                                                onClickCitation = handleClickCitation
-                                            )
-                                        }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(22.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.24f),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                    ),
+                                    onClick = { onUserMessageClick?.invoke() },
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                        MarkdownBlock(
+                                            content = renderedText,
+                                            messageDepthFromEnd = messageDepthFromEnd,
+                                            onClickCitation = handleClickCitation
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            val renderedText = remember(part.text, assistant, messageDepthFromEnd) {
+                                part.text.replaceRegexes(
+                                    assistant = assistant,
+                                    scope = AssistantAffectScope.ASSISTANT,
+                                    phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+                                    messageDepthFromEnd = messageDepthFromEnd,
+                                )
+                            }
+                            if (settings.displaySetting.showAssistantBubble) {
+                                Surface(
+                                    shape = RoundedCornerShape(22.dp),
+                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.78f),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                                    ),
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                        MarkdownBlock(
+                                            content = renderedText,
+                                            messageDepthFromEnd = messageDepthFromEnd,
+                                            onClickCitation = handleClickCitation,
+                                        )
                                     }
                                 }
                             } else {
-                                if (settings.displaySetting.showAssistantBubble) {
-                                    Surface(
-                                        shape = RoundedCornerShape(22.dp),
-                                        color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.78f),
-                                        border = BorderStroke(
-                                            width = 1.dp,
-                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-                                        ),
-                                    ) {
-                                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                            MarkdownBlock(
-                                                content = part.text.replaceRegexes(
-                                                    assistant = assistant,
-                                                    scope = AssistantAffectScope.ASSISTANT,
-                                                    phase = AssistantRegexApplyPhase.VISUAL_ONLY,
-                                                    messageDepthFromEnd = messageDepthFromEnd,
-                                                ),
-                                                messageDepthFromEnd = messageDepthFromEnd,
-                                                onClickCitation = handleClickCitation,
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    MarkdownBlock(
-                                        content = part.text.replaceRegexes(
-                                            assistant = assistant,
-                                            scope = AssistantAffectScope.ASSISTANT,
-                                            phase = AssistantRegexApplyPhase.VISUAL_ONLY,
-                                            messageDepthFromEnd = messageDepthFromEnd,
-                                        ),
-                                        messageDepthFromEnd = messageDepthFromEnd,
-                                        onClickCitation = handleClickCitation,
-                                        modifier = Modifier
-                                    )
-                                }
+                                MarkdownBlock(
+                                    content = renderedText,
+                                    messageDepthFromEnd = messageDepthFromEnd,
+                                    onClickCitation = handleClickCitation,
+                                    modifier = Modifier
+                                )
                             }
                         }
                     }

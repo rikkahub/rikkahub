@@ -104,7 +104,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     val shareText = stringResource(R.string.setting_page_share_text)
     val share = stringResource(R.string.setting_page_share)
     val noShareApp = stringResource(R.string.setting_page_no_share_app)
-    val enableGlassBlur = settings.displaySetting.enableBlurEffect && !listState.isScrollInProgress
+    val enableGlassBlur = settings.displaySetting.enableBlurEffect
     var searchQuery by rememberSaveable { mutableStateOf("") }
     val normalizedQuery = searchQuery.trim()
     val warningTitle = stringResource(R.string.setting_page_config_api_title)
@@ -172,51 +172,37 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             containerColor = Color.Transparent,
         ) { innerPadding ->
-            LazyColumn(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(
-                        if (enableGlassBlur) {
-                            Modifier.hazeSource(state = hazeState)
-                        } else {
-                            Modifier
-                        }
-                    ),
-                state = listState,
-                contentPadding = innerPadding + PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                    .padding(innerPadding)
             ) {
+                SettingsSearchBar(
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { searchQuery = it },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .then(
+                            if (enableGlassBlur) {
+                                Modifier.hazeSource(state = hazeState)
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    state = listState,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                ) {
                 if (settings.isNotConfigured()) {
                     if (matchesSetting(warningTitle, warningDesc, listOf("provider", "api", "model"))) {
                         item {
                             ProviderConfigWarningCard(navController)
                         }
-                    }
-                }
-
-                item("settingsSearch") {
-                    LuneSection(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    ) {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 4.dp),
-                            singleLine = true,
-                            placeholder = { Text("搜索设置") },
-                            leadingIcon = {
-                                Icon(HugeIcons.GlobalSearch, contentDescription = null)
-                            },
-                            trailingIcon = {
-                                if (searchQuery.isNotBlank()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
-                                        Icon(HugeIcons.Cancel01, contentDescription = null)
-                                    }
-                                }
-                            },
-                        )
                     }
                 }
 
@@ -585,8 +571,38 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     }
                 }
 
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SettingsSearchBar(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LuneSection(modifier = modifier) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            singleLine = true,
+            placeholder = { Text("搜索设置") },
+            leadingIcon = {
+                Icon(HugeIcons.GlobalSearch, contentDescription = null)
+            },
+            trailingIcon = {
+                if (searchQuery.isNotBlank()) {
+                    IconButton(onClick = { onSearchQueryChange("") }) {
+                        Icon(HugeIcons.Cancel01, contentDescription = null)
+                    }
+                }
+            },
+        )
     }
 }
 

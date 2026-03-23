@@ -218,7 +218,19 @@ private fun ChatListNormal(
     val scope = rememberCoroutineScope()
     var isRecentScroll by remember { mutableStateOf(false) }
     val density = LocalDensity.current
-    val enableGlassBlur = settings.displaySetting.enableBlurEffect && !state.isScrollInProgress
+    val enableGlassBlur = settings.displaySetting.enableBlurEffect
+    val assistant = remember(settings.assistants, conversation.assistantId) {
+        settings.getAssistantById(conversation.assistantId)
+    }
+    val modelsById = remember(settings.providers) {
+        buildMap {
+            settings.providers.forEach { provider ->
+                provider.models.forEach { model ->
+                    put(model.id, model)
+                }
+            }
+        }
+    }
     val isAtBottom by remember(state, density, innerPadding) {
         derivedStateOf {
             val lastItem = state.layoutInfo.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf false
@@ -332,8 +344,8 @@ private fun ChatListNormal(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .widthIn(max = 760.dp),
-                            model = node.currentMessage.modelId?.let { settings.findModelById(it) },
-                            assistant = settings.getAssistantById(conversation.assistantId),
+                            model = node.currentMessage.modelId?.let(modelsById::get),
+                            assistant = assistant,
                             loading = loading && index == conversation.messageNodes.lastIndex,
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)

@@ -107,7 +107,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     // 操作菜单状态
     var actionSheetAssistant by remember { mutableStateOf<Assistant?>(null) }
     val hazeState = rememberHazeState()
-    val enableGlassBlur = settings.displaySetting.enableBlurEffect && !lazyListState.isScrollInProgress
+    val enableGlassBlur = settings.displaySetting.enableBlurEffect
 
     // 根据搜索关键词和选中的标签过滤助手
     val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery) {
@@ -226,6 +226,17 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 state = lazyListState,
             ) {
+                if (filteredAssistants.isEmpty()) {
+                    item("assistantEmptyState") {
+                        AssistantEmptyState(
+                            isFiltering = isFiltering,
+                            onClearFilters = {
+                                searchQuery = ""
+                                selectedTagIds = emptySet()
+                            }
+                        )
+                    }
+                }
                 lazyItems(filteredAssistants, key = { assistant -> assistant.id }) { assistant ->
                     ReorderableItem(
                         state = reorderableState,
@@ -283,6 +294,50 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 actionSheetAssistant = null
             }
         )
+    }
+}
+
+@Composable
+private fun AssistantEmptyState(
+    isFiltering: Boolean,
+    onClearFilters: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = luneGlassContainerColor(),
+        border = BorderStroke(1.dp, luneGlassBorderColor()),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = if (isFiltering) {
+                    stringResource(R.string.assistant_page_search_placeholder)
+                } else {
+                    stringResource(R.string.assistant_page_title)
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = if (isFiltering) {
+                    "没有匹配的助手，试试清空搜索词或标签筛选。"
+                } else {
+                    "还没有助手，点击右上角新增，或从现有配置复制一份开始。"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (isFiltering) {
+                TextButton(
+                    onClick = onClearFilters,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text("清空筛选")
+                }
+            }
+        }
     }
 }
 

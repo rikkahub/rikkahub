@@ -1,9 +1,14 @@
 package me.rerere.rikkahub.ui.hooks
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -73,4 +78,31 @@ fun <T> useThrottle(
             }
         }
     }
+}
+
+@Composable
+fun rememberDebouncedTextState(
+    value: String,
+    debounceMillis: Long = 400,
+    onDebouncedValueChange: (String) -> Unit,
+): MutableState<String> {
+    val state = rememberSaveable { mutableStateOf(value) }
+    val latestValue by rememberUpdatedState(value)
+    val latestOnDebouncedValueChange by rememberUpdatedState(onDebouncedValueChange)
+
+    LaunchedEffect(value) {
+        if (state.value != value) {
+            state.value = value
+        }
+    }
+
+    LaunchedEffect(state.value) {
+        if (state.value == latestValue) return@LaunchedEffect
+        delay(debounceMillis)
+        if (state.value != latestValue) {
+            latestOnDebouncedValueChange(state.value)
+        }
+    }
+
+    return state
 }
