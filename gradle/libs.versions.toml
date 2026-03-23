@@ -10,6 +10,7 @@ junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 commons-text = "1.15.0"
+commons-compress = "1.28.0"
 lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.13.0"
 composeBom = "2026.04.01"
@@ -59,6 +60,7 @@ baselineprofile = "1.4.1"
 profileinstaller = "1.4.1"
 ktor = "3.4.3"
 sqlite-vector = "0.9.92"
+xz = "1.11"
 jmdns = "3.6.3"
 slf4j = "2.0.17"
 sqlite-android = "-SNAPSHOT"
@@ -137,6 +139,7 @@ sonner = { module = "io.github.dokar3:sonner", version.ref = "sonner" }
 leakcanary-android = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 commons-text = { module = "org.apache.commons:commons-text", version.ref = "commons-text" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }
 modelcontextprotocol-kotlin-sdk = { module = "io.modelcontextprotocol:kotlin-sdk", version.ref = "mcp" }
 pebble = { module = "io.pebbletemplates:pebble", version.ref = "pebble" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
@@ -166,6 +169,7 @@ ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
 ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
 ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
 sqlite-vector = { module = "ai.sqlite:vector", version.ref = "sqlite-vector" }
+xz = { module = "org.tukaani:xz", version.ref = "xz" }
 jmdns = { module = "org.jmdns:jmdns", version.ref = "jmdns" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-android = { module = "uk.uuid.slf4j:slf4j-android", version = "2.0.17-0" }
