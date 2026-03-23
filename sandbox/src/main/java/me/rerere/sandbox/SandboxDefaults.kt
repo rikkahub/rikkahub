@@ -12,6 +12,7 @@ internal object SandboxDefaults {
             "HOME" to config.homeDirectory,
             "USER" to if (config.fakeRoot) "root" else "sandbox",
             "LOGNAME" to if (config.fakeRoot) "root" else "sandbox",
+            "SHELL" to "/bin/bash",
             "PATH" to config.defaultPath,
             "TERM" to config.terminal,
             "TMPDIR" to "/tmp",

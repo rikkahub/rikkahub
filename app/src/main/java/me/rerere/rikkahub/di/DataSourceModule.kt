@@ -139,6 +139,10 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().sandboxDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 

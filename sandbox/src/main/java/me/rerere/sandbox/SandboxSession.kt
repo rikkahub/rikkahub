@@ -53,23 +53,31 @@ class SandboxSession internal constructor(private val process: Process) {
 
     init {
         val stdoutJob = scope.launch {
-            process.inputStream.bufferedReader().use { reader ->
-                val buf = CharArray(BUFFER_SIZE)
-                while (true) {
-                    val n = reader.read(buf)
-                    if (n < 0) break
-                    _output.emit(SandboxOutput.Stdout(String(buf, 0, n)))
+            try {
+                process.inputStream.bufferedReader().use { reader ->
+                    val buf = CharArray(BUFFER_SIZE)
+                    while (true) {
+                        val n = reader.read(buf)
+                        if (n < 0) break
+                        _output.emit(SandboxOutput.Stdout(String(buf, 0, n)))
+                    }
                 }
+            } catch (_: java.io.IOException) {
+                // Stream closed by kill(), treat as EOF
             }
         }
         val stderrJob = scope.launch {
-            process.errorStream.bufferedReader().use { reader ->
-                val buf = CharArray(BUFFER_SIZE)
-                while (true) {
-                    val n = reader.read(buf)
-                    if (n < 0) break
-                    _output.emit(SandboxOutput.Stderr(String(buf, 0, n)))
+            try {
+                process.errorStream.bufferedReader().use { reader ->
+                    val buf = CharArray(BUFFER_SIZE)
+                    while (true) {
+                        val n = reader.read(buf)
+                        if (n < 0) break
+                        _output.emit(SandboxOutput.Stderr(String(buf, 0, n)))
+                    }
                 }
+            } catch (_: java.io.IOException) {
+                // Stream closed by kill(), treat as EOF
             }
         }
         scope.launch {

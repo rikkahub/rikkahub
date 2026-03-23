@@ -25,6 +25,7 @@ object SandboxCommandBuilder {
         if (config.fakeRoot) {
             args += "-0"
         }
+        args += "-l" // --link2symlink: convert hardlinks to symlinks (needed on Android)
 
         args += listOf("-r", config.rootfsDir.absolutePath)
         args += listOf("-w", config.workingDirectory)
