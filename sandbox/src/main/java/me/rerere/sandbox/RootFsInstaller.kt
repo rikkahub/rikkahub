@@ -164,7 +164,7 @@ class RootFsInstaller {
                 val normalized = entry.name.removePrefix("./").trimEnd('/')
                 if (normalized.isEmpty()) continue
                 val firstComponent = normalized.substringBefore('/')
-                if (firstComponent.isEmpty()) return null
+                if (firstComponent.isEmpty() || firstComponent == "..") return null
                 when {
                     candidate == null -> candidate = firstComponent
                     candidate != firstComponent -> return null

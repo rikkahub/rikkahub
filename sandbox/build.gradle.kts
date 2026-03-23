@@ -36,8 +36,10 @@ dependencies {
     implementation(libs.material)
     implementation(libs.commons.compress)
     implementation(libs.xz)
+    implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

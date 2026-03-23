@@ -85,6 +85,23 @@ class PRootSandbox(private val context: Context) {
         )
     }
 
+    fun startSession(
+        config: SandboxConfig,
+        guestCommand: List<String>,
+    ): SandboxSession {
+        return SandboxSession(start(config, guestCommand))
+    }
+
+    fun startShellSession(
+        config: SandboxConfig,
+        shell: String = "/bin/sh",
+    ): SandboxSession {
+        return startSession(
+            config = config,
+            guestCommand = listOf(shell, "-l"),
+        )
+    }
+
     fun executeShell(
         config: SandboxConfig,
         script: String,
