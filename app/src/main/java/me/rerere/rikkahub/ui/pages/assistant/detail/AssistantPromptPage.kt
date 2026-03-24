@@ -380,7 +380,6 @@ private fun AssistantPromptContent(
                             onShare = {},
                             onDelete = {},
                             onUpdate = {},
-                            lastMessage = false,
                         )
                     }
                 }

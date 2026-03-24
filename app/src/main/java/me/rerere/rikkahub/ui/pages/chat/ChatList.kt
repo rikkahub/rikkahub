@@ -376,7 +376,6 @@ private fun ChatListNormal(
                             onClearTranslation = onClearTranslation,
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
-                            lastMessage = index == conversation.messageNodes.lastIndex,
                             showIdentity = !groupedWithPrevious,
                             showMetadata = index == conversation.messageNodes.lastIndex,
                             messageDepthFromEnd = conversation.messageNodes.size - index,

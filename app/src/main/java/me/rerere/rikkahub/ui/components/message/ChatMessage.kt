@@ -103,6 +103,10 @@ import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.urlDecode
 import java.util.Locale
 
+internal fun UIMessage.shouldShowPrimaryActions(loading: Boolean): Boolean {
+    return !loading && !parts.isEmptyUIMessage()
+}
+
 @Composable
 fun ChatMessage(
     node: MessageNode,
@@ -110,7 +114,6 @@ fun ChatMessage(
     loading: Boolean = false,
     model: Model? = null,
     assistant: Assistant? = null,
-    lastMessage: Boolean = false,
     showIdentity: Boolean = true,
     showMetadata: Boolean = false,
     onFork: () -> Unit,
@@ -157,7 +160,7 @@ fun ChatMessage(
     val assistantAvatarSlotWidth = if (message.role == MessageRole.ASSISTANT && settings.showModelIcon) 32.dp else 0.dp
     val userAvatarSlotWidth = if (message.role == MessageRole.USER && settings.showUserAvatar) 36.dp else 0.dp
     val avatarGap = 6.dp
-    val showPrimaryActions = lastMessage && !loading && !message.parts.isEmptyUIMessage()
+    val showPrimaryActions = message.shouldShowPrimaryActions(loading)
     val showAccessoryRow = showPrimaryActions || node.messages.size > 1
 
     @Composable
@@ -455,11 +458,13 @@ private fun MessagePartsBlock(
                                     onClick = { onUserMessageClick?.invoke() },
                                 ) {
                                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                        MarkdownBlock(
-                                            content = renderedText,
-                                            messageDepthFromEnd = messageDepthFromEnd,
-                                            onClickCitation = handleClickCitation
-                                        )
+                                        SelectionContainer {
+                                            MarkdownBlock(
+                                                content = renderedText,
+                                                messageDepthFromEnd = messageDepthFromEnd,
+                                                onClickCitation = handleClickCitation
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -482,20 +487,24 @@ private fun MessagePartsBlock(
                                     ),
                                 ) {
                                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                        MarkdownBlock(
-                                            content = renderedText,
-                                            messageDepthFromEnd = messageDepthFromEnd,
-                                            onClickCitation = handleClickCitation,
-                                        )
+                                        SelectionContainer {
+                                            MarkdownBlock(
+                                                content = renderedText,
+                                                messageDepthFromEnd = messageDepthFromEnd,
+                                                onClickCitation = handleClickCitation,
+                                            )
+                                        }
                                     }
                                 }
                             } else {
-                                MarkdownBlock(
-                                    content = renderedText,
-                                    messageDepthFromEnd = messageDepthFromEnd,
-                                    onClickCitation = handleClickCitation,
-                                    modifier = Modifier
-                                )
+                                SelectionContainer {
+                                    MarkdownBlock(
+                                        content = renderedText,
+                                        messageDepthFromEnd = messageDepthFromEnd,
+                                        onClickCitation = handleClickCitation,
+                                        modifier = Modifier
+                                    )
+                                }
                             }
                         }
                     }
