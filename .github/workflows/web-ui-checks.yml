@@ -38,6 +38,10 @@ jobs:
         working-directory: web-ui
         run: bun run typecheck
 
+      - name: Test
+        working-directory: web-ui
+        run: bun run test:ci
+
       - name: Build
         working-directory: web-ui
         run: bun run build

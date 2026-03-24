@@ -1,10 +1,8 @@
-name: Android Unit Tests
+name: Android Baseline Profile
 
 on:
-  push:
-    branches:
-      - "**"
-  pull_request:
+  schedule:
+    - cron: "0 3 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -15,8 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  unit-tests:
+  baseline-profile:
     runs-on: ubuntu-latest
+    timeout-minutes: 75
 
     steps:
       - uses: actions/checkout@v5
@@ -70,16 +69,36 @@ jobs:
         run: |
           printf '%s' "${PLACEHOLDER_GOOGLE_SERVICES_JSON}" > app/google-services.json
 
-      - name: Run unit tests
+      - name: Enable KVM
         run: |
-          chmod +x gradlew
-          ./gradlew test
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
-      - name: Upload unit test reports
+      - name: Generate baseline profile and run startup benchmark
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
+          script: |
+            adb wait-for-device
+            while [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" != "1" ]; do sleep 5; done
+            while ! adb shell pm path android >/dev/null 2>&1; do sleep 5; done
+            chmod +x gradlew
+            ./gradlew \
+              :app:baselineprofile:connectedNonMinifiedReleaseAndroidTest \
+              :app:baselineprofile:collectNonMinifiedReleaseBaselineProfile \
+              :app:baselineprofile:connectedBenchmarkReleaseAndroidTest
+
+      - name: Upload baseline profile artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-unit-test-reports
+          name: android-baseline-profile-artifacts
           path: |
-            **/build/reports/tests/**
-            **/build/test-results/**
+            app/src/main/generated/baselineProfiles/**
+            app/baselineprofile/build/reports/**
+            app/baselineprofile/build/outputs/**

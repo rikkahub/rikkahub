@@ -6,6 +6,8 @@
     "build": "react-router build && bun run copy.ts",
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
+    "test": "vitest",
+    "test:ci": "vitest run",
     "typecheck": "react-router typegen && tsc",
     "lint": "oxlint app --fix",
     "fmt": "oxfmt app",
@@ -51,9 +53,13 @@
   "devDependencies": {
     "@react-router/dev": "7.13.0",
     "@tailwindcss/vite": "^4.1.13",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.10.13",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "jsdom": "^27.0.1",
     "oxfmt": "^0.32.0",
     "oxlint": "^1.49.0",
     "tailwindcss": "^4.1.13",
@@ -61,6 +67,7 @@
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
     "vite-plugin-svgr": "^4.5.0",
-    "vite-tsconfig-paths": "^5.1.4"
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.2.4"
   }
 }

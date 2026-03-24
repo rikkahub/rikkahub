@@ -11,6 +11,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -291,6 +292,7 @@ dependencies {
     implementation(project(":common"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
+    baselineProfile(project(":app:baselineprofile"))
 
     // Leak Canary
     // debugImplementation(libs.leakcanary.android)
