@@ -1,0 +1,37 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    paths:
+      - "**/*.gradle"
+      - "**/*.gradle.kts"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/pnpm-lock.yaml"
+      - "**/yarn.lock"
+      - "**/bun.lock"
+      - "**/bun.lockb"
+      - "gradle.properties"
+      - "gradle/libs.versions.toml"
+      - "gradle/wrapper/gradle-wrapper.properties"
+      - ".github/dependency-review-config.yml"
+      - ".github/workflows/dependency-review.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          config-file: ./.github/dependency-review-config.yml

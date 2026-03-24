@@ -4,7 +4,39 @@ on:
   push:
     branches:
       - "**"
+    paths:
+      - "app/**"
+      - "ai/**"
+      - "common/**"
+      - "document/**"
+      - "highlight/**"
+      - "search/**"
+      - "tts/**"
+      - "web/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/android-instrumented-tests.yml"
   pull_request:
+    paths:
+      - "app/**"
+      - "ai/**"
+      - "common/**"
+      - "document/**"
+      - "highlight/**"
+      - "search/**"
+      - "tts/**"
+      - "web/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/android-instrumented-tests.yml"
   workflow_dispatch:
 
 permissions:

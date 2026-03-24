@@ -30,6 +30,10 @@ jobs:
         working-directory: web-ui
         run: bun install --frozen-lockfile
 
+      - name: Format check
+        working-directory: web-ui
+        run: bun run fmt:check
+
       - name: Lint
         working-directory: web-ui
         run: ./node_modules/.bin/oxlint app

@@ -1,4 +1,4 @@
-name: Android Screenshot Tests
+name: Android Release Smoke
 
 on:
   push:
@@ -13,13 +13,14 @@ on:
       - "search/**"
       - "tts/**"
       - "web/**"
+      - "web-ui/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "gradle.properties"
       - "gradle/**"
       - "gradlew"
       - "gradlew.bat"
-      - ".github/workflows/android-screenshot-tests.yml"
+      - ".github/workflows/android-release-smoke.yml"
   pull_request:
     paths:
       - "app/**"
@@ -30,13 +31,14 @@ on:
       - "search/**"
       - "tts/**"
       - "web/**"
+      - "web-ui/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "gradle.properties"
       - "gradle/**"
       - "gradlew"
       - "gradlew.bat"
-      - ".github/workflows/android-screenshot-tests.yml"
+      - ".github/workflows/android-release-smoke.yml"
   workflow_dispatch:
 
 permissions:
@@ -47,8 +49,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  screenshot-tests:
+  release-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v5
@@ -61,6 +64,19 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Web UI dependencies
+        working-directory: web-ui
+        run: bun install --frozen-lockfile
+
+      - name: Build Web UI
+        working-directory: web-ui
+        run: bun run build
 
       - name: Prepare Google Services config
         env:
@@ -104,20 +120,15 @@ jobs:
         run: |
           printf '%s' "${PLACEHOLDER_GOOGLE_SERVICES_JSON}" > app/google-services.json
 
-      - name: Validate screenshot references
+      - name: Build release APK
         run: |
           chmod +x gradlew
-          ./gradlew \
-            --no-daemon \
-            -Dorg.gradle.internal.cmdline.max.length=500000 \
-            :app:validateDebugScreenshotTest
+          ./gradlew --no-daemon assembleRelease
 
-      - name: Upload screenshot reports
+      - name: Upload release smoke APKs
         uses: actions/upload-artifact@v6
-        if: always()
+        if: success()
         with:
-          name: android-screenshot-test-reports
-          path: |
-            app/build/reports/screenshotTest/**
-            app/build/outputs/screenshotTest-results/**
-            app/build/test-results/validateDebugScreenshotTest/**
+          name: android-release-smoke-apks
+          path: app/build/outputs/apk/release/*.apk
+          compression-level: 0
