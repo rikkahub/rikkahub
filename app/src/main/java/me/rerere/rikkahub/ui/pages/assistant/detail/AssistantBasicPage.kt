@@ -41,6 +41,7 @@ import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.hooks.rememberCommitOnFinishSliderState
 import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.toFixed
@@ -240,13 +241,23 @@ internal fun AssistantBasicContent(
                 }
             ) {
                 if (assistant.temperature != null) {
+                    val temperatureSliderState = rememberCommitOnFinishSliderState(assistant.temperature)
                     Slider(
-                        value = assistant.temperature,
-                        onValueChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    temperature = it.toFixed(2).toFloatOrNull() ?: 0.6f
-                                )
+                        value = temperatureSliderState.value,
+                        onValueChange = temperatureSliderState::onValueChange,
+                        onValueChangeFinished = {
+                            temperatureSliderState.onValueChangeFinished(
+                                externalValue = assistant.temperature,
+                                onValueCommitted = {
+                                    onUpdate(
+                                        assistant.copy(
+                                            temperature = it
+                                        )
+                                    )
+                                },
+                                normalize = {
+                                    it.toFixed(2).toFloatOrNull() ?: 0.6f
+                                }
                             )
                         },
                         valueRange = 0f..2f,
@@ -258,7 +269,7 @@ internal fun AssistantBasicContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        val currentTemperature = assistant.temperature
+                        val currentTemperature = temperatureSliderState.value
                         val tagType = when (currentTemperature) {
                             in 0.0f..0.3f -> TagType.INFO
                             in 0.3f..1.0f -> TagType.SUCCESS
@@ -270,7 +281,7 @@ internal fun AssistantBasicContent(
                             type = TagType.INFO
                         ) {
                             Text(
-                                text = "$currentTemperature"
+                                text = currentTemperature.toFixed(2)
                             )
                         }
 
@@ -317,13 +328,23 @@ internal fun AssistantBasicContent(
                 }
             ) {
                 assistant.topP?.let { topP ->
+                    val topPSliderState = rememberCommitOnFinishSliderState(topP)
                     Slider(
-                        value = topP,
-                        onValueChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    topP = it.toFixed(2).toFloatOrNull() ?: 1.0f
-                                )
+                        value = topPSliderState.value,
+                        onValueChange = topPSliderState::onValueChange,
+                        onValueChangeFinished = {
+                            topPSliderState.onValueChangeFinished(
+                                externalValue = topP,
+                                onValueCommitted = {
+                                    onUpdate(
+                                        assistant.copy(
+                                            topP = it
+                                        )
+                                    )
+                                },
+                                normalize = {
+                                    it.toFixed(2).toFloatOrNull() ?: 1.0f
+                                }
                             )
                         },
                         valueRange = 0f..1f,
@@ -333,7 +354,7 @@ internal fun AssistantBasicContent(
                     Text(
                         text = stringResource(
                             R.string.assistant_page_top_p_value,
-                            topP.toString()
+                            topPSliderState.value.toFixed(2)
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
@@ -352,24 +373,37 @@ internal fun AssistantBasicContent(
                     )
                 }
             ) {
+                val contextMessageSizeSliderState = rememberCommitOnFinishSliderState(
+                    assistant.contextMessageSize.toFloat()
+                )
                 Slider(
-                    value = assistant.contextMessageSize.toFloat(),
-                    onValueChange = {
-                        onUpdate(
-                            assistant.copy(
-                                contextMessageSize = it.roundToInt()
-                            )
+                    value = contextMessageSizeSliderState.value,
+                    onValueChange = contextMessageSizeSliderState::onValueChange,
+                    onValueChangeFinished = {
+                        contextMessageSizeSliderState.onValueChangeFinished(
+                            externalValue = assistant.contextMessageSize.toFloat(),
+                            onValueCommitted = {
+                                onUpdate(
+                                    assistant.copy(
+                                        contextMessageSize = it.toInt()
+                                    )
+                                )
+                            },
+                            normalize = {
+                                it.roundToInt().coerceIn(0, 512).toFloat()
+                            }
                         )
                     },
                     valueRange = 0f..512f,
                     steps = 0,
                     modifier = Modifier.fillMaxWidth()
                 )
+                val contextMessageSize = contextMessageSizeSliderState.value.toInt()
 
                 Text(
-                    text = if (assistant.contextMessageSize > 0) stringResource(
+                    text = if (contextMessageSize > 0) stringResource(
                         R.string.assistant_page_context_message_count,
-                        assistant.contextMessageSize
+                        contextMessageSize
                     ) else stringResource(R.string.assistant_page_context_message_unlimited),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
@@ -492,13 +526,23 @@ internal fun AssistantBasicContent(
                         Text(stringResource(R.string.assistant_page_background_opacity_desc))
                     }
                 ) {
+                    val backgroundOpacitySliderState = rememberCommitOnFinishSliderState(backgroundOpacity)
                     Slider(
-                        value = backgroundOpacity,
-                        onValueChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    backgroundOpacity = it.toFixed(2).toFloatOrNull()?.coerceIn(0f, 1f) ?: 1.0f
-                                )
+                        value = backgroundOpacitySliderState.value,
+                        onValueChange = backgroundOpacitySliderState::onValueChange,
+                        onValueChangeFinished = {
+                            backgroundOpacitySliderState.onValueChangeFinished(
+                                externalValue = backgroundOpacity,
+                                onValueCommitted = {
+                                    onUpdate(
+                                        assistant.copy(
+                                            backgroundOpacity = it
+                                        )
+                                    )
+                                },
+                                normalize = {
+                                    it.toFixed(2).toFloatOrNull()?.coerceIn(0f, 1f) ?: 1.0f
+                                }
                             )
                         },
                         valueRange = 0f..1f,
@@ -508,7 +552,7 @@ internal fun AssistantBasicContent(
                     Text(
                         text = stringResource(
                             R.string.assistant_page_background_opacity_value,
-                            (backgroundOpacity * 100).roundToInt()
+                            (backgroundOpacitySliderState.value * 100).roundToInt()
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
@@ -525,13 +569,23 @@ internal fun AssistantBasicContent(
                         Text(stringResource(R.string.assistant_page_background_blur_desc))
                     }
                 ) {
+                    val backgroundBlurSliderState = rememberCommitOnFinishSliderState(backgroundBlur)
                     Slider(
-                        value = backgroundBlur,
-                        onValueChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    backgroundBlur = it.toFixed(1).toFloatOrNull()?.coerceIn(0f, 40f) ?: 0f
-                                )
+                        value = backgroundBlurSliderState.value,
+                        onValueChange = backgroundBlurSliderState::onValueChange,
+                        onValueChangeFinished = {
+                            backgroundBlurSliderState.onValueChangeFinished(
+                                externalValue = backgroundBlur,
+                                onValueCommitted = {
+                                    onUpdate(
+                                        assistant.copy(
+                                            backgroundBlur = it
+                                        )
+                                    )
+                                },
+                                normalize = {
+                                    it.toFixed(1).toFloatOrNull()?.coerceIn(0f, 40f) ?: 0f
+                                }
                             )
                         },
                         valueRange = 0f..40f,
@@ -541,7 +595,7 @@ internal fun AssistantBasicContent(
                     Text(
                         text = stringResource(
                             R.string.assistant_page_background_blur_value,
-                            backgroundBlur.roundToInt()
+                            backgroundBlurSliderState.value.roundToInt()
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),

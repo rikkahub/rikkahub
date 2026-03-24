@@ -46,6 +46,7 @@ import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
+import me.rerere.rikkahub.ui.hooks.rememberCommitOnFinishSliderState
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import me.rerere.rikkahub.ui.pages.setting.components.CustomThemeSection
 import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
@@ -58,6 +59,7 @@ import org.koin.androidx.compose.koinViewModel
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.ui.graphics.Color
+import kotlin.math.roundToInt
 
 private const val MAX_CODE_BLOCK_RENDER_DEPTH = 100
 private val AmoledBackground = Color(0xFF000000)
@@ -456,44 +458,51 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 }
                             }
                         }
-                        ListItem(
-                            headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
-                            colors = CustomColors.listItemColors,
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
+                        colors = CustomColors.listItemColors,
+                    )
+                    val fontSizeSliderState = rememberCommitOnFinishSliderState(displaySetting.fontSizeRatio)
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Slider(
+                            value = fontSizeSliderState.value,
+                            onValueChange = fontSizeSliderState::onValueChange,
+                            onValueChangeFinished = {
+                                fontSizeSliderState.onValueChangeFinished(
+                                    externalValue = displaySetting.fontSizeRatio,
+                                    onValueCommitted = {
+                                        updateDisplaySetting(displaySetting.copy(fontSizeRatio = it))
+                                    }
+                                )
+                            },
+                            valueRange = 0.5f..2f,
+                            steps = 11,
+                            modifier = Modifier.weight(1f)
                         )
-                        Row(
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Slider(
-                                value = displaySetting.fontSizeRatio,
-                                onValueChange = {
-                                    updateDisplaySetting(displaySetting.copy(fontSizeRatio = it))
-                                },
-                                valueRange = 0.5f..2f,
-                                steps = 11,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = "${(displaySetting.fontSizeRatio * 100).toInt()}%",
-                            )
-                        }
-                        MarkdownBlock(
-                            content = stringResource(R.string.setting_display_page_font_size_preview),
-                            modifier = Modifier.padding(8.dp),
-                            style = LocalTextStyle.current.copy(
-                                fontSize = LocalTextStyle.current.fontSize * displaySetting.fontSizeRatio,
-                                lineHeight = LocalTextStyle.current.lineHeight * displaySetting.fontSizeRatio,
-                                fontFamily = when (displaySetting.chatFontFamily) {
-                                    ChatFontFamily.DEFAULT -> FontFamily.Default
-                                    ChatFontFamily.SERIF -> FontFamily.Serif
-                                    ChatFontFamily.MONOSPACE -> FontFamily.Monospace
-                                }
-                            )
+                        Text(
+                            text = "${(fontSizeSliderState.value * 100).toInt()}%",
                         )
                     }
+                    MarkdownBlock(
+                        content = stringResource(R.string.setting_display_page_font_size_preview),
+                        modifier = Modifier.padding(8.dp),
+                        style = LocalTextStyle.current.copy(
+                            fontSize = LocalTextStyle.current.fontSize * fontSizeSliderState.value,
+                            lineHeight = LocalTextStyle.current.lineHeight * fontSizeSliderState.value,
+                            fontFamily = when (displaySetting.chatFontFamily) {
+                                ChatFontFamily.DEFAULT -> FontFamily.Default
+                                ChatFontFamily.SERIF -> FontFamily.Serif
+                                ChatFontFamily.MONOSPACE -> FontFamily.Monospace
+                            }
+                        )
+                    )
+                }
                 }
             }
 
@@ -561,20 +570,39 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Slider(
-                            value = displaySetting.codeBlockRenderMaxDepth
+                        val renderDepthSliderState = rememberCommitOnFinishSliderState(
+                            displaySetting.codeBlockRenderMaxDepth
                                 .coerceIn(0, MAX_CODE_BLOCK_RENDER_DEPTH)
-                                .toFloat(),
-                            onValueChange = {
-                                updateDisplaySetting(displaySetting.copy(codeBlockRenderMaxDepth = it.toInt()))
+                                .toFloat()
+                        )
+                        Slider(
+                            value = renderDepthSliderState.value,
+                            onValueChange = renderDepthSliderState::onValueChange,
+                            onValueChangeFinished = {
+                                renderDepthSliderState.onValueChangeFinished(
+                                    externalValue = displaySetting.codeBlockRenderMaxDepth
+                                        .coerceIn(0, MAX_CODE_BLOCK_RENDER_DEPTH)
+                                        .toFloat(),
+                                    onValueCommitted = {
+                                        updateDisplaySetting(
+                                            displaySetting.copy(codeBlockRenderMaxDepth = it.toInt())
+                                        )
+                                    },
+                                    normalize = {
+                                        it.roundToInt()
+                                            .coerceIn(0, MAX_CODE_BLOCK_RENDER_DEPTH)
+                                            .toFloat()
+                                    }
+                                )
                             },
                             valueRange = 0f..MAX_CODE_BLOCK_RENDER_DEPTH.toFloat(),
                             steps = MAX_CODE_BLOCK_RENDER_DEPTH - 1,
                             modifier = Modifier.weight(1f)
                         )
+                        val renderDepthValue = renderDepthSliderState.value.toInt()
                         Text(
-                            text = if (displaySetting.codeBlockRenderMaxDepth > 0) {
-                                displaySetting.codeBlockRenderMaxDepth.toString()
+                            text = if (renderDepthValue > 0) {
+                                renderDepthValue.toString()
                             } else {
                                 stringResource(R.string.setting_common_no_limit)
                             },
@@ -724,17 +752,31 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
+                                val pasteThresholdSliderState = rememberCommitOnFinishSliderState(
+                                    displaySetting.pasteLongTextThreshold.toFloat()
+                                )
                                 Slider(
-                                    value = displaySetting.pasteLongTextThreshold.toFloat(),
-                                    onValueChange = {
-                                        updateDisplaySetting(displaySetting.copy(pasteLongTextThreshold = it.toInt()))
+                                    value = pasteThresholdSliderState.value,
+                                    onValueChange = pasteThresholdSliderState::onValueChange,
+                                    onValueChangeFinished = {
+                                        pasteThresholdSliderState.onValueChangeFinished(
+                                            externalValue = displaySetting.pasteLongTextThreshold.toFloat(),
+                                            onValueCommitted = {
+                                                updateDisplaySetting(
+                                                    displaySetting.copy(pasteLongTextThreshold = it.toInt())
+                                                )
+                                            },
+                                            normalize = {
+                                                it.roundToInt().coerceIn(100, 10000).toFloat()
+                                            }
+                                        )
                                     },
                                     valueRange = 100f..10000f,
                                     steps = 98,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Text(
-                                    text = "${displaySetting.pasteLongTextThreshold}",
+                                    text = "${pasteThresholdSliderState.value.toInt()}",
                                 )
                             }
                         }
