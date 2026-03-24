@@ -90,11 +90,7 @@ jobs:
             while [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" != "1" ]; do sleep 5; done
             while ! adb shell pm path android >/dev/null 2>&1; do sleep 5; done
             chmod +x gradlew
-            ./gradlew --no-daemon \
-              -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR \
-              :app:baselineprofile:connectedNonMinifiedReleaseAndroidTest \
-              :app:baselineprofile:collectNonMinifiedReleaseBaselineProfile \
-              :app:baselineprofile:connectedBenchmarkReleaseAndroidTest
+            ./gradlew --no-daemon -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR :app:baselineprofile:connectedNonMinifiedReleaseAndroidTest :app:baselineprofile:collectNonMinifiedReleaseBaselineProfile :app:baselineprofile:connectedBenchmarkReleaseAndroidTest
 
       - name: Upload baseline profile artifacts
         uses: actions/upload-artifact@v6
