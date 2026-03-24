@@ -12,11 +12,13 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.baselineprofile)
+    alias(libs.plugins.screenshot)
 }
 
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 36
+    experimentalProperties["android.experimental.enableScreenshotTest"] = true
 
     defaultConfig {
         applicationId = "me.rerere.rikkahub.ywxk"
@@ -114,6 +116,11 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+        }
+    }
+    testOptions {
+        screenshotTests {
+            imageDifferenceThreshold = 0.0001f
         }
     }
     tasks.withType<KotlinCompile>().configureEach {
@@ -304,6 +311,10 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
     androidTestImplementation(libs.androidx.room.testing)
+    screenshotTestImplementation(platform(libs.androidx.compose.bom))
+    screenshotTestImplementation(libs.androidx.ui.tooling)
+    screenshotTestImplementation(libs.androidx.ui.tooling.preview.android)
+    screenshotTestImplementation(libs.screenshot.validation.api)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
