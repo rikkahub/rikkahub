@@ -91,7 +91,7 @@ jobs:
             ./gradlew --no-daemon :app:baselineprofile:connectedNonMinifiedReleaseAndroidTest :app:baselineprofile:collectNonMinifiedReleaseBaselineProfile :app:baselineprofile:connectedBenchmarkReleaseAndroidTest
 
       - name: Upload baseline profile artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: android-baseline-profile-artifacts

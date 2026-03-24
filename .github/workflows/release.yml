@@ -29,7 +29,7 @@ jobs:
           java-version: '17'
 
       - name: Gradle cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gradle/caches
@@ -64,7 +64,7 @@ jobs:
           ./gradlew assembleRelease
 
       - name: Upload arm64-v8a APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: success()
         with:
           name: release-apk-arm64-v8a
@@ -72,7 +72,7 @@ jobs:
           compression-level: 0
 
       - name: Upload x86_64 APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: success()
         with:
           name: release-apk-x86_64
@@ -80,7 +80,7 @@ jobs:
           compression-level: 0
 
       - name: Upload universal APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: success()
         with:
           name: release-apk-universal
