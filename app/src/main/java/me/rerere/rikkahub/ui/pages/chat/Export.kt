@@ -15,7 +15,9 @@ import me.rerere.hugeicons.stroke.Wrench01
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -512,11 +514,24 @@ private fun ExportedChatImage(
                             shape = RoundedCornerShape(18.dp),
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
-                            Image(
-                                painter = painterResource(id = R.mipmap.ic_launcher),
-                                contentDescription = APP_DISPLAY_NAME,
-                                modifier = Modifier.padding(4.dp)
-                            )
+                            // `ic_launcher` resolves to an adaptive icon on API 26+, which
+                            // painterResource cannot render during offscreen bitmap export.
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(4.dp)
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.mipmap.ic_launcher_background),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                Image(
+                                    painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                                    contentDescription = APP_DISPLAY_NAME,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
 
