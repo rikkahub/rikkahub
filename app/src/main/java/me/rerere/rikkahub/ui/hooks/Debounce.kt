@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.hooks
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -8,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -89,18 +91,45 @@ fun rememberDebouncedTextState(
     val state = rememberSaveable { mutableStateOf(value) }
     val latestValue by rememberUpdatedState(value)
     val latestOnDebouncedValueChange by rememberUpdatedState(onDebouncedValueChange)
+    var lastExternalValue by remember { mutableStateOf(value) }
+    var lastDispatchedValue by remember { mutableStateOf(value) }
 
     LaunchedEffect(value) {
-        if (state.value != value) {
+        val shouldSyncState =
+            state.value == lastExternalValue ||
+                value != lastDispatchedValue ||
+                state.value == value
+        lastExternalValue = value
+
+        if (shouldSyncState && state.value != value) {
             state.value = value
+        }
+        if (shouldSyncState) {
+            lastDispatchedValue = value
         }
     }
 
     LaunchedEffect(state.value) {
-        if (state.value == latestValue) return@LaunchedEffect
+        val currentValue = state.value
+        if (currentValue == latestValue || currentValue == lastDispatchedValue) return@LaunchedEffect
         delay(debounceMillis)
-        if (state.value != latestValue) {
-            latestOnDebouncedValueChange(state.value)
+        if (
+            state.value == currentValue &&
+            currentValue != latestValue &&
+            currentValue != lastDispatchedValue
+        ) {
+            lastDispatchedValue = currentValue
+            latestOnDebouncedValueChange(currentValue)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            val currentValue = state.value
+            if (currentValue != latestValue && currentValue != lastDispatchedValue) {
+                lastDispatchedValue = currentValue
+                latestOnDebouncedValueChange(currentValue)
+            }
         }
     }
 

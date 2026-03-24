@@ -347,13 +347,15 @@ private fun MessagePartsBlock(
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
     val themeTokens = LocalThemeTokenOverrides.current
+    val latestContext by rememberUpdatedState(context)
+    val latestParts by rememberUpdatedState(parts)
 
     // 消息输出HapticFeedback
     val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
-            parts.forEach { part ->
+            latestParts.forEach { part ->
                 if (part is UIMessagePart.Tool && part.toolName == "search_web" && part.isExecuted) {
                     val outputText = part.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
                     val items =
@@ -363,7 +365,7 @@ private fun MessagePartsBlock(
                         val id = item.jsonObject["id"]?.jsonPrimitive?.content ?: return@forEach
                         val url = item.jsonObject["url"]?.jsonPrimitive?.content ?: return@forEach
                         if (citationId == id) {
-                            context.openUrl(url)
+                            latestContext.openUrl(url)
                             return@handler
                         }
                     }

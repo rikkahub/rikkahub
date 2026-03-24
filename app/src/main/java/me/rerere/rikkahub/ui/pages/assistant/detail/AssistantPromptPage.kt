@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,7 +47,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -98,8 +98,7 @@ import me.rerere.rikkahub.utils.onSuccess
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlin.uuid.Uuid
 
 @Composable
@@ -139,7 +138,6 @@ fun AssistantPromptPage(id: String) {
     }
 }
 
-@OptIn(FlowPreview::class)
 @Composable
 private fun AssistantPromptContent(
     modifier: Modifier = Modifier,
@@ -171,24 +169,62 @@ private fun AssistantPromptContent(
                 val systemPromptValue = rememberTextFieldState(
                     initialText = assistant.systemPrompt,
                 )
-                LaunchedEffect(Unit) {
-                    snapshotFlow { systemPromptValue.text.toString() }
-                        .debounce(400)
-                        .collect { text ->
-                            if (text != latestAssistant.systemPrompt) {
-                                latestOnUpdate(
-                                    latestAssistant.copy(
-                                        systemPrompt = text
-                                    )
-                                )
-                            }
-                        }
-                }
+                var lastExternalSystemPrompt by remember { mutableStateOf(assistant.systemPrompt) }
+                var lastDispatchedSystemPrompt by remember { mutableStateOf(assistant.systemPrompt) }
+                val systemPromptText = systemPromptValue.text.toString()
+
                 LaunchedEffect(assistant.systemPrompt) {
                     val currentText = systemPromptValue.text.toString()
-                    if (currentText != assistant.systemPrompt) {
+                    val shouldSyncText =
+                        currentText == lastExternalSystemPrompt ||
+                            assistant.systemPrompt != lastDispatchedSystemPrompt ||
+                            currentText == assistant.systemPrompt
+                    lastExternalSystemPrompt = assistant.systemPrompt
+
+                    if (shouldSyncText && currentText != assistant.systemPrompt) {
                         systemPromptValue.edit {
                             replace(0, length, assistant.systemPrompt)
+                        }
+                    }
+                    if (shouldSyncText) {
+                        lastDispatchedSystemPrompt = assistant.systemPrompt
+                    }
+                }
+                LaunchedEffect(systemPromptText) {
+                    if (
+                        systemPromptText == latestAssistant.systemPrompt ||
+                        systemPromptText == lastDispatchedSystemPrompt
+                    ) {
+                        return@LaunchedEffect
+                    }
+                    delay(400)
+                    val latestText = systemPromptValue.text.toString()
+                    if (
+                        latestText == systemPromptText &&
+                        latestText != latestAssistant.systemPrompt &&
+                        latestText != lastDispatchedSystemPrompt
+                    ) {
+                        lastDispatchedSystemPrompt = latestText
+                        latestOnUpdate(
+                            latestAssistant.copy(
+                                systemPrompt = latestText
+                            )
+                        )
+                    }
+                }
+                DisposableEffect(Unit) {
+                    onDispose {
+                        val currentText = systemPromptValue.text.toString()
+                        if (
+                            currentText != latestAssistant.systemPrompt &&
+                            currentText != lastDispatchedSystemPrompt
+                        ) {
+                            lastDispatchedSystemPrompt = currentText
+                            latestOnUpdate(
+                                latestAssistant.copy(
+                                    systemPrompt = currentText
+                                )
+                            )
                         }
                     }
                 }
