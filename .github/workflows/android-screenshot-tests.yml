@@ -26,7 +26,9 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "17"
-          cache: "gradle"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Prepare Google Services config
         env:
@@ -69,11 +71,6 @@ jobs:
             }
         run: |
           printf '%s' "${PLACEHOLDER_GOOGLE_SERVICES_JSON}" > app/google-services.json
-
-      - name: Refresh Gradle generated worker jars
-        run: |
-          rm -rf "${HOME}/.gradle/caches/"*/workerMain
-          rm -rf "${HOME}/.gradle/caches/"*/generated-gradle-jars
 
       - name: Validate screenshot references
         run: |
