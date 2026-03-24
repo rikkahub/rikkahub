@@ -19,6 +19,21 @@ android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 36
     experimentalProperties["android.experimental.enableScreenshotTest"] = true
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+
+    if (localPropertiesFile.exists()) {
+        localProperties.load(FileInputStream(localPropertiesFile))
+    }
+
+    val releaseStoreFilePath = localProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }
+    val releaseStorePassword = localProperties.getProperty("storePassword")?.takeIf { it.isNotBlank() }
+    val releaseKeyAlias = localProperties.getProperty("keyAlias")?.takeIf { it.isNotBlank() }
+    val releaseKeyPassword = localProperties.getProperty("keyPassword")?.takeIf { it.isNotBlank() }
+    val hasReleaseSigningConfig = releaseStoreFilePath != null &&
+        releaseStorePassword != null &&
+        releaseKeyAlias != null &&
+        releaseKeyPassword != null
 
     defaultConfig {
         applicationId = "me.rerere.rikkahub.ywxk"
@@ -48,32 +63,25 @@ android {
 
     signingConfigs {
         create("release") {
-            val localProperties = Properties()
-            val localPropertiesFile = rootProject.file("local.properties")
-
-            if (localPropertiesFile.exists()) {
-                localProperties.load(FileInputStream(localPropertiesFile))
-
-                val storeFilePath = localProperties.getProperty("storeFile")
-                val storePasswordValue = localProperties.getProperty("storePassword")
-                val keyAliasValue = localProperties.getProperty("keyAlias")
-                val keyPasswordValue = localProperties.getProperty("keyPassword")
-
-                if (storeFilePath != null && storePasswordValue != null &&
-                    keyAliasValue != null && keyPasswordValue != null
-                ) {
-                    storeFile = file(storeFilePath)
-                    storePassword = storePasswordValue
-                    keyAlias = keyAliasValue
-                    keyPassword = keyPasswordValue
-                }
+            if (hasReleaseSigningConfig) {
+                storeFile = file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
             }
         }
     }
 
+    val releaseSigningName = if (hasReleaseSigningConfig) {
+        "release"
+    } else {
+        // CI workflows such as baseline profile do not provide release keystore secrets.
+        "debug"
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName(releaseSigningName)
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
