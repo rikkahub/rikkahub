@@ -98,6 +98,16 @@ internal fun normalizeCodeFenceContentForDisplay(
     }
 }
 
+internal fun shouldRenderMermaidRichly(
+    language: String,
+    completeCodeBlock: Boolean,
+    richRenderingEnabled: Boolean,
+): Boolean {
+    return completeCodeBlock &&
+        richRenderingEnabled &&
+        language.equals("mermaid", ignoreCase = true)
+}
+
 @Composable
 fun HighlightCodeBlock(
     code: String,
@@ -105,6 +115,7 @@ fun HighlightCodeBlock(
     modifier: Modifier = Modifier,
     completeCodeBlock: Boolean = true,
     style: TextStyle? = null,
+    renderMermaidRichly: Boolean = true,
 ) {
     val darkMode = LocalDarkMode.current
     val colorPalette = if (darkMode) AtomOneDarkPalette else AtomOneLightPalette
@@ -170,7 +181,11 @@ fun HighlightCodeBlock(
             modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
         ) {
             when {
-                completeCodeBlock && language == "mermaid" -> {
+                shouldRenderMermaidRichly(
+                    language = language,
+                    completeCodeBlock = completeCodeBlock,
+                    richRenderingEnabled = renderMermaidRichly,
+                ) -> {
                     Mermaid(
                         code = code,
                         modifier = Modifier.fillMaxWidth(),

@@ -704,6 +704,7 @@ private fun MarkdownNode(
                         .padding(bottom = 4.dp)
                         .fillMaxWidth(),
                     completeCodeBlock = hasEnd,
+                    renderMermaidRichly = shouldRenderCodeBlock,
                 )
             }
         }
