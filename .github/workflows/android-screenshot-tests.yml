@@ -70,10 +70,15 @@ jobs:
         run: |
           printf '%s' "${PLACEHOLDER_GOOGLE_SERVICES_JSON}" > app/google-services.json
 
+      - name: Refresh Gradle generated worker jars
+        run: |
+          rm -rf "${HOME}/.gradle/caches/"*/workerMain
+          rm -rf "${HOME}/.gradle/caches/"*/generated-gradle-jars
+
       - name: Validate screenshot references
         run: |
           chmod +x gradlew
-          ./gradlew :app:validateDebugScreenshotTest
+          ./gradlew --no-daemon :app:validateDebugScreenshotTest
 
       - name: Upload screenshot reports
         uses: actions/upload-artifact@v4
