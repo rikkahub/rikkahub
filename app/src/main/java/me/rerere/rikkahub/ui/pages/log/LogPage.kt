@@ -1,17 +1,21 @@
 package me.rerere.rikkahub.ui.pages.log
 
+import android.content.ClipData
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Delete01
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -20,7 +24,9 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -29,15 +35,35 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.dokar.sonner.ToastType
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.R
 import me.rerere.common.android.LogEntry
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.ui.JsonTree
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.JsonInstantPretty
@@ -256,29 +282,7 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
 
         log.requestBody?.let { body ->
             item {
-                HorizontalDivider()
-                Text(
-                    text = "Request Body",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                val jsonElement = remember(body) {
-                    runCatching { JsonInstantPretty.parseToJsonElement(body) }.getOrNull()
-                }
-                if (jsonElement != null) {
-                    JsonTree(
-                        json = jsonElement,
-                        modifier = Modifier.padding(top = 4.dp),
-                        initialExpandLevel = 2
-                    )
-                } else {
-                    Text(
-                        text = body,
-                        fontFamily = JetbrainsMono,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
+                LogBodySection(title = "Request Body", body = body)
             }
         }
 
@@ -301,29 +305,119 @@ private fun RequestLogDetail(log: LogEntry.RequestLog) {
 
         log.responseBody?.let { body ->
             item {
-                HorizontalDivider()
-                Text(
-                    text = "Response Body",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
+                LogBodySection(title = "Response Body", body = body)
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogBodySection(title: String, body: String) {
+    val parsedJson = remember(body) {
+        runCatching { JsonInstantPretty.parseToJsonElement(body) }.getOrNull()
+    }
+    val displayText = remember(body, parsedJson) {
+        parsedJson?.let { JsonInstantPretty.encodeToString(it) } ?: body
+    }
+    val lineCount = remember(displayText) { displayText.lineSequence().count().coerceAtLeast(1) }
+    val colorScheme = MaterialTheme.colorScheme
+    val highlightedText = remember(
+        parsedJson,
+        colorScheme.primary,
+        colorScheme.onSurface,
+        colorScheme.onSurfaceVariant,
+        colorScheme.outline
+    ) {
+        parsedJson?.let {
+            buildJsonAnnotatedString(
+                element = it,
+                colors = JsonHighlightColors(
+                    key = colorScheme.primary,
+                    string = Color(0xFF6A8759),
+                    number = Color(0xFF6897BB),
+                    boolean = Color(0xFFCC7832),
+                    punctuation = colorScheme.onSurfaceVariant,
+                    nullValue = colorScheme.outline
                 )
-                val jsonElement = remember(body) {
-                    runCatching { JsonInstantPretty.parseToJsonElement(body) }.getOrNull()
-                }
-                if (jsonElement != null) {
-                    JsonTree(
-                        json = jsonElement,
-                        modifier = Modifier.padding(top = 4.dp),
-                        initialExpandLevel = 2
-                    )
-                } else {
+            )
+        }
+    }
+    val clipboardManager = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val toaster = LocalToaster.current
+    val copiedText = stringResource(R.string.copied)
+
+    HorizontalDivider()
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 8.dp, bottom = 6.dp)
+    )
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, top = 8.dp, end = 4.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
-                        text = body,
-                        fontFamily = JetbrainsMono,
-                        modifier = Modifier.padding(top = 4.dp)
+                        text = if (parsedJson != null) "Formatted JSON" else "Raw Body",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (parsedJson != null) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                    Text(
+                        text = "$lineCount lines",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            clipboardManager.setClipEntry(ClipEntry(ClipData.newPlainText("request-log", displayText)))
+                            toaster.show(copiedText, type = ToastType.Success)
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Copy01,
+                        contentDescription = stringResource(R.string.text_selection_copy)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = stringResource(R.string.text_selection_copy))
+                }
+            }
+
+            HorizontalDivider()
+
+            SelectionContainer {
+                Text(
+                    text = highlightedText ?: AnnotatedString(displayText),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = JetbrainsMono,
+                        lineHeight = 20.sp
+                    ),
+                    softWrap = true
+                )
             }
         }
     }
@@ -358,6 +452,137 @@ private fun HeaderItem(key: String, value: String) {
             style = MaterialTheme.typography.bodySmall,
             fontFamily = JetbrainsMono
         )
+    }
+}
+
+private data class JsonHighlightColors(
+    val key: Color,
+    val string: Color,
+    val number: Color,
+    val boolean: Color,
+    val punctuation: Color,
+    val nullValue: Color
+)
+
+private fun buildJsonAnnotatedString(
+    element: JsonElement,
+    colors: JsonHighlightColors
+): AnnotatedString = buildAnnotatedString {
+    appendJsonElement(element = element, depth = 0, colors = colors)
+}
+
+private fun AnnotatedString.Builder.appendJsonElement(
+    element: JsonElement,
+    depth: Int,
+    colors: JsonHighlightColors
+) {
+    when (element) {
+        is JsonObject -> {
+            if (element.isEmpty()) {
+                appendJsonPunctuation("{}", colors.punctuation)
+                return
+            }
+
+            appendJsonPunctuation("{", colors.punctuation)
+            val entries = element.entries.toList()
+            entries.forEachIndexed { index, (key, value) ->
+                appendLineBreakWithIndent(depth + 1)
+                withStyle(SpanStyle(color = colors.key)) {
+                    append("\"")
+                    append(escapeJsonString(key))
+                    append("\"")
+                }
+                appendJsonPunctuation(": ", colors.punctuation)
+                appendJsonElement(value, depth + 1, colors)
+                if (index != entries.lastIndex) {
+                    appendJsonPunctuation(",", colors.punctuation)
+                }
+            }
+            appendLineBreakWithIndent(depth)
+            appendJsonPunctuation("}", colors.punctuation)
+        }
+
+        is JsonArray -> {
+            if (element.isEmpty()) {
+                appendJsonPunctuation("[]", colors.punctuation)
+                return
+            }
+
+            appendJsonPunctuation("[", colors.punctuation)
+            element.forEachIndexed { index, value ->
+                appendLineBreakWithIndent(depth + 1)
+                appendJsonElement(value, depth + 1, colors)
+                if (index != element.lastIndex) {
+                    appendJsonPunctuation(",", colors.punctuation)
+                }
+            }
+            appendLineBreakWithIndent(depth)
+            appendJsonPunctuation("]", colors.punctuation)
+        }
+
+        JsonNull -> {
+            withStyle(SpanStyle(color = colors.nullValue)) {
+                append("null")
+            }
+        }
+
+        is JsonPrimitive -> {
+            when {
+                element.isString -> {
+                    withStyle(SpanStyle(color = colors.string)) {
+                        append("\"")
+                        append(escapeJsonString(element.content))
+                        append("\"")
+                    }
+                }
+
+                element.booleanOrNull != null -> {
+                    withStyle(SpanStyle(color = colors.boolean)) {
+                        append(element.content)
+                    }
+                }
+
+                element.longOrNull != null || element.doubleOrNull != null -> {
+                    withStyle(SpanStyle(color = colors.number)) {
+                        append(element.content)
+                    }
+                }
+
+                else -> {
+                    withStyle(SpanStyle(color = colors.punctuation)) {
+                        append(element.content)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun AnnotatedString.Builder.appendJsonPunctuation(text: String, color: Color) {
+    withStyle(SpanStyle(color = color)) {
+        append(text)
+    }
+}
+
+private fun AnnotatedString.Builder.appendLineBreakWithIndent(depth: Int) {
+    append("\n")
+    repeat(depth) {
+        append("  ")
+    }
+}
+
+private fun escapeJsonString(text: String): String = buildString(text.length + 8) {
+    text.forEach { char ->
+        when (char) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
+            else -> append(char)
+        }
     }
 }
 
