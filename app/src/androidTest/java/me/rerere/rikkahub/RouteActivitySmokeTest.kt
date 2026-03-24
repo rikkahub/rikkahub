@@ -24,11 +24,11 @@ class RouteActivitySmokeTest {
 
     @Test
     fun drawer_settingsNavigation_opensSettingsPage() {
+        val settingsLabel = composeRule.activity.getString(R.string.settings)
+
         composeRule.onNodeWithContentDescription("Messages").performClick()
 
-        composeRule.onNodeWithText(
-            composeRule.activity.getString(R.string.settings)
-        ).performClick()
+        composeRule.onNodeWithContentDescription(settingsLabel).performClick()
 
         composeRule.onNodeWithText(
             composeRule.activity.getString(R.string.setting_page_display_setting)

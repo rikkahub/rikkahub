@@ -40,6 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -272,6 +274,7 @@ fun ChatDrawerContent(
                     .padding(horizontal = 8.dp)
             ) {
                 DrawerAction(
+                    contentDescription = stringResource(R.string.assistant_page_title),
                     icon = {
                         Icon(
                             imageVector = HugeIcons.LookTop,
@@ -288,6 +291,7 @@ fun ChatDrawerContent(
 
                 Box {
                     DrawerAction(
+                        contentDescription = stringResource(R.string.menu),
                         icon = {
                             Icon(HugeIcons.Sparkles, "Menu")
                         },
@@ -322,6 +326,7 @@ fun ChatDrawerContent(
                 }
 
                 DrawerAction(
+                    contentDescription = stringResource(R.string.favorite_page_title),
                     icon = {
                         Icon(HugeIcons.InLove, stringResource(R.string.favorite_page_title))
                     },
@@ -334,6 +339,7 @@ fun ChatDrawerContent(
                 )
 
                 DrawerAction(
+                    contentDescription = "统计数据",
                     icon = {
                         Icon(HugeIcons.ChartColumn, "统计数据")
                     },
@@ -348,6 +354,7 @@ fun ChatDrawerContent(
                 Spacer(Modifier.weight(1f))
 
                 DrawerAction(
+                    contentDescription = stringResource(R.string.settings),
                     icon = {
                         Icon(HugeIcons.Settings03, null)
                     },
@@ -546,13 +553,16 @@ private fun DrawerActions(navController: Navigator) {
 @Composable
 private fun DrawerAction(
     modifier: Modifier = Modifier,
+    contentDescription: String,
     icon: @Composable () -> Unit,
     label: @Composable () -> Unit,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.semantics {
+            this.contentDescription = contentDescription
+        },
         color = MaterialTheme.colorScheme.primaryContainer,
         shape = CircleShape,
         contentColor = MaterialTheme.colorScheme.onSurface,

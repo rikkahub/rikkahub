@@ -60,10 +60,20 @@ class AppDatabaseMigrationPathTest {
                         }
                     }
                 }
+                val normalizedTables = tables.mapTo(mutableSetOf()) { it.lowercase() }
 
-                assertTrue("conversationentity should exist after migration from $startVersion", tables.contains("conversationentity"))
-                assertTrue("message_node should exist after migration from $startVersion", tables.contains("message_node"))
-                assertTrue("scheduled_task_run should exist after migration from $startVersion", tables.contains("scheduled_task_run"))
+                assertTrue(
+                    "conversationentity should exist after migration from $startVersion",
+                    normalizedTables.contains("conversationentity")
+                )
+                assertTrue(
+                    "message_node should exist after migration from $startVersion",
+                    normalizedTables.contains("message_node")
+                )
+                assertTrue(
+                    "scheduled_task_run should exist after migration from $startVersion",
+                    normalizedTables.contains("scheduled_task_run")
+                )
             }
 
             database.close()
