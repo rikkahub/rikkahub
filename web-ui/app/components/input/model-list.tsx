@@ -212,7 +212,10 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
 
     return sections.find((section) => section.providerId === selectedProviderId) ?? sections[0];
   }, [sections, selectedProviderId]);
-  const filteredModels = React.useMemo(() => sections.flatMap((section) => section.models), [sections]);
+  const filteredModels = React.useMemo(
+    () => sections.flatMap((section) => section.models),
+    [sections],
+  );
 
   const favoriteModels = React.useMemo(() => {
     return favoriteModelIds
@@ -220,7 +223,9 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
       .filter((model): model is ProviderModel => model !== undefined);
   }, [favoriteModelIds, filteredModels]);
   const isFavoriteSectionSelected = selectedProviderId === FAVORITE_SECTION_ID;
-  const displayedModels = isFavoriteSectionSelected ? favoriteModels : (selectedSection?.models ?? []);
+  const displayedModels = isFavoriteSectionSelected
+    ? favoriteModels
+    : (selectedSection?.models ?? []);
 
   const currentModel = React.useMemo(
     () => allModels.find((model) => model.id === currentModelId) ?? null,
@@ -252,13 +257,21 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
       return;
     }
 
-    if (selectedProviderId && sections.some((section) => section.providerId === selectedProviderId)) {
+    if (
+      selectedProviderId &&
+      sections.some((section) => section.providerId === selectedProviderId)
+    ) {
       return;
     }
 
     const currentModelSection =
-      currentModelId == null ? null : sections.find((section) => section.models.some((model) => model.id === currentModelId));
-    setSelectedProviderId(currentModelSection?.providerId ?? (favoriteModels.length > 0 ? FAVORITE_SECTION_ID : sections[0]?.providerId ?? null));
+      currentModelId == null
+        ? null
+        : sections.find((section) => section.models.some((model) => model.id === currentModelId));
+    setSelectedProviderId(
+      currentModelSection?.providerId ??
+        (favoriteModels.length > 0 ? FAVORITE_SECTION_ID : (sections[0]?.providerId ?? null)),
+    );
   }, [currentModelId, favoriteModels.length, open, sections, selectedProviderId]);
 
   React.useEffect(() => {
@@ -292,9 +305,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
         setOpen(false);
       } catch (changeError) {
         const message =
-          changeError instanceof Error
-            ? changeError.message
-            : t("model_list.switch_model_failed");
+          changeError instanceof Error ? changeError.message : t("model_list.switch_model_failed");
         setError(message);
       } finally {
         setUpdatingModelId(null);
@@ -373,9 +384,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
       <PopoverContent align="end" className="w-[min(96vw,30rem)] gap-0 p-0">
         <PopoverHeader className="border-b px-4 py-3">
           <PopoverTitle className="text-sm">{t("model_list.title")}</PopoverTitle>
-          <PopoverDescription className="text-xs">
-            {t("model_list.description")}
-          </PopoverDescription>
+          <PopoverDescription className="text-xs">{t("model_list.description")}</PopoverDescription>
         </PopoverHeader>
 
         <div className="space-y-2 px-3 py-3">
@@ -417,7 +426,9 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                           setSelectedProviderId(FAVORITE_SECTION_ID);
                         }}
                       >
-                        <Heart className={cn("size-3", isFavoriteSectionSelected && "fill-current")} />
+                        <Heart
+                          className={cn("size-3", isFavoriteSectionSelected && "fill-current")}
+                        />
                         <span>{t("model_list.favorites")}</span>
                       </button>
                     )}

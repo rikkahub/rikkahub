@@ -34,11 +34,14 @@ describe("ConversationSearchButton", () => {
       target: { value: "release" },
     });
 
-    await waitFor(() => {
-      expect(apiMock.get).toHaveBeenCalledWith("conversations/search", {
-        searchParams: { query: "release" },
-      });
-    }, { timeout: 2_000 });
+    await waitFor(
+      () => {
+        expect(apiMock.get).toHaveBeenCalledWith("conversations/search", {
+          searchParams: { query: "release" },
+        });
+      },
+      { timeout: 2_000 },
+    );
 
     fireEvent.click(await screen.findByText("Release notes"));
 

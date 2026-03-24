@@ -15,4 +15,10 @@ export const useSettingsStore = useAppStore;
 export const useChatInputStore = useAppStore;
 export const useClockStore = useAppStore;
 
-export type { AppStoreState, ChatInputSlice, ClockSlice, Draft, SettingsSlice } from "~/stores/slices/types";
+export type {
+  AppStoreState,
+  ChatInputSlice,
+  ClockSlice,
+  Draft,
+  SettingsSlice,
+} from "~/stores/slices/types";

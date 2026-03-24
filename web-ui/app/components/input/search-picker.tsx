@@ -214,7 +214,10 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                 disabled={disabled || loading}
                 onCheckedChange={(nextChecked) => {
                   if (!canUse || !currentModel) return;
-                  toggleBuiltInSearchMutation.mutate({ modelId: currentModel.id, enabled: nextChecked });
+                  toggleBuiltInSearchMutation.mutate({
+                    modelId: currentModel.id,
+                    enabled: nextChecked,
+                  });
                 }}
               />
             </div>

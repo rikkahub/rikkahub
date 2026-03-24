@@ -362,7 +362,11 @@ const CodeBlockBody = React.memo(
 
     return (
       <pre
-        className={cn("m-0 p-3 text-sm", wrapLines ? "whitespace-pre-wrap" : "whitespace-pre", className)}
+        className={cn(
+          "m-0 p-3 text-sm",
+          wrapLines ? "whitespace-pre-wrap" : "whitespace-pre",
+          className,
+        )}
         style={preStyle}
       >
         <code
@@ -475,7 +479,12 @@ export function CodeBlockContent({
   }, [code, language, rawTokens, shouldHighlight]);
 
   return (
-    <div className={cn("code-block-content relative", wrapLines ? "overflow-y-auto overflow-x-hidden" : "overflow-auto")}>
+    <div
+      className={cn(
+        "code-block-content relative",
+        wrapLines ? "overflow-y-auto overflow-x-hidden" : "overflow-auto",
+      )}
+    >
       <CodeBlockBody
         className="dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
         showLineNumbers={showLineNumbers}
@@ -711,7 +720,12 @@ export function CodeBlock({
             <CodeBlockCopyButton />
           </CodeBlockActions>
         </CodeBlockHeader>
-        <CodeBlockContent code={code} language={shikiLanguage} showLineNumbers={showLineNumbers} wrapLines={wrapLines} />
+        <CodeBlockContent
+          code={code}
+          language={shikiLanguage}
+          showLineNumbers={showLineNumbers}
+          wrapLines={wrapLines}
+        />
       </CodeBlockContainer>
     </CodeBlockContext.Provider>
   );

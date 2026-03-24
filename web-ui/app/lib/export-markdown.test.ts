@@ -67,7 +67,12 @@ describe("export-markdown", () => {
               id: "assistant-branch-2",
               parts: [
                 { type: "text", text: "Final answer" },
-                { type: "document", fileName: "notes.md", url: "/api/files/1", mime: "text/markdown" },
+                {
+                  type: "document",
+                  fileName: "notes.md",
+                  url: "/api/files/1",
+                  mime: "text/markdown",
+                },
               ],
             },
           ],

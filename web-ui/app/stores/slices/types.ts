@@ -26,4 +26,3 @@ export interface ClockSlice {
 }
 
 export type AppStoreState = SettingsSlice & ChatInputSlice & ClockSlice;
-

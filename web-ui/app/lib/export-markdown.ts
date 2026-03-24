@@ -1,9 +1,6 @@
 import type { ConversationDto, MessageDto } from "~/types";
 
-export function convertMessageToMarkdown(
-  message: MessageDto,
-  includeReasoning: boolean,
-): string {
+export function convertMessageToMarkdown(message: MessageDto, includeReasoning: boolean): string {
   const lines: string[] = [];
 
   for (const part of message.parts) {

@@ -123,9 +123,9 @@ export default function Markdown({
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex, rehypeRaw]}
         plugins={{ cjk: cjk }}
-        animated={{ animation: "blurIn", sep: 'word', duration: 300 }}
+        animated={{ animation: "blurIn", sep: "word", duration: 300 }}
         isAnimating={isAnimating}
-        controls={{code: false, mermaid: false}}
+        controls={{ code: false, mermaid: false }}
         components={{
           pre: ({ children }) => <>{children}</>,
           code: ({ className, children, ...props }) => {

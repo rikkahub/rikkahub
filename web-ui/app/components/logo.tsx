@@ -1,6 +1,6 @@
 import type { ComponentPropsWithRef } from "react";
 
-export default function Logo(props: ComponentPropsWithRef<'svg'>) {
+export default function Logo(props: ComponentPropsWithRef<"svg">) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -9,7 +9,16 @@ export default function Logo(props: ComponentPropsWithRef<'svg'>) {
       height="256"
       {...props}
     >
-      <rect x="70" y="70" width="1060" height="1060" rx="250" fill="white" stroke="#e7e7e7" strokeWidth="24" />
+      <rect
+        x="70"
+        y="70"
+        width="1060"
+        height="1060"
+        rx="250"
+        fill="white"
+        stroke="#e7e7e7"
+        strokeWidth="24"
+      />
 
       <g transform="translate(190 190)" fill="none" stroke="#111111" strokeLinecap="round">
         <circle

@@ -523,142 +523,149 @@ function useDraftInputController({
   };
 }
 
-const ConversationTimeline = React.memo(({
-  activeId,
-  isHomeRoute,
-  detailLoading,
-  detailError,
-  selectedNodeMessages,
-  isGenerating,
-  settings,
-  conversationAssistantId,
-  contentClassName,
-  onEdit,
-  onDelete,
-  onFork,
-  onRegenerate,
-  onSelectBranch,
-  onToolApproval,
-}: {
-  activeId: string | null;
-  isHomeRoute: boolean;
-  detailLoading: boolean;
-  detailError: string | null;
-  selectedNodeMessages: SelectedNodeMessage[];
-  isGenerating: boolean;
-  settings: Settings | null;
-  conversationAssistantId: string | null;
-  contentClassName?: string;
-  onEdit: (message: MessageDto) => void | Promise<void>;
-  onDelete: (messageId: string) => Promise<void>;
-  onFork: (messageId: string) => Promise<void>;
-  onRegenerate: (messageId: string) => Promise<void>;
-  onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
-  onToolApproval: (toolCallId: string, approved: boolean, reason: string, answer?: string) => Promise<void>;
-}) => {
-  const { t } = useTranslation("page");
-  const canQuickJump =
-    Boolean(activeId) && !detailLoading && !detailError && selectedNodeMessages.length > 1;
-  const assistant = React.useMemo(() => {
-    if (!settings || !conversationAssistantId) return null;
-    return settings.assistants.find((item) => item.id === conversationAssistantId) ?? null;
-  }, [conversationAssistantId, settings]);
-  const modelById = React.useMemo(() => {
-    const map = new Map<string, ProviderModel>();
-    if (!settings) return map;
+const ConversationTimeline = React.memo(
+  ({
+    activeId,
+    isHomeRoute,
+    detailLoading,
+    detailError,
+    selectedNodeMessages,
+    isGenerating,
+    settings,
+    conversationAssistantId,
+    contentClassName,
+    onEdit,
+    onDelete,
+    onFork,
+    onRegenerate,
+    onSelectBranch,
+    onToolApproval,
+  }: {
+    activeId: string | null;
+    isHomeRoute: boolean;
+    detailLoading: boolean;
+    detailError: string | null;
+    selectedNodeMessages: SelectedNodeMessage[];
+    isGenerating: boolean;
+    settings: Settings | null;
+    conversationAssistantId: string | null;
+    contentClassName?: string;
+    onEdit: (message: MessageDto) => void | Promise<void>;
+    onDelete: (messageId: string) => Promise<void>;
+    onFork: (messageId: string) => Promise<void>;
+    onRegenerate: (messageId: string) => Promise<void>;
+    onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
+    onToolApproval: (
+      toolCallId: string,
+      approved: boolean,
+      reason: string,
+      answer?: string,
+    ) => Promise<void>;
+  }) => {
+    const { t } = useTranslation("page");
+    const canQuickJump =
+      Boolean(activeId) && !detailLoading && !detailError && selectedNodeMessages.length > 1;
+    const assistant = React.useMemo(() => {
+      if (!settings || !conversationAssistantId) return null;
+      return settings.assistants.find((item) => item.id === conversationAssistantId) ?? null;
+    }, [conversationAssistantId, settings]);
+    const modelById = React.useMemo(() => {
+      const map = new Map<string, ProviderModel>();
+      if (!settings) return map;
 
-    for (const provider of settings.providers) {
-      for (const model of provider.models) {
-        if (!map.has(model.id)) {
-          map.set(model.id, model);
+      for (const provider of settings.providers) {
+        for (const model of provider.models) {
+          if (!map.has(model.id)) {
+            map.set(model.id, model);
+          }
         }
       }
-    }
 
-    return map;
-  }, [settings]);
+      return map;
+    }, [settings]);
 
-  return (
-    <Conversation className="flex-1 min-h-0">
-      <ConversationContent
-        className={cn("mx-auto w-full max-w-3xl gap-4 px-4 py-6", contentClassName)}
-      >
-        {!activeId && !isHomeRoute && (
-          <ConversationEmptyState
-            icon={<MessageSquare className="size-10" />}
-            title={t("conversations.empty_state.select_title")}
-            description={t("conversations.empty_state.select_description")}
+    return (
+      <Conversation className="flex-1 min-h-0">
+        <ConversationContent
+          className={cn("mx-auto w-full max-w-3xl gap-4 px-4 py-6", contentClassName)}
+        >
+          {!activeId && !isHomeRoute && (
+            <ConversationEmptyState
+              icon={<MessageSquare className="size-10" />}
+              title={t("conversations.empty_state.select_title")}
+              description={t("conversations.empty_state.select_description")}
+            />
+          )}
+          {activeId && detailLoading && (
+            <ConversationEmptyState
+              title={t("conversations.empty_state.loading_title")}
+              description={t("conversations.empty_state.loading_description")}
+            />
+          )}
+          {activeId && detailError && (
+            <ConversationEmptyState
+              title={t("conversations.empty_state.error_title")}
+              description={detailError}
+            />
+          )}
+          {!detailLoading && !detailError && activeId && selectedNodeMessages.length === 0 && (
+            <ConversationEmptyState
+              icon={<MessageSquare className="size-10" />}
+              title={t("conversations.empty_state.no_message_title")}
+              description={t("conversations.empty_state.no_message_description")}
+            />
+          )}
+          {!detailLoading &&
+            !detailError &&
+            activeId &&
+            selectedNodeMessages.map(({ node, message }, index) => {
+              const model = message.modelId ? (modelById.get(message.modelId) ?? null) : null;
+
+              return (
+                <div
+                  key={message.id}
+                  id={getConversationMessageAnchorId(message.id)}
+                  className="scroll-mt-24"
+                >
+                  <ChatMessage
+                    node={node}
+                    message={message}
+                    loading={isGenerating && index === selectedNodeMessages.length - 1}
+                    isLastMessage={index === selectedNodeMessages.length - 1}
+                    assistant={assistant}
+                    model={model}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    onFork={onFork}
+                    onRegenerate={onRegenerate}
+                    onSelectBranch={onSelectBranch}
+                    onToolApproval={onToolApproval}
+                  />
+                </div>
+              );
+            })}
+          {!detailLoading && !detailError && activeId && isGenerating && (
+            <div className="flex items-start py-2">
+              <TypingIndicator className="px-1 py-2" />
+            </div>
+          )}
+        </ConversationContent>
+
+        {canQuickJump ? (
+          <ConversationQuickJump
+            items={selectedNodeMessages.map(({ message }) => ({
+              id: message.id,
+              role: message.role,
+              preview: getQuickJumpPreview(message, t),
+            }))}
           />
-        )}
-        {activeId && detailLoading && (
-          <ConversationEmptyState
-            title={t("conversations.empty_state.loading_title")}
-            description={t("conversations.empty_state.loading_description")}
-          />
-        )}
-        {activeId && detailError && (
-          <ConversationEmptyState
-            title={t("conversations.empty_state.error_title")}
-            description={detailError}
-          />
-        )}
-        {!detailLoading && !detailError && activeId && selectedNodeMessages.length === 0 && (
-          <ConversationEmptyState
-            icon={<MessageSquare className="size-10" />}
-            title={t("conversations.empty_state.no_message_title")}
-            description={t("conversations.empty_state.no_message_description")}
-          />
-        )}
-        {!detailLoading &&
-          !detailError &&
-          activeId &&
-          selectedNodeMessages.map(({ node, message }, index) => {
-            const model = message.modelId ? (modelById.get(message.modelId) ?? null) : null;
+        ) : null}
 
-            return (
-              <div
-                key={message.id}
-                id={getConversationMessageAnchorId(message.id)}
-                className="scroll-mt-24"
-              >
-                <ChatMessage
-                  node={node}
-                  message={message}
-                  loading={isGenerating && index === selectedNodeMessages.length - 1}
-                  isLastMessage={index === selectedNodeMessages.length - 1}
-                  assistant={assistant}
-                  model={model}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  onFork={onFork}
-                  onRegenerate={onRegenerate}
-                  onSelectBranch={onSelectBranch}
-                  onToolApproval={onToolApproval}
-                />
-              </div>
-            );
-          })}
-        {!detailLoading && !detailError && activeId && isGenerating && (
-          <div className="flex items-start py-2">
-            <TypingIndicator className="px-1 py-2" />
-          </div>
-        )}
-      </ConversationContent>
-
-      {canQuickJump ? (
-        <ConversationQuickJump
-          items={selectedNodeMessages.map(({ message }) => ({
-            id: message.id,
-            role: message.role,
-            preview: getQuickJumpPreview(message, t),
-          }))}
-        />
-      ) : null}
-
-      <ConversationScrollButton />
-    </Conversation>
-  );
-});
+        <ConversationScrollButton />
+      </Conversation>
+    );
+  },
+);
 
 export function meta() {
   return [

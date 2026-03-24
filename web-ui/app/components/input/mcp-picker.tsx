@@ -158,9 +158,7 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
       <PopoverContent align="end" className="w-[min(92vw,22rem)] gap-0 p-0">
         <PopoverHeader className="border-b px-3 py-2.5">
           <PopoverTitle className="text-sm">{t("mcp.title")}</PopoverTitle>
-          <PopoverDescription className="text-[11px]">
-            {t("mcp.description")}
-          </PopoverDescription>
+          <PopoverDescription className="text-[11px]">{t("mcp.description")}</PopoverDescription>
         </PopoverHeader>
 
         <div className="space-y-2 px-2.5 py-2.5">

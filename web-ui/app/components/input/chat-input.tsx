@@ -96,9 +96,7 @@ async function detectUploadFile(
   return { allowed: false, mimeType: detected.mime };
 }
 
-function toMessagePart(
-  file: UploadFilesResponseDto["files"][number],
-): UIMessagePart {
+function toMessagePart(file: UploadFilesResponseDto["files"][number]): UIMessagePart {
   if (file.mime.startsWith("image/")) {
     return {
       type: "image",
@@ -234,10 +232,8 @@ export function ChatInput({
 
   const canStop = ready && Boolean(onStop) && isGenerating && !disabled;
   const canSend = ready && !isGenerating && !disabled && !isEmpty;
-  const canUpload =
-    ready && !disabled && !isGenerating && !uploading && !submitting;
-  const canSwitchModel =
-    ready && !disabled && !isGenerating && !uploading && !submitting;
+  const canUpload = ready && !disabled && !isGenerating && !uploading && !submitting;
+  const canSwitchModel = ready && !disabled && !isGenerating && !uploading && !submitting;
   const canUseQuickMessage = ready && !disabled && !uploading && !submitting;
   const actionDisabled = submitting || uploading || (!canStop && !canSend);
 
@@ -263,9 +259,7 @@ export function ChatInput({
       const skippedFiles = results.filter((r) => !r.allowed);
 
       if (skippedFiles.length > 0) {
-        toast.warning(
-          t("chat.unsupported_file_skipped", { count: skippedFiles.length }),
-        );
+        toast.warning(t("chat.unsupported_file_skipped", { count: skippedFiles.length }));
       }
 
       if (uploadableFiles.length === 0) {
@@ -285,17 +279,12 @@ export function ChatInput({
       setUploading(true);
       setError(null);
       try {
-        const response = await api.postMultipart<UploadFilesResponseDto>(
-          "files/upload",
-          formData,
-        );
+        const response = await api.postMultipart<UploadFilesResponseDto>("files/upload", formData);
         const parts = response.files.map(toMessagePart);
         onAddParts(parts);
       } catch (uploadError) {
         const message =
-          uploadError instanceof Error
-            ? uploadError.message
-            : t("chat.upload_failed");
+          uploadError instanceof Error ? uploadError.message : t("chat.upload_failed");
         setError(message);
       } finally {
         setUploading(false);
@@ -322,10 +311,7 @@ export function ChatInput({
         await onSend();
       }
     } catch (submitError) {
-      const message =
-        submitError instanceof Error
-          ? submitError.message
-          : t("chat.send_failed");
+      const message = submitError instanceof Error ? submitError.message : t("chat.send_failed");
       setError(message);
     } finally {
       setSubmitting(false);
@@ -456,17 +442,14 @@ export function ChatInput({
     [canUpload, dragActive],
   );
 
-  const handleDragLeave = React.useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-      if (dragDepthRef.current === 0) {
-        setDragActive(false);
-      }
-    },
-    [],
-  );
+  const handleDragLeave = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setDragActive(false);
+    }
+  }, []);
 
   const handleDrop = React.useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
@@ -481,12 +464,8 @@ export function ChatInput({
     [canUpload, uploadFiles],
   );
 
-  const sendHint = sendOnEnter
-    ? t("chat.send_hint_enter")
-    : t("chat.send_hint_newline");
-  const placeholder = ready
-    ? t("chat.placeholder_ready")
-    : t("chat.placeholder_not_ready");
+  const sendHint = sendOnEnter ? t("chat.send_hint_enter") : t("chat.send_hint_newline");
+  const placeholder = ready ? t("chat.placeholder_ready") : t("chat.placeholder_not_ready");
 
   return (
     <div
@@ -499,8 +478,7 @@ export function ChatInput({
         <div
           className={cn(
             "relative flex flex-col gap-2 rounded-lg border bg-muted/50 p-2 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring",
-            dragActive &&
-              "border-primary/40 bg-primary/5 ring-2 ring-primary/30",
+            dragActive && "border-primary/40 bg-primary/5 ring-2 ring-primary/30",
           )}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
@@ -572,18 +550,12 @@ export function ChatInput({
                     <button
                       className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                       onClick={async () => {
-                        if (!ready || disabled || isGenerating || submitting)
-                          return;
+                        if (!ready || disabled || isGenerating || submitting) return;
 
                         const fileId = getPartFileId(part);
-                        if (
-                          fileId != null &&
-                          (shouldDeleteFileOnRemove?.(part) ?? true)
-                        ) {
+                        if (fileId != null && (shouldDeleteFileOnRemove?.(part) ?? true)) {
                           try {
-                            await api.delete<{ status: string }>(
-                              `files/${fileId}`,
-                            );
+                            await api.delete<{ status: string }>(`files/${fileId}`);
                           } catch (deleteError) {
                             const message =
                               deleteError instanceof Error
@@ -612,8 +584,8 @@ export function ChatInput({
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
             onPaste={(event) => {
-                void handlePaste(event);
-              }}
+              void handlePaste(event);
+            }}
             placeholder={placeholder}
             disabled={!ready || disabled}
             className="min-h-[60px] max-h-[200px] resize-none border-0 bg-transparent dark:bg-transparent p-2 text-sm shadow-none focus-visible:ring-0"
@@ -621,10 +593,7 @@ export function ChatInput({
           />
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1">
-              <DropdownMenu
-                open={uploadMenuOpen}
-                onOpenChange={setUploadMenuOpen}
-              >
+              <DropdownMenu open={uploadMenuOpen} onOpenChange={setUploadMenuOpen}>
                 <input
                   ref={fileInputRef}
                   className="hidden"
@@ -648,18 +617,11 @@ export function ChatInput({
                     className="size-8 rounded-full text-muted-foreground hover:text-foreground"
                   >
                     <Plus
-                      className={cn(
-                        "size-4 transition-transform",
-                        uploadMenuOpen && "rotate-45",
-                      )}
+                      className={cn("size-4 transition-transform", uploadMenuOpen && "rotate-45")}
                     />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="min-w-36"
-                  side="top"
-                  align="start"
-                >
+                <DropdownMenuContent className="min-w-36" side="top" align="start">
                   <DropdownMenuItem
                     onClick={() => {
                       imageInputRef.current?.click();
@@ -732,12 +694,8 @@ export function ChatInput({
             </Button>
           </div>
         </div>
-        <p className="mt-2 text-center text-xs text-muted-foreground">
-          {sendHint}
-        </p>
-        {error ? (
-          <p className="mt-1 text-center text-xs text-destructive">{error}</p>
-        ) : null}
+        <p className="mt-2 text-center text-xs text-muted-foreground">{sendHint}</p>
+        {error ? <p className="mt-1 text-center text-xs text-destructive">{error}</p> : null}
       </div>
     </div>
   );
@@ -788,9 +746,7 @@ function QuickMessageButton({
               }}
             >
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium">
-                  {quickMessage.title}
-                </div>
+                <div className="truncate text-sm font-medium">{quickMessage.title}</div>
                 <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
                   {quickMessage.content}
                 </div>

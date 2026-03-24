@@ -66,7 +66,12 @@ export function groupMessageParts(parts: UIMessagePart[]): MessagePartBlock[] {
 interface MessagePartsProps {
   parts: UIMessagePart[];
   loading?: boolean;
-  onToolApproval?: (toolCallId: string, approved: boolean, reason: string, answer?: string) => void | Promise<void>;
+  onToolApproval?: (
+    toolCallId: string,
+    approved: boolean,
+    reason: string,
+    answer?: string,
+  ) => void | Promise<void>;
   onClickCitation?: (id: string) => void;
 }
 
@@ -98,81 +103,83 @@ function renderContentPart(
   }
 }
 
-export const MessageParts = React.memo(({
-  parts,
-  loading = false,
-  onToolApproval,
-  onClickCitation,
-}: MessagePartsProps) => {
-  const { t } = useTranslation("message");
-  const groupedParts = React.useMemo(() => groupMessageParts(parts), [parts]);
+export const MessageParts = React.memo(
+  ({ parts, loading = false, onToolApproval, onClickCitation }: MessagePartsProps) => {
+    const { t } = useTranslation("message");
+    const groupedParts = React.useMemo(() => groupMessageParts(parts), [parts]);
 
-  return (
-    <>
-      {groupedParts.map((block, blockIndex) => {
-        if (block.type === "thinking") {
-          if (block.steps.length === 0) return null;
+    return (
+      <>
+        {groupedParts.map((block, blockIndex) => {
+          if (block.type === "thinking") {
+            if (block.steps.length === 0) return null;
 
-          const isReasoningOnlyBlock = block.steps.every((step) => step.type === "reasoning");
-          const hasLoadingReasoning = block.steps.some(
-            (step) => step.type === "reasoning" && step.reasoning.finishedAt == null,
-          );
-          const enableAdaptiveWidth = isReasoningOnlyBlock && !hasLoadingReasoning;
+            const isReasoningOnlyBlock = block.steps.every((step) => step.type === "reasoning");
+            const hasLoadingReasoning = block.steps.some(
+              (step) => step.type === "reasoning" && step.reasoning.finishedAt == null,
+            );
+            const enableAdaptiveWidth = isReasoningOnlyBlock && !hasLoadingReasoning;
 
-          return (
-            <ChainOfThought
-              key={`thinking-${blockIndex}`}
-              className="my-1"
-              collapsedAdaptiveWidth={enableAdaptiveWidth}
-              collapseLabel={t("message_parts.collapse_thinking")}
-              showMoreLabel={(hiddenCount) =>
-                t("message_parts.expand_thinking_steps", { count: hiddenCount })
-              }
-              steps={block.steps}
-              renderStep={(step, stepIndex, { isFirst, isLast }) => {
-                if (step.type === "reasoning") {
-                  const stepKey = step.reasoning.createdAt ?? `${blockIndex}-${stepIndex}`;
+            return (
+              <ChainOfThought
+                key={`thinking-${blockIndex}`}
+                className="my-1"
+                collapsedAdaptiveWidth={enableAdaptiveWidth}
+                collapseLabel={t("message_parts.collapse_thinking")}
+                showMoreLabel={(hiddenCount) =>
+                  t("message_parts.expand_thinking_steps", { count: hiddenCount })
+                }
+                steps={block.steps}
+                renderStep={(step, stepIndex, { isFirst, isLast }) => {
+                  if (step.type === "reasoning") {
+                    const stepKey = step.reasoning.createdAt ?? `${blockIndex}-${stepIndex}`;
+                    return (
+                      <ReasoningStepPart
+                        key={stepKey}
+                        reasoning={step.reasoning}
+                        collapsedAdaptiveWidth={enableAdaptiveWidth}
+                        isFirst={isFirst}
+                        isLast={isLast}
+                      />
+                    );
+                  }
+
+                  const stepKey = step.tool.toolCallId || `${blockIndex}-${stepIndex}`;
                   return (
-                    <ReasoningStepPart
+                    <ToolStepPart
                       key={stepKey}
-                      reasoning={step.reasoning}
-                      collapsedAdaptiveWidth={enableAdaptiveWidth}
+                      tool={step.tool}
+                      loading={loading && step.tool.output.length === 0}
+                      onToolApproval={onToolApproval}
                       isFirst={isFirst}
                       isLast={isLast}
                     />
                   );
-                }
+                }}
+              />
+            );
+          }
 
-                const stepKey = step.tool.toolCallId || `${blockIndex}-${stepIndex}`;
-                return (
-                  <ToolStepPart
-                    key={stepKey}
-                    tool={step.tool}
-                    loading={loading && step.tool.output.length === 0}
-                    onToolApproval={onToolApproval}
-                    isFirst={isFirst}
-                    isLast={isLast}
-                  />
-                );
-              }}
-            />
+          return (
+            <React.Fragment key={`content-${block.index}`}>
+              {renderContentPart(block.part, t, loading, onClickCitation)}
+            </React.Fragment>
           );
-        }
-
-        return (
-          <React.Fragment key={`content-${block.index}`}>
-            {renderContentPart(block.part, t, loading, onClickCitation)}
-          </React.Fragment>
-        );
-      })}
-    </>
-  );
-});
+        })}
+      </>
+    );
+  },
+);
 
 interface MessagePartProps {
   part: UIMessagePart;
   loading?: boolean;
-  onToolApproval?: (toolCallId: string, approved: boolean, reason: string, answer?: string) => void | Promise<void>;
+  onToolApproval?: (
+    toolCallId: string,
+    approved: boolean,
+    reason: string,
+    answer?: string,
+  ) => void | Promise<void>;
   onClickCitation?: (id: string) => void;
 }
 

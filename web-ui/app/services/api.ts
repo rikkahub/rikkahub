@@ -66,7 +66,9 @@ function getValidWebAuthToken(): string | null {
 
 function dispatchWebAuthRequired(detail: WebAuthRequiredEventDetail) {
   if (!isBrowser()) return;
-  window.dispatchEvent(new CustomEvent<WebAuthRequiredEventDetail>(WEB_AUTH_REQUIRED_EVENT, { detail }));
+  window.dispatchEvent(
+    new CustomEvent<WebAuthRequiredEventDetail>(WEB_AUTH_REQUIRED_EVENT, { detail }),
+  );
 }
 
 const kyInstance = ky.create({

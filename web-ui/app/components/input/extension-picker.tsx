@@ -11,11 +11,7 @@ import { extractErrorMessage } from "~/lib/error";
 import { safeStringArray } from "~/lib/type-guards";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
-import type {
-  LorebookProfile,
-  ModeInjectionProfile,
-  QuickMessage,
-} from "~/types";
+import type { LorebookProfile, ModeInjectionProfile, QuickMessage } from "~/types";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
@@ -63,20 +59,17 @@ function getQuickMessages(source: unknown): QuickMessage[] {
   return source.filter((item): item is QuickMessage =>
     Boolean(
       item &&
-        typeof item === "object" &&
-        typeof item.id === "string" &&
-        typeof item.content === "string" &&
-        item.content.trim().length > 0,
+      typeof item === "object" &&
+      typeof item.id === "string" &&
+      typeof item.content === "string" &&
+      item.content.trim().length > 0,
     ),
   );
 }
 
 type ActiveTab = "quickmessages" | "mode" | "lorebook";
 
-export function ExtensionPickerButton({
-  disabled = false,
-  className,
-}: ExtensionPickerButtonProps) {
+export function ExtensionPickerButton({ disabled = false, className }: ExtensionPickerButtonProps) {
   const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
 
@@ -89,10 +82,7 @@ export function ExtensionPickerButton({
     () => getModeInjections(settings?.modeInjections),
     [settings?.modeInjections],
   );
-  const lorebooks = React.useMemo(
-    () => getLorebooks(settings?.lorebooks),
-    [settings?.lorebooks],
-  );
+  const lorebooks = React.useMemo(() => getLorebooks(settings?.lorebooks), [settings?.lorebooks]);
   const quickMessages = React.useMemo(
     () => getQuickMessages(settings?.quickMessages),
     [settings?.quickMessages],
@@ -102,10 +92,7 @@ export function ExtensionPickerButton({
     () => new Set(modeInjections.map((item) => item.id)),
     [modeInjections],
   );
-  const lorebookIdSet = React.useMemo(
-    () => new Set(lorebooks.map((item) => item.id)),
-    [lorebooks],
-  );
+  const lorebookIdSet = React.useMemo(() => new Set(lorebooks.map((item) => item.id)), [lorebooks]);
   const quickMessageIdSet = React.useMemo(
     () => new Set(quickMessages.map((item) => item.id)),
     [quickMessages],
@@ -125,11 +112,8 @@ export function ExtensionPickerButton({
   );
 
   const selectedCount =
-    selectedModeInjectionIds.length +
-    selectedLorebookIds.length +
-    selectedQuickMessageIds.length;
-  const hasData =
-    quickMessages.length > 0 || modeInjections.length > 0 || lorebooks.length > 0;
+    selectedModeInjectionIds.length + selectedLorebookIds.length + selectedQuickMessageIds.length;
+  const hasData = quickMessages.length > 0 || modeInjections.length > 0 || lorebooks.length > 0;
 
   React.useEffect(() => {
     if (!canUse || !hasData) {
@@ -181,8 +165,7 @@ export function ExtensionPickerButton({
     modeInjectionIds:
       overrides.modeInjectionIds ??
       selectedModeInjectionIds.filter((id) => modeInjectionIdSet.has(id)),
-    lorebookIds:
-      overrides.lorebookIds ?? selectedLorebookIds.filter((id) => lorebookIdSet.has(id)),
+    lorebookIds: overrides.lorebookIds ?? selectedLorebookIds.filter((id) => lorebookIdSet.has(id)),
     quickMessageIds:
       overrides.quickMessageIds ??
       selectedQuickMessageIds.filter((id) => quickMessageIdSet.has(id)),
@@ -201,15 +184,19 @@ export function ExtensionPickerButton({
         key: `mode:${id}`,
       });
     },
-    [canUse, currentAssistant, modeInjectionIdSet, selectedModeInjectionIds, updateExtensionsMutation],
+    [
+      canUse,
+      currentAssistant,
+      modeInjectionIdSet,
+      selectedModeInjectionIds,
+      updateExtensionsMutation,
+    ],
   );
 
   const handleToggleLorebook = React.useCallback(
     (id: string, checked: boolean) => {
       if (!canUse || !currentAssistant) return;
-      const nextIds = new Set(
-        selectedLorebookIds.filter((item) => lorebookIdSet.has(item)),
-      );
+      const nextIds = new Set(selectedLorebookIds.filter((item) => lorebookIdSet.has(item)));
       if (checked) nextIds.add(id);
       else nextIds.delete(id);
       updateExtensionsMutation.mutate({
@@ -233,7 +220,13 @@ export function ExtensionPickerButton({
         key: `quickmessage:${id}`,
       });
     },
-    [canUse, currentAssistant, quickMessageIdSet, selectedQuickMessageIds, updateExtensionsMutation],
+    [
+      canUse,
+      currentAssistant,
+      quickMessageIdSet,
+      selectedQuickMessageIds,
+      updateExtensionsMutation,
+    ],
   );
 
   if (!hasData) {
