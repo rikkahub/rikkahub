@@ -75,7 +75,10 @@ jobs:
       - name: Validate screenshot references
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon :app:validateDebugScreenshotTest
+          ./gradlew \
+            --no-daemon \
+            -Dorg.gradle.internal.cmdline.max.length=500000 \
+            :app:validateDebugScreenshotTest
 
       - name: Upload screenshot reports
         uses: actions/upload-artifact@v6
