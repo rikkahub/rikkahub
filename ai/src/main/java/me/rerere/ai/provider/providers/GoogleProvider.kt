@@ -118,26 +118,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: error("empty body")
                 Log.d(TAG, "listModels: $body")
-                val bodyObject = json.parseToJsonElement(body).jsonObject
-                val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
-
-                models.mapNotNull {
-                    val modelObject = it.jsonObject
-
-                    // 忽略非chat/embedding模型
-                    val supportedGenerationMethods =
-                        modelObject["supportedGenerationMethods"]!!.jsonArray
-                            .map { method -> method.jsonPrimitive.content }
-                    if ("generateContent" !in supportedGenerationMethods && "embedContent" !in supportedGenerationMethods) {
-                        return@mapNotNull null
-                    }
-
-                    Model(
-                        modelId = modelObject["name"]!!.jsonPrimitive.content.substringAfter("/"),
-                        displayName = modelObject["displayName"]!!.jsonPrimitive.content,
-                        type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
-                    )
-                }
+                parseGoogleModelList(body)
             } else {
                 emptyList()
             }
@@ -807,4 +788,62 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
 
         ImageGenerationResult(items = items)
     }
+}
+
+internal fun parseGoogleModelList(body: String): List<Model> {
+    val root = runCatching { json.parseToJsonElement(body) }.getOrNull() as? JsonObject
+        ?: return emptyList()
+    val models = root["models"] as? JsonArray ?: return emptyList()
+
+    return models.mapNotNull { modelElement ->
+        val modelObject = modelElement as? JsonObject ?: return@mapNotNull null
+        val rawName = (modelObject["name"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+            ?: return@mapNotNull null
+        val modelId = normalizeGoogleModelId(rawName)
+        val displayName = (modelObject["displayName"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+            ?: modelId
+        val modelType = parseGoogleModelType(modelObject, modelId, displayName) ?: return@mapNotNull null
+
+        Model(
+            modelId = modelId,
+            displayName = displayName,
+            type = modelType,
+        )
+    }
+}
+
+private fun parseGoogleModelType(
+    modelObject: JsonObject,
+    modelId: String,
+    displayName: String,
+): ModelType? {
+    val supportedGenerationMethods =
+        (modelObject["supportedGenerationMethods"] as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            ?.filter { it.isNotBlank() }
+
+    return when {
+        supportedGenerationMethods.isNullOrEmpty() -> inferGoogleModelType(modelId, displayName)
+        "generateContent" in supportedGenerationMethods -> ModelType.CHAT
+        "embedContent" in supportedGenerationMethods -> ModelType.EMBEDDING
+        else -> null
+    }
+}
+
+private fun inferGoogleModelType(
+    modelId: String,
+    displayName: String,
+): ModelType {
+    val searchableName = "$modelId $displayName".lowercase()
+    return if ("embedding" in searchableName || "embed" in searchableName) {
+        ModelType.EMBEDDING
+    } else {
+        ModelType.CHAT
+    }
+}
+
+private fun normalizeGoogleModelId(name: String): String = when {
+    name.startsWith("models/") -> name.removePrefix("models/")
+    name.startsWith("publishers/google/models/") -> name.removePrefix("publishers/google/models/")
+    else -> name
 }
