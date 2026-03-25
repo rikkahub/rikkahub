@@ -87,4 +87,85 @@ class SillyTavernMacroTransformerTest {
         assertTrue(result.first().toText() == "A\n1" || result.first().toText() == "B\n1")
         assertEquals("[Start]", result[1].toText())
     }
+
+    @Test
+    fun `macros should support scoped if else and trim blocks`() {
+        val env = StMacroEnvironment(
+            user = "Alice",
+            char = "Seraphina",
+            group = "Seraphina",
+            groupNotMuted = "Seraphina",
+            notChar = "Alice",
+            characterDescription = "Guardian",
+            characterPersonality = "",
+            scenario = "",
+            persona = "",
+            charPrompt = "",
+            charInstruction = "",
+            charDepthPrompt = "",
+            creatorNotes = "",
+            exampleMessagesRaw = "",
+            lastChatMessage = "",
+            lastUserMessage = "",
+            lastAssistantMessage = "",
+            modelName = "Test Model",
+        )
+
+        val result = SillyTavernMacroTransformer.applySillyTavernMacros(
+            messages = listOf(
+                UIMessage.system(
+                    """
+                    {{if description}}
+                      # Description
+                      {{description}}
+                    {{else}}
+                      Missing
+                    {{/if}}
+                    """.trimIndent()
+                ),
+                UIMessage.system("{{trim}}\n\n  padded text\n\n{{/trim}}"),
+            ),
+            env = env,
+        )
+
+        assertEquals(2, result.size)
+        assertEquals("# Description\nGuardian", result[0].toText())
+        assertEquals("padded text", result[1].toText())
+    }
+
+    @Test
+    fun `macros should support inline if and variable shorthand`() {
+        val env = StMacroEnvironment(
+            user = "Alice",
+            char = "Seraphina",
+            group = "Seraphina",
+            groupNotMuted = "Seraphina",
+            notChar = "Alice",
+            characterDescription = "",
+            characterPersonality = "",
+            scenario = "",
+            persona = "",
+            charPrompt = "",
+            charInstruction = "",
+            charDepthPrompt = "",
+            creatorNotes = "",
+            exampleMessagesRaw = "",
+            lastChatMessage = "",
+            lastUserMessage = "",
+            lastAssistantMessage = "",
+            modelName = "Test Model",
+        )
+
+        val result = SillyTavernMacroTransformer.applySillyTavernMacros(
+            messages = listOf(
+                UIMessage.system(
+                    "{{setvar::showHeader::1}}{{if .showHeader::Visible}}{{newline}}{{if !personality::Fallback}}"
+                ),
+            ),
+            env = env,
+        )
+
+        assertEquals(1, result.size)
+        assertEquals("Visible\nFallback", result.single().toText())
+    }
 }

@@ -12,6 +12,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
     private const val MAX_MACRO_PASSES = 32
     private val macroRegex = Regex("""\{\{([^{}]*)\}\}""", setOf(RegexOption.DOT_MATCHES_ALL))
     private val diceRegex = Regex("""^\s*(\d*)d(\d+)([+-]\d+)?\s*$""", setOf(RegexOption.IGNORE_CASE))
+    private val legacyTrimRegex = Regex("""(?:\r?\n)*\{\{trim\}\}(?:\r?\n)*""", setOf(RegexOption.IGNORE_CASE))
 
     override suspend fun transform(
         ctx: TransformerContext,
@@ -66,6 +67,11 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         var result = text
         repeat(MAX_MACRO_PASSES) {
             var changed = false
+            val scopedResolved = resolveScopedMacros(result, env, state)
+            if (scopedResolved != result) {
+                result = scopedResolved
+                changed = true
+            }
             result = macroRegex.replace(result) { match ->
                 val replacement = replaceMacro(match.value, match.groupValues[1], env, state)
                 if (replacement != match.value) {
@@ -73,12 +79,30 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
                 }
                 replacement
             }
+            val postProcessed = postProcessMacros(result)
+            if (postProcessed != result) {
+                result = postProcessed
+                changed = true
+            }
             if (!changed) {
                 return result
             }
         }
 
-        return result
+        return postProcessMacros(result)
+    }
+
+    private fun resolveScopedMacros(
+        text: String,
+        env: StMacroEnvironment,
+        state: StMacroState,
+    ): String {
+        var result = text
+        while (true) {
+            val scopedMacro = findInnermostScopedMacro(result) ?: return result
+            val replacement = evaluateScopedMacro(scopedMacro, result, env, state)
+            result = result.replaceRange(scopedMacro.open.startIndex, scopedMacro.close.endIndex + 1, replacement)
+        }
     }
 
     private fun replaceMacro(
@@ -94,7 +118,20 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         fun tail(index: Int): String = parsed.args.drop(index).joinToString("::")
 
         return when (name) {
-            "//", "comment", "noop" -> ""
+            "//", "comment", "noop", "else" -> ""
+            "if" -> {
+                val inlineIf = parseInlineIfArguments(body)
+                if (inlineIf == null) {
+                    raw
+                } else {
+                    if (evaluateCondition(inlineIf.condition, env, state)) {
+                        resolveMacros(inlineIf.content, env, state)
+                    } else {
+                        ""
+                    }
+                }
+            }
+            "trim" -> raw
             "space" -> " ".repeat(parsePositiveInt(arg(0)).coerceAtLeast(1))
             "newline" -> "\n".repeat(parsePositiveInt(arg(0)).coerceAtLeast(1))
             "user" -> env.user
@@ -165,6 +202,63 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         }
     }
 
+    private fun evaluateScopedMacro(
+        macro: ScopedMacroMatch,
+        text: String,
+        env: StMacroEnvironment,
+        state: StMacroState,
+    ): String {
+        val content = text.substring(macro.open.endIndex + 1, macro.close.startIndex)
+        return when (macro.open.name) {
+            "trim" -> trimScopedContent(resolveMacros(content, env, state))
+            "if" -> {
+                val split = splitTopLevelElse(content)
+                val chosenBranch = if (evaluateCondition(macro.open.args.firstOrNull().orEmpty(), env, state)) {
+                    split.thenBranch
+                } else {
+                    split.elseBranch
+                }
+                trimScopedContent(resolveMacros(chosenBranch.orEmpty(), env, state))
+            }
+            else -> macro.open.raw
+        }
+    }
+
+    private fun evaluateCondition(
+        rawCondition: String,
+        env: StMacroEnvironment,
+        state: StMacroState,
+    ): Boolean {
+        var condition = rawCondition.trim()
+        var inverted = false
+        if (condition.startsWith("!")) {
+            inverted = true
+            condition = condition.removePrefix("!").trimStart()
+        }
+
+        condition = resolveMacros(condition, env, state).trim()
+        condition = when {
+            condition.startsWith(".") -> state.localVariables[condition.removePrefix(".").trim()].orEmpty()
+            condition.startsWith("$") -> state.globalVariables[condition.removePrefix("$").trim()].orEmpty()
+            else -> resolveBareConditionMacro(condition, env, state)
+        }
+
+        val truthy = condition.isNotEmpty() && !isFalseBoolean(condition)
+        return if (inverted) !truthy else truthy
+    }
+
+    private fun resolveBareConditionMacro(
+        condition: String,
+        env: StMacroEnvironment,
+        state: StMacroState,
+    ): String {
+        if (condition.isBlank()) return ""
+        val parsed = ParsedMacro.parse(condition) ?: return condition
+        val raw = "{{${condition}}}"
+        val resolved = replaceMacro(raw, condition, env, state)
+        return if (resolved == raw) condition else resolved
+    }
+
     private fun pickRandom(args: List<String>): String {
         val options = when {
             args.size > 1 -> args
@@ -220,6 +314,76 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         return value.trim().toIntOrNull() ?: 1
     }
 
+    private fun parseInlineIfArguments(body: String): InlineIfArguments? {
+        val remainder = body.trim().removePrefix("if").trimStart()
+        val delimiterIndex = remainder.indexOf("::")
+        if (delimiterIndex <= 0) return null
+        return InlineIfArguments(
+            condition = remainder.substring(0, delimiterIndex).trim(),
+            content = remainder.substring(delimiterIndex + 2),
+        )
+    }
+
+    private fun postProcessMacros(text: String): String {
+        return legacyTrimRegex.replace(text, "")
+    }
+
+    private fun splitTopLevelElse(content: String): IfBranches {
+        var depth = 0
+        macroRegex.findAll(content).forEach { match ->
+            val tag = MacroTag.from(match) ?: return@forEach
+            when {
+                tag.isScopedOpeningIf() -> depth++
+                tag.isClosing && tag.name == "if" -> depth = (depth - 1).coerceAtLeast(0)
+                tag.name == "else" && !tag.isClosing && depth == 0 -> {
+                    return IfBranches(
+                        thenBranch = content.substring(0, match.range.first),
+                        elseBranch = content.substring(match.range.last + 1),
+                    )
+                }
+            }
+        }
+        return IfBranches(thenBranch = content, elseBranch = null)
+    }
+
+    private fun findInnermostScopedMacro(text: String): ScopedMacroMatch? {
+        val stack = mutableListOf<MacroTag>()
+        macroRegex.findAll(text).forEach { match ->
+            val tag = MacroTag.from(match) ?: return@forEach
+            when {
+                tag.isScopedOpening() -> stack += tag
+                tag.isClosing -> {
+                    val open = stack.lastOrNull { it.name == tag.name } ?: return@forEach
+                    stack.remove(open)
+                    return ScopedMacroMatch(open = open, close = tag)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun trimScopedContent(content: String): String {
+        if (content.isBlank()) return ""
+        val lines = content.split('\n')
+        val baseIndent = lines.firstOrNull { it.trim().isNotEmpty() }
+            ?.takeWhile { it == ' ' || it == '\t' }
+            ?.length ?: 0
+        if (baseIndent == 0) return content.trim()
+
+        return lines.joinToString("\n") { line ->
+            val lineIndent = line.takeWhile { it == ' ' || it == '\t' }.length
+            if (lineIndent >= baseIndent) {
+                line.drop(baseIndent)
+            } else {
+                line.trimStart()
+            }
+        }.trim()
+    }
+
+    private fun isFalseBoolean(value: String): Boolean {
+        return value.trim().lowercase() in setOf("off", "false", "0")
+    }
+
     private fun squashSystemMessages(
         messages: List<UIMessage>,
         template: SillyTavernPromptTemplate,
@@ -252,6 +416,62 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
             }
         }
         return result
+    }
+}
+
+private data class IfBranches(
+    val thenBranch: String,
+    val elseBranch: String?,
+)
+
+private data class InlineIfArguments(
+    val condition: String,
+    val content: String,
+)
+
+private data class ScopedMacroMatch(
+    val open: MacroTag,
+    val close: MacroTag,
+)
+
+private data class MacroTag(
+    val raw: String,
+    val name: String,
+    val args: List<String>,
+    val startIndex: Int,
+    val endIndex: Int,
+    val isClosing: Boolean,
+) {
+    fun isScopedOpening(): Boolean {
+        return when (name) {
+            "if" -> !isClosing && args.size <= 1
+            "trim" -> !isClosing
+            else -> false
+        }
+    }
+
+    fun isScopedOpeningIf(): Boolean {
+        return name == "if" && !isClosing && args.size <= 1
+    }
+
+    companion object {
+        fun from(match: MatchResult): MacroTag? {
+            val raw = match.value
+            val body = match.groupValues[1].trim()
+            if (body.isEmpty()) return null
+
+            val isClosing = body.startsWith("/")
+            val normalizedBody = if (isClosing) body.removePrefix("/").trim() else body
+            val parsed = ParsedMacro.parse(normalizedBody) ?: return null
+            return MacroTag(
+                raw = raw,
+                name = parsed.name.lowercase(),
+                args = parsed.args,
+                startIndex = match.range.first,
+                endIndex = match.range.last,
+                isClosing = isClosing,
+            )
+        }
     }
 }
 
