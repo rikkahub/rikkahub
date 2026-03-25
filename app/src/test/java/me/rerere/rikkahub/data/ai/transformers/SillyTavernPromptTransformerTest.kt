@@ -174,4 +174,34 @@ class SillyTavernPromptTransformerTest {
             result.map { it.toText() }
         )
     }
+
+    @Test
+    fun `chat history should append send_if_empty when last message is assistant`() {
+        val template = SillyTavernPromptTemplate(
+            sendIfEmpty = "[Keep going]",
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+            ),
+            assistant = Assistant(stPromptTemplate = template),
+            lorebooks = emptyList(),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("U1", "A1", "[Keep going]"),
+            result.map { it.toText() }
+        )
+        assertEquals(
+            listOf(MessageRole.USER, MessageRole.ASSISTANT, MessageRole.USER),
+            result.map { it.role }
+        )
+    }
 }

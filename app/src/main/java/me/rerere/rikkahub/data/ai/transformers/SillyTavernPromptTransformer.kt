@@ -88,6 +88,7 @@ internal fun transformSillyTavernPrompt(
                 .groupBy { it.position }
         )
     }
+    processedHistoryMessages = applySendIfEmpty(processedHistoryMessages, template)
 
     val orderedPromptIds = template.orderedPromptIds.ifEmpty {
         template.prompts.filter { it.enabled }.map { it.identifier }
@@ -139,7 +140,7 @@ internal fun transformSillyTavernPrompt(
         }
 
     if (!appendedChatHistory) {
-        result += processedHistoryMessages
+        result += buildChatHistoryMessages(processedHistoryMessages, template)
     }
 
     return result
@@ -322,6 +323,19 @@ private fun buildChatHistoryMessages(
         }
         addAll(chatHistoryMessages)
     }
+}
+
+private fun applySendIfEmpty(
+    chatHistoryMessages: List<UIMessage>,
+    template: SillyTavernPromptTemplate,
+): List<UIMessage> {
+    val sendIfEmpty = template.sendIfEmpty.trim()
+    val lastChatMessage = chatHistoryMessages.lastOrNull()
+    if (sendIfEmpty.isBlank() || lastChatMessage?.role != MessageRole.ASSISTANT) {
+        return chatHistoryMessages
+    }
+
+    return chatHistoryMessages + UIMessage.user(sendIfEmpty)
 }
 
 private fun parseDialogueExampleMessages(
