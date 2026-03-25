@@ -11,6 +11,8 @@ import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
@@ -74,14 +76,9 @@ class SillyTavernPromptTransformerTest {
 
         assertEquals(
             listOf(
-                "Base System",
-                "Main Prompt",
-                "<wi>Lore Before</wi>",
-                "Character Description",
-                "<wi>Lore After</wi>",
+                "Base System\nMain Prompt\n<wi>Lore Before</wi>\nCharacter Description\n<wi>Lore After</wi>\nCard Jailbreak",
                 "Hello",
                 "Hi",
-                "Card Jailbreak",
             ),
             result.map { it.toText() }
         )
@@ -203,5 +200,118 @@ class SillyTavernPromptTransformerTest {
             listOf(MessageRole.USER, MessageRole.ASSISTANT, MessageRole.USER),
             result.map { it.role }
         )
+    }
+
+    @Test
+    fun `leading system prompt sections should collapse into one message`() {
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "main", content = "Main Prompt"),
+                SillyTavernPromptItem(identifier = "charDescription", marker = true),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+                SillyTavernPromptItem(identifier = "jailbreak", content = "Jailbreak Prompt"),
+            ),
+            orderedPromptIds = listOf("main", "charDescription", "chatHistory", "jailbreak"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.system("Base System"),
+                UIMessage.user("Hello"),
+            ),
+            assistant = Assistant(
+                stPromptTemplate = template,
+                stCharacterData = SillyTavernCharacterData(description = "Character Description"),
+            ),
+            lorebooks = emptyList(),
+            template = template,
+        )
+
+        assertEquals(
+            listOf(MessageRole.SYSTEM, MessageRole.USER),
+            result.map { it.role }
+        )
+        assertEquals(
+            "Base System\nMain Prompt\nCharacter Description\nJailbreak Prompt",
+            result.first().toText()
+        )
+    }
+
+    @Test
+    fun `useSystemPrompt false should exclude assistant system prompt but keep remaining prelude`() {
+        val template = SillyTavernPromptTemplate(
+            useSystemPrompt = false,
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "main", content = "ST Main"),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("main", "chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.system("Assistant System\nRuntime Tool Prompt"),
+                UIMessage.user("Hello"),
+            ),
+            assistant = Assistant(
+                systemPrompt = "Assistant System",
+                stPromptTemplate = template,
+            ),
+            lorebooks = emptyList(),
+            template = template,
+        )
+
+        assertEquals(
+            listOf(MessageRole.SYSTEM, MessageRole.USER),
+            result.map { it.role }
+        )
+        assertFalse(result.first().toText().contains("Assistant System"))
+        assertEquals("Runtime Tool Prompt\nST Main", result.first().toText())
+    }
+
+    @Test
+    fun `st lorebook matching should respect scanDepth`() {
+        val lorebook = Lorebook(
+            id = Uuid.random(),
+            entries = listOf(
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    keywords = listOf("ancient keyword"),
+                    scanDepth = 1,
+                    position = InjectionPosition.TOP_OF_CHAT,
+                    content = "Triggered lore",
+                )
+            )
+        )
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("Ancient keyword appeared earlier"),
+                UIMessage.assistant("Old reply"),
+                UIMessage.user("Latest turn without match"),
+            ),
+            assistant = Assistant(
+                stPromptTemplate = template,
+                lorebookIds = setOf(lorebook.id),
+            ),
+            lorebooks = listOf(lorebook),
+            template = template,
+        )
+
+        assertEquals(
+            listOf(
+                "Ancient keyword appeared earlier",
+                "Old reply",
+                "Latest turn without match",
+            ),
+            result.map { it.toText() }
+        )
+        assertTrue(result.none { it.toText() == "Triggered lore" })
     }
 }

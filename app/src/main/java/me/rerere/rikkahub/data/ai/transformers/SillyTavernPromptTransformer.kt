@@ -37,8 +37,13 @@ internal fun transformSillyTavernPrompt(
     lorebooks: List<Lorebook>,
     template: SillyTavernPromptTemplate,
 ): List<UIMessage> {
-    val leadingSystemMessages = messages.takeWhile { it.role == MessageRole.SYSTEM }
-    val chatHistoryMessages = messages.drop(leadingSystemMessages.size)
+    val rawLeadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
+    val leadingSystemMessages = collectLeadingSystemMessages(
+        messages = messages,
+        assistant = assistant,
+        template = template,
+    )
+    val chatHistoryMessages = messages.drop(rawLeadingSystemCount)
     val characterData = assistant.stCharacterData
 
     val triggeredLorebookEntries = collectTriggeredLorebookEntries(
@@ -93,7 +98,11 @@ internal fun transformSillyTavernPrompt(
     val orderedPromptIds = template.orderedPromptIds.ifEmpty {
         template.prompts.filter { it.enabled }.map { it.identifier }
     }
-    val result = leadingSystemMessages.toMutableList()
+    val leadingSystemSections = leadingSystemMessages
+        .map { it.toText().trim() }
+        .filter { it.isNotBlank() }
+        .toMutableList()
+    val result = mutableListOf<UIMessage>()
     val appendedPromptIds = mutableSetOf<String>()
     var appendedChatHistory = false
 
@@ -114,7 +123,12 @@ internal fun transformSillyTavernPrompt(
         if (identifier == "chatHistory" && resolvedMessages.isNotEmpty()) {
             appendedChatHistory = true
         }
-        result += resolvedMessages
+        appendResolvedMessages(
+            promptIdentifier = identifier,
+            resolvedMessages = resolvedMessages,
+            leadingSystemSections = leadingSystemSections,
+            result = result,
+        )
         appendedPromptIds += identifier
     }
 
@@ -136,14 +150,59 @@ internal fun transformSillyTavernPrompt(
             if (prompt.identifier == "chatHistory" && resolvedMessages.isNotEmpty()) {
                 appendedChatHistory = true
             }
-            result += resolvedMessages
+            appendResolvedMessages(
+                promptIdentifier = prompt.identifier,
+                resolvedMessages = resolvedMessages,
+                leadingSystemSections = leadingSystemSections,
+                result = result,
+            )
         }
 
     if (!appendedChatHistory) {
-        result += buildChatHistoryMessages(processedHistoryMessages, template)
+        appendResolvedMessages(
+            promptIdentifier = "chatHistory",
+            resolvedMessages = buildChatHistoryMessages(processedHistoryMessages, template),
+            leadingSystemSections = leadingSystemSections,
+            result = result,
+        )
     }
 
-    return result
+    return collapseLeadingSystemMessages(
+        buildList {
+            if (leadingSystemSections.isNotEmpty()) {
+                add(UIMessage.system(leadingSystemSections.joinToString("\n")))
+            }
+            addAll(result)
+        }
+    )
+}
+
+private fun collectLeadingSystemMessages(
+    messages: List<UIMessage>,
+    assistant: Assistant,
+    template: SillyTavernPromptTemplate,
+): List<UIMessage> {
+    val leadingSystemMessages = messages.takeWhile { it.role == MessageRole.SYSTEM }
+    if (leadingSystemMessages.isEmpty()) return emptyList()
+    if (template.useSystemPrompt) return leadingSystemMessages
+
+    val assistantSystemPrompt = assistant.systemPrompt
+    val firstSystemMessage = leadingSystemMessages.first().toText()
+    val strippedText = if (
+        assistantSystemPrompt.isNotBlank() &&
+        firstSystemMessage.startsWith(assistantSystemPrompt)
+    ) {
+        firstSystemMessage
+            .removePrefix(assistantSystemPrompt)
+            .trimStart('\r', '\n')
+    } else {
+        firstSystemMessage
+    }.trim()
+
+    return strippedText
+        .takeIf { it.isNotBlank() }
+        ?.let { listOf(UIMessage.system(it)) }
+        ?: emptyList()
 }
 
 private fun collectTriggeredLorebookEntries(
@@ -171,7 +230,10 @@ private fun collectTriggeredLorebookEntries(
         .flatMap { lorebook ->
             lorebook.entries.filter { entry ->
                 val context = extractContextForMatching(nonSystemMessages, entry.scanDepth)
-                entry.isTriggered(context, triggerContext)
+                entry.isTriggered(
+                    context = context,
+                    triggerContext = triggerContext.copy(recentMessagesText = context),
+                )
             }
         }
         .sortedByDescending { it.priority }
@@ -395,6 +457,37 @@ private fun createMessage(role: MessageRole, content: String): UIMessage {
         MessageRole.ASSISTANT -> UIMessage.assistant(content)
         else -> UIMessage.user(content)
     }
+}
+
+private fun appendResolvedMessages(
+    promptIdentifier: String,
+    resolvedMessages: List<UIMessage>,
+    leadingSystemSections: MutableList<String>,
+    result: MutableList<UIMessage>,
+) {
+    val hoistSystemMessages = promptIdentifier != "chatHistory"
+    resolvedMessages.forEach { message ->
+        if (hoistSystemMessages && message.role == MessageRole.SYSTEM) {
+            message.toText()
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?.let(leadingSystemSections::add)
+        } else {
+            result += message
+        }
+    }
+}
+
+private fun collapseLeadingSystemMessages(messages: List<UIMessage>): List<UIMessage> {
+    val leadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
+    if (leadingSystemCount <= 1) return messages
+
+    val mergedSystemText = messages
+        .take(leadingSystemCount)
+        .joinToString("\n") { it.toText().trim() }
+        .trim()
+
+    return listOf(UIMessage.system(mergedSystemText)) + messages.drop(leadingSystemCount)
 }
 
 private fun applyAbsoluteMessages(

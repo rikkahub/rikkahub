@@ -504,7 +504,8 @@ private fun mapCharacterBookPosition(position: String?, extensionPosition: Int?)
     }) {
         0 -> InjectionPosition.BEFORE_SYSTEM_PROMPT
         1 -> InjectionPosition.AFTER_SYSTEM_PROMPT
-        2, 3 -> InjectionPosition.TOP_OF_CHAT
+        2, 5 -> InjectionPosition.TOP_OF_CHAT
+        3, 6 -> InjectionPosition.BOTTOM_OF_CHAT
         4 -> InjectionPosition.AT_DEPTH
         else -> InjectionPosition.AFTER_SYSTEM_PROMPT
     }

@@ -144,4 +144,46 @@ class SillyTavernImportTest {
         assertEquals(MessageRole.ASSISTANT, entry.role)
         assertEquals(2, entry.injectDepth)
     }
+
+    @Test
+    fun `should map character book positions 3 and 6 to bottom of chat`() {
+        val json = """
+            {
+              "spec": "chara_card_v2",
+              "data": {
+                "name": "Seraphina",
+                "character_book": {
+                  "entries": [
+                    {
+                      "comment": "Bottom A",
+                      "content": "Bottom A content",
+                      "keys": ["alpha"],
+                      "extensions": {
+                        "position": 3
+                      }
+                    },
+                    {
+                      "comment": "Bottom B",
+                      "content": "Bottom B content",
+                      "keys": ["beta"],
+                      "extensions": {
+                        "position": 6
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+        """.trimIndent()
+
+        val payload = parseAssistantImportFromJson(
+            jsonString = json,
+            sourceName = "character",
+        )
+
+        assertEquals(
+            listOf(InjectionPosition.BOTTOM_OF_CHAT, InjectionPosition.BOTTOM_OF_CHAT),
+            payload.lorebooks.single().entries.map { it.position }
+        )
+    }
 }
