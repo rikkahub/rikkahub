@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai.transformers
 
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
@@ -42,17 +43,26 @@ internal fun transformSillyTavernPrompt(
     template: SillyTavernPromptTemplate,
     generationType: String = "normal",
 ): List<UIMessage> {
+    val normalizedGenerationType = generationType.trim().lowercase().ifBlank { "normal" }
     val rawLeadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
     val leadingSystemMessages = collectLeadingSystemMessages(
         messages = messages,
         assistant = assistant,
         template = template,
     )
-    val chatHistoryMessages = messages.drop(rawLeadingSystemCount)
+    val chatHistoryMessages = applyNamesBehaviorToChatHistory(
+        messages.drop(rawLeadingSystemCount),
+        template = template,
+    )
     val characterData = assistant.stCharacterData
+    val runtimeBehavior = applyGenerationTypeRuntimeBehavior(
+        chatHistoryMessages = chatHistoryMessages,
+        template = template,
+        generationType = normalizedGenerationType,
+    )
 
     val triggeredLorebookEntries = collectTriggeredLorebookEntries(
-        historyMessages = chatHistoryMessages,
+        historyMessages = runtimeBehavior.chatHistoryMessages,
         assistant = assistant,
         lorebooks = lorebooks,
         characterData = characterData,
@@ -93,7 +103,7 @@ internal fun transformSillyTavernPrompt(
             }
         }
 
-    var processedHistoryMessages = applyAbsoluteMessages(chatHistoryMessages, absoluteMessages)
+    var processedHistoryMessages = applyAbsoluteMessages(runtimeBehavior.chatHistoryMessages, absoluteMessages)
 
     val floatingLorebookEntries = triggeredLorebookEntries.filter {
         it.position == InjectionPosition.TOP_OF_CHAT || it.position == InjectionPosition.BOTTOM_OF_CHAT
@@ -139,6 +149,7 @@ internal fun transformSillyTavernPrompt(
             result = result,
         )
     }
+    result += runtimeBehavior.controlMessages
 
     return collapseLeadingSystemMessages(
         buildList {
@@ -148,6 +159,159 @@ internal fun transformSillyTavernPrompt(
             addAll(result)
         }
     )
+}
+
+private data class StRuntimePromptBehavior(
+    val chatHistoryMessages: List<UIMessage>,
+    val controlMessages: List<UIMessage> = emptyList(),
+)
+
+private fun applyGenerationTypeRuntimeBehavior(
+    chatHistoryMessages: List<UIMessage>,
+    template: SillyTavernPromptTemplate,
+    generationType: String,
+): StRuntimePromptBehavior {
+    return when (generationType) {
+        "continue" -> buildContinueRuntimeBehavior(chatHistoryMessages, template)
+        "impersonate" -> buildImpersonationRuntimeBehavior(chatHistoryMessages, template)
+        else -> StRuntimePromptBehavior(chatHistoryMessages = chatHistoryMessages)
+    }
+}
+
+private fun buildContinueRuntimeBehavior(
+    chatHistoryMessages: List<UIMessage>,
+    template: SillyTavernPromptTemplate,
+): StRuntimePromptBehavior {
+    if (chatHistoryMessages.lastOrNull()?.role != MessageRole.ASSISTANT) {
+        return StRuntimePromptBehavior(chatHistoryMessages = chatHistoryMessages)
+    }
+
+    val continueIndex = chatHistoryMessages.lastIndex
+    val continuedMessage = chatHistoryMessages[continueIndex]
+    val remainingHistory = chatHistoryMessages.toMutableList().apply { removeAt(continueIndex) }
+    val continuedText = appendContinuationPostfix(
+        text = continuedMessage.toText(),
+        postfix = template.continuePostfix,
+    )
+    val continuedPrompt = buildString {
+        if (template.continuePrefill) {
+            val assistantPrefill = template.assistantPrefill
+            if (assistantPrefill.isNotBlank()) {
+                append(assistantPrefill)
+                if (continuedText.isNotBlank()) {
+                    append("\n\n")
+                }
+            }
+        }
+        append(continuedText)
+    }.takeIf { it.isNotBlank() }?.let { content ->
+        createMessage(
+            role = continuedMessage.role,
+            content = content,
+        )
+    }
+
+    val controlMessages = buildList {
+        if (continuedPrompt != null) {
+            add(continuedPrompt)
+        }
+        if (!template.continuePrefill) {
+            val nudgePrompt = replaceRuntimePlaceholder(
+                text = stripInlineRegexBlocks(template.continueNudgePrompt),
+                key = "lastChatMessage",
+                value = continuedText,
+            ).trim()
+            if (nudgePrompt.isNotBlank()) {
+                add(UIMessage.system(nudgePrompt))
+            }
+        }
+    }
+
+    return StRuntimePromptBehavior(
+        chatHistoryMessages = remainingHistory,
+        controlMessages = controlMessages,
+    )
+}
+
+private fun buildImpersonationRuntimeBehavior(
+    chatHistoryMessages: List<UIMessage>,
+    template: SillyTavernPromptTemplate,
+): StRuntimePromptBehavior {
+    val controlMessages = buildList {
+        val impersonationPrompt = stripInlineRegexBlocks(template.impersonationPrompt).trim()
+        if (impersonationPrompt.isNotBlank()) {
+            add(UIMessage.system(impersonationPrompt))
+        }
+
+        val assistantImpersonation = template.assistantImpersonation
+        if (assistantImpersonation.isNotBlank()) {
+            add(UIMessage.assistant(assistantImpersonation))
+        }
+    }
+
+    return StRuntimePromptBehavior(
+        chatHistoryMessages = chatHistoryMessages,
+        controlMessages = controlMessages,
+    )
+}
+
+private fun applyNamesBehaviorToChatHistory(
+    chatHistoryMessages: List<UIMessage>,
+    template: SillyTavernPromptTemplate,
+): List<UIMessage> {
+    if (template.namesBehavior != 2) {
+        return chatHistoryMessages
+    }
+
+    return chatHistoryMessages.map { message ->
+        when (message.role) {
+            MessageRole.USER -> prefixMessageContent(message, "{{user}}")
+            MessageRole.ASSISTANT -> prefixMessageContent(message, "{{char}}")
+            else -> message
+        }
+    }
+}
+
+private fun prefixMessageContent(
+    message: UIMessage,
+    speaker: String,
+): UIMessage {
+    val prefix = "$speaker: "
+    var prefixed = false
+    val updatedParts = message.parts.map { part ->
+        if (!prefixed && part is UIMessagePart.Text) {
+            prefixed = true
+            part.copy(text = prefix + part.text)
+        } else {
+            part
+        }
+    }
+
+    return if (prefixed) {
+        message.copy(parts = updatedParts)
+    } else if (message.parts.isNotEmpty()) {
+        message.copy(parts = listOf(UIMessagePart.Text(prefix.trimEnd())) + message.parts)
+    } else {
+        message
+    }
+}
+
+private fun appendContinuationPostfix(
+    text: String,
+    postfix: String,
+): String {
+    if (text.isBlank()) return text
+    return text + postfix
+}
+
+private fun replaceRuntimePlaceholder(
+    text: String,
+    key: String,
+    value: String,
+): String {
+    return text
+        .replace("{{$key}}", value, ignoreCase = true)
+        .replace("{${key}}", value, ignoreCase = true)
 }
 
 private fun collectLeadingSystemMessages(

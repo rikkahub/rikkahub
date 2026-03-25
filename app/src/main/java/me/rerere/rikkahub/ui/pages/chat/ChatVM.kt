@@ -314,6 +314,11 @@ class ChatVM(
         chatService.regenerateAtMessage(_conversationId, message, regenerateAssistantMsg)
     }
 
+    fun continueAssistantMessage(message: UIMessage) {
+        analytics.logEvent("ai_continue_at_message", null)
+        chatService.continueAssistantMessage(_conversationId, message)
+    }
+
     fun handleToolApproval(
         toolCallId: String,
         approved: Boolean,

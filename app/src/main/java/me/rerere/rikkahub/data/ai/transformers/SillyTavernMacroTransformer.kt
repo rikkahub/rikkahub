@@ -28,16 +28,20 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
             template = template,
             characterData = characterData,
         )
-        return applySillyTavernMacros(messages, env, template)
+        return applySillyTavernMacros(
+            messages = messages,
+            env = env,
+            template = template,
+            state = ctx.stMacroState ?: StMacroState(),
+        )
     }
 
     internal fun applySillyTavernMacros(
         messages: List<UIMessage>,
         env: StMacroEnvironment,
         template: SillyTavernPromptTemplate? = null,
+        state: StMacroState = StMacroState(),
     ): List<UIMessage> {
-        val state = StMacroState()
-
         val transformed = messages.map { message ->
             message.copy(
                 parts = message.parts.map { part ->
@@ -501,7 +505,7 @@ private data class ParsedMacro(
     }
 }
 
-internal data class StMacroState(
+data class StMacroState(
     val localVariables: MutableMap<String, String> = linkedMapOf(),
     val globalVariables: MutableMap<String, String> = linkedMapOf(),
 )

@@ -429,4 +429,127 @@ class SillyTavernPromptTransformerTest {
             continueResult.map { it.toText() }
         )
     }
+
+    @Test
+    fun `continue generation should append control prompts instead of send_if_empty`() {
+        val template = SillyTavernPromptTemplate(
+            continueNudgePrompt = "Continue: {{lastChatMessage}}",
+            sendIfEmpty = "[Keep going]",
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+            ),
+            assistant = Assistant(stPromptTemplate = template),
+            lorebooks = emptyList(),
+            template = template,
+            generationType = "continue",
+        )
+
+        assertEquals(
+            listOf("U1", "A1", "Continue: A1"),
+            result.map { it.toText() }
+        )
+        assertEquals(
+            listOf(MessageRole.USER, MessageRole.ASSISTANT, MessageRole.SYSTEM),
+            result.map { it.role }
+        )
+    }
+
+    @Test
+    fun `continue prefill should seed assistant control message`() {
+        val template = SillyTavernPromptTemplate(
+            assistantPrefill = "Prefill",
+            continuePrefill = true,
+            continuePostfix = " ",
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+            ),
+            assistant = Assistant(stPromptTemplate = template),
+            lorebooks = emptyList(),
+            template = template,
+            generationType = "continue",
+        )
+
+        assertEquals(
+            listOf("U1", "Prefill\n\nA1 "),
+            result.map { it.toText() }
+        )
+        assertEquals(
+            listOf(MessageRole.USER, MessageRole.ASSISTANT),
+            result.map { it.role }
+        )
+    }
+
+    @Test
+    fun `impersonate generation should append runtime control prompts`() {
+        val template = SillyTavernPromptTemplate(
+            impersonationPrompt = "Act as {{user}}",
+            assistantImpersonation = "I ",
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+            ),
+            assistant = Assistant(stPromptTemplate = template),
+            lorebooks = emptyList(),
+            template = template,
+            generationType = "impersonate",
+        )
+
+        assertEquals(
+            listOf("U1", "A1", "Act as {{user}}", "I "),
+            result.map { it.toText() }
+        )
+        assertEquals(
+            listOf(MessageRole.USER, MessageRole.ASSISTANT, MessageRole.SYSTEM, MessageRole.ASSISTANT),
+            result.map { it.role }
+        )
+    }
+
+    @Test
+    fun `names behavior content should prefix chat history speakers`() {
+        val template = SillyTavernPromptTemplate(
+            namesBehavior = 2,
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("Hello"),
+                UIMessage.assistant("Hi"),
+            ),
+            assistant = Assistant(stPromptTemplate = template),
+            lorebooks = emptyList(),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("{{user}}: Hello", "{{char}}: Hi"),
+            result.map { it.toText() }
+        )
+    }
 }

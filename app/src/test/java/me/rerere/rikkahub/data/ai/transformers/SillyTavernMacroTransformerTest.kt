@@ -171,4 +171,48 @@ class SillyTavernMacroTransformerTest {
         assertEquals(1, result.size)
         assertEquals("Visible\nFallback", result.single().toText())
     }
+
+    @Test
+    fun `macros should persist variables when the same state is reused`() {
+        val env = StMacroEnvironment(
+            user = "Alice",
+            char = "Seraphina",
+            group = "Seraphina",
+            groupNotMuted = "Seraphina",
+            notChar = "Alice",
+            characterDescription = "",
+            characterPersonality = "",
+            scenario = "",
+            persona = "",
+            charPrompt = "",
+            charInstruction = "",
+            charDepthPrompt = "",
+            creatorNotes = "",
+            exampleMessagesRaw = "",
+            lastChatMessage = "",
+            lastUserMessage = "",
+            lastAssistantMessage = "",
+            modelName = "Test Model",
+        )
+        val state = StMacroState()
+
+        SillyTavernMacroTransformer.applySillyTavernMacros(
+            messages = listOf(
+                UIMessage.system("{{setvar::style::Gentle}}{{setglobalvar::theme::Moon}}"),
+            ),
+            env = env,
+            state = state,
+        )
+
+        val result = SillyTavernMacroTransformer.applySillyTavernMacros(
+            messages = listOf(
+                UIMessage.system("{{getvar::style}} / {{getglobalvar::theme}}"),
+            ),
+            env = env,
+            state = state,
+        )
+
+        assertEquals(1, result.size)
+        assertEquals("Gentle / Moon", result.single().toText())
+    }
 }

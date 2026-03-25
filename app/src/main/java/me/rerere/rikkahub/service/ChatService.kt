@@ -77,6 +77,7 @@ import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexPromptOnlyTransformer
+import me.rerere.rikkahub.data.ai.transformers.StMacroState
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernMacroTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
@@ -165,6 +166,7 @@ class ChatService(
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
+    private val stMacroGlobalVariables = ConcurrentHashMap<String, String>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
     // 错误状态
@@ -244,6 +246,25 @@ class ChatService(
         }
     }
 
+    private fun getConversationStMacroState(conversationId: Uuid): StMacroState {
+        return getOrCreateSession(conversationId).getStMacroState(stMacroGlobalVariables)
+    }
+
+    private fun resetConversationStMacroState(conversationId: Uuid) {
+        sessions[conversationId]?.let { session ->
+            session.resetStMacroLocalVariables()
+            session.stGenerationType = "normal"
+        }
+    }
+
+    private fun setConversationStGenerationType(conversationId: Uuid, stGenerationType: String) {
+        getOrCreateSession(conversationId).stGenerationType = stGenerationType.trim().lowercase().ifBlank { "normal" }
+    }
+
+    private fun getConversationStGenerationType(conversationId: Uuid): String {
+        return sessions[conversationId]?.stGenerationType ?: "normal"
+    }
+
     // ---- 引用管理 ----
 
     fun addConversationReference(conversationId: Uuid) {
@@ -296,6 +317,7 @@ class ChatService(
 
     suspend fun initializeConversation(conversationId: Uuid) {
         getOrCreateSession(conversationId) // 确保 session 存在
+        resetConversationStMacroState(conversationId)
         val conversation = conversationRepo.getConversationById(conversationId)
         if (conversation != null) {
             updateConversation(conversationId, conversation)
@@ -319,7 +341,8 @@ class ChatService(
         conversationId: Uuid,
         content: List<UIMessagePart>,
         answer: Boolean = true,
-        forceTermuxCommandMode: Boolean = false
+        forceTermuxCommandMode: Boolean = false,
+        stGenerationType: String = "normal",
     ) {
         if (content.isEmptyInputMessage()) return
 
@@ -356,7 +379,10 @@ class ChatService(
                     )
                 } else if (answer) {
                     // 开始补全
-                    handleMessageComplete(conversationId)
+                    handleMessageComplete(
+                        conversationId = conversationId,
+                        stGenerationType = stGenerationType,
+                    )
                 }
 
                 _generationDoneFlow.emit(conversationId)
@@ -559,6 +585,7 @@ class ChatService(
             } else {
                 memoryRepository.getMemoriesOfAssistant(effectiveAssistant.id.toString())
             },
+            stMacroState = StMacroState(globalVariables = stMacroGlobalVariables),
             inputTransformers = buildList {
                 addAll(inputTransformers)
                 add(templateTransformer)
@@ -624,7 +651,8 @@ class ChatService(
     fun regenerateAtMessage(
         conversationId: Uuid,
         message: UIMessage,
-        regenerateAssistantMsg: Boolean = true
+        regenerateAssistantMsg: Boolean = true,
+        stGenerationType: String = "normal",
     ) {
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
@@ -641,17 +669,59 @@ class ChatService(
                         messageNodes = conversation.messageNodes.subList(0, indexAt + 1)
                     )
                     saveConversation(conversationId, newConversation)
-                    handleMessageComplete(conversationId)
+                    resetConversationStMacroState(conversationId)
+                    handleMessageComplete(
+                        conversationId = conversationId,
+                        stGenerationType = stGenerationType,
+                    )
                 } else {
                     if (regenerateAssistantMsg) {
                         val node = conversation.getMessageNodeByMessage(message)
                         val nodeIndex = conversation.messageNodes.indexOf(node)
-                        handleMessageComplete(conversationId, messageRange = 0..<nodeIndex)
+                        resetConversationStMacroState(conversationId)
+                        handleMessageComplete(
+                            conversationId = conversationId,
+                            messageRange = 0..<nodeIndex,
+                            stGenerationType = stGenerationType,
+                        )
                     } else {
                         saveConversation(conversationId, conversation)
                     }
                 }
 
+                _generationDoneFlow.emit(conversationId)
+            } catch (e: Exception) {
+                addError(e, conversationId)
+            }
+        }
+
+        session.setJob(job)
+    }
+
+    fun continueAssistantMessage(
+        conversationId: Uuid,
+        message: UIMessage,
+    ) {
+        if (message.role != MessageRole.ASSISTANT) return
+
+        val session = getOrCreateSession(conversationId)
+        session.getJob()?.cancel()
+
+        val job = appScope.launch {
+            try {
+                val conversation = session.state.value
+                val node = conversation.getMessageNodeByMessage(message)
+                    ?: error("Message node not found")
+                val nodeIndex = conversation.messageNodes.indexOf(node)
+                val truncatedConversation = conversation.copy(
+                    messageNodes = conversation.messageNodes.subList(0, nodeIndex + 1)
+                )
+                saveConversation(conversationId, truncatedConversation)
+                resetConversationStMacroState(conversationId)
+                handleMessageComplete(
+                    conversationId = conversationId,
+                    stGenerationType = "continue",
+                )
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
                 addError(e, conversationId)
@@ -713,7 +783,10 @@ class ChatService(
 
                 // Only continue generation when all pending tools are handled
                 if (!hasPendingTools) {
-                    handleMessageComplete(conversationId)
+                    handleMessageComplete(
+                        conversationId = conversationId,
+                        stGenerationType = getConversationStGenerationType(conversationId),
+                    )
                 }
 
                 _generationDoneFlow.emit(conversationId)
@@ -730,8 +803,10 @@ class ChatService(
     private suspend fun handleMessageComplete(
         conversationId: Uuid,
         messageRange: ClosedRange<Int>? = null,
-        notifyOnCompletion: Boolean = true
+        notifyOnCompletion: Boolean = true,
+        stGenerationType: String = "normal",
     ) {
+        setConversationStGenerationType(conversationId, stGenerationType)
         val settings = settingsStore.settingsFlow.first()
         val conversation = getConversationFlow(conversationId).value
         val assistant = settings.getAssistantById(conversation.assistantId) ?: settings.getCurrentAssistant()
@@ -778,6 +853,8 @@ class ChatService(
                 } else {
                     memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
                 },
+                stGenerationType = stGenerationType,
+                stMacroState = getConversationStMacroState(conversationId),
                 inputTransformers = buildList {
                     addAll(inputTransformers)
                     add(templateTransformer)
@@ -1435,6 +1512,7 @@ class ChatService(
         }
         if (!edited) return
 
+        resetConversationStMacroState(conversationId)
         saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
@@ -1500,6 +1578,7 @@ class ChatService(
             }
         }
 
+        resetConversationStMacroState(conversationId)
         saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
@@ -1518,6 +1597,7 @@ class ChatService(
             return
         }
 
+        resetConversationStMacroState(conversationId)
         saveConversation(conversationId, updatedConversation)
     }
 
