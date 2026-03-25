@@ -226,7 +226,7 @@ private fun parsePresetImport(
     }.ifEmpty {
         preset.prompts.filter { it.enabled ?: true }.map { it.identifier }
     }
-        val promptItems = preset.prompts.map { prompt ->
+    val promptItems = preset.prompts.map { prompt ->
         SillyTavernPromptItem(
             identifier = prompt.identifier,
             name = prompt.name.orEmpty(),
@@ -251,9 +251,20 @@ private fun parsePresetImport(
         personalityFormat = preset.personalityFormat ?: "{{personality}}",
         wiFormat = preset.wiFormat ?: "{0}",
         mainPrompt = promptItems.find { it.identifier == "main" }?.content.orEmpty(),
+        newChatPrompt = preset.newChatPrompt.orEmpty(),
+        newGroupChatPrompt = preset.newGroupChatPrompt.orEmpty(),
+        newExampleChatPrompt = preset.newExampleChatPrompt.orEmpty(),
         continueNudgePrompt = preset.continueNudgePrompt.orEmpty(),
         groupNudgePrompt = preset.groupNudgePrompt.orEmpty(),
         impersonationPrompt = preset.impersonationPrompt.orEmpty(),
+        assistantPrefill = preset.assistantPrefill.orEmpty(),
+        assistantImpersonation = preset.assistantImpersonation.orEmpty(),
+        continuePrefill = preset.continuePrefill ?: false,
+        continuePostfix = preset.continuePostfix.orEmpty(),
+        sendIfEmpty = preset.sendIfEmpty.orEmpty(),
+        namesBehavior = preset.namesBehavior,
+        useSystemPrompt = preset.useSystemPrompt ?: false,
+        squashSystemMessages = preset.squashSystemMessages ?: false,
         prompts = promptItems,
         orderedPromptIds = orderedPromptIds,
     )
@@ -398,9 +409,13 @@ internal fun defaultSillyTavernPromptTemplate(): SillyTavernPromptTemplate {
         personalityFormat = "{{personality}}",
         wiFormat = "{0}",
         mainPrompt = prompts.first().content,
+        newChatPrompt = "[Start a new Chat]",
+        newGroupChatPrompt = "[Start a new group chat. Group members: {{group}}]",
+        newExampleChatPrompt = "[Example Chat]",
         continueNudgePrompt = "[Continue your last message without repeating its original content.]",
         groupNudgePrompt = "[Write the next reply only as {{char}}.]",
         impersonationPrompt = "[Write your next reply from the point of view of {{user}}, using the chat history so far as a guideline for the writing style of {{user}}. Don't write as {{char}} or system. Don't describe actions of {{char}}.]",
+        continuePostfix = " ",
         prompts = prompts,
         orderedPromptIds = listOf(
             "main",
@@ -695,6 +710,17 @@ private data class StPresetImport(
     val temperature: Double? = null,
     val top_p: Double? = null,
     val openai_max_tokens: Int? = null,
+    val names_behavior: Int? = null,
+    val send_if_empty: String? = null,
+    val assistant_prefill: String? = null,
+    val assistant_impersonation: String? = null,
+    val continue_prefill: Boolean? = null,
+    val continue_postfix: String? = null,
+    val new_chat_prompt: String? = null,
+    val new_group_chat_prompt: String? = null,
+    val new_example_chat_prompt: String? = null,
+    val use_sysprompt: Boolean? = null,
+    val squash_system_messages: Boolean? = null,
     val reasoning_effort: String? = null,
     val scenario_format: String? = null,
     val personality_format: String? = null,
@@ -710,6 +736,39 @@ private data class StPresetImport(
 
     val openAIMaxTokens: Int?
         get() = openai_max_tokens
+
+    val namesBehavior: Int?
+        get() = names_behavior
+
+    val sendIfEmpty: String?
+        get() = send_if_empty
+
+    val assistantPrefill: String?
+        get() = assistant_prefill
+
+    val assistantImpersonation: String?
+        get() = assistant_impersonation
+
+    val continuePrefill: Boolean?
+        get() = continue_prefill
+
+    val continuePostfix: String?
+        get() = continue_postfix
+
+    val newChatPrompt: String?
+        get() = new_chat_prompt
+
+    val newGroupChatPrompt: String?
+        get() = new_group_chat_prompt
+
+    val newExampleChatPrompt: String?
+        get() = new_example_chat_prompt
+
+    val useSystemPrompt: Boolean?
+        get() = use_sysprompt
+
+    val squashSystemMessages: Boolean?
+        get() = squash_system_messages
 
     val reasoningEffort: String?
         get() = reasoning_effort

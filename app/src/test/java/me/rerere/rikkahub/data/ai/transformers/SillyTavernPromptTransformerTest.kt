@@ -138,4 +138,40 @@ class SillyTavernPromptTransformerTest {
             result.map { it.role }
         )
     }
+
+    @Test
+    fun `chat history should include new chat prompt and character depth prompt`() {
+        val template = SillyTavernPromptTemplate(
+            newChatPrompt = "[Start]",
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+                UIMessage.user("U2"),
+            ),
+            assistant = Assistant(
+                stPromptTemplate = template,
+                stCharacterData = SillyTavernCharacterData(
+                    depthPrompt = me.rerere.rikkahub.data.model.StDepthPrompt(
+                        prompt = "Depth Prompt",
+                        depth = 1,
+                        role = MessageRole.SYSTEM,
+                    )
+                ),
+            ),
+            lorebooks = emptyList(),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("[Start]", "U1", "A1", "Depth Prompt", "U2"),
+            result.map { it.toText() }
+        )
+    }
 }

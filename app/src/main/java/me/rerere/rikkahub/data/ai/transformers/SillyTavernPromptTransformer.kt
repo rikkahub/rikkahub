@@ -182,7 +182,7 @@ private fun buildAbsoluteMessages(
     worldInfoBefore: String,
     worldInfoAfter: String,
 ): List<StAbsoluteMessage> {
-    return template.prompts
+    val promptMessages = template.prompts
         .filter { it.enabled && it.injectionPosition == StPromptInjectionPosition.ABSOLUTE }
         .mapNotNull { prompt ->
             resolvePromptText(
@@ -200,6 +200,24 @@ private fun buildAbsoluteMessages(
                 )
             }
         }
+    val depthPrompt = characterData?.depthPrompt
+    val depthPromptMessage = depthPrompt
+        ?.prompt
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.let { content ->
+            StAbsoluteMessage(
+                depth = depthPrompt.depth.coerceAtLeast(0),
+                order = 100,
+                role = depthPrompt.role,
+                content = content,
+            )
+        }
+    return if (depthPromptMessage != null) {
+        promptMessages + depthPromptMessage
+    } else {
+        promptMessages
+    }
 }
 
 private fun resolveRelativePromptMessages(
@@ -211,8 +229,11 @@ private fun resolveRelativePromptMessages(
     chatHistoryMessages: List<UIMessage>,
 ): List<UIMessage> {
     return when (prompt.identifier) {
-        "chatHistory" -> chatHistoryMessages
-        "dialogueExamples" -> parseDialogueExampleMessages(characterData?.exampleMessagesRaw.orEmpty())
+        "chatHistory" -> buildChatHistoryMessages(chatHistoryMessages, template)
+        "dialogueExamples" -> parseDialogueExampleMessages(
+            raw = characterData?.exampleMessagesRaw.orEmpty(),
+            introPrompt = template.newExampleChatPrompt,
+        )
         "personaDescription" -> emptyList()
         else -> resolvePromptText(
             prompt = prompt,
@@ -290,8 +311,25 @@ private fun formatCharacterField(
         .replace("{${key}}", value, ignoreCase = true)
 }
 
-private fun parseDialogueExampleMessages(raw: String): List<UIMessage> {
+private fun buildChatHistoryMessages(
+    chatHistoryMessages: List<UIMessage>,
+    template: SillyTavernPromptTemplate,
+): List<UIMessage> {
+    val newChatPrompt = template.newChatPrompt.trim()
+    return buildList {
+        if (newChatPrompt.isNotBlank()) {
+            add(UIMessage.system(newChatPrompt))
+        }
+        addAll(chatHistoryMessages)
+    }
+}
+
+private fun parseDialogueExampleMessages(
+    raw: String,
+    introPrompt: String,
+): List<UIMessage> {
     if (raw.isBlank()) return emptyList()
+    val normalizedIntroPrompt = introPrompt.trim().ifBlank { "[Example Chat]" }
 
     return raw
         .replace("\r", "")
@@ -301,7 +339,7 @@ private fun parseDialogueExampleMessages(raw: String): List<UIMessage> {
         .flatMap { block ->
             val turns = splitDialogueTurns(block)
             buildList {
-                add(UIMessage.system("{Example Dialogue:}"))
+                add(UIMessage.system(normalizedIntroPrompt))
                 if (turns.isEmpty()) {
                     add(UIMessage.system(block))
                 } else {

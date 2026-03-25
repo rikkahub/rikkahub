@@ -78,6 +78,7 @@ import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexPromptOnlyTransformer
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernPromptTransformer
+import me.rerere.rikkahub.data.ai.transformers.SillyTavernMacroTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
@@ -132,6 +133,7 @@ private val inputTransformers by lazy {
         MessageTemplateInjectionTransformer,
         SillyTavernPromptTransformer,
         PromptInjectionTransformer,
+        SillyTavernMacroTransformer,
         PlaceholderTransformer,
         DocumentAsPromptTransformer,
         OcrTransformer,

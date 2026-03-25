@@ -15,6 +15,12 @@ class SillyTavernImportTest {
             {
               "name": "Preset A",
               "temperature": 1.1,
+              "assistant_prefill": "Prefill",
+              "continue_prefill": true,
+              "continue_postfix": "\n",
+              "new_chat_prompt": "[Start]",
+              "new_example_chat_prompt": "[Examples]",
+              "squash_system_messages": true,
               "prompts": [
                 {
                   "identifier": "main",
@@ -72,6 +78,12 @@ class SillyTavernImportTest {
         assertEquals(listOf("main", "chatHistory"), payload.assistant.stPromptTemplate?.orderedPromptIds)
         assertEquals(2, payload.regexes.size)
         assertFalse(payload.assistant.stPromptTemplate?.findPrompt("main")?.content?.contains("<regex>") == true)
+        assertEquals("Prefill", payload.assistant.stPromptTemplate?.assistantPrefill)
+        assertEquals(true, payload.assistant.stPromptTemplate?.continuePrefill)
+        assertEquals("\n", payload.assistant.stPromptTemplate?.continuePostfix)
+        assertEquals("[Start]", payload.assistant.stPromptTemplate?.newChatPrompt)
+        assertEquals("[Examples]", payload.assistant.stPromptTemplate?.newExampleChatPrompt)
+        assertEquals(true, payload.assistant.stPromptTemplate?.squashSystemMessages)
     }
 
     @Test
