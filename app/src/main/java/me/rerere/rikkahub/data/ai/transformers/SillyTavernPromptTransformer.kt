@@ -9,11 +9,14 @@ import me.rerere.rikkahub.data.model.LorebookTriggerContext
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
+import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.isTriggered
+import me.rerere.rikkahub.data.model.matchesGenerationType
+import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.utils.applyPlaceholders
 
 object SillyTavernPromptTransformer : InputMessageTransformer {
@@ -27,6 +30,7 @@ object SillyTavernPromptTransformer : InputMessageTransformer {
             assistant = ctx.assistant,
             lorebooks = ctx.settings.lorebooks,
             template = template,
+            generationType = ctx.stGenerationType,
         )
     }
 }
@@ -36,6 +40,7 @@ internal fun transformSillyTavernPrompt(
     assistant: Assistant,
     lorebooks: List<Lorebook>,
     template: SillyTavernPromptTemplate,
+    generationType: String = "normal",
 ): List<UIMessage> {
     val rawLeadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
     val leadingSystemMessages = collectLeadingSystemMessages(
@@ -61,12 +66,20 @@ internal fun transformSillyTavernPrompt(
         .filter { it.position == InjectionPosition.AFTER_SYSTEM_PROMPT }
         .joinToString("\n") { it.content.trim() }
         .trim()
+    val orderedPrompts = template.resolvePromptOrder()
+        .mapNotNull { orderItem ->
+            template.findPrompt(orderItem.identifier)?.let { prompt ->
+                orderItem to prompt
+            }
+        }
 
     val absoluteMessages = buildAbsoluteMessages(
+        orderedPrompts = orderedPrompts,
         template = template,
         characterData = characterData,
         worldInfoBefore = worldInfoBefore,
         worldInfoAfter = worldInfoAfter,
+        generationType = generationType,
     ) + triggeredLorebookEntries
         .filter { it.position == InjectionPosition.AT_DEPTH }
         .mapNotNull { entry ->
@@ -95,73 +108,33 @@ internal fun transformSillyTavernPrompt(
     }
     processedHistoryMessages = applySendIfEmpty(processedHistoryMessages, template)
 
-    val orderedPromptIds = template.orderedPromptIds.ifEmpty {
-        template.prompts.filter { it.enabled }.map { it.identifier }
-    }
     val leadingSystemSections = leadingSystemMessages
         .map { it.toText().trim() }
         .filter { it.isNotBlank() }
         .toMutableList()
     val result = mutableListOf<UIMessage>()
-    val appendedPromptIds = mutableSetOf<String>()
-    var appendedChatHistory = false
 
-    orderedPromptIds.forEach { identifier ->
-        val prompt = template.findPrompt(identifier) ?: return@forEach
-        if (!prompt.enabled || prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE) {
+    orderedPrompts.forEach { (orderItem, prompt) ->
+        if (
+            !orderItem.enabled ||
+            prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE ||
+            !prompt.matchesGenerationType(generationType)
+        ) {
             return@forEach
         }
 
         val resolvedMessages = resolveRelativePromptMessages(
             prompt = prompt,
+            assistant = assistant,
             template = template,
             characterData = characterData,
             worldInfoBefore = worldInfoBefore,
             worldInfoAfter = worldInfoAfter,
             chatHistoryMessages = processedHistoryMessages,
         )
-        if (identifier == "chatHistory" && resolvedMessages.isNotEmpty()) {
-            appendedChatHistory = true
-        }
         appendResolvedMessages(
-            promptIdentifier = identifier,
+            promptIdentifier = prompt.identifier,
             resolvedMessages = resolvedMessages,
-            leadingSystemSections = leadingSystemSections,
-            result = result,
-        )
-        appendedPromptIds += identifier
-    }
-
-    template.prompts
-        .filter {
-            it.enabled &&
-                it.injectionPosition != StPromptInjectionPosition.ABSOLUTE &&
-                it.identifier !in appendedPromptIds
-        }
-        .forEach { prompt ->
-            val resolvedMessages = resolveRelativePromptMessages(
-                prompt = prompt,
-                template = template,
-                characterData = characterData,
-                worldInfoBefore = worldInfoBefore,
-                worldInfoAfter = worldInfoAfter,
-                chatHistoryMessages = processedHistoryMessages,
-            )
-            if (prompt.identifier == "chatHistory" && resolvedMessages.isNotEmpty()) {
-                appendedChatHistory = true
-            }
-            appendResolvedMessages(
-                promptIdentifier = prompt.identifier,
-                resolvedMessages = resolvedMessages,
-                leadingSystemSections = leadingSystemSections,
-                result = result,
-            )
-        }
-
-    if (!appendedChatHistory) {
-        appendResolvedMessages(
-            promptIdentifier = "chatHistory",
-            resolvedMessages = buildChatHistoryMessages(processedHistoryMessages, template),
             leadingSystemSections = leadingSystemSections,
             result = result,
         )
@@ -221,6 +194,7 @@ private fun collectTriggeredLorebookEntries(
         recentMessagesText = nonSystemMessages.joinToString("\n") { it.toText() },
         characterDescription = characterData?.description.orEmpty(),
         characterPersonality = characterData?.personality.orEmpty(),
+        personaDescription = assistant.userPersona,
         scenario = characterData?.scenario.orEmpty(),
         creatorNotes = characterData?.creatorNotes.orEmpty(),
         characterDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),
@@ -240,14 +214,21 @@ private fun collectTriggeredLorebookEntries(
 }
 
 private fun buildAbsoluteMessages(
+    orderedPrompts: List<Pair<SillyTavernPromptOrderItem, SillyTavernPromptItem>>,
     template: SillyTavernPromptTemplate,
     characterData: SillyTavernCharacterData?,
     worldInfoBefore: String,
     worldInfoAfter: String,
+    generationType: String,
 ): List<StAbsoluteMessage> {
-    val promptMessages = template.prompts
-        .filter { it.enabled && it.injectionPosition == StPromptInjectionPosition.ABSOLUTE }
-        .mapNotNull { prompt ->
+    val promptMessages = orderedPrompts
+        .asSequence()
+        .filter { (orderItem, prompt) ->
+            orderItem.enabled &&
+                prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE &&
+                prompt.matchesGenerationType(generationType)
+        }
+        .mapNotNull { (_, prompt) ->
             resolvePromptText(
                 prompt = prompt,
                 template = template,
@@ -263,6 +244,7 @@ private fun buildAbsoluteMessages(
                 )
             }
         }
+        .toList()
     val depthPrompt = characterData?.depthPrompt
     val depthPromptMessage = depthPrompt
         ?.prompt
@@ -285,6 +267,7 @@ private fun buildAbsoluteMessages(
 
 private fun resolveRelativePromptMessages(
     prompt: SillyTavernPromptItem,
+    assistant: Assistant,
     template: SillyTavernPromptTemplate,
     characterData: SillyTavernCharacterData?,
     worldInfoBefore: String,
@@ -297,7 +280,11 @@ private fun resolveRelativePromptMessages(
             raw = characterData?.exampleMessagesRaw.orEmpty(),
             introPrompt = template.newExampleChatPrompt,
         )
-        "personaDescription" -> emptyList()
+        "personaDescription" -> assistant.userPersona
+            .trim()
+            .takeIf { it.isNotBlank() }
+            ?.let { text -> listOf(createMessage(prompt.role, text)) }
+            ?: emptyList()
         else -> resolvePromptText(
             prompt = prompt,
             template = template,

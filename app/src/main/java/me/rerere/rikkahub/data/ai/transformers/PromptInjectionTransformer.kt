@@ -7,6 +7,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.LorebookTriggerContext
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.isTriggered
 
@@ -82,12 +83,19 @@ internal fun collectInjections(
     if (enabledLorebooks.isNotEmpty() && assistant.stPromptTemplate == null) {
         // 提取上下文用于匹配（只取非 SYSTEM 消息）
         val nonSystemMessages = messages.filter { it.role != MessageRole.SYSTEM }
+        val triggerContext = LorebookTriggerContext(
+            recentMessagesText = nonSystemMessages.joinToString("\n") { it.toText() },
+            personaDescription = assistant.userPersona,
+        )
 
         enabledLorebooks.forEach { lorebook ->
             lorebook.entries
                 .filter { entry ->
                     val context = extractContextForMatching(nonSystemMessages, entry.scanDepth)
-                    entry.isTriggered(context)
+                    entry.isTriggered(
+                        context = context,
+                        triggerContext = triggerContext.copy(recentMessagesText = context),
+                    )
                 }
                 .forEach { injections.add(it) }
         }

@@ -552,7 +552,7 @@ internal data class StMacroEnvironment(
                 characterDescription = characterData?.description.orEmpty(),
                 characterPersonality = characterData?.personality.orEmpty(),
                 scenario = characterData?.scenario.orEmpty(),
-                persona = "",
+                persona = ctx.assistant.userPersona,
                 charPrompt = characterData?.systemPromptOverride.orEmpty(),
                 charInstruction = characterData?.postHistoryInstructions.orEmpty(),
                 charDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),

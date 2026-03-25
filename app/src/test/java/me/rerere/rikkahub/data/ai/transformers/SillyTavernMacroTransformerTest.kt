@@ -19,7 +19,7 @@ class SillyTavernMacroTransformerTest {
             characterDescription = "Guardian",
             characterPersonality = "Warm",
             scenario = "Forest",
-            persona = "",
+            persona = "I catalog every answer carefully.",
             charPrompt = "Card Main",
             charInstruction = "Card Jailbreak",
             charDepthPrompt = "Depth Note",
@@ -34,13 +34,16 @@ class SillyTavernMacroTransformerTest {
         val result = SillyTavernMacroTransformer.applySillyTavernMacros(
             messages = listOf(
                 UIMessage.system("{{setvar::style::Gentle}}{{// hidden}}"),
-                UIMessage.system("{{getvar::style}} / {{char}} / {{user}} / {{lastUsermessage}}"),
+                UIMessage.system("{{getvar::style}} / {{char}} / {{user}} / {{persona}} / {{lastUsermessage}}"),
             ),
             env = env,
         )
 
         assertEquals(1, result.size)
-        assertEquals("Gentle / Seraphina / Alice / Latest user input", result.single().toText())
+        assertEquals(
+            "Gentle / Seraphina / Alice / I catalog every answer carefully. / Latest user input",
+            result.single().toText()
+        )
     }
 
     @Test

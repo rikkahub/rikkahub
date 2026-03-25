@@ -8,8 +8,10 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
+import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
+import me.rerere.rikkahub.data.model.withPromptOrder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -106,7 +108,7 @@ class SillyTavernPromptTransformerTest {
                     injectionOrder = 100,
                 ),
             ),
-            orderedPromptIds = listOf("chatHistory"),
+            orderedPromptIds = listOf("chatHistory", "absoluteSystem", "absoluteUser"),
         )
 
         val result = transformSillyTavernPrompt(
@@ -313,5 +315,118 @@ class SillyTavernPromptTransformerTest {
             result.map { it.toText() }
         )
         assertTrue(result.none { it.toText() == "Triggered lore" })
+    }
+
+    @Test
+    fun `persona description prompt should render assistant user persona`() {
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "personaDescription", marker = true),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("personaDescription", "chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = Assistant(
+                userPersona = "I speak like an archivist and keep meticulous notes.",
+                stPromptTemplate = template,
+            ),
+            lorebooks = emptyList(),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("I speak like an archivist and keep meticulous notes.", "Hello"),
+            result.map { it.toText() }
+        )
+    }
+
+    @Test
+    fun `st lorebook should support persona description matching`() {
+        val lorebook = Lorebook(
+            id = Uuid.random(),
+            entries = listOf(
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    keywords = listOf("archivist"),
+                    matchPersonaDescription = true,
+                    position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
+                    content = "Persona lore",
+                )
+            )
+        )
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "worldInfoBefore", marker = true),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("worldInfoBefore", "chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = Assistant(
+                userPersona = "I am an archivist who documents everything.",
+                stPromptTemplate = template,
+                lorebookIds = setOf(lorebook.id),
+            ),
+            lorebooks = listOf(lorebook),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("Persona lore", "Hello"),
+            result.map { it.toText() }
+        )
+    }
+
+    @Test
+    fun `prompt order enablement should override prompt enabled and respect generation triggers`() {
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(
+                    identifier = "main",
+                    content = "Main Prompt",
+                    enabled = false,
+                ),
+                SillyTavernPromptItem(
+                    identifier = "continueOnly",
+                    content = "Continue Prompt",
+                    injectionTriggers = listOf("continue"),
+                ),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+        ).withPromptOrder(
+            listOf(
+                SillyTavernPromptOrderItem("main", enabled = true),
+                SillyTavernPromptOrderItem("continueOnly", enabled = true),
+                SillyTavernPromptOrderItem("chatHistory", enabled = true),
+            )
+        )
+
+        val normalResult = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = Assistant(stPromptTemplate = template),
+            lorebooks = emptyList(),
+            template = template,
+        )
+        val continueResult = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = Assistant(stPromptTemplate = template),
+            lorebooks = emptyList(),
+            template = template,
+            generationType = "continue",
+        )
+
+        assertEquals(
+            listOf("Main Prompt", "Hello"),
+            normalResult.map { it.toText() }
+        )
+        assertEquals(
+            listOf("Main Prompt\nContinue Prompt", "Hello"),
+            continueResult.map { it.toText() }
+        )
     }
 }

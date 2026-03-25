@@ -8,13 +8,11 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
-import com.drew.imaging.ImageMetadataReader
-import com.drew.imaging.png.PngChunkType
-import com.drew.metadata.png.PngDirectory
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
+import kotlin.text.Charsets.ISO_8859_1
 
 /**
  * 图片处理工具类
@@ -235,20 +233,77 @@ object ImageUtils {
      * @return Result<String> 包含角色元数据的Result对象
      */
     fun getTavernCharacterMeta(context: Context, uri: Uri): Result<String> = runCatching {
-        val metadata = context.contentResolver.openInputStream(uri)?.use { ImageMetadataReader.readMetadata(it) }
-        if (metadata == null) error("Metadata is null, please check if the image is a character card")
-        if (!metadata.containsDirectoryOfType(PngDirectory::class.java)) error("No PNG directory found, please check if the image is a character card")
+        val pngBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: error("Failed to read image data")
+        extractTavernCharacterMetaFromPngBytes(pngBytes)
+    }
 
-        val pngDirectory = metadata.getDirectoriesOfType(PngDirectory::class.java)
-            .firstOrNull { directory ->
-                directory.pngChunkType == PngChunkType.tEXt
-                    && directory.getString(PngDirectory.TAG_TEXTUAL_DATA).startsWith("[chara:")
-            } ?: error("No tEXt chunk found, please check if the image is a character card")
+    internal fun extractTavernCharacterMetaFromPngBytes(bytes: ByteArray): String {
+        require(bytes.size >= PNG_SIGNATURE.size) { "Invalid PNG data" }
+        require(bytes.copyOfRange(0, PNG_SIGNATURE.size).contentEquals(PNG_SIGNATURE)) {
+            "No PNG signature found, please check if the image is a character card"
+        }
 
-        val value = pngDirectory.getString(PngDirectory.TAG_TEXTUAL_DATA)
+        var offset = PNG_SIGNATURE.size
+        var legacyEncoded: String? = null
+        val textChunks = linkedMapOf<String, String>()
 
-        val regex = Regex("""\[chara:\s*(.+?)]""")
-        return Result.success(regex.find(value)?.groupValues?.get(1) ?: error("No character data found"))
+        while (offset + 12 <= bytes.size) {
+            val length = readPngInt(bytes, offset)
+            val dataStart = offset + 8
+            val dataEnd = dataStart + length
+            require(length >= 0 && dataEnd + 4 <= bytes.size) { "Invalid PNG chunk length" }
+
+            val chunkType = bytes.decodeToString(offset + 4, offset + 8)
+            if (chunkType == "tEXt") {
+                parsePngTextChunk(bytes.copyOfRange(dataStart, dataEnd))?.let { (keyword, text) ->
+                    val normalizedKeyword = keyword.trim().lowercase()
+                    if (normalizedKeyword.isNotBlank()) {
+                        textChunks[normalizedKeyword] = text
+                    }
+                    if (legacyEncoded == null) {
+                        legacyEncoded = LEGACY_CHARA_REGEX.find(text)?.groupValues?.get(1)
+                    }
+                }
+            }
+
+            offset = dataEnd + 4
+            if (chunkType == "IEND") {
+                break
+            }
+        }
+
+        return textChunks["ccv3"]
+            ?: textChunks["chara"]
+            ?: legacyEncoded
+            ?: error("No character data found")
+    }
+
+    private fun readPngInt(bytes: ByteArray, offset: Int): Int {
+        return ((bytes[offset].toInt() and 0xFF) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
+            (bytes[offset + 3].toInt() and 0xFF)
+    }
+
+    private fun parsePngTextChunk(bytes: ByteArray): Pair<String, String>? {
+        val separatorIndex = bytes.indexOf(0)
+        if (separatorIndex <= 0) return null
+        val keyword = bytes.decodeToString(endIndex = separatorIndex)
+        val text = bytes.decodeToString(
+            startIndex = separatorIndex + 1,
+            endIndex = bytes.size,
+            charset = ISO_8859_1,
+        )
+        return keyword to text
+    }
+
+    private fun ByteArray.decodeToString(
+        startIndex: Int = 0,
+        endIndex: Int = size,
+        charset: java.nio.charset.Charset = Charsets.US_ASCII,
+    ): String {
+        return String(this, startIndex, endIndex - startIndex, charset)
     }
 
     data class ImageInfo(
@@ -256,4 +311,17 @@ object ImageUtils {
         val height: Int,
         val mimeType: String?
     )
+
+    private val PNG_SIGNATURE = byteArrayOf(
+        0x89.toByte(),
+        0x50,
+        0x4E,
+        0x47,
+        0x0D,
+        0x0A,
+        0x1A,
+        0x0A,
+    )
+
+    private val LEGACY_CHARA_REGEX = Regex("""\[chara:\s*(.+?)]""", setOf(RegexOption.IGNORE_CASE))
 }

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.findPrompt
+import me.rerere.rikkahub.data.model.findPromptOrder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -28,7 +29,8 @@ class SillyTavernImportTest {
                   "role": "system",
                   "content": "Main body <regex>\"foo\":\"baz\"</regex>",
                   "system_prompt": true,
-                  "enabled": true
+                  "enabled": false,
+                  "injection_trigger": ["normal", "continue"]
                 },
                 {
                   "identifier": "chatHistory",
@@ -76,8 +78,10 @@ class SillyTavernImportTest {
 
         assertEquals(AssistantImportKind.PRESET, payload.kind)
         assertEquals(listOf("main", "chatHistory"), payload.assistant.stPromptTemplate?.orderedPromptIds)
+        assertEquals(true, payload.assistant.stPromptTemplate?.findPromptOrder("main")?.enabled)
         assertEquals(2, payload.regexes.size)
         assertFalse(payload.assistant.stPromptTemplate?.findPrompt("main")?.content?.contains("<regex>") == true)
+        assertEquals(listOf("normal", "continue"), payload.assistant.stPromptTemplate?.findPrompt("main")?.injectionTriggers)
         assertEquals("Prefill", payload.assistant.stPromptTemplate?.assistantPrefill)
         assertEquals(true, payload.assistant.stPromptTemplate?.continuePrefill)
         assertEquals("\n", payload.assistant.stPromptTemplate?.continuePostfix)
@@ -118,6 +122,7 @@ class SillyTavernImportTest {
                       "keys": ["glade"],
                       "extensions": {
                         "position": 4,
+                        "match_persona_description": true,
                         "depth": 2,
                         "role": 2
                       }
@@ -142,6 +147,7 @@ class SillyTavernImportTest {
         assertNotNull(payload.assistant.stPromptTemplate)
         assertEquals(InjectionPosition.AT_DEPTH, entry.position)
         assertEquals(MessageRole.ASSISTANT, entry.role)
+        assertEquals(true, entry.matchPersonaDescription)
         assertEquals(2, entry.injectDepth)
     }
 

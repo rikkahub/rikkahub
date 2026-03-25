@@ -19,6 +19,7 @@ data class Assistant(
     val avatar: Avatar = Avatar.Dummy,
     val useAssistantAvatar: Boolean = false, // 使用助手头像替代模型头像
     val tags: List<Uuid> = emptyList(),
+    val userPersona: String = "",
     val systemPrompt: String = "",
     val temperature: Float? = null,
     val topP: Float? = null,
@@ -273,6 +274,7 @@ sealed class PromptInjection {
         val constantActive: Boolean = false,       // 常驻激活（无需匹配）
         val matchCharacterDescription: Boolean = false,
         val matchCharacterPersonality: Boolean = false,
+        val matchPersonaDescription: Boolean = false,
         val matchScenario: Boolean = false,
         val matchCreatorNotes: Boolean = false,
         val matchCharacterDepthPrompt: Boolean = false,
@@ -310,6 +312,7 @@ fun PromptInjection.RegexInjection.isTriggered(
         if (triggerContext.recentMessagesText.isNotBlank()) add(triggerContext.recentMessagesText)
         if (matchCharacterDescription && triggerContext.characterDescription.isNotBlank()) add(triggerContext.characterDescription)
         if (matchCharacterPersonality && triggerContext.characterPersonality.isNotBlank()) add(triggerContext.characterPersonality)
+        if (matchPersonaDescription && triggerContext.personaDescription.isNotBlank()) add(triggerContext.personaDescription)
         if (matchScenario && triggerContext.scenario.isNotBlank()) add(triggerContext.scenario)
         if (matchCreatorNotes && triggerContext.creatorNotes.isNotBlank()) add(triggerContext.creatorNotes)
         if (matchCharacterDepthPrompt && triggerContext.characterDepthPrompt.isNotBlank()) add(triggerContext.characterDepthPrompt)

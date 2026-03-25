@@ -34,9 +34,12 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
+import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StDepthPrompt
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
+import me.rerere.rikkahub.data.model.matchesGenerationType
+import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import kotlin.uuid.Uuid
@@ -221,11 +224,30 @@ private fun parsePresetImport(
 ): AssistantImportPayload {
     val preset = ImportJson.decodeFromJsonElement<StPresetImport>(json)
     val selectedOrder = selectPresetOrder(preset.promptOrder)
-    val orderedPromptIds = selectedOrder.mapNotNull { item ->
-        item.identifier.takeIf { item.enabled }
-    }.ifEmpty {
-        preset.prompts.filter { it.enabled ?: true }.map { it.identifier }
-    }
+    val promptOrder = selectedOrder
+        .mapNotNull { item ->
+            item.identifier
+                ?.takeIf { it.isNotBlank() }
+                ?.let { identifier ->
+                    SillyTavernPromptOrderItem(
+                        identifier = identifier,
+                        enabled = item.enabled,
+                    )
+                }
+        }
+        .ifEmpty {
+            preset.prompts
+                .mapNotNull { prompt ->
+                    prompt.identifier
+                        .takeIf { it.isNotBlank() }
+                        ?.let { identifier ->
+                            SillyTavernPromptOrderItem(
+                                identifier = identifier,
+                                enabled = prompt.enabled ?: true,
+                            )
+                        }
+                }
+        }
     val promptItems = preset.prompts.map { prompt ->
         SillyTavernPromptItem(
             identifier = prompt.identifier,
@@ -242,6 +264,7 @@ private fun parsePresetImport(
             },
             injectionDepth = prompt.injectionDepth ?: 4,
             injectionOrder = prompt.injectionOrder ?: 100,
+            injectionTriggers = prompt.injectionTriggers,
             forbidOverrides = prompt.forbidOverrides ?: false,
         )
     }
@@ -266,8 +289,7 @@ private fun parsePresetImport(
         useSystemPrompt = preset.useSystemPrompt ?: false,
         squashSystemMessages = preset.squashSystemMessages ?: false,
         prompts = promptItems,
-        orderedPromptIds = orderedPromptIds,
-    )
+    ).withPromptOrder(promptOrder)
 
     val regexes = buildList {
         addAll(parseRegexScripts(json["extensions"]?.jsonObject?.get("regex_scripts"), sourceName = preset.name))
@@ -280,8 +302,12 @@ private fun parsePresetImport(
                 ?.get("regexes"),
             sourceName = "${preset.name} (SPreset)"
         ))
+        val promptOrderMap = promptOrder.associateBy { it.identifier }
         promptItems
-            .filter { it.identifier in orderedPromptIds && it.enabled }
+            .filter { prompt ->
+                val orderItem = promptOrderMap[prompt.identifier] ?: return@filter false
+                orderItem.enabled && prompt.matchesGenerationType("normal")
+            }
             .forEach { prompt ->
                 val rawContent = preset.prompts
                     .firstOrNull { it.identifier == prompt.identifier }
@@ -423,11 +449,25 @@ internal fun defaultSillyTavernPromptTemplate(): SillyTavernPromptTemplate {
             "charDescription",
             "charPersonality",
             "scenario",
+            "personaDescription",
             "worldInfoAfter",
             "dialogueExamples",
             "chatHistory",
             "jailbreak",
         ),
+    ).withPromptOrder(
+        listOf(
+            SillyTavernPromptOrderItem("main"),
+            SillyTavernPromptOrderItem("worldInfoBefore"),
+            SillyTavernPromptOrderItem("charDescription"),
+            SillyTavernPromptOrderItem("charPersonality"),
+            SillyTavernPromptOrderItem("scenario"),
+            SillyTavernPromptOrderItem("personaDescription"),
+            SillyTavernPromptOrderItem("worldInfoAfter"),
+            SillyTavernPromptOrderItem("dialogueExamples"),
+            SillyTavernPromptOrderItem("chatHistory"),
+            SillyTavernPromptOrderItem("jailbreak"),
+        )
     )
 }
 
@@ -468,6 +508,8 @@ private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
             matchCharacterDescription = extensions?.get("match_character_description")?.jsonPrimitiveOrNull?.booleanOrNull
                 ?: false,
             matchCharacterPersonality = extensions?.get("match_character_personality")?.jsonPrimitiveOrNull?.booleanOrNull
+                ?: false,
+            matchPersonaDescription = extensions?.get("match_persona_description")?.jsonPrimitiveOrNull?.booleanOrNull
                 ?: false,
             matchScenario = extensions?.get("match_scenario")?.jsonPrimitiveOrNull?.booleanOrNull ?: false,
             matchCreatorNotes = extensions?.get("match_creator_notes")?.jsonPrimitiveOrNull?.booleanOrNull ?: false,
@@ -808,6 +850,7 @@ private data class StPresetPromptImport(
     val injection_position: Int? = null,
     val injection_depth: Int? = null,
     val injection_order: Int? = null,
+    val injection_trigger: List<String>? = null,
     val forbid_overrides: Boolean? = null,
 ) {
     val systemPrompt: Boolean?
@@ -821,6 +864,17 @@ private data class StPresetPromptImport(
 
     val injectionOrder: Int?
         get() = injection_order
+
+    val injectionTriggers: List<String>
+        get() = injection_trigger
+            ?.mapNotNull { trigger ->
+                trigger
+                    .trim()
+                    .lowercase()
+                    .takeIf { it.isNotBlank() }
+            }
+            ?.distinct()
+            ?: emptyList()
 
     val forbidOverrides: Boolean?
         get() = forbid_overrides

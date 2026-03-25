@@ -11,6 +11,7 @@ class TransformerContext(
     val model: Model,
     val assistant: Assistant,
     val settings: Settings,
+    val stGenerationType: String = "normal",
 )
 
 interface MessageTransformer {
