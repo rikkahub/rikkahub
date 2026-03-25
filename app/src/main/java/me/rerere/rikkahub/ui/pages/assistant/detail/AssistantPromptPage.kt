@@ -133,7 +133,10 @@ fun AssistantPromptPage(id: String) {
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
             settings = settings,
-            onUpdate = { vm.update(it) }
+            onUpdate = { vm.update(it) },
+            onUpdateWithLorebooks = { updatedAssistant, lorebooks ->
+                vm.updateWithLorebooks(updatedAssistant, lorebooks)
+            },
         )
     }
 }
@@ -143,13 +146,15 @@ private fun AssistantPromptContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
     settings: Settings,
-    onUpdate: (Assistant) -> Unit
+    onUpdate: (Assistant) -> Unit,
+    onUpdateWithLorebooks: (Assistant, List<me.rerere.rikkahub.data.model.Lorebook>) -> Unit,
 ) {
     val context = LocalContext.current
     val templateTransformer = koinInject<TemplateTransformer>()
     val themeTokens = LocalThemeTokenOverrides.current
     val latestAssistant by rememberUpdatedState(assistant)
     val latestOnUpdate by rememberUpdatedState(onUpdate)
+    val latestOnUpdateWithLorebooks by rememberUpdatedState(onUpdateWithLorebooks)
 
     Column(
         modifier = modifier
@@ -159,6 +164,110 @@ private fun AssistantPromptContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "SillyTavern 导入",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "可导入预设 JSON、角色卡 PNG/JSON，以及角色卡内嵌世界书。导入到现有助手时会自动合并新 lorebook，并在导入前确认配套 regex。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                AssistantImporter(
+                    onImport = { payload, includeRegexes ->
+                        val application = applyImportedAssistantToExisting(
+                            currentAssistant = assistant,
+                            payload = payload,
+                            existingLorebooks = settings.lorebooks,
+                            includeRegexes = includeRegexes,
+                        )
+                        latestOnUpdateWithLorebooks(
+                            application.assistant,
+                            application.lorebooks.filter { imported ->
+                                settings.lorebooks.none { it.id == imported.id }
+                            }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (assistant.stPromptTemplate != null || assistant.stCharacterData != null) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "当前运行时映射",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        assistant.stPromptTemplate?.let { template ->
+                            Text(
+                                text = "Preset: ${template.sourceName.ifBlank { "SillyTavern" }}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        assistant.stCharacterData?.let { character ->
+                            Text(
+                                text = "角色卡: ${character.sourceName.ifBlank { character.name.ifBlank { "SillyTavern" } }}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Text(
+                            text = "Regex ${assistant.regexes.size} 条，关联世界书 ${assistant.lorebookIds.size} 本。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (assistant.stPromptTemplate != null) {
+                                TextButton(
+                                    onClick = {
+                                        latestOnUpdate(
+                                            latestAssistant.copy(
+                                                stPromptTemplate = if (latestAssistant.stCharacterData != null) {
+                                                    defaultSillyTavernPromptTemplate()
+                                                } else {
+                                                    null
+                                                }
+                                            )
+                                        )
+                                    }
+                                ) {
+                                    Text(
+                                        if (assistant.stCharacterData != null) {
+                                            "恢复默认模板"
+                                        } else {
+                                            "清除 ST 预设"
+                                        }
+                                    )
+                                }
+                            }
+                            if (assistant.stCharacterData != null) {
+                                TextButton(
+                                    onClick = {
+                                        latestOnUpdate(
+                                            latestAssistant.copy(
+                                                stCharacterData = null
+                                            )
+                                        )
+                                    }
+                                ) {
+                                    Text("清除角色卡信息")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {

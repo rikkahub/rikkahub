@@ -79,7 +79,7 @@ internal fun collectInjections(
     val enabledLorebooks = lorebooks.filter {
         it.enabled && assistant.lorebookIds.contains(it.id)
     }
-    if (enabledLorebooks.isNotEmpty()) {
+    if (enabledLorebooks.isNotEmpty() && assistant.stPromptTemplate == null) {
         // 提取上下文用于匹配（只取非 SYSTEM 消息）
         val nonSystemMessages = messages.filter { it.role != MessageRole.SYSTEM }
 
@@ -214,6 +214,7 @@ private fun createMergedInjectionMessages(injections: List<PromptInjection>): Li
         .map { (role, grouped) ->
             val mergedContent = grouped.joinToString("\n") { it.content }
             when (role) {
+                MessageRole.SYSTEM -> UIMessage.system(mergedContent)
                 MessageRole.ASSISTANT -> UIMessage.assistant(mergedContent)
                 else -> UIMessage.user(mergedContent)
             }

@@ -50,6 +50,8 @@ data class Assistant(
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val openAIReasoningEffort: String = "",
+    val stPromptTemplate: SillyTavernPromptTemplate? = null,
+    val stCharacterData: SillyTavernCharacterData? = null,
 )
 
 @Serializable
@@ -106,6 +108,7 @@ data class AssistantMemory(
 
 @Serializable
 enum class AssistantAffectScope {
+    SYSTEM,
     USER,
     ASSISTANT,
 }
@@ -259,10 +262,21 @@ sealed class PromptInjection {
         override val injectDepth: Int = 4,
         override val role: MessageRole = MessageRole.USER,
         val keywords: List<String> = emptyList(),  // 触发关键词
+        val secondaryKeywords: List<String> = emptyList(),
+        val selective: Boolean = false,
+        val selectiveLogic: Int = 0,
         val useRegex: Boolean = false,             // 是否使用正则匹配
         val caseSensitive: Boolean = false,        // 大小写敏感
+        val matchWholeWords: Boolean = false,
+        val probability: Int? = null,
         val scanDepth: Int = 4,                    // 扫描最近N条消息
         val constantActive: Boolean = false,       // 常驻激活（无需匹配）
+        val matchCharacterDescription: Boolean = false,
+        val matchCharacterPersonality: Boolean = false,
+        val matchScenario: Boolean = false,
+        val matchCreatorNotes: Boolean = false,
+        val matchCharacterDepthPrompt: Boolean = false,
+        val stMetadata: Map<String, String> = emptyMap(),
     ) : PromptInjection()
 }
 
@@ -284,27 +298,130 @@ data class Lorebook(
  * @param context 要扫描的上下文文本
  * @return 是否触发
  */
-fun PromptInjection.RegexInjection.isTriggered(context: String): Boolean {
+fun PromptInjection.RegexInjection.isTriggered(
+    context: String,
+    triggerContext: LorebookTriggerContext = LorebookTriggerContext(recentMessagesText = context)
+): Boolean {
     if (!enabled) return false
-    if (constantActive) return true
+    if (constantActive) return passesProbabilityCheck()
     if (keywords.isEmpty()) return false
 
-    return keywords.any { keyword ->
-        if (useRegex) {
-            try {
-                val options = if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
-                Regex(keyword, options).containsMatchIn(context)
-            } catch (e: Exception) {
-                false
-            }
-        } else {
-            if (caseSensitive) {
-                context.contains(keyword)
-            } else {
-                context.contains(keyword, ignoreCase = true)
-            }
+    val haystacks = buildList {
+        if (triggerContext.recentMessagesText.isNotBlank()) add(triggerContext.recentMessagesText)
+        if (matchCharacterDescription && triggerContext.characterDescription.isNotBlank()) add(triggerContext.characterDescription)
+        if (matchCharacterPersonality && triggerContext.characterPersonality.isNotBlank()) add(triggerContext.characterPersonality)
+        if (matchScenario && triggerContext.scenario.isNotBlank()) add(triggerContext.scenario)
+        if (matchCreatorNotes && triggerContext.creatorNotes.isNotBlank()) add(triggerContext.creatorNotes)
+        if (matchCharacterDepthPrompt && triggerContext.characterDepthPrompt.isNotBlank()) add(triggerContext.characterDepthPrompt)
+    }.ifEmpty { listOf(context) }
+
+    val hasPrimaryMatch = keywords.any { keyword ->
+        haystacks.any { haystack ->
+            keywordMatches(
+                keyword = keyword,
+                context = haystack,
+                useRegex = useRegex,
+                caseSensitive = caseSensitive,
+                matchWholeWords = matchWholeWords,
+            )
         }
     }
+    if (!hasPrimaryMatch) return false
+
+    if (!selective || secondaryKeywords.isEmpty()) {
+        return passesProbabilityCheck()
+    }
+
+    val secondaryMatches = secondaryKeywords.map { keyword ->
+        haystacks.any { haystack ->
+            keywordMatches(
+                keyword = keyword,
+                context = haystack,
+                useRegex = useRegex,
+                caseSensitive = caseSensitive,
+                matchWholeWords = matchWholeWords,
+            )
+        }
+    }
+
+    val selectiveMatched = when (selectiveLogic) {
+        1 -> !secondaryMatches.all { it } // NOT_ALL
+        2 -> secondaryMatches.none { it } // NOT_ANY
+        3 -> secondaryMatches.all { it } // AND_ALL
+        else -> secondaryMatches.any { it } // AND_ANY
+    }
+
+    return selectiveMatched && passesProbabilityCheck()
+}
+
+private fun PromptInjection.RegexInjection.passesProbabilityCheck(): Boolean {
+    val chance = probability ?: return true
+    if (chance >= 100) return true
+    if (chance <= 0) return false
+    return kotlin.random.Random.nextInt(100) < chance
+}
+
+private fun keywordMatches(
+    keyword: String,
+    context: String,
+    useRegex: Boolean,
+    caseSensitive: Boolean,
+    matchWholeWords: Boolean,
+): Boolean {
+    if (keyword.isBlank() || context.isBlank()) return false
+
+    val regexFromSlash = parseSlashRegex(keyword, caseSensitive)
+    if (useRegex || regexFromSlash != null) {
+        return runCatching {
+            val regex = regexFromSlash ?: Regex(
+                keyword,
+                if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
+            )
+            regex.containsMatchIn(context)
+        }.getOrDefault(false)
+    }
+
+    return if (matchWholeWords) {
+        val escaped = Regex.escape(keyword)
+        val options = if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
+        Regex("""(?:^|[^\p{L}\p{N}_])$escaped(?:$|[^\p{L}\p{N}_])""", options).containsMatchIn(context)
+    } else {
+        context.contains(keyword, ignoreCase = !caseSensitive)
+    }
+}
+
+private fun parseSlashRegex(input: String, caseSensitive: Boolean): Regex? {
+    if (!input.startsWith('/') || input.length < 2) return null
+
+    var escaped = false
+    var closingSlashIndex = -1
+    for (index in 1 until input.length) {
+        val char = input[index]
+        if (escaped) {
+            escaped = false
+            continue
+        }
+        if (char == '\\') {
+            escaped = true
+            continue
+        }
+        if (char == '/') {
+            closingSlashIndex = index
+        }
+    }
+
+    if (closingSlashIndex <= 0) return null
+
+    val pattern = input.substring(1, closingSlashIndex)
+    val flags = input.substring(closingSlashIndex + 1)
+    val options = mutableSetOf<RegexOption>()
+    if (!caseSensitive && 'i' !in flags) {
+        options += RegexOption.IGNORE_CASE
+    }
+    if ('i' in flags) options += RegexOption.IGNORE_CASE
+    if ('m' in flags) options += RegexOption.MULTILINE
+    if ('s' in flags) options += RegexOption.DOT_MATCHES_ALL
+    return runCatching { Regex(pattern, options) }.getOrNull()
 }
 
 /**

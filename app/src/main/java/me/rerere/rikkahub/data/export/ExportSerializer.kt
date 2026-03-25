@@ -4,9 +4,12 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import me.rerere.rikkahub.data.model.InjectionPosition
@@ -166,10 +169,28 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
                         injectDepth = entry.depth,
                         content = entry.content,
                         keywords = entry.key,
+                        secondaryKeywords = entry.secondaryKeys,
+                        selective = entry.selective,
                         useRegex = false, // SillyTavern 格式不支持 useRegex
                         caseSensitive = entry.caseSensitive ?: false,
+                        matchWholeWords = entry.matchWholeWords ?: false,
+                        probability = entry.probability?.takeIf { entry.useProbability == true || it > 0 },
                         scanDepth = entry.scanDepth ?: 4,
                         constantActive = entry.constant,
+                        role = mapSillyTavernRole(entry.role),
+                        stMetadata = buildMap {
+                            putIfPresent("uid", entry.uid)
+                            putIfPresent("displayIndex", entry.displayIndex)
+                            putIfPresent("group", entry.group)
+                            putIfPresent("group_override", entry.groupOverride)
+                            putIfPresent("group_weight", entry.groupWeight)
+                            putIfPresent("sticky", entry.sticky)
+                            putIfPresent("cooldown", entry.cooldown)
+                            putIfPresent("delay", entry.delay)
+                            putIfPresent("delay_until_recursion", entry.delayUntilRecursion)
+                            putIfPresent("vectorized", entry.vectorized)
+                            putIfPresent("automation_id", entry.automationId)
+                        },
                     )
                 }
             )
@@ -180,10 +201,18 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
         return when (position) {
             0 -> InjectionPosition.BEFORE_SYSTEM_PROMPT
             1 -> InjectionPosition.AFTER_SYSTEM_PROMPT
-            2 -> InjectionPosition.TOP_OF_CHAT
-            3 -> InjectionPosition.TOP_OF_CHAT // After Examples -> 聊天历史开头
-            4 -> InjectionPosition.AT_DEPTH    // @Depth 模式
+            2, 5 -> InjectionPosition.TOP_OF_CHAT
+            3, 6 -> InjectionPosition.BOTTOM_OF_CHAT
+            4 -> InjectionPosition.AT_DEPTH
             else -> InjectionPosition.AFTER_SYSTEM_PROMPT
+        }
+    }
+
+    private fun mapSillyTavernRole(role: Int?): me.rerere.ai.core.MessageRole {
+        return when (role) {
+            1 -> me.rerere.ai.core.MessageRole.USER
+            2 -> me.rerere.ai.core.MessageRole.ASSISTANT
+            else -> me.rerere.ai.core.MessageRole.SYSTEM
         }
     }
 }
@@ -245,14 +274,46 @@ private data class SillyTavernLorebook(
 
 @Serializable
 private data class SillyTavernEntry(
+    val uid: Int? = null,
     val key: List<String> = emptyList(),
+    @SerialName("keysecondary")
+    val secondaryKeys: List<String> = emptyList(),
     val content: String = "",
     val comment: String? = null,
     val constant: Boolean = false,
+    val selective: Boolean = false,
     val position: Int = 0,
     val order: Int = 100,
     val disable: Boolean = false,
+    val displayIndex: Int? = null,
+    val group: String? = null,
+    val groupOverride: Boolean? = null,
+    val groupWeight: Int? = null,
+    val sticky: Int? = null,
+    val cooldown: Int? = null,
+    val delay: Int? = null,
+    val probability: Int? = null,
+    val useProbability: Boolean? = null,
     val depth: Int = 4,
+    val role: Int? = null,
+    val vectorized: Boolean? = null,
+    val delayUntilRecursion: Boolean? = null,
     val scanDepth: Int? = null,
     val caseSensitive: Boolean? = null,
+    val matchWholeWords: Boolean? = null,
+    val automationId: String? = null,
 )
+
+private fun MutableMap<String, String>.putIfPresent(key: String, value: Any?) {
+    when (value) {
+        null -> {}
+        is JsonElement -> {
+            if (value is JsonPrimitive) {
+                value.contentOrNull?.let { put(key, it) }
+            } else {
+                put(key, value.toString())
+            }
+        }
+        else -> put(key, value.toString())
+    }
+}

@@ -20,6 +20,7 @@ object RegexPromptOnlyTransformer : InputMessageTransformer {
 
         return messages.mapIndexed { index, message ->
             val scope = when (message.role) {
+                MessageRole.SYSTEM -> AssistantAffectScope.SYSTEM
                 MessageRole.USER -> AssistantAffectScope.USER
                 MessageRole.ASSISTANT -> AssistantAffectScope.ASSISTANT
                 else -> return@mapIndexed message
