@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
+import me.rerere.rikkahub.data.model.effectiveUserPersona
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.isTriggered
@@ -25,13 +26,16 @@ object SillyTavernPromptTransformer : InputMessageTransformer {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        val template = ctx.assistant.stPromptTemplate ?: return messages
+        val template = ctx.settings.stPresetTemplate
+            ?.takeIf { ctx.settings.stPresetEnabled }
+            ?: return messages
         return transformSillyTavernPrompt(
             messages = messages,
             assistant = ctx.assistant,
             lorebooks = ctx.settings.lorebooks,
             template = template,
             generationType = ctx.stGenerationType,
+            personaDescription = ctx.settings.effectiveUserPersona(ctx.assistant),
         )
     }
 }
@@ -42,8 +46,10 @@ internal fun transformSillyTavernPrompt(
     lorebooks: List<Lorebook>,
     template: SillyTavernPromptTemplate,
     generationType: String = "normal",
+    personaDescription: String = assistant.userPersona,
 ): List<UIMessage> {
     val normalizedGenerationType = generationType.trim().lowercase().ifBlank { "normal" }
+    val normalizedPersonaDescription = personaDescription.trim()
     val rawLeadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
     val leadingSystemMessages = collectLeadingSystemMessages(
         messages = messages,
@@ -66,6 +72,7 @@ internal fun transformSillyTavernPrompt(
         assistant = assistant,
         lorebooks = lorebooks,
         characterData = characterData,
+        personaDescription = normalizedPersonaDescription,
     )
 
     val worldInfoBefore = triggeredLorebookEntries
@@ -141,6 +148,7 @@ internal fun transformSillyTavernPrompt(
             worldInfoBefore = worldInfoBefore,
             worldInfoAfter = worldInfoAfter,
             chatHistoryMessages = processedHistoryMessages,
+            personaDescription = normalizedPersonaDescription,
         )
         appendResolvedMessages(
             promptIdentifier = prompt.identifier,
@@ -347,6 +355,7 @@ private fun collectTriggeredLorebookEntries(
     assistant: Assistant,
     lorebooks: List<Lorebook>,
     characterData: SillyTavernCharacterData?,
+    personaDescription: String,
 ): List<PromptInjection.RegexInjection> {
     val enabledLorebooks = lorebooks.filter {
         it.enabled && assistant.lorebookIds.contains(it.id)
@@ -358,7 +367,7 @@ private fun collectTriggeredLorebookEntries(
         recentMessagesText = nonSystemMessages.joinToString("\n") { it.toText() },
         characterDescription = characterData?.description.orEmpty(),
         characterPersonality = characterData?.personality.orEmpty(),
-        personaDescription = assistant.userPersona,
+        personaDescription = personaDescription,
         scenario = characterData?.scenario.orEmpty(),
         creatorNotes = characterData?.creatorNotes.orEmpty(),
         characterDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),
@@ -437,6 +446,7 @@ private fun resolveRelativePromptMessages(
     worldInfoBefore: String,
     worldInfoAfter: String,
     chatHistoryMessages: List<UIMessage>,
+    personaDescription: String,
 ): List<UIMessage> {
     return when (prompt.identifier) {
         "chatHistory" -> buildChatHistoryMessages(chatHistoryMessages, template)
@@ -444,7 +454,7 @@ private fun resolveRelativePromptMessages(
             raw = characterData?.exampleMessagesRaw.orEmpty(),
             introPrompt = template.newExampleChatPrompt,
         )
-        "personaDescription" -> assistant.userPersona
+        "personaDescription" -> personaDescription
             .trim()
             .takeIf { it.isNotBlank() }
             ?.let { text -> listOf(createMessage(prompt.role, text)) }

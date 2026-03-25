@@ -66,6 +66,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -96,9 +97,11 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val assistantMemoryCounts by vm.assistantMemoryCounts.collectAsStateWithLifecycle()
     var pendingImportedLorebooks by remember { mutableStateOf<List<Lorebook>>(emptyList()) }
+    var pendingImportedGlobalRegexes by remember(settings.regexes) { mutableStateOf(settings.regexes) }
     val createState = useEditState<Assistant> {
-        vm.addAssistantWithLorebooks(it, pendingImportedLorebooks)
+        vm.addAssistantWithLorebooks(it, pendingImportedLorebooks, pendingImportedGlobalRegexes)
         pendingImportedLorebooks = emptyList()
+        pendingImportedGlobalRegexes = settings.regexes
     }
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -143,6 +146,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                             IconButton(
                                 onClick = {
                                     pendingImportedLorebooks = emptyList()
+                                    pendingImportedGlobalRegexes = settings.regexes
                                     createState.open(Assistant())
                                 }) {
                                 Icon(HugeIcons.Add01, stringResource(R.string.assistant_page_add))
@@ -287,7 +291,9 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
         state = createState,
         settings = settings,
         pendingImportedLorebooks = pendingImportedLorebooks,
+        pendingImportedGlobalRegexes = pendingImportedGlobalRegexes,
         onPendingImportedLorebooksChange = { pendingImportedLorebooks = it },
+        onPendingImportedGlobalRegexesChange = { pendingImportedGlobalRegexes = it },
     )
 
     // 操作菜单 Bottom Sheet
@@ -419,12 +425,15 @@ private fun AssistantCreationSheet(
     state: EditState<Assistant>,
     settings: Settings,
     pendingImportedLorebooks: List<Lorebook>,
+    pendingImportedGlobalRegexes: List<AssistantRegex>,
     onPendingImportedLorebooksChange: (List<Lorebook>) -> Unit,
+    onPendingImportedGlobalRegexesChange: (List<AssistantRegex>) -> Unit,
 ) {
     state.EditStateContent { assistant, update ->
         ModalBottomSheet(
             onDismissRequest = {
                 onPendingImportedLorebooksChange(emptyList())
+                onPendingImportedGlobalRegexesChange(settings.regexes)
                 state.dismiss()
             },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -464,6 +473,7 @@ private fun AssistantCreationSheet(
                                 currentAssistant = assistant,
                                 payload = payload,
                                 existingLorebooks = settings.lorebooks + pendingImportedLorebooks,
+                                existingGlobalRegexes = pendingImportedGlobalRegexes,
                                 includeRegexes = includeRegexes,
                             )
                             onPendingImportedLorebooksChange(
@@ -471,6 +481,7 @@ private fun AssistantCreationSheet(
                                     settings.lorebooks.none { it.id == imported.id }
                                 }
                             )
+                            onPendingImportedGlobalRegexesChange(application.globalRegexes)
                             update(application.assistant)
                             state.confirm()
                         },
@@ -484,6 +495,7 @@ private fun AssistantCreationSheet(
                     TextButton(
                         onClick = {
                             onPendingImportedLorebooksChange(emptyList())
+                            onPendingImportedGlobalRegexesChange(settings.regexes)
                             state.dismiss()
                         }) {
                         Text(stringResource(R.string.assistant_page_cancel))

@@ -6,6 +6,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
 import me.rerere.rikkahub.data.model.chatMessageDepthFromEndMap
+import me.rerere.rikkahub.data.model.effectiveRegexes
 import me.rerere.rikkahub.data.model.replaceRegexes
 
 object RegexPromptOnlyTransformer : InputMessageTransformer {
@@ -14,7 +15,7 @@ object RegexPromptOnlyTransformer : InputMessageTransformer {
         messages: List<UIMessage>,
     ): List<UIMessage> {
         val assistant = ctx.assistant
-        if (assistant.regexes.isEmpty()) return messages
+        if (ctx.settings.effectiveRegexes(assistant).isEmpty()) return messages
 
         val depthMap = messages.chatMessageDepthFromEndMap()
 
@@ -34,6 +35,7 @@ object RegexPromptOnlyTransformer : InputMessageTransformer {
                             part.copy(
                                 text = part.text.replaceRegexes(
                                     assistant = assistant,
+                                    settings = ctx.settings,
                                     scope = scope,
                                     phase = AssistantRegexApplyPhase.PROMPT_ONLY,
                                     messageDepthFromEnd = messageDepth
@@ -45,6 +47,7 @@ object RegexPromptOnlyTransformer : InputMessageTransformer {
                             part.copy(
                                 reasoning = part.reasoning.replaceRegexes(
                                     assistant = assistant,
+                                    settings = ctx.settings,
                                     scope = scope,
                                     phase = AssistantRegexApplyPhase.PROMPT_ONLY,
                                     messageDepthFromEnd = messageDepth

@@ -168,6 +168,7 @@ private fun ReasoningContent(
             MarkdownBlock(
                 content = reasoning.reasoning.replaceRegexes(
                     assistant = assistant,
+                    settings = LocalSettings.current,
                     scope = AssistantAffectScope.ASSISTANT,
                     phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                     messageDepthFromEnd = messageDepthFromEnd,

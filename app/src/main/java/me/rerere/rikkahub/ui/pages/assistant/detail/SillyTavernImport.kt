@@ -65,6 +65,7 @@ data class AssistantImportPayload(
 data class AssistantImportApplication(
     val assistant: Assistant,
     val lorebooks: List<Lorebook>,
+    val globalRegexes: List<AssistantRegex> = emptyList(),
 )
 
 internal suspend fun parseAssistantImportFromUri(
@@ -118,12 +119,14 @@ internal fun parseAssistantImportFromJson(
 internal fun applyImportedAssistantForCreate(
     payload: AssistantImportPayload,
     existingLorebooks: List<Lorebook>,
+    existingGlobalRegexes: List<AssistantRegex> = emptyList(),
     includeRegexes: Boolean,
 ): AssistantImportApplication {
     return applyImportedAssistantForCreate(
         currentAssistant = Assistant(),
         payload = payload,
         existingLorebooks = existingLorebooks,
+        existingGlobalRegexes = existingGlobalRegexes,
         includeRegexes = includeRegexes,
     )
 }
@@ -132,9 +135,18 @@ internal fun applyImportedAssistantForCreate(
     currentAssistant: Assistant,
     payload: AssistantImportPayload,
     existingLorebooks: List<Lorebook>,
+    existingGlobalRegexes: List<AssistantRegex> = emptyList(),
     includeRegexes: Boolean,
 ): AssistantImportApplication {
     val lorebooks = mergeLorebooks(existingLorebooks, payload.lorebooks)
+    val globalRegexes = when (payload.kind) {
+        AssistantImportKind.PRESET -> mergeImportedRegexes(
+            current = existingGlobalRegexes,
+            imported = payload.regexes,
+            includeImported = includeRegexes,
+        )
+        AssistantImportKind.CHARACTER_CARD -> existingGlobalRegexes
+    }
     val assistant = when (payload.kind) {
         AssistantImportKind.PRESET -> currentAssistant.copy(
             name = currentAssistant.name.ifBlank { payload.assistant.name },
@@ -148,11 +160,6 @@ internal fun applyImportedAssistantForCreate(
             stPromptTemplate = payload.assistant.stPromptTemplate ?: currentAssistant.stPromptTemplate,
             stCharacterData = currentAssistant.stCharacterData,
             lorebookIds = currentAssistant.lorebookIds + payload.lorebooks.map { it.id }.toSet(),
-            regexes = mergeImportedRegexes(
-                current = currentAssistant.regexes,
-                imported = payload.regexes,
-                includeImported = includeRegexes,
-            ),
         )
 
         AssistantImportKind.CHARACTER_CARD -> currentAssistant.copy(
@@ -172,6 +179,7 @@ internal fun applyImportedAssistantForCreate(
     return AssistantImportApplication(
         assistant = assistant,
         lorebooks = lorebooks,
+        globalRegexes = globalRegexes,
     )
 }
 
@@ -179,9 +187,18 @@ internal fun applyImportedAssistantToExisting(
     currentAssistant: Assistant,
     payload: AssistantImportPayload,
     existingLorebooks: List<Lorebook>,
+    existingGlobalRegexes: List<AssistantRegex> = emptyList(),
     includeRegexes: Boolean,
 ): AssistantImportApplication {
     val mergedLorebooks = mergeLorebooks(existingLorebooks, payload.lorebooks)
+    val globalRegexes = when (payload.kind) {
+        AssistantImportKind.PRESET -> mergeImportedRegexes(
+            current = existingGlobalRegexes,
+            imported = payload.regexes,
+            includeImported = includeRegexes,
+        )
+        AssistantImportKind.CHARACTER_CARD -> existingGlobalRegexes
+    }
     val nextAssistant = when (payload.kind) {
         AssistantImportKind.PRESET -> currentAssistant.copy(
             temperature = payload.assistant.temperature ?: currentAssistant.temperature,
@@ -191,11 +208,6 @@ internal fun applyImportedAssistantToExisting(
                 currentAssistant.openAIReasoningEffort
             },
             stPromptTemplate = payload.assistant.stPromptTemplate ?: currentAssistant.stPromptTemplate,
-            regexes = mergeImportedRegexes(
-                current = currentAssistant.regexes,
-                imported = payload.regexes,
-                includeImported = includeRegexes,
-            ),
         )
 
         AssistantImportKind.CHARACTER_CARD -> currentAssistant.copy(
@@ -215,6 +227,7 @@ internal fun applyImportedAssistantToExisting(
     return AssistantImportApplication(
         assistant = nextAssistant,
         lorebooks = mergedLorebooks,
+        globalRegexes = globalRegexes,
     )
 }
 
@@ -653,7 +666,7 @@ private fun mapRegexScript(
     )
 }
 
-private fun mergeImportedRegexes(
+internal fun mergeImportedRegexes(
     current: List<AssistantRegex>,
     imported: List<AssistantRegex>,
     includeImported: Boolean,

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.model
 
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.datastore.Settings
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import kotlin.uuid.Uuid
@@ -94,5 +95,41 @@ class AssistantRegexTest {
         assertEquals(3, depthMap[1])
         assertEquals(2, depthMap[2])
         assertEquals(1, depthMap[3])
+    }
+
+    @Test
+    fun `global and assistant regexes should be applied together in order`() {
+        val settings = Settings(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "foo",
+                    replaceString = "bar",
+                    affectingScope = setOf(AssistantAffectScope.USER),
+                )
+            )
+        )
+        val assistant = Assistant(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "bar",
+                    replaceString = "baz",
+                    affectingScope = setOf(AssistantAffectScope.USER),
+                )
+            )
+        )
+
+        assertEquals(
+            "baz",
+            "foo".replaceRegexes(
+                assistant = assistant,
+                settings = settings,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
     }
 }

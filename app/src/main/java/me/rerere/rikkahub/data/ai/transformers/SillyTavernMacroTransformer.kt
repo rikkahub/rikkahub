@@ -5,6 +5,8 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
+import me.rerere.rikkahub.data.model.effectiveUserName
+import me.rerere.rikkahub.data.model.effectiveUserPersona
 import kotlin.math.max
 import kotlin.random.Random
 
@@ -18,7 +20,8 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        val template = ctx.assistant.stPromptTemplate
+        val template = ctx.settings.stPresetTemplate
+            ?.takeIf { ctx.settings.stPresetEnabled }
         val characterData = ctx.assistant.stCharacterData
         if (template == null && characterData == null) return messages
 
@@ -537,7 +540,7 @@ internal data class StMacroEnvironment(
             template: SillyTavernPromptTemplate?,
             characterData: SillyTavernCharacterData?,
         ): StMacroEnvironment {
-            val userName = ctx.settings.displaySetting.userNickname.ifBlank { "user" }
+            val userName = ctx.settings.effectiveUserName().ifBlank { "user" }
             val charName = ctx.assistant.name.ifBlank {
                 characterData?.name?.ifBlank { "assistant" } ?: "assistant"
             }
@@ -556,7 +559,7 @@ internal data class StMacroEnvironment(
                 characterDescription = characterData?.description.orEmpty(),
                 characterPersonality = characterData?.personality.orEmpty(),
                 scenario = characterData?.scenario.orEmpty(),
-                persona = ctx.assistant.userPersona,
+                persona = ctx.settings.effectiveUserPersona(ctx.assistant),
                 charPrompt = characterData?.systemPromptOverride.orEmpty(),
                 charInstruction = characterData?.postHistoryInstructions.orEmpty(),
                 charDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),

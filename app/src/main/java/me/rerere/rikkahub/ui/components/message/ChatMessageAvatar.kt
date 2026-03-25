@@ -18,6 +18,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.model.effectiveUserName
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -74,16 +75,16 @@ fun ChatMessageIdentityLabel(
     assistant: Assistant?,
     modifier: Modifier = Modifier,
 ) {
-    val settings = LocalSettings.current.displaySetting
+    val settings = LocalSettings.current
     val isUser = message.role == MessageRole.USER
-    val showName = if (isUser) settings.showUserAvatar else settings.showModelName
-    val showDate = settings.showDateBelowName
+    val showName = if (isUser) settings.displaySetting.showUserAvatar else settings.displaySetting.showModelName
+    val showDate = settings.displaySetting.showDateBelowName
 
     if (!showName && !showDate) return
 
     val alignment = if (isUser) Alignment.End else Alignment.Start
     val labelText = when {
-        isUser -> settings.userNickname.ifBlank { stringResource(R.string.user_default_name) }
+        isUser -> settings.effectiveUserName().ifBlank { stringResource(R.string.user_default_name) }
         assistant?.useAssistantAvatar == true -> assistant.name.ifEmpty {
             stringResource(R.string.assistant_page_default_assistant)
         }

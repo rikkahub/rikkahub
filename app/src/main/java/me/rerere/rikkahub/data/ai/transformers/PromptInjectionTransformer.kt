@@ -8,6 +8,7 @@ import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookTriggerContext
+import me.rerere.rikkahub.data.model.effectiveUserPersona
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.isTriggered
 
@@ -25,7 +26,9 @@ object PromptInjectionTransformer : InputMessageTransformer {
             messages = messages,
             assistant = ctx.assistant,
             modeInjections = ctx.settings.modeInjections,
-            lorebooks = ctx.settings.lorebooks
+            lorebooks = ctx.settings.lorebooks,
+            personaDescription = ctx.settings.effectiveUserPersona(ctx.assistant),
+            stPromptTemplateActive = ctx.settings.stPresetEnabled && ctx.settings.stPresetTemplate != null,
         )
     }
 }
@@ -37,14 +40,18 @@ internal fun transformMessages(
     messages: List<UIMessage>,
     assistant: Assistant,
     modeInjections: List<PromptInjection.ModeInjection>,
-    lorebooks: List<Lorebook>
+    lorebooks: List<Lorebook>,
+    personaDescription: String = assistant.userPersona,
+    stPromptTemplateActive: Boolean = assistant.stPromptTemplate != null,
 ): List<UIMessage> {
     // 收集所有需要注入的内容
     val injections = collectInjections(
         messages = messages,
         assistant = assistant,
         modeInjections = modeInjections,
-        lorebooks = lorebooks
+        lorebooks = lorebooks,
+        personaDescription = personaDescription,
+        stPromptTemplateActive = stPromptTemplateActive,
     )
 
     if (injections.isEmpty()) {
@@ -67,7 +74,9 @@ internal fun collectInjections(
     messages: List<UIMessage>,
     assistant: Assistant,
     modeInjections: List<PromptInjection.ModeInjection>,
-    lorebooks: List<Lorebook>
+    lorebooks: List<Lorebook>,
+    personaDescription: String = assistant.userPersona,
+    stPromptTemplateActive: Boolean = assistant.stPromptTemplate != null,
 ): List<PromptInjection> {
     val injections = mutableListOf<PromptInjection>()
 
@@ -80,12 +89,12 @@ internal fun collectInjections(
     val enabledLorebooks = lorebooks.filter {
         it.enabled && assistant.lorebookIds.contains(it.id)
     }
-    if (enabledLorebooks.isNotEmpty() && assistant.stPromptTemplate == null) {
+    if (enabledLorebooks.isNotEmpty() && !stPromptTemplateActive) {
         // 提取上下文用于匹配（只取非 SYSTEM 消息）
         val nonSystemMessages = messages.filter { it.role != MessageRole.SYSTEM }
         val triggerContext = LorebookTriggerContext(
             recentMessagesText = nonSystemMessages.joinToString("\n") { it.toText() },
-            personaDescription = assistant.userPersona,
+            personaDescription = personaDescription,
         )
 
         enabledLorebooks.forEach { lorebook ->

@@ -56,7 +56,8 @@ class PromptInjectionTransformerTest {
         useRegex: Boolean = false,
         caseSensitive: Boolean = false,
         scanDepth: Int = 5,
-        constantActive: Boolean = false
+        constantActive: Boolean = false,
+        matchPersonaDescription: Boolean = false,
     ) = PromptInjection.RegexInjection(
         id = id,
         name = name,
@@ -70,7 +71,8 @@ class PromptInjectionTransformerTest {
         useRegex = useRegex,
         caseSensitive = caseSensitive,
         scanDepth = scanDepth,
-        constantActive = constantActive
+        constantActive = constantActive,
+        matchPersonaDescription = matchPersonaDescription,
     )
 
     private fun createLorebook(
@@ -187,6 +189,32 @@ class PromptInjectionTransformerTest {
         )
 
         assertEquals(messages, result)
+    }
+
+    @Test
+    fun `lorebook should support effective global persona description matching`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    keywords = listOf("archivist"),
+                    matchPersonaDescription = true,
+                )
+            )
+        )
+
+        val injections = collectInjections(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)).copy(userPersona = "Legacy assistant persona"),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+            personaDescription = "I am an archivist who documents everything.",
+            stPromptTemplateActive = false,
+        )
+
+        assertEquals(1, injections.size)
+        assertEquals("Regex injected content", injections.single().content)
     }
     // endregion
 

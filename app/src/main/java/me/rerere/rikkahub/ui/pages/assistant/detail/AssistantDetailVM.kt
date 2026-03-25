@@ -143,6 +143,20 @@ class AssistantDetailVM(
         updateWithLorebooks(assistant = assistant, lorebooks = emptyList())
     }
 
+    fun updateSettings(
+        settings: Settings,
+        oldAssistant: Assistant? = null,
+        newAssistant: Assistant? = null,
+    ) {
+        viewModelScope.launch {
+            if (oldAssistant != null && newAssistant != null) {
+                checkAvatarDelete(old = oldAssistant, new = newAssistant)
+                checkBackgroundDelete(old = oldAssistant, new = newAssistant)
+            }
+            settingsStore.update(settings)
+        }
+    }
+
     fun updateWithLorebooks(
         assistant: Assistant,
         lorebooks: List<Lorebook>,

@@ -733,7 +733,7 @@
   <string name="web_search_disabled">Web search disabled</string>
   <string name="web_search_enabled">Web search enabled</string>
   <string name="prompt_page_title">Prompt Injection</string>
-  <string name="prompt_page_message_template_tab">Message Template</string>
+  <string name="prompt_page_message_template_tab">ST Preset</string>
   <string name="prompt_page_mode_injection_tab">Mode Injection</string>
   <string name="prompt_page_lorebook_tab">Lorebook</string>
   <string name="prompt_page_mode_injection_empty">No mode injections</string>

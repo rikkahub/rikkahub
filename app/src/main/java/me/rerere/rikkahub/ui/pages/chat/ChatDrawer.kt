@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -24,10 +23,8 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,13 +46,13 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.ChartColumn
 import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.InLove
 import me.rerere.hugeicons.stroke.LanguageCircle
 import me.rerere.hugeicons.stroke.LookTop
-import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Sparkles
@@ -65,21 +62,21 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.effectiveUserAvatar
+import me.rerere.rikkahub.data.model.effectiveUserName
+import me.rerere.rikkahub.data.model.effectiveUserPersona
+import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
-import me.rerere.rikkahub.ui.components.ui.Greeting
 import me.rerere.rikkahub.ui.components.ui.LuneBackdrop
 import me.rerere.rikkahub.ui.components.ui.LuneSection
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
 import me.rerere.rikkahub.ui.context.Navigator
-import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
-import me.rerere.rikkahub.ui.hooks.useEditState
-import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.toDp
 import org.koin.compose.koinInject
@@ -96,6 +93,9 @@ fun ChatDrawerContent(
     val context = LocalContext.current
     val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
+    val selectedPersonaProfile = settings.selectedUserPersonaProfile()
+    val effectiveUserName = settings.effectiveUserName().ifBlank { context.getString(R.string.user_default_name) }
+    val effectiveUserPersona = settings.effectiveUserPersona()
 
     val conversations = vm.conversations.collectAsLazyPagingItems()
     val conversationListState = rememberLazyListState()
@@ -103,17 +103,6 @@ fun ChatDrawerContent(
     val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
         initialValue = emptyMap(),
     )
-
-    // 昵称编辑状态
-    val nicknameEditState = useEditState<String> { newNickname ->
-        vm.updateSettings(
-            settings.copy(
-                displaySetting = settings.displaySetting.copy(
-                    userNickname = newNickname
-                )
-            )
-        )
-    }
 
     // 移动对话状态
     var showMoveToAssistantSheet by remember { mutableStateOf(false) }
@@ -144,7 +133,13 @@ fun ChatDrawerContent(
 
             // 用户头像和昵称自定义区域
             LuneSection(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        navController.navigate(Screen.UserPersona) {
+                            launchSingleTop = true
+                        }
+                    },
             ) {
                 Row(
                     modifier = Modifier
@@ -154,17 +149,8 @@ fun ChatDrawerContent(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     UIAvatar(
-                        name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
-                        value = settings.displaySetting.userAvatar,
-                        onUpdate = { newAvatar ->
-                            vm.updateSettings(
-                                settings.copy(
-                                    displaySetting = settings.displaySetting.copy(
-                                        userAvatar = newAvatar
-                                    )
-                                )
-                            )
-                        },
+                        name = effectiveUserName,
+                        value = settings.effectiveUserAvatar(),
                         modifier = Modifier.size(52.dp),
                     )
 
@@ -174,35 +160,53 @@ fun ChatDrawerContent(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text(
-                                text = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
+                                text = effectiveUserName,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.clickable {
-                                    nicknameEditState.open(settings.displaySetting.userNickname)
-                                }
+                                modifier = Modifier.weight(1f, fill = false)
                             )
-
-                            Icon(
-                                imageVector = HugeIcons.PencilEdit01,
-                                contentDescription = "Edit",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier
-                                    .onClick {
-                                        nicknameEditState.open(settings.displaySetting.userNickname)
-                                    }
-                                    .size(LocalTextStyle.current.fontSize.toDp())
-                            )
+                            if (selectedPersonaProfile != null) {
+                                Text(
+                                    text = "当前",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
-                        Greeting(
+                        Text(
+                            text = effectiveUserPersona.ifBlank {
+                                if (settings.userPersonaProfiles.isEmpty()) {
+                                    "点击创建并管理人设"
+                                } else {
+                                    "点击切换和编辑当前人设"
+                                }
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = if (settings.userPersonaProfiles.isEmpty()) {
+                                "当前未创建 Persona"
+                            } else {
+                                "已创建 ${settings.userPersonaProfiles.size} 个 Persona"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
+                    Icon(
+                        imageVector = HugeIcons.ArrowRight01,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(LocalTextStyle.current.fontSize.toDp() + 4.dp)
+                    )
                 }
             }
 
@@ -366,45 +370,6 @@ fun ChatDrawerContent(
             }
             }
         }
-    }
-
-    // 昵称编辑对话框
-    nicknameEditState.EditStateContent { nickname, onUpdate ->
-        AlertDialog(
-            onDismissRequest = {
-                nicknameEditState.dismiss()
-            },
-            title = {
-                Text(stringResource(R.string.chat_page_edit_nickname))
-            },
-            text = {
-                OutlinedTextField(
-                    value = nickname,
-                    onValueChange = onUpdate,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = { Text(stringResource(R.string.chat_page_nickname_placeholder)) }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        nicknameEditState.confirm()
-                    }
-                ) {
-                    Text(stringResource(R.string.chat_page_save))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        nicknameEditState.dismiss()
-                    }
-                ) {
-                    Text(stringResource(R.string.chat_page_cancel))
-                }
-            }
-        )
     }
 
     // 移动到助手 Bottom Sheet

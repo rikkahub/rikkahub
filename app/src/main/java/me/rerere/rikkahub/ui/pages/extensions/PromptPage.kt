@@ -82,7 +82,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.export.LorebookSerializer
 import me.rerere.rikkahub.data.export.ModeInjectionSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
@@ -159,22 +158,11 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
         ) { page ->
             when (page) {
                 0 -> {
-                    val currentAssistant = settings.getCurrentAssistant()
-                    MessageTemplateEditorTab(
-                        template = currentAssistant.messageInjectionTemplate,
-                        onUpdate = { template ->
-                            vm.updateSettings(
-                                settings.copy(
-                                    assistants = settings.assistants.map { assistant ->
-                                        if (assistant.id == currentAssistant.id) {
-                                            assistant.copy(messageInjectionTemplate = template)
-                                        } else {
-                                            assistant
-                                        }
-                                    }
-                                )
-                            )
-                        }
+                    SillyTavernPresetTab(
+                        settings = settings,
+                        onUpdate = { updatedSettings ->
+                            vm.updateSettings(updatedSettings)
+                        },
                     )
                 }
 

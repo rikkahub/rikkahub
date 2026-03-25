@@ -131,7 +131,7 @@ private fun SillyTavernImporter(
             },
             text = {
                 Text(
-                    "检测到 ${payload.regexes.size} 条配套正则。导入预设/角色卡时，是否一并导入这些正则？"
+                    "检测到 ${payload.regexes.size} 条配套正则。预设 regex 会导入到全局，角色卡 regex 会导入到当前助手，是否一并导入？"
                 )
             },
             confirmButton = {

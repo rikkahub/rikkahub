@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.datastore
 
 import android.content.Context
 import android.util.Log
+import androidx.core.net.toUri
 import androidx.datastore.core.IOException
 import androidx.datastore.preferences.SharedPreferencesMigration
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -36,7 +37,9 @@ import me.rerere.rikkahub.data.ai.tools.termux.TERMUX_PTY_DEFAULT_YIELD_TIME_MS
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.DEFAULT_TEXT_SELECTION_ACTIONS
 import me.rerere.rikkahub.data.model.InjectionPosition
@@ -44,8 +47,10 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.ScheduledPromptTask
+import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.model.TextSelectionConfig
+import me.rerere.rikkahub.data.model.UserPersonaProfile
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.PresetThemes
 import me.rerere.rikkahub.utils.JsonInstant
@@ -159,6 +164,11 @@ class SettingsStore(
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
+        val REGEXES = stringPreferencesKey("regexes")
+        val ST_PRESET_ENABLED = booleanPreferencesKey("st_preset_enabled")
+        val ST_PRESET_TEMPLATE = stringPreferencesKey("st_preset_template")
+        val USER_PERSONA_PROFILES = stringPreferencesKey("user_persona_profiles")
+        val SELECTED_USER_PERSONA_PROFILE = stringPreferencesKey("selected_user_persona_profile")
 
         // 备份提醒
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
@@ -273,6 +283,17 @@ class SettingsStore(
                 quickMessages = preferences[QUICK_MESSAGES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                regexes = preferences[REGEXES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                stPresetEnabled = preferences[ST_PRESET_ENABLED] == true,
+                stPresetTemplate = preferences[ST_PRESET_TEMPLATE]?.let {
+                    JsonInstant.decodeFromString(it)
+                },
+                userPersonaProfiles = preferences[USER_PERSONA_PROFILES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                selectedUserPersonaProfileId = preferences[SELECTED_USER_PERSONA_PROFILE]?.let { Uuid.parse(it) },
                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
@@ -334,11 +355,56 @@ class SettingsStore(
                     ttsProviders.add(defaultTTSProvider.copyProvider())
                 }
             }
+            var stPresetTemplate = it.stPresetTemplate
+            var stPresetEnabled = it.stPresetEnabled
+            if (stPresetTemplate == null) {
+                val selectedAssistantTemplate = assistants
+                    .find { assistant -> assistant.id == it.assistantId }
+                    ?.stPromptTemplate
+                val migratedTemplate = selectedAssistantTemplate
+                    ?: assistants.firstOrNull { assistant -> assistant.stPromptTemplate != null }?.stPromptTemplate
+                if (migratedTemplate != null) {
+                    stPresetTemplate = migratedTemplate
+                    stPresetEnabled = true
+                }
+            }
+            var userPersonaProfiles = it.userPersonaProfiles
+            var selectedUserPersonaProfileId = it.selectedUserPersonaProfileId
+            if (userPersonaProfiles.isEmpty()) {
+                val selectedAssistantPersona = assistants
+                    .find { assistant -> assistant.id == it.assistantId }
+                    ?.userPersona
+                    .orEmpty()
+                    .trim()
+                val migratedPersona = selectedAssistantPersona.takeIf { it.isNotBlank() }
+                    ?: assistants
+                        .asSequence()
+                        .map { assistant -> assistant.userPersona.trim() }
+                        .firstOrNull { it.isNotBlank() }
+                val legacyUserName = it.displaySetting.userNickname.trim()
+                val legacyUserAvatar = it.displaySetting.userAvatar
+                val shouldCreateProfile = migratedPersona != null ||
+                    legacyUserName.isNotBlank() ||
+                    legacyUserAvatar !is Avatar.Dummy
+                if (shouldCreateProfile) {
+                    val migratedProfile = UserPersonaProfile(
+                        name = legacyUserName.ifBlank { "默认 Persona" },
+                        avatar = legacyUserAvatar,
+                        content = migratedPersona.orEmpty(),
+                    )
+                    userPersonaProfiles = listOf(migratedProfile)
+                    selectedUserPersonaProfileId = migratedProfile.id
+                }
+            }
             it.copy(
                 providers = providers,
                 assistants = assistants,
                 ttsProviders = ttsProviders,
                 scheduledTasks = scheduledTasks,
+                stPresetEnabled = stPresetEnabled,
+                stPresetTemplate = stPresetTemplate,
+                userPersonaProfiles = userPersonaProfiles,
+                selectedUserPersonaProfileId = selectedUserPersonaProfileId,
             )
         }
         .map { settings ->
@@ -350,6 +416,11 @@ class SettingsStore(
             val fallbackAssistantId = settings.assistants.firstOrNull()?.id ?: DEFAULT_ASSISTANT_ID
             val maxSearchIndex = (settings.searchServices.size - 1).coerceAtLeast(0)
             val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
+            val userPersonaProfiles = settings.userPersonaProfiles.distinctBy { it.id }
+            val selectedUserPersonaProfileId = userPersonaProfiles
+                .firstOrNull { it.id == settings.selectedUserPersonaProfileId }
+                ?.id
+                ?: userPersonaProfiles.firstOrNull()?.id
             val textSelectionConfig = settings.textSelectionConfig.let { config ->
                 config.copy(
                     assistantId = config.assistantId?.takeIf { it in validAssistantIds },
@@ -400,6 +471,9 @@ class SettingsStore(
                 },
                 modeInjections = settings.modeInjections.distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
+                regexes = settings.regexes.distinctBy { it.id },
+                userPersonaProfiles = userPersonaProfiles,
+                selectedUserPersonaProfileId = selectedUserPersonaProfileId,
                 scheduledTasks = settings.scheduledTasks
                     .distinctBy { it.id }
                     .map { task ->
@@ -431,6 +505,13 @@ class SettingsStore(
         if(settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
             return
+        }
+        val previousSettings = settingsFlow.value
+        if (!previousSettings.init) {
+            val removedAvatarUris = previousSettings.referencedLocalUserAvatarUris() - settings.referencedLocalUserAvatarUris()
+            if (removedAvatarUris.isNotEmpty()) {
+                get<FilesManager>().deleteChatFiles(removedAvatarUris.map { it.toUri() })
+            }
         }
         settingsFlow.value = settings
         dataStore.edit { preferences ->
@@ -491,6 +572,15 @@ class SettingsStore(
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
+            preferences[REGEXES] = JsonInstant.encodeToString(settings.regexes)
+            preferences[ST_PRESET_ENABLED] = settings.stPresetEnabled
+            settings.stPresetTemplate?.let {
+                preferences[ST_PRESET_TEMPLATE] = JsonInstant.encodeToString(it)
+            } ?: preferences.remove(ST_PRESET_TEMPLATE)
+            preferences[USER_PERSONA_PROFILES] = JsonInstant.encodeToString(settings.userPersonaProfiles)
+            settings.selectedUserPersonaProfileId?.let {
+                preferences[SELECTED_USER_PERSONA_PROFILE] = it.toString()
+            } ?: preferences.remove(SELECTED_USER_PERSONA_PROFILE)
             preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
             preferences[WEB_SERVER_PORT] = settings.webServerPort
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
@@ -633,6 +723,11 @@ data class Settings(
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
+    val regexes: List<AssistantRegex> = emptyList(),
+    val stPresetEnabled: Boolean = false,
+    val stPresetTemplate: SillyTavernPromptTemplate? = null,
+    val userPersonaProfiles: List<UserPersonaProfile> = emptyList(),
+    val selectedUserPersonaProfileId: Uuid? = null,
     val webServerEnabled: Boolean = false,
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,
@@ -646,6 +741,19 @@ data class Settings(
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
         fun dummy() = Settings(init = true)
+    }
+}
+
+private fun Settings.referencedLocalUserAvatarUris(): Set<String> = buildSet {
+    fun addAvatar(avatar: Avatar) {
+        if (avatar is Avatar.Image && avatar.url.startsWith("file:")) {
+            add(avatar.url)
+        }
+    }
+
+    addAvatar(displaySetting.userAvatar)
+    userPersonaProfiles.forEach { profile ->
+        addAvatar(profile.avatar)
     }
 }
 

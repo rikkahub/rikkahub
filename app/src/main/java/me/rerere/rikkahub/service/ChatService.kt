@@ -71,7 +71,6 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
 import me.rerere.rikkahub.data.ai.tools.termux.isSuccessful
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
-import me.rerere.rikkahub.data.ai.transformers.MessageTemplateInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
@@ -131,7 +130,6 @@ data class ScheduledTaskExecutionResult(
 private val inputTransformers by lazy {
     listOf(
         TimeReminderTransformer,
-        MessageTemplateInjectionTransformer,
         SillyTavernPromptTransformer,
         PromptInjectionTransformer,
         SillyTavernMacroTransformer,
@@ -517,6 +515,7 @@ class ChatService(
                     part.copy(
                         text = part.text.replaceRegexes(
                             assistant = assistant,
+                            settings = settingsStore.settingsFlow.value,
                             scope = AssistantAffectScope.USER,
                             phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
                             messageDepthFromEnd = messageDepthFromEnd

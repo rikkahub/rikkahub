@@ -7,6 +7,7 @@ import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.datastore.Settings
 import kotlin.uuid.Uuid
 
 private val DEFAULT_SCHEDULED_TASK_ASSISTANT_ID = Uuid.parse("0950e2dc-9bd5-4801-afa3-aa887aa36b4e")
@@ -145,13 +146,14 @@ fun List<UIMessage>.chatMessageDepthFromEndMap(): Map<Int, Int> {
 
 fun String.replaceRegexes(
     assistant: Assistant?,
+    settings: Settings? = null,
     scope: AssistantAffectScope,
     phase: AssistantRegexApplyPhase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
     messageDepthFromEnd: Int? = null,
 ): String {
-    if (assistant == null) return this
-    if (assistant.regexes.isEmpty()) return this
-    return assistant.regexes.fold(this) { acc, regex ->
+    val effectiveRegexes = settings?.effectiveRegexes(assistant) ?: assistant?.regexes.orEmpty()
+    if (effectiveRegexes.isEmpty()) return this
+    return effectiveRegexes.fold(this) { acc, regex ->
         if (
             regex.enabled &&
             regex.matchesPhase(phase) &&
@@ -174,6 +176,22 @@ fun String.replaceRegexes(
             acc
         }
     }
+}
+
+fun Settings.effectiveRegexes(assistant: Assistant?): List<AssistantRegex> {
+    return (regexes + assistant?.regexes.orEmpty())
+        .distinctBy { regex ->
+            listOf(
+                regex.name,
+                regex.findRegex,
+                regex.replaceString,
+                regex.affectingScope.sortedBy { scope -> scope.name }.joinToString(","),
+                regex.visualOnly.toString(),
+                regex.promptOnly.toString(),
+                regex.minDepth?.toString().orEmpty(),
+                regex.maxDepth?.toString().orEmpty(),
+            ).joinToString("|")
+        }
 }
 
 private fun AssistantRegex.matchesPhase(phase: AssistantRegexApplyPhase): Boolean {

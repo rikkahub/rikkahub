@@ -82,9 +82,11 @@ import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
+import me.rerere.rikkahub.data.model.effectiveUserPersona
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.hasExplicitPromptOrder
 import me.rerere.rikkahub.data.model.resolvePromptOrder
+import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.ui.components.message.ChatMessage
@@ -95,6 +97,7 @@ import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.TextArea
 import me.rerere.rikkahub.ui.hooks.rememberDebouncedTextState
+import me.rerere.rikkahub.ui.pages.extensions.RegexEditorSection
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
@@ -143,6 +146,13 @@ fun AssistantPromptPage(id: String) {
             assistant = assistant,
             settings = settings,
             onUpdate = { vm.update(it) },
+            onUpdateSettings = { updatedSettings, oldAssistant, newAssistant ->
+                vm.updateSettings(
+                    settings = updatedSettings,
+                    oldAssistant = oldAssistant,
+                    newAssistant = newAssistant,
+                )
+            },
             onUpdateWithLorebooks = { updatedAssistant, lorebooks ->
                 vm.updateWithLorebooks(updatedAssistant, lorebooks)
             },
@@ -156,6 +166,7 @@ private fun AssistantPromptContent(
     assistant: Assistant,
     settings: Settings,
     onUpdate: (Assistant) -> Unit,
+    onUpdateSettings: (Settings, Assistant?, Assistant?) -> Unit,
     onUpdateWithLorebooks: (Assistant, List<me.rerere.rikkahub.data.model.Lorebook>) -> Unit,
 ) {
     val context = LocalContext.current
@@ -163,7 +174,11 @@ private fun AssistantPromptContent(
     val themeTokens = LocalThemeTokenOverrides.current
     val latestAssistant by rememberUpdatedState(assistant)
     val latestOnUpdate by rememberUpdatedState(onUpdate)
+    val latestSettings by rememberUpdatedState(settings)
+    val latestOnUpdateSettings by rememberUpdatedState(onUpdateSettings)
     val latestOnUpdateWithLorebooks by rememberUpdatedState(onUpdateWithLorebooks)
+    val selectedPersonaProfile = settings.selectedUserPersonaProfile()
+    val effectiveUserPersona = settings.effectiveUserPersona(assistant)
 
     Column(
         modifier = modifier
@@ -185,7 +200,7 @@ private fun AssistantPromptContent(
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "可导入预设 JSON、角色卡 PNG/JSON，以及角色卡内嵌世界书。导入到现有助手时会自动合并新 lorebook，并在导入前确认配套 regex。",
+                    text = "可导入预设 JSON、角色卡 PNG/JSON，以及角色卡内嵌世界书。预设会写入全局 ST 预设，角色卡与配套 lorebook/regex 仍按当前助手合并。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -195,18 +210,53 @@ private fun AssistantPromptContent(
                             currentAssistant = assistant,
                             payload = payload,
                             existingLorebooks = settings.lorebooks,
+                            existingGlobalRegexes = settings.regexes,
                             includeRegexes = includeRegexes,
                         )
-                        latestOnUpdateWithLorebooks(
-                            application.assistant,
-                            application.lorebooks.filter { imported ->
-                                settings.lorebooks.none { it.id == imported.id }
-                            }
+                        val importedLorebooks = application.lorebooks.filter { imported ->
+                            latestSettings.lorebooks.none { it.id == imported.id }
+                        }
+                        val nextAssistant = when (payload.kind) {
+                            AssistantImportKind.PRESET -> application.assistant.copy(
+                                stPromptTemplate = latestAssistant.stPromptTemplate,
+                            )
+
+                            AssistantImportKind.CHARACTER_CARD -> application.assistant
+                        }
+                        val shouldSeedGlobalPreset = when (payload.kind) {
+                            AssistantImportKind.PRESET -> true
+                            AssistantImportKind.CHARACTER_CARD -> latestSettings.stPresetTemplate == null
+                        }
+                        val nextGlobalPreset = if (shouldSeedGlobalPreset) {
+                            payload.assistant.stPromptTemplate ?: latestSettings.stPresetTemplate
+                        } else {
+                            latestSettings.stPresetTemplate
+                        }
+                        latestOnUpdateSettings(
+                            latestSettings.copy(
+                                lorebooks = latestSettings.lorebooks + importedLorebooks,
+                                assistants = latestSettings.assistants.map { existing ->
+                                    if (existing.id == nextAssistant.id) {
+                                        nextAssistant
+                                    } else {
+                                        existing
+                                    }
+                                },
+                                stPresetEnabled = when {
+                                    payload.kind == AssistantImportKind.PRESET && nextGlobalPreset != null -> true
+                                    shouldSeedGlobalPreset && nextGlobalPreset != null -> true
+                                    else -> latestSettings.stPresetEnabled
+                                },
+                                regexes = application.globalRegexes,
+                                stPresetTemplate = nextGlobalPreset,
+                            ),
+                            latestAssistant,
+                            nextAssistant,
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (assistant.stPromptTemplate != null || assistant.stCharacterData != null) {
+                if (settings.stPresetTemplate != null || assistant.stCharacterData != null) {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -214,9 +264,9 @@ private fun AssistantPromptContent(
                             text = "当前运行时映射",
                             style = MaterialTheme.typography.labelLarge
                         )
-                        assistant.stPromptTemplate?.let { template ->
+                        settings.stPresetTemplate?.let { template ->
                             Text(
-                                text = "Preset: ${template.sourceName.ifBlank { "SillyTavern" }}",
+                                text = "全局预设: ${template.sourceName.ifBlank { "SillyTavern" }}${if (settings.stPresetEnabled) "" else "（已关闭）"}",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -226,14 +276,19 @@ private fun AssistantPromptContent(
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
-                        if (assistant.userPersona.isNotBlank()) {
+                        if (selectedPersonaProfile != null) {
                             Text(
-                                text = "用户人格: 已配置",
+                                text = "全局 Persona: ${selectedPersonaProfile.name.ifBlank { "未命名 Persona" }}${if (effectiveUserPersona.isBlank()) "（内容为空）" else ""}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else if (effectiveUserPersona.isNotBlank()) {
+                            Text(
+                                text = "全局 Persona: 兼容回退旧助手 Persona",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                         Text(
-                            text = "Regex ${assistant.regexes.size} 条，关联世界书 ${assistant.lorebookIds.size} 本。",
+                            text = "全局 Regex ${settings.regexes.size} 条，助手 Regex ${assistant.regexes.size} 条，关联世界书 ${assistant.lorebookIds.size} 本。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -241,29 +296,6 @@ private fun AssistantPromptContent(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (assistant.stPromptTemplate != null) {
-                                TextButton(
-                                    onClick = {
-                                        latestOnUpdate(
-                                            latestAssistant.copy(
-                                                stPromptTemplate = if (latestAssistant.stCharacterData != null) {
-                                                    defaultSillyTavernPromptTemplate()
-                                                } else {
-                                                    null
-                                                }
-                                            )
-                                        )
-                                    }
-                                ) {
-                                    Text(
-                                        if (assistant.stCharacterData != null) {
-                                            "恢复默认模板"
-                                        } else {
-                                            "清除 ST 预设"
-                                        }
-                                    )
-                                }
-                            }
                             if (assistant.stCharacterData != null) {
                                 TextButton(
                                     onClick = {
@@ -281,14 +313,6 @@ private fun AssistantPromptContent(
                     }
                 }
             }
-        }
-
-        assistant.stPromptTemplate?.let { template ->
-            SillyTavernPresetEditorCard(
-                assistant = assistant,
-                template = template,
-                onUpdate = latestOnUpdate,
-            )
         }
 
         Card(
@@ -621,46 +645,16 @@ private fun AssistantPromptContent(
             }
         }
 
-        Card(
-            colors = CustomColors.cardColorsOnSurfaceContainer
-        ) {
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_regex_title))
-                },
-                description = {
-                    Text(stringResource(R.string.assistant_page_regex_desc))
-                }
-            )
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(horizontal = 8.dp)
-            ) {
-                assistant.regexes.fastForEachIndexed { index, regex ->
-                    AssistantRegexCard(
-                        regex = regex,
-                        onUpdate = onUpdate,
-                        assistant = assistant,
-                        index = index
-                    )
-                }
-                Button(
-                    onClick = {
-                        onUpdate(
-                            assistant.copy(
-                                regexes = assistant.regexes + AssistantRegex(
-                                    id = Uuid.random()
-                                )
-                            )
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(HugeIcons.Add01, null)
-                }
-            }
-        }
+        RegexEditorSection(
+            regexes = assistant.regexes,
+            onUpdate = { regexes ->
+                onUpdate(
+                    assistant.copy(regexes = regexes)
+                )
+            },
+            title = "助手级 Regex",
+            description = "仅对当前助手生效。适合角色卡自带的格式化、美化和卡片专属规则。",
+        )
     }
 }
 
@@ -787,18 +781,6 @@ private fun SillyTavernPresetEditorCard(
             Text(
                 text = "运行时选项",
                 style = MaterialTheme.typography.labelLarge
-            )
-
-            OutlinedTextField(
-                value = assistant.userPersona,
-                onValueChange = { value ->
-                    onUpdate(
-                        assistant.copy(userPersona = value)
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("用户人格 / Persona Description") },
-                minLines = 3,
             )
 
             StBooleanSettingRow(

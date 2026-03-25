@@ -318,7 +318,7 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
-    fun `persona description prompt should render assistant user persona`() {
+    fun `persona description prompt should render effective global persona`() {
         val template = SillyTavernPromptTemplate(
             prompts = listOf(
                 SillyTavernPromptItem(identifier = "personaDescription", marker = true),
@@ -330,11 +330,12 @@ class SillyTavernPromptTransformerTest {
         val result = transformSillyTavernPrompt(
             messages = listOf(UIMessage.user("Hello")),
             assistant = Assistant(
-                userPersona = "I speak like an archivist and keep meticulous notes.",
+                userPersona = "Legacy assistant persona",
                 stPromptTemplate = template,
             ),
             lorebooks = emptyList(),
             template = template,
+            personaDescription = "I speak like an archivist and keep meticulous notes.",
         )
 
         assertEquals(
@@ -344,7 +345,7 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
-    fun `st lorebook should support persona description matching`() {
+    fun `st lorebook should support global persona description matching`() {
         val lorebook = Lorebook(
             id = Uuid.random(),
             entries = listOf(
@@ -368,12 +369,13 @@ class SillyTavernPromptTransformerTest {
         val result = transformSillyTavernPrompt(
             messages = listOf(UIMessage.user("Hello")),
             assistant = Assistant(
-                userPersona = "I am an archivist who documents everything.",
+                userPersona = "Legacy assistant persona",
                 stPromptTemplate = template,
                 lorebookIds = setOf(lorebook.id),
             ),
             lorebooks = listOf(lorebook),
             template = template,
+            personaDescription = "I am an archivist who documents everything.",
         )
 
         assertEquals(

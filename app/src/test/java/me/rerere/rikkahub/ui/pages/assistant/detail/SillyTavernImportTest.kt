@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import me.rerere.ai.core.MessageRole
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.findPromptOrder
@@ -191,5 +192,88 @@ class SillyTavernImportTest {
             listOf(InjectionPosition.BOTTOM_OF_CHAT, InjectionPosition.BOTTOM_OF_CHAT),
             payload.lorebooks.single().entries.map { it.position }
         )
+    }
+
+    @Test
+    fun `preset import should route regexes to global collection instead of assistant`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Regex Routing",
+                  "prompts": [
+                    { "identifier": "main", "role": "system", "content": "Main" }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "regex_scripts": [
+                      {
+                        "scriptName": "Preset Regex",
+                        "findRegex": "foo",
+                        "replaceString": "bar",
+                        "placement": [2]
+                      }
+                    ]
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "preset-routing",
+        )
+
+        val currentAssistant = Assistant()
+        val currentGlobalRegexes = listOf(payload.regexes.first().copy(name = "Existing Global"))
+        val application = applyImportedAssistantToExisting(
+            currentAssistant = currentAssistant,
+            payload = payload,
+            existingLorebooks = emptyList(),
+            existingGlobalRegexes = currentGlobalRegexes,
+            includeRegexes = true,
+        )
+
+        assertEquals(0, application.assistant.regexes.size)
+        assertEquals(2, application.globalRegexes.size)
+    }
+
+    @Test
+    fun `character card import should keep regexes on assistant level`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "spec": "chara_card_v2",
+                  "data": {
+                    "name": "Regex Character",
+                    "extensions": {
+                      "regex_scripts": [
+                        {
+                          "scriptName": "Card Regex",
+                          "findRegex": "hello",
+                          "replaceString": "hi",
+                          "placement": [2]
+                        }
+                      ]
+                    }
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "character-routing",
+        )
+
+        val currentAssistant = Assistant()
+        val application = applyImportedAssistantToExisting(
+            currentAssistant = currentAssistant,
+            payload = payload,
+            existingLorebooks = emptyList(),
+            existingGlobalRegexes = emptyList(),
+            includeRegexes = true,
+        )
+
+        assertEquals(1, application.assistant.regexes.size)
+        assertEquals(0, application.globalRegexes.size)
     }
 }

@@ -108,17 +108,7 @@ fun UIAvatar(
     }
 
     Box(modifier = modifier.size(32.dp)) {
-        Surface(
-            shape = rememberAvatarShape(loading),
-            modifier = Modifier.fillMaxSize(),
-            onClick = {
-                onClick?.invoke()
-                if (onUpdate != null) showPickOption = true
-            },
-            tonalElevation = 4.dp,
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        ) {
+        val avatarContent: @Composable () -> Unit = {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize()
@@ -157,6 +147,32 @@ fun UIAvatar(
                         )
                     }
                 }
+            }
+        }
+
+        if (onClick != null || onUpdate != null) {
+            Surface(
+                shape = rememberAvatarShape(loading),
+                modifier = Modifier.fillMaxSize(),
+                onClick = {
+                    onClick?.invoke()
+                    if (onUpdate != null) showPickOption = true
+                },
+                tonalElevation = 4.dp,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ) {
+                avatarContent()
+            }
+        } else {
+            Surface(
+                shape = rememberAvatarShape(loading),
+                modifier = Modifier.fillMaxSize(),
+                tonalElevation = 4.dp,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ) {
+                avatarContent()
             }
         }
 

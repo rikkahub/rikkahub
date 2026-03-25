@@ -84,6 +84,8 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.effectiveUserAvatar
+import me.rerere.rikkahub.data.model.effectiveUserName
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -132,7 +134,8 @@ fun ChatMessage(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
-    val settings = LocalSettings.current.displaySetting
+    val allSettings = LocalSettings.current
+    val settings = allSettings.displaySetting
     val baseFontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio
     val scaledLineHeight = if (LocalTextStyle.current.lineHeight.isSpecified) {
         LocalTextStyle.current.lineHeight * settings.fontSizeRatio
@@ -278,8 +281,8 @@ fun ChatMessage(
                         Spacer(modifier = Modifier.width(avatarGap))
                         if (showIdentity) {
                             ChatMessageUserAvatar(
-                                avatar = settings.userAvatar,
-                                nickname = settings.userNickname,
+                                avatar = allSettings.effectiveUserAvatar(),
+                                nickname = allSettings.effectiveUserName(),
                             )
                         } else {
                             Spacer(modifier = Modifier.width(userAvatarSlotWidth))
@@ -442,9 +445,10 @@ private fun MessagePartsBlock(
                                     modifier = Modifier
                                 )
                             } else {
-                                val renderedText = remember(part.text, assistant, messageDepthFromEnd) {
+                                val renderedText = remember(part.text, assistant, settings.regexes, messageDepthFromEnd) {
                                     part.text.replaceRegexes(
                                         assistant = assistant,
+                                        settings = settings,
                                         scope = AssistantAffectScope.USER,
                                         phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                         messageDepthFromEnd = messageDepthFromEnd,
@@ -471,9 +475,10 @@ private fun MessagePartsBlock(
                                 }
                             }
                         } else {
-                            val renderedText = remember(part.text, assistant, messageDepthFromEnd) {
+                            val renderedText = remember(part.text, assistant, settings.regexes, messageDepthFromEnd) {
                                 part.text.replaceRegexes(
                                     assistant = assistant,
+                                    settings = settings,
                                     scope = AssistantAffectScope.ASSISTANT,
                                     phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                     messageDepthFromEnd = messageDepthFromEnd,
