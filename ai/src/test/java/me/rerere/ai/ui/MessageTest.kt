@@ -105,6 +105,29 @@ class MessageTest {
     }
 
     @Test
+    fun `limitContext with legacy TOOL result at start should include corresponding tool call chain`() {
+        val messages = listOf(
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("User query"))),
+            UIMessage(
+                role = MessageRole.ASSISTANT, parts = listOf(
+                    UIMessagePart.Tool(
+                        toolCallId = "call1",
+                        toolName = "test_tool",
+                        input = "{}",
+                        output = emptyList()
+                    )
+                )
+            ),
+            UIMessage(role = MessageRole.TOOL, parts = listOf(UIMessagePart.Text("tool result"))),
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text("Final response")))
+        )
+
+        val result = messages.limitContext(2)
+        assertEquals(4, result.size)
+        assertEquals(messages, result)
+    }
+
+    @Test
     fun `limitContext with empty list should return empty list`() {
         val messages = emptyList<UIMessage>()
         val result = messages.limitContext(5)

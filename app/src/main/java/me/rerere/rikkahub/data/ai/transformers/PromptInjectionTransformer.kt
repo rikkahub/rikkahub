@@ -222,10 +222,15 @@ private fun createMergedInjectionMessages(injections: List<PromptInjection>): Li
 }
 
 /**
- * 查找安全的插入位置，避免注入到 USER → ASSISTANT(含Tool) 之间
+ * 查找安全的插入位置，避免打断工具调用链。
  *
- * 某些提供商（如 deepseek）要求 USER 之后紧跟带工具的 ASSISTANT，
- * 在两者之间插入消息会导致报错或破坏推理连续性。
+ * 需要保护的边界：
+ * - USER -> ASSISTANT(tool_calls)
+ * - ASSISTANT(tool_calls) -> TOOL
+ * - TOOL -> TOOL
+ *
+ * 这样既不会破坏某些提供商对 tool call 邻接关系的要求，也能兼容旧版
+ * `TOOL` role 历史消息。
  */
 internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): Int {
     var index = targetIndex.coerceIn(0, messages.size)
@@ -235,12 +240,7 @@ internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): I
         val prevMessage = messages.getOrNull(index - 1)
         val currentMessage = messages.getOrNull(index)
 
-        // 不能插入到 USER → ASSISTANT(含Tool) 之间
-        val isPrevUser = prevMessage?.role == MessageRole.USER
-        val isCurrentAssistantWithTools = currentMessage?.role == MessageRole.ASSISTANT
-            && currentMessage.getTools().isNotEmpty()
-
-        if (isPrevUser && isCurrentAssistantWithTools) {
+        if (isUnsafeToolBoundary(prevMessage, currentMessage)) {
             index--
         } else {
             break
@@ -248,4 +248,23 @@ internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): I
     }
 
     return index
+}
+
+private fun isUnsafeToolBoundary(
+    previousMessage: UIMessage?,
+    currentMessage: UIMessage?,
+): Boolean {
+    val isPreviousUser = previousMessage?.role == MessageRole.USER
+    val isPreviousAssistantWithTools = previousMessage.isAssistantWithTools()
+    val isPreviousTool = previousMessage?.role == MessageRole.TOOL
+    val isCurrentAssistantWithTools = currentMessage.isAssistantWithTools()
+    val isCurrentTool = currentMessage?.role == MessageRole.TOOL
+
+    return (isPreviousUser && isCurrentAssistantWithTools) ||
+        (isPreviousAssistantWithTools && isCurrentTool) ||
+        (isPreviousTool && isCurrentTool)
+}
+
+private fun UIMessage?.isAssistantWithTools(): Boolean {
+    return this?.role == MessageRole.ASSISTANT && this.getTools().isNotEmpty()
 }

@@ -302,6 +302,21 @@ fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
 
         val currentMessage = this[adjustedStartIndex]
 
+        // 如果从 legacy TOOL message 开始截断，需要把对应的 ASSISTANT(tool call) 一起带上
+        if (currentMessage.role == MessageRole.TOOL) {
+            var toolClusterStart = adjustedStartIndex
+            while (toolClusterStart > 0 && this[toolClusterStart - 1].role == MessageRole.TOOL) {
+                toolClusterStart--
+            }
+
+            val assistantIndex = toolClusterStart - 1
+            if (assistantIndex >= 0 && this[assistantIndex].getTools().isNotEmpty()) {
+                adjustedStartIndex = assistantIndex
+                needsAdjustment = true
+                continue
+            }
+        }
+
         // 如果当前消息包含已执行的tool（有output），往前查找对应的tool call
         if (currentMessage.getTools().any { it.isExecuted }) {
             for (i in adjustedStartIndex - 1 downTo 0) {

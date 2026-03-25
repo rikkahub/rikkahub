@@ -118,6 +118,13 @@ class PromptInjectionTransformerTest {
             )
         )
     }
+
+    private fun createLegacyToolMessage(content: String = "tool result"): UIMessage {
+        return UIMessage(
+            role = MessageRole.TOOL,
+            parts = listOf(UIMessagePart.Text(content))
+        )
+    }
     // endregion
 
     // region No injection tests
@@ -1038,6 +1045,33 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
+    fun `findSafeInsertIndex should not insert between ASSISTANT with tools and TOOL result`() {
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Call a tool"),
+            createAssistantWithUnexecutedTool("call_1", "tool"),
+            createLegacyToolMessage()
+        )
+
+        val safeIndex = findSafeInsertIndex(messages, 3)
+        assertEquals(1, safeIndex)
+    }
+
+    @Test
+    fun `findSafeInsertIndex should not insert between consecutive TOOL results`() {
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Call a tool"),
+            createAssistantWithUnexecutedTool("call_1", "tool"),
+            createLegacyToolMessage("tool result 1"),
+            createLegacyToolMessage("tool result 2")
+        )
+
+        val safeIndex = findSafeInsertIndex(messages, 4)
+        assertEquals(1, safeIndex)
+    }
+
+    @Test
     fun `findSafeInsertIndex should return original index when no tools`() {
         val messages = listOf(
             UIMessage.system("System prompt"),
@@ -1083,6 +1117,41 @@ class PromptInjectionTransformerTest {
 
         assertTrue(injectedIndex < originalUserIndex)
         assertEquals(originalUserIndex + 1, assistantWithToolIndex)
+    }
+
+    @Test
+    fun `BOTTOM_OF_CHAT should not inject inside legacy tool result chain`() {
+        val injectionId = Uuid.random()
+        val injection = createModeInjection(
+            id = injectionId,
+            position = InjectionPosition.BOTTOM_OF_CHAT,
+            content = "Bottom injection"
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Call a tool"),
+            createAssistantWithUnexecutedTool("call_1", "tool"),
+            createLegacyToolMessage()
+        )
+
+        val result = transformMessages(
+            messages = messages,
+            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
+            modeInjections = listOf(injection),
+            lorebooks = emptyList()
+        )
+
+        assertEquals(5, result.size)
+
+        val injectedIndex = result.indexOfFirst { getMessageText(it).contains("Bottom injection") }
+        val originalUserIndex = result.indexOfFirst { getMessageText(it).contains("Call a tool") }
+        val assistantWithToolIndex = result.indexOfFirst { it.getTools().isNotEmpty() }
+        val toolResultIndex = result.indexOfLast { it.role == MessageRole.TOOL }
+
+        assertTrue(injectedIndex < originalUserIndex)
+        assertEquals(originalUserIndex + 1, assistantWithToolIndex)
+        assertEquals(assistantWithToolIndex + 1, toolResultIndex)
     }
 
     @Test
