@@ -92,6 +92,37 @@ class PRootSandbox(private val context: Context) {
         return SandboxSession(start(config, guestCommand))
     }
 
+    fun startPtySession(
+        config: SandboxConfig,
+        guestCommand: List<String>,
+        rows: Int = 24,
+        cols: Int = 80,
+    ): PtySession {
+        val binaries = resolveBinaries()
+        val command = SandboxCommandBuilder.build(binaries, config, guestCommand)
+
+        val envMap = buildMap {
+            putAll(System.getenv())
+            put("PROOT_LOADER", binaries.loader.absolutePath)
+            binaries.loader32?.let { put("PROOT_LOADER_32", it.absolutePath) }
+            put("PROOT_TMP_DIR", ensureProotTmpDir(config).absolutePath)
+            putAll(config.hostEnvironment)
+        }
+        val envArray = envMap.map { "${it.key}=${it.value}" }.toTypedArray()
+        val cwd = resolveLaunchDirectory(config).absolutePath
+
+        val result = Pty.nativeExec(
+            cmd = command[0],
+            argv = command.toTypedArray(),
+            envp = envArray,
+            cwd = cwd,
+            rows = rows,
+            cols = cols,
+        ) ?: throw IllegalStateException("Failed to create PTY subprocess")
+
+        return PtySession(masterFd = result[0], pid = result[1])
+    }
+
     fun startShellSession(
         config: SandboxConfig,
         shell: String = "/bin/sh",

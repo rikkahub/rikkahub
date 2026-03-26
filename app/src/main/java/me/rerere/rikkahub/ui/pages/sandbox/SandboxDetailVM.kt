@@ -11,9 +11,10 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.sandbox.SandboxInfo
 import me.rerere.rikkahub.data.sandbox.SandboxManager
 import me.rerere.sandbox.PRootSandbox
+import me.rerere.sandbox.PtySession
 import me.rerere.sandbox.SandboxConfig
 import me.rerere.sandbox.SandboxOutput
-import me.rerere.sandbox.SandboxSession
+import me.rerere.sandbox.TerminalBuffer
 
 enum class TerminalState { IDLE, RUNNING, EXITED }
 
@@ -39,13 +40,13 @@ class SandboxDetailVM(
         }
     }
 
-    private var session: SandboxSession? = null
+    private var session: PtySession? = null
     private var collectJob: Job? = null
-    private val outputBuffer = StringBuilder()
+    private val terminalBuffer = TerminalBuffer()
 
     fun startSession() {
         if (_terminalState.value == TerminalState.RUNNING) return
-        outputBuffer.clear()
+        terminalBuffer.clear()
         _output.value = ""
         _terminalState.value = TerminalState.RUNNING
 
@@ -56,7 +57,7 @@ class SandboxDetailVM(
             rootfsDir = rootfsDir,
             workingDirectory = "/root",
         )
-        val newSession = proot.startSession(config, guestCommand = listOf("/bin/bash", "-l"))
+        val newSession = proot.startPtySession(config, guestCommand = listOf("/bin/bash", "-l"))
         session = newSession
 
         collectJob = viewModelScope.launch {
@@ -91,12 +92,8 @@ class SandboxDetailVM(
     }
 
     private fun appendOutput(text: String) {
-        val stripped = ANSI_REGEX.replace(text, "")
-        outputBuffer.append(stripped)
-        if (outputBuffer.length > MAX_OUTPUT_CHARS) {
-            outputBuffer.delete(0, outputBuffer.length - MAX_OUTPUT_CHARS)
-        }
-        _output.value = outputBuffer.toString()
+        terminalBuffer.append(text)
+        _output.value = terminalBuffer.getText()
     }
 
     private fun ensureBashProfile(rootfsDir: java.io.File) {
@@ -105,16 +102,5 @@ class SandboxDetailVM(
             bashProfile.parentFile?.mkdirs()
             bashProfile.writeText("[ -f ~/.bashrc ] && . ~/.bashrc\n")
         }
-    }
-
-    companion object {
-        private const val MAX_OUTPUT_CHARS = 200_000
-        private val ANSI_REGEX = Regex(
-            "\u001B(?:" +
-                "\\[[0-9;?]*[ -/]*[@-~]" +           // CSI: ESC [ ... final
-                "|][^\u0007\u001B]*(?:\u0007|\u001B\\\\)" + // OSC: ESC ] ... BEL or ESC ] ... ESC\
-                "|[^\\[\\]]" +                         // ESC + single char
-                ")"
-        )
     }
 }
