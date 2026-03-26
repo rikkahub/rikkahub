@@ -318,6 +318,49 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
+    fun `st lorebook should support recursive scanning`() {
+        val lorebook = Lorebook(
+            id = Uuid.random(),
+            recursiveScanning = true,
+            entries = listOf(
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    keywords = listOf("alpha"),
+                    position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
+                    content = "beta breadcrumb",
+                ),
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    keywords = listOf("beta"),
+                    position = InjectionPosition.AFTER_SYSTEM_PROMPT,
+                    content = "Recursive lore",
+                ),
+            )
+        )
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "worldInfoBefore", marker = true),
+                SillyTavernPromptItem(identifier = "worldInfoAfter", marker = true),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("worldInfoBefore", "worldInfoAfter", "chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("alpha trigger")),
+            assistant = Assistant(
+                stPromptTemplate = template,
+                lorebookIds = setOf(lorebook.id),
+            ),
+            lorebooks = listOf(lorebook),
+            template = template,
+        )
+
+        assertTrue(result.first().toText().contains("beta breadcrumb"))
+        assertTrue(result.first().toText().contains("Recursive lore"))
+    }
+
+    @Test
     fun `persona description prompt should render effective global persona`() {
         val template = SillyTavernPromptTemplate(
             prompts = listOf(

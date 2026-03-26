@@ -5,12 +5,10 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
-import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookTriggerContext
+import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.effectiveUserPersona
-import me.rerere.rikkahub.data.model.extractContextForMatching
-import me.rerere.rikkahub.data.model.isTriggered
 
 /**
  * 提示词注入转换器
@@ -42,7 +40,7 @@ internal fun transformMessages(
     modeInjections: List<PromptInjection.ModeInjection>,
     lorebooks: List<Lorebook>,
     personaDescription: String = assistant.userPersona,
-    stPromptTemplateActive: Boolean = assistant.stPromptTemplate != null,
+    stPromptTemplateActive: Boolean = false,
 ): List<UIMessage> {
     // 收集所有需要注入的内容
     val injections = collectInjections(
@@ -76,7 +74,7 @@ internal fun collectInjections(
     modeInjections: List<PromptInjection.ModeInjection>,
     lorebooks: List<Lorebook>,
     personaDescription: String = assistant.userPersona,
-    stPromptTemplateActive: Boolean = assistant.stPromptTemplate != null,
+    stPromptTemplateActive: Boolean = false,
 ): List<PromptInjection> {
     val injections = mutableListOf<PromptInjection>()
 
@@ -90,24 +88,14 @@ internal fun collectInjections(
         it.enabled && assistant.lorebookIds.contains(it.id)
     }
     if (enabledLorebooks.isNotEmpty() && !stPromptTemplateActive) {
-        // 提取上下文用于匹配（只取非 SYSTEM 消息）
-        val nonSystemMessages = messages.filter { it.role != MessageRole.SYSTEM }
-        val triggerContext = LorebookTriggerContext(
-            recentMessagesText = nonSystemMessages.joinToString("\n") { it.toText() },
-            personaDescription = personaDescription,
+        injections += collectTriggeredLorebookEntries(
+            historyMessages = messages,
+            assistant = assistant,
+            lorebooks = enabledLorebooks,
+            triggerContext = LorebookTriggerContext(
+                personaDescription = personaDescription,
+            ),
         )
-
-        enabledLorebooks.forEach { lorebook ->
-            lorebook.entries
-                .filter { entry ->
-                    val context = extractContextForMatching(nonSystemMessages, entry.scanDepth)
-                    entry.isTriggered(
-                        context = context,
-                        triggerContext = triggerContext.copy(recentMessagesText = context),
-                    )
-                }
-                .forEach { injections.add(it) }
-        }
     }
 
     return injections

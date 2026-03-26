@@ -79,11 +79,15 @@ class PromptInjectionTransformerTest {
         id: Uuid = Uuid.random(),
         name: String = "Test Lorebook",
         enabled: Boolean = true,
+        recursiveScanning: Boolean = false,
+        tokenBudget: Int? = null,
         entries: List<PromptInjection.RegexInjection> = emptyList()
     ) = Lorebook(
         id = id,
         name = name,
         enabled = enabled,
+        recursiveScanning = recursiveScanning,
+        tokenBudget = tokenBudget,
         entries = entries
     )
 
@@ -856,6 +860,72 @@ class PromptInjectionTransformerTest {
         assertTrue(!systemText.contains("Shallow scan content"))
         // deepEntry (scanDepth=10) 应该触发，因为早期消息包含关键词
         assertTrue(systemText.contains("Deep scan content"))
+    }
+
+    @Test
+    fun `recursive lorebook should activate chained entries`() {
+        val lorebookId = Uuid.random()
+        val seedEntry = createRegexInjection(
+            keywords = listOf("alpha"),
+            content = "beta breadcrumb"
+        )
+        val chainedEntry = createRegexInjection(
+            keywords = listOf("beta"),
+            content = "Chained lore"
+        )
+        val lorebook = createLorebook(
+            id = lorebookId,
+            recursiveScanning = true,
+            entries = listOf(seedEntry, chainedEntry)
+        )
+
+        val result = transformMessages(
+            messages = listOf(
+                UIMessage.system("System prompt"),
+                UIMessage.user("alpha trigger")
+            ),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook)
+        )
+
+        val systemText = getMessageText(result[0])
+        assertTrue(systemText.contains("beta breadcrumb"))
+        assertTrue(systemText.contains("Chained lore"))
+    }
+
+    @Test
+    fun `recursive lorebook should respect prevent recursion metadata`() {
+        val lorebookId = Uuid.random()
+        val seedEntry = createRegexInjection(
+            keywords = listOf("alpha"),
+            content = "beta breadcrumb",
+        ).copy(
+            stMetadata = mapOf("prevent_recursion" to "true")
+        )
+        val chainedEntry = createRegexInjection(
+            keywords = listOf("beta"),
+            content = "Chained lore"
+        )
+        val lorebook = createLorebook(
+            id = lorebookId,
+            recursiveScanning = true,
+            entries = listOf(seedEntry, chainedEntry)
+        )
+
+        val result = transformMessages(
+            messages = listOf(
+                UIMessage.system("System prompt"),
+                UIMessage.user("alpha trigger")
+            ),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook)
+        )
+
+        val systemText = getMessageText(result[0])
+        assertTrue(systemText.contains("beta breadcrumb"))
+        assertTrue(!systemText.contains("Chained lore"))
     }
 
     @Test

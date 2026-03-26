@@ -14,9 +14,7 @@ import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import me.rerere.rikkahub.data.model.effectiveUserPersona
-import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.findPrompt
-import me.rerere.rikkahub.data.model.isTriggered
 import me.rerere.rikkahub.data.model.matchesGenerationType
 import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -71,8 +69,14 @@ internal fun transformSillyTavernPrompt(
         historyMessages = runtimeBehavior.chatHistoryMessages,
         assistant = assistant,
         lorebooks = lorebooks,
-        characterData = characterData,
-        personaDescription = normalizedPersonaDescription,
+        triggerContext = LorebookTriggerContext(
+            characterDescription = characterData?.description.orEmpty(),
+            characterPersonality = characterData?.personality.orEmpty(),
+            personaDescription = normalizedPersonaDescription,
+            scenario = characterData?.scenario.orEmpty(),
+            creatorNotes = characterData?.creatorNotes.orEmpty(),
+            characterDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),
+        ),
     )
 
     val worldInfoBefore = triggeredLorebookEntries
@@ -348,42 +352,6 @@ private fun collectLeadingSystemMessages(
         .takeIf { it.isNotBlank() }
         ?.let { listOf(UIMessage.system(it)) }
         ?: emptyList()
-}
-
-private fun collectTriggeredLorebookEntries(
-    historyMessages: List<UIMessage>,
-    assistant: Assistant,
-    lorebooks: List<Lorebook>,
-    characterData: SillyTavernCharacterData?,
-    personaDescription: String,
-): List<PromptInjection.RegexInjection> {
-    val enabledLorebooks = lorebooks.filter {
-        it.enabled && assistant.lorebookIds.contains(it.id)
-    }
-    if (enabledLorebooks.isEmpty()) return emptyList()
-
-    val nonSystemMessages = historyMessages.filter { it.role != MessageRole.SYSTEM }
-    val triggerContext = LorebookTriggerContext(
-        recentMessagesText = nonSystemMessages.joinToString("\n") { it.toText() },
-        characterDescription = characterData?.description.orEmpty(),
-        characterPersonality = characterData?.personality.orEmpty(),
-        personaDescription = personaDescription,
-        scenario = characterData?.scenario.orEmpty(),
-        creatorNotes = characterData?.creatorNotes.orEmpty(),
-        characterDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),
-    )
-
-    return enabledLorebooks
-        .flatMap { lorebook ->
-            lorebook.entries.filter { entry ->
-                val context = extractContextForMatching(nonSystemMessages, entry.scanDepth)
-                entry.isTriggered(
-                    context = context,
-                    triggerContext = triggerContext.copy(recentMessagesText = context),
-                )
-            }
-        }
-        .sortedByDescending { it.priority }
 }
 
 private fun buildAbsoluteMessages(

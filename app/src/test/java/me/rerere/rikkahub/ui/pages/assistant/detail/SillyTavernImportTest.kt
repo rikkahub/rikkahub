@@ -8,6 +8,7 @@ import me.rerere.rikkahub.data.model.findPromptOrder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SillyTavernImportTest {
@@ -153,6 +154,45 @@ class SillyTavernImportTest {
     }
 
     @Test
+    fun `should preserve core character book regex semantics`() {
+        val json = """
+            {
+              "spec": "chara_card_v2",
+              "data": {
+                "name": "Seraphina",
+                "character_book": {
+                  "scan_depth": 9,
+                  "token_budget": 256,
+                  "recursive_scanning": true,
+                  "entries": [
+                    {
+                      "comment": "Regex Entry",
+                      "content": "Regex content",
+                      "keys": ["gl.*"],
+                      "secondary_keys": ["/forest/i"],
+                      "use_regex": true,
+                      "extensions": {}
+                    }
+                  ]
+                }
+              }
+            }
+        """.trimIndent()
+
+        val payload = parseAssistantImportFromJson(
+            jsonString = json,
+            sourceName = "character",
+        )
+
+        val lorebook = payload.lorebooks.single()
+        val entry = lorebook.entries.single()
+        assertEquals(true, entry.useRegex)
+        assertEquals(9, entry.scanDepth)
+        assertEquals(true, lorebook.recursiveScanning)
+        assertEquals(256, lorebook.tokenBudget)
+    }
+
+    @Test
     fun `should map character book positions 3 and 6 to bottom of chat`() {
         val json = """
             {
@@ -226,7 +266,9 @@ class SillyTavernImportTest {
             sourceName = "preset-routing",
         )
 
-        val currentAssistant = Assistant()
+        val currentAssistant = Assistant(
+            stPromptTemplate = defaultSillyTavernPromptTemplate(),
+        )
         val currentGlobalRegexes = listOf(payload.regexes.first().copy(name = "Existing Global"))
         val application = applyImportedAssistantToExisting(
             currentAssistant = currentAssistant,
@@ -238,6 +280,7 @@ class SillyTavernImportTest {
 
         assertEquals(0, application.assistant.regexes.size)
         assertEquals(2, application.globalRegexes.size)
+        assertNull(application.assistant.stPromptTemplate)
     }
 
     @Test
@@ -264,7 +307,9 @@ class SillyTavernImportTest {
             sourceName = "character-routing",
         )
 
-        val currentAssistant = Assistant()
+        val currentAssistant = Assistant(
+            stPromptTemplate = defaultSillyTavernPromptTemplate(),
+        )
         val application = applyImportedAssistantToExisting(
             currentAssistant = currentAssistant,
             payload = payload,
@@ -275,5 +320,6 @@ class SillyTavernImportTest {
 
         assertEquals(1, application.assistant.regexes.size)
         assertEquals(0, application.globalRegexes.size)
+        assertNull(application.assistant.stPromptTemplate)
     }
 }

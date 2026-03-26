@@ -798,6 +798,16 @@ private fun LorebookCard(
                                 Text(stringResource(R.string.prompt_page_disabled))
                             }
                         }
+                        if (book.recursiveScanning) {
+                            Tag(type = TagType.SUCCESS) {
+                                Text("递归扫描")
+                            }
+                        }
+                        book.tokenBudget?.let { budget ->
+                            Tag(type = TagType.INFO) {
+                                Text("Budget $budget")
+                            }
+                        }
                     }
                 }
                 IconButton(onClick = { showExportDialog = true }) {
@@ -892,6 +902,34 @@ private fun LorebookEditSheet(
                             onCheckedChange = { onEdit(book.copy(enabled = it)) }
                         )
                     }
+                )
+
+                FormItem(
+                    label = { Text("递归扫描") },
+                    description = { Text("允许已触发条目的内容继续触发后续条目。") },
+                    tail = {
+                        Switch(
+                            checked = book.recursiveScanning,
+                            onCheckedChange = { onEdit(book.copy(recursiveScanning = it)) }
+                        )
+                    }
+                )
+
+                OutlinedTextField(
+                    value = book.tokenBudget?.toString().orEmpty(),
+                    onValueChange = { value ->
+                        val normalized = value.trim()
+                        if (normalized.isEmpty()) {
+                            onEdit(book.copy(tokenBudget = null))
+                        } else {
+                            normalized.toIntOrNull()?.let { budget ->
+                                onEdit(book.copy(tokenBudget = budget))
+                            }
+                        }
+                    },
+                    label = { Text("Token Budget") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
 
                 // 条目列表

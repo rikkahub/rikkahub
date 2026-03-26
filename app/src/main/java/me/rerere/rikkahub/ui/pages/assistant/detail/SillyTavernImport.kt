@@ -157,7 +157,7 @@ internal fun applyImportedAssistantForCreate(
             openAIReasoningEffort = payload.assistant.openAIReasoningEffort.ifBlank {
                 currentAssistant.openAIReasoningEffort
             },
-            stPromptTemplate = payload.assistant.stPromptTemplate ?: currentAssistant.stPromptTemplate,
+            stPromptTemplate = null,
             stCharacterData = currentAssistant.stCharacterData,
             lorebookIds = currentAssistant.lorebookIds + payload.lorebooks.map { it.id }.toSet(),
         )
@@ -166,7 +166,7 @@ internal fun applyImportedAssistantForCreate(
             name = payload.assistant.name.ifBlank { currentAssistant.name },
             avatar = (payload.assistant.avatar as? Avatar.Image) ?: currentAssistant.avatar,
             presetMessages = payload.assistant.presetMessages.ifEmpty { currentAssistant.presetMessages },
-            stPromptTemplate = currentAssistant.stPromptTemplate ?: payload.assistant.stPromptTemplate,
+            stPromptTemplate = null,
             stCharacterData = payload.assistant.stCharacterData ?: currentAssistant.stCharacterData,
             lorebookIds = currentAssistant.lorebookIds + payload.lorebooks.map { it.id }.toSet(),
             regexes = mergeImportedRegexes(
@@ -207,14 +207,14 @@ internal fun applyImportedAssistantToExisting(
             openAIReasoningEffort = payload.assistant.openAIReasoningEffort.ifBlank {
                 currentAssistant.openAIReasoningEffort
             },
-            stPromptTemplate = payload.assistant.stPromptTemplate ?: currentAssistant.stPromptTemplate,
+            stPromptTemplate = null,
         )
 
         AssistantImportKind.CHARACTER_CARD -> currentAssistant.copy(
             name = payload.assistant.name.ifBlank { currentAssistant.name },
             avatar = (payload.assistant.avatar as? Avatar.Image) ?: currentAssistant.avatar,
             presetMessages = payload.assistant.presetMessages.ifEmpty { currentAssistant.presetMessages },
-            stPromptTemplate = currentAssistant.stPromptTemplate ?: payload.assistant.stPromptTemplate,
+            stPromptTemplate = null,
             stCharacterData = payload.assistant.stCharacterData ?: currentAssistant.stCharacterData,
             lorebookIds = currentAssistant.lorebookIds + payload.lorebooks.map { it.id }.toSet(),
             regexes = mergeImportedRegexes(
@@ -485,14 +485,23 @@ internal fun defaultSillyTavernPromptTemplate(): SillyTavernPromptTemplate {
 }
 
 private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
+    val bookScanDepth = book["scan_depth"]?.jsonPrimitiveOrNull?.intOrNull
+    val tokenBudget = book["token_budget"]?.jsonPrimitiveOrNull?.intOrNull
+    val recursiveScanning = book["recursive_scanning"]?.jsonPrimitiveOrNull?.booleanOrNull ?: false
     val entries = book["entries"]?.jsonArrayOrNull().orEmpty().mapIndexed { index, element ->
         val entry = element.jsonObject
         val extensions = entry["extensions"]?.jsonObjectOrNull()
+        val keywords = entry["keys"]?.jsonArrayOrNull()?.mapNotNull { it.jsonPrimitiveOrNull?.contentOrNull } ?: emptyList()
+        val secondaryKeywords = entry["secondary_keys"]?.jsonArrayOrNull()
+            ?.mapNotNull { it.jsonPrimitiveOrNull?.contentOrNull }
+            ?: emptyList()
+        val useRegex = entry["use_regex"]?.jsonPrimitiveOrNull?.booleanOrNull
+            ?: (keywords.any(::isSlashDelimitedRegex) || secondaryKeywords.any(::isSlashDelimitedRegex))
         PromptInjection.RegexInjection(
             id = Uuid.random(),
             name = entry["comment"]?.jsonPrimitiveOrNull?.contentOrNull
                 ?: entry["name"]?.jsonPrimitiveOrNull?.contentOrNull
-                ?: entry["keys"]?.jsonArrayOrNull()?.firstOrNull()?.jsonPrimitiveOrNull?.contentOrNull.orEmpty(),
+                ?: keywords.firstOrNull().orEmpty(),
             enabled = entry["enabled"]?.jsonPrimitiveOrNull?.booleanOrNull ?: true,
             priority = entry["insertion_order"]?.jsonPrimitiveOrNull?.intOrNull ?: 100,
             position = mapCharacterBookPosition(
@@ -502,13 +511,11 @@ private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
             content = entry["content"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty(),
             injectDepth = extensions?.get("depth")?.jsonPrimitiveOrNull?.intOrNull ?: 4,
             role = mapExtensionPromptRole(extensions?.get("role")?.jsonPrimitiveOrNull?.intOrNull),
-            keywords = entry["keys"]?.jsonArrayOrNull()?.mapNotNull { it.jsonPrimitiveOrNull?.contentOrNull } ?: emptyList(),
-            secondaryKeywords = entry["secondary_keys"]?.jsonArrayOrNull()
-                ?.mapNotNull { it.jsonPrimitiveOrNull?.contentOrNull }
-                ?: emptyList(),
+            keywords = keywords,
+            secondaryKeywords = secondaryKeywords,
             selective = entry["selective"]?.jsonPrimitiveOrNull?.booleanOrNull ?: false,
             selectiveLogic = extensions?.get("selectiveLogic")?.jsonPrimitiveOrNull?.intOrNull ?: 0,
-            useRegex = false,
+            useRegex = useRegex,
             caseSensitive = (
                 entry["case_sensitive"]?.jsonPrimitiveOrNull?.booleanOrNull
                     ?: extensions?.get("case_sensitive")?.jsonPrimitiveOrNull?.booleanOrNull
@@ -516,7 +523,7 @@ private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
                 ),
             matchWholeWords = extensions?.get("match_whole_words")?.jsonPrimitiveOrNull?.booleanOrNull ?: false,
             probability = extensions?.get("probability")?.jsonPrimitiveOrNull?.intOrNull,
-            scanDepth = extensions?.get("scan_depth")?.jsonPrimitiveOrNull?.intOrNull ?: 4,
+            scanDepth = extensions?.get("scan_depth")?.jsonPrimitiveOrNull?.intOrNull ?: bookScanDepth ?: 4,
             constantActive = entry["constant"]?.jsonPrimitiveOrNull?.booleanOrNull ?: false,
             matchCharacterDescription = extensions?.get("match_character_description")?.jsonPrimitiveOrNull?.booleanOrNull
                 ?: false,
@@ -529,6 +536,8 @@ private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
             matchCharacterDepthPrompt = extensions?.get("match_character_depth_prompt")?.jsonPrimitiveOrNull?.booleanOrNull
                 ?: false,
             stMetadata = buildMap {
+                putIfPresent("exclude_recursion", extensions?.get("exclude_recursion"))
+                putIfPresent("prevent_recursion", extensions?.get("prevent_recursion"))
                 putIfPresent("group", extensions?.get("group"))
                 putIfPresent("group_override", extensions?.get("group_override"))
                 putIfPresent("group_weight", extensions?.get("group_weight"))
@@ -547,8 +556,15 @@ private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
         name = book["name"]?.jsonPrimitiveOrNull?.contentOrNull?.ifBlank { null } ?: "$cardName Lorebook",
         description = book["description"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty(),
         enabled = true,
+        recursiveScanning = recursiveScanning,
+        tokenBudget = tokenBudget,
         entries = entries,
     )
+}
+
+private fun isSlashDelimitedRegex(value: String): Boolean {
+    return Regex("""^/(.*?)(?<!\\)/([a-zA-Z]*)$""", setOf(RegexOption.DOT_MATCHES_ALL))
+        .matches(value.trim())
 }
 
 private fun mapCharacterBookPosition(position: String?, extensionPosition: Int?): InjectionPosition {

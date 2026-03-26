@@ -159,6 +159,8 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
                 name = fileName ?: LocalDateTime.now().toLocalString(),
                 description = "",
                 enabled = true,
+                recursiveScanning = stLorebook.recursiveScanning ?: false,
+                tokenBudget = stLorebook.tokenBudget,
                 entries = stLorebook.entries.values.map { entry ->
                     PromptInjection.RegexInjection(
                         id = Uuid.random(),
@@ -181,6 +183,8 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
                         stMetadata = buildMap {
                             putIfPresent("uid", entry.uid)
                             putIfPresent("displayIndex", entry.displayIndex)
+                            putIfPresent("exclude_recursion", entry.excludeRecursion)
+                            putIfPresent("prevent_recursion", entry.preventRecursion)
                             putIfPresent("group", entry.group)
                             putIfPresent("group_override", entry.groupOverride)
                             putIfPresent("group_weight", entry.groupWeight)
@@ -269,6 +273,10 @@ object MessageTemplateSerializer : ExportSerializer<MessageInjectionTemplate> {
 
 @Serializable
 private data class SillyTavernLorebook(
+    @SerialName("recursive_scanning")
+    val recursiveScanning: Boolean? = null,
+    @SerialName("token_budget")
+    val tokenBudget: Int? = null,
     val entries: Map<String, SillyTavernEntry> = emptyMap(),
 )
 
@@ -286,9 +294,11 @@ private data class SillyTavernEntry(
     val order: Int = 100,
     val disable: Boolean = false,
     val displayIndex: Int? = null,
+    val excludeRecursion: Boolean? = null,
     val group: String? = null,
     val groupOverride: Boolean? = null,
     val groupWeight: Int? = null,
+    val preventRecursion: Boolean? = null,
     val sticky: Int? = null,
     val cooldown: Int? = null,
     val delay: Int? = null,

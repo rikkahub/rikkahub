@@ -309,6 +309,8 @@ data class Lorebook(
     val name: String = "",
     val description: String = "",
     val enabled: Boolean = true,
+    val recursiveScanning: Boolean = false,
+    val tokenBudget: Int? = null,
     val entries: List<PromptInjection.RegexInjection> = emptyList(),
 )
 
@@ -457,7 +459,7 @@ fun extractContextForMatching(
     scanDepth: Int
 ): String {
     return messages
-        .takeLast(scanDepth)
+        .takeLast(scanDepth.coerceAtLeast(0))
         .joinToString("\n") { it.toText() }
 }
 
