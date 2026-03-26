@@ -91,6 +91,8 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
+import me.rerere.rikkahub.data.model.normalizeForModeInjection
+import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -104,6 +106,11 @@ import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+
+private val modeInjectionPositions = listOf(
+    InjectionPosition.BEFORE_SYSTEM_PROMPT,
+    InjectionPosition.AFTER_SYSTEM_PROMPT,
+)
 
 @Composable
 fun PromptPage(vm: PromptVM = koinViewModel()) {
@@ -213,7 +220,7 @@ private fun ModeInjectionTab(
     val importFailedMsg = stringResource(R.string.export_import_failed)
     val importer = rememberImporter(ModeInjectionSerializer) { result ->
         result.onSuccess { imported ->
-            onUpdate(currentModeInjections + imported)
+            onUpdate(currentModeInjections + imported.normalizedForSystemPromptSupplement())
             toaster.show(importSuccessMsg)
         }.onFailure { error ->
             toaster.show(importFailedMsg.format(error.message))
@@ -270,7 +277,7 @@ private fun ModeInjectionTab(
                                         scaleY = 1.05f
                                     }
                                 },
-                            onEdit = { editState.open(injection) },
+                            onEdit = { editState.open(injection.normalizedForSystemPromptSupplement()) },
                             onDelete = { onUpdate(modeInjections - injection) }
                         )
                     }
@@ -289,7 +296,7 @@ private fun ModeInjectionTab(
                 }
             },
         ) {
-            Button(onClick = { editState.open(PromptInjection.ModeInjection()) }) {
+            Button(onClick = { editState.open(PromptInjection.ModeInjection().normalizedForSystemPromptSupplement()) }) {
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
@@ -325,10 +332,11 @@ private fun ModeInjectionCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val normalizedInjection = injection.normalizedForSystemPromptSupplement()
     val swipeState = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
     var showExportDialog by remember { mutableStateOf(false) }
-    val exporter = rememberExporter(injection, ModeInjectionSerializer)
+    val exporter = rememberExporter(normalizedInjection, ModeInjectionSerializer)
 
     SwipeToDismissBox(
         state = swipeState,
@@ -374,7 +382,7 @@ private fun ModeInjectionCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = injection.name.ifEmpty { stringResource(R.string.prompt_page_unnamed) },
+                        text = normalizedInjection.name.ifEmpty { stringResource(R.string.prompt_page_unnamed) },
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -383,12 +391,12 @@ private fun ModeInjectionCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Tag(type = TagType.INFO) {
-                            Text(getPositionLabel(injection.position))
+                            Text(getPositionLabel(normalizedInjection.position))
                         }
                         Tag(type = TagType.DEFAULT) {
-                            Text(stringResource(R.string.prompt_page_priority_format, injection.priority))
+                            Text(stringResource(R.string.prompt_page_priority_format, normalizedInjection.priority))
                         }
-                        if (!injection.enabled) {
+                        if (!normalizedInjection.enabled) {
                             Tag(type = TagType.WARNING) {
                                 Text(stringResource(R.string.prompt_page_disabled))
                             }
@@ -420,6 +428,10 @@ private fun ModeInjectionEditSheet(
     onConfirm: () -> Unit,
     onEdit: (PromptInjection.ModeInjection) -> Unit
 ) {
+    val normalizedInjection = injection.normalizedForSystemPromptSupplement()
+    val updateInjection: (PromptInjection.ModeInjection) -> Unit = { edited ->
+        onEdit(edited.normalizedForSystemPromptSupplement())
+    }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
@@ -458,8 +470,8 @@ private fun ModeInjectionEditSheet(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 OutlinedTextField(
-                    value = injection.name,
-                    onValueChange = { onEdit(injection.copy(name = it)) },
+                    value = normalizedInjection.name,
+                    onValueChange = { updateInjection(normalizedInjection.copy(name = it)) },
                     label = { Text(stringResource(R.string.prompt_page_name)) },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -468,16 +480,16 @@ private fun ModeInjectionEditSheet(
                     label = { Text(stringResource(R.string.prompt_page_enabled)) },
                     tail = {
                         Switch(
-                            checked = injection.enabled,
-                            onCheckedChange = { onEdit(injection.copy(enabled = it)) }
+                            checked = normalizedInjection.enabled,
+                            onCheckedChange = { updateInjection(normalizedInjection.copy(enabled = it)) }
                         )
                     }
                 )
 
                 OutlinedTextField(
-                    value = injection.priority.toString(),
+                    value = normalizedInjection.priority.toString(),
                     onValueChange = {
-                        it.toIntOrNull()?.let { p -> onEdit(injection.copy(priority = p)) }
+                        it.toIntOrNull()?.let { p -> updateInjection(normalizedInjection.copy(priority = p)) }
                     },
                     label = { Text(stringResource(R.string.prompt_page_priority_label)) },
                     modifier = Modifier.fillMaxWidth(),
@@ -489,34 +501,14 @@ private fun ModeInjectionEditSheet(
                     style = MaterialTheme.typography.titleSmall
                 )
                 InjectionPositionSelector(
-                    position = injection.position,
-                    onSelect = { onEdit(injection.copy(position = it)) }
-                )
-
-                AnimatedVisibility(visible = injection.position == InjectionPosition.AT_DEPTH) {
-                    OutlinedTextField(
-                        value = injection.injectDepth.toString(),
-                        onValueChange = {
-                            it.toIntOrNull()?.let { d -> onEdit(injection.copy(injectDepth = d)) }
-                        },
-                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                }
-
-                Text(
-                    stringResource(R.string.prompt_page_injection_role),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                InjectionRoleSelector(
-                    role = injection.role,
-                    onSelect = { onEdit(injection.copy(role = it)) }
+                    position = normalizedInjection.position.normalizeForModeInjection(),
+                    options = modeInjectionPositions,
+                    onSelect = { updateInjection(normalizedInjection.copy(position = it)) }
                 )
 
                 OutlinedTextField(
-                    value = injection.content,
-                    onValueChange = { onEdit(injection.copy(content = it)) },
+                    value = normalizedInjection.content,
+                    onValueChange = { updateInjection(normalizedInjection.copy(content = it)) },
                     label = { Text(stringResource(R.string.prompt_page_injection_content)) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -543,10 +535,11 @@ private fun ModeInjectionEditSheet(
 @Composable
 private fun InjectionPositionSelector(
     position: InjectionPosition,
-    onSelect: (InjectionPosition) -> Unit
+    onSelect: (InjectionPosition) -> Unit,
+    options: List<InjectionPosition> = InjectionPosition.entries.toList(),
 ) {
     Select(
-        options = InjectionPosition.entries,
+        options = options,
         selectedOption = position,
         onOptionSelected = onSelect,
         optionToString = { getPositionLabel(it) },

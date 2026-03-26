@@ -52,6 +52,7 @@ import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.model.TextSelectionConfig
 import me.rerere.rikkahub.data.model.UserPersonaProfile
+import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.PresetThemes
 import me.rerere.rikkahub.utils.JsonInstant
@@ -464,7 +465,9 @@ class SettingsStore(
                 favoriteModels = settings.favoriteModels.filter { uuid ->
                     settings.providers.flatMap { it.models }.any { it.id == uuid }
                 },
-                modeInjections = settings.modeInjections.distinctBy { it.id },
+                modeInjections = settings.modeInjections
+                    .map { it.normalizedForSystemPromptSupplement() }
+                    .distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
                 regexes = settings.regexes.distinctBy { it.id },
                 userPersonaProfiles = userPersonaProfiles,
@@ -498,11 +501,12 @@ class SettingsStore(
         .toMutableStateFlow(scope, Settings.dummy())
 
     suspend fun update(settings: Settings) {
-        if(settings.init) {
+        if (settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
         val normalizedSettings = settings.copy(
+            modeInjections = settings.modeInjections.map { it.normalizedForSystemPromptSupplement() },
             lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized()
         )
         val previousSettings = settingsFlow.value

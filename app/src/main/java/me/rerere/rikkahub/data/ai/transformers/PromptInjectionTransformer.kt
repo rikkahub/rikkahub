@@ -10,6 +10,7 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookTriggerContext
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.effectiveUserPersona
+import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 
 /**
  * 提示词注入转换器
@@ -94,6 +95,7 @@ internal fun collectInjections(
     // 1. 获取关联的 ModeInjection
     modeInjections
         .filter { it.enabled && assistant.modeInjectionIds.contains(it.id) }
+        .map { it.normalizedForSystemPromptSupplement() }
         .forEach { injections.add(it) }
 
     // 2. 获取关联的 Lorebook 中被触发的 RegexInjection

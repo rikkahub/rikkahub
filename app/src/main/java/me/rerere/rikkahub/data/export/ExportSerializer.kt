@@ -17,6 +17,7 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.MessageInjectionTemplate
 import me.rerere.rikkahub.data.model.withNewNodeIds
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDateTime
 import kotlin.uuid.Uuid
@@ -101,6 +102,7 @@ object ModeInjectionSerializer : ExportSerializer<PromptInjection.ModeInjection>
             ExportSerializer.DefaultJson
                 .decodeFromJsonElement<PromptInjection.ModeInjection>(exportData.data)
                 .copy(id = Uuid.random())
+                .normalizedForSystemPromptSupplement()
         }.getOrNull()
     }
 }

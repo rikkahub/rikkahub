@@ -34,7 +34,7 @@ class PromptInjectionTransformerTest {
         position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
         content: String = "Injected content",
         injectDepth: Int = 4,
-        role: MessageRole = MessageRole.USER
+        role: MessageRole = MessageRole.SYSTEM
     ) = PromptInjection.ModeInjection(
         id = id,
         name = name,
@@ -93,6 +93,28 @@ class PromptInjectionTransformerTest {
         tokenBudget = tokenBudget,
         entries = entries
     )
+
+    private fun transformWithAlwaysActiveLorebookEntry(
+        entry: PromptInjection.RegexInjection,
+        messages: List<UIMessage>,
+        lorebookId: Uuid = Uuid.random(),
+    ): List<UIMessage> {
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                entry.copy(
+                    keywords = emptyList(),
+                    constantActive = true,
+                )
+            )
+        )
+        return transformMessages(
+            messages = messages,
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+        )
+    }
 
     private fun getMessageText(message: UIMessage): String {
         return message.parts
@@ -309,9 +331,9 @@ class PromptInjectionTransformerTest {
     }
     // endregion
 
-    // region TOP_OF_CHAT tests
+    // region Mode injection normalization tests
     @Test
-    fun `mode injection with TOP_OF_CHAT should insert before first user message`() {
+    fun `mode injection should normalize non system positions to AFTER_SYSTEM_PROMPT`() {
         val injectionId = Uuid.random()
         val injection = createModeInjection(
             id = injectionId,
@@ -332,119 +354,20 @@ class PromptInjectionTransformerTest {
             lorebooks = emptyList()
         )
 
-        assertEquals(4, result.size)
+        assertEquals(3, result.size)
         assertEquals(MessageRole.SYSTEM, result[0].role)
-        assertEquals("System prompt", getMessageText(result[0]))
-        assertEquals(MessageRole.USER, result[1].role)
-        assertEquals("Top of chat content", getMessageText(result[1]))
-        assertEquals(MessageRole.USER, result[2].role)
-    }
-    // endregion
-
-    // region BOTTOM_OF_CHAT tests
-    @Test
-    fun `mode injection with BOTTOM_OF_CHAT should insert before last message`() {
-        val injectionId = Uuid.random()
-        val injection = createModeInjection(
-            id = injectionId,
-            position = InjectionPosition.BOTTOM_OF_CHAT,
-            content = "Bottom of chat content"
-        )
-
-        val messages = listOf(
-            UIMessage.system("System prompt"),
-            UIMessage.user("Hello"),
-            UIMessage.assistant("Hi!"),
-            UIMessage.user("How are you?")
-        )
-
-        val result = transformMessages(
-            messages = messages,
-            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
-            modeInjections = listOf(injection),
-            lorebooks = emptyList()
-        )
-
-        assertEquals(5, result.size)
-        assertEquals(MessageRole.USER, result[3].role)
-        assertEquals("Bottom of chat content", getMessageText(result[3]))
-        assertEquals(MessageRole.USER, result[4].role)
-        assertEquals("How are you?", getMessageText(result[4]))
-    }
-    // endregion
-
-    // region AT_DEPTH tests
-    @Test
-    fun `mode injection with AT_DEPTH should insert at specified depth from end`() {
-        val injectionId = Uuid.random()
-        val injection = createModeInjection(
-            id = injectionId,
-            position = InjectionPosition.AT_DEPTH,
-            injectDepth = 2,
-            content = "At depth 2 content"
-        )
-
-        val messages = listOf(
-            UIMessage.system("System prompt"),
-            UIMessage.user("Message 1"),
-            UIMessage.assistant("Response 1"),
-            UIMessage.user("Message 2"),
-            UIMessage.assistant("Response 2")
-        )
-
-        val result = transformMessages(
-            messages = messages,
-            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
-            modeInjections = listOf(injection),
-            lorebooks = emptyList()
-        )
-
-        // depth=2 means insert before the 2nd message from the end
-        // Original: [System, User1, Asst1, User2, Asst2] (5 messages)
-        // Insert at index 5-2=3, so: [System, User1, Asst1, Injected, User2, Asst2]
-        assertEquals(6, result.size)
-        assertEquals(MessageRole.USER, result[3].role)
-        assertEquals("At depth 2 content", getMessageText(result[3]))
-        assertEquals(MessageRole.USER, result[4].role)
-        assertEquals("Message 2", getMessageText(result[4]))
+        val systemText = getMessageText(result[0])
+        assertTrue(systemText.startsWith("System prompt"))
+        assertTrue(systemText.endsWith("Top of chat content"))
     }
 
     @Test
-    fun `AT_DEPTH with depth 1 should insert before last message`() {
+    fun `mode injection should always use SYSTEM role`() {
         val injectionId = Uuid.random()
         val injection = createModeInjection(
             id = injectionId,
-            position = InjectionPosition.AT_DEPTH,
-            injectDepth = 1,
-            content = "Before last"
-        )
-
-        val messages = listOf(
-            UIMessage.system("System prompt"),
-            UIMessage.user("Hello"),
-            UIMessage.assistant("Hi!")
-        )
-
-        val result = transformMessages(
-            messages = messages,
-            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
-            modeInjections = listOf(injection),
-            lorebooks = emptyList()
-        )
-
-        assertEquals(4, result.size)
-        assertEquals("Before last", getMessageText(result[2]))
-        assertEquals("Hi!", getMessageText(result[3]))
-    }
-
-    @Test
-    fun `AT_DEPTH with depth larger than message count should insert at beginning`() {
-        val injectionId = Uuid.random()
-        val injection = createModeInjection(
-            id = injectionId,
-            position = InjectionPosition.AT_DEPTH,
-            injectDepth = 100,
-            content = "Large depth content"
+            role = MessageRole.ASSISTANT,
+            content = "Forced system content"
         )
 
         val messages = listOf(
@@ -459,27 +382,144 @@ class PromptInjectionTransformerTest {
             lorebooks = emptyList()
         )
 
+        assertEquals(2, result.size)
+        assertEquals(MessageRole.SYSTEM, result[0].role)
+        assertTrue(getMessageText(result[0]).contains("Forced system content"))
+    }
+    // endregion
+
+    // region Lorebook position tests
+    @Test
+    fun `lorebook entry with TOP_OF_CHAT should insert before first user message`() {
+        val injection = createRegexInjection(
+            position = InjectionPosition.TOP_OF_CHAT,
+            content = "Top of chat content"
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            UIMessage.assistant("Hi!")
+        )
+
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
+
+        assertEquals(4, result.size)
+        assertEquals(MessageRole.SYSTEM, result[0].role)
+        assertEquals("System prompt", getMessageText(result[0]))
+        assertEquals(MessageRole.USER, result[1].role)
+        assertEquals("Top of chat content", getMessageText(result[1]))
+        assertEquals(MessageRole.USER, result[2].role)
+    }
+
+    @Test
+    fun `lorebook entry with BOTTOM_OF_CHAT should insert before last message`() {
+        val injection = createRegexInjection(
+            position = InjectionPosition.BOTTOM_OF_CHAT,
+            content = "Bottom of chat content"
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            UIMessage.assistant("Hi!"),
+            UIMessage.user("How are you?")
+        )
+
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
+
+        assertEquals(5, result.size)
+        assertEquals(MessageRole.USER, result[3].role)
+        assertEquals("Bottom of chat content", getMessageText(result[3]))
+        assertEquals(MessageRole.USER, result[4].role)
+        assertEquals("How are you?", getMessageText(result[4]))
+    }
+
+    @Test
+    fun `lorebook entry with AT_DEPTH should insert at specified depth from end`() {
+        val injection = createRegexInjection(
+            position = InjectionPosition.AT_DEPTH,
+            injectDepth = 2,
+            content = "At depth 2 content"
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Message 1"),
+            UIMessage.assistant("Response 1"),
+            UIMessage.user("Message 2"),
+            UIMessage.assistant("Response 2")
+        )
+
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
+
+        assertEquals(6, result.size)
+        assertEquals(MessageRole.USER, result[3].role)
+        assertEquals("At depth 2 content", getMessageText(result[3]))
+        assertEquals(MessageRole.USER, result[4].role)
+        assertEquals("Message 2", getMessageText(result[4]))
+    }
+
+    @Test
+    fun `lorebook AT_DEPTH with depth 1 should insert before last message`() {
+        val injection = createRegexInjection(
+            position = InjectionPosition.AT_DEPTH,
+            injectDepth = 1,
+            content = "Before last"
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            UIMessage.assistant("Hi!")
+        )
+
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
+
+        assertEquals(4, result.size)
+        assertEquals("Before last", getMessageText(result[2]))
+        assertEquals("Hi!", getMessageText(result[3]))
+    }
+
+    @Test
+    fun `lorebook AT_DEPTH with depth larger than message count should insert at beginning`() {
+        val injection = createRegexInjection(
+            position = InjectionPosition.AT_DEPTH,
+            injectDepth = 100,
+            content = "Large depth content"
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello")
+        )
+
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
+
         assertEquals(3, result.size)
         assertEquals("Large depth content", getMessageText(result[0]))
     }
 
     @Test
-    fun `multiple AT_DEPTH injections with different depths should all apply`() {
-        val id1 = Uuid.random()
-        val id2 = Uuid.random()
-
-        val injections = listOf(
-            createModeInjection(
-                id = id1,
-                position = InjectionPosition.AT_DEPTH,
-                injectDepth = 1,
-                content = "Depth 1"
-            ),
-            createModeInjection(
-                id = id2,
-                position = InjectionPosition.AT_DEPTH,
-                injectDepth = 3,
-                content = "Depth 3"
+    fun `multiple lorebook AT_DEPTH injections with different depths should all apply`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    position = InjectionPosition.AT_DEPTH,
+                    injectDepth = 1,
+                    content = "Depth 1",
+                    keywords = emptyList(),
+                    constantActive = true,
+                ),
+                createRegexInjection(
+                    position = InjectionPosition.AT_DEPTH,
+                    injectDepth = 3,
+                    content = "Depth 3",
+                    keywords = emptyList(),
+                    constantActive = true,
+                )
             )
         )
 
@@ -493,36 +533,38 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(modeInjectionIds = setOf(id1, id2)),
-            modeInjections = injections,
-            lorebooks = emptyList()
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook)
         )
 
-        // Both should be inserted
         assertEquals(7, result.size)
         assertTrue(result.any { getMessageText(it).contains("Depth 1") })
         assertTrue(result.any { getMessageText(it).contains("Depth 3") })
     }
 
     @Test
-    fun `multiple AT_DEPTH injections with same depth should be merged`() {
-        val id1 = Uuid.random()
-        val id2 = Uuid.random()
-
-        val injections = listOf(
-            createModeInjection(
-                id = id1,
-                position = InjectionPosition.AT_DEPTH,
-                injectDepth = 2,
-                priority = 10,
-                content = "Higher priority"
-            ),
-            createModeInjection(
-                id = id2,
-                position = InjectionPosition.AT_DEPTH,
-                injectDepth = 2,
-                priority = 5,
-                content = "Lower priority"
+    fun `multiple lorebook AT_DEPTH injections with same depth should be merged`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    position = InjectionPosition.AT_DEPTH,
+                    injectDepth = 2,
+                    priority = 10,
+                    content = "Higher priority",
+                    keywords = emptyList(),
+                    constantActive = true,
+                ),
+                createRegexInjection(
+                    position = InjectionPosition.AT_DEPTH,
+                    injectDepth = 2,
+                    priority = 5,
+                    content = "Lower priority",
+                    keywords = emptyList(),
+                    constantActive = true,
+                )
             )
         )
 
@@ -534,17 +576,15 @@ class PromptInjectionTransformerTest {
 
         val result = transformMessages(
             messages = messages,
-            assistant = createAssistant(modeInjectionIds = setOf(id1, id2)),
-            modeInjections = injections,
-            lorebooks = emptyList()
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook)
         )
 
-        // Same depth injections should be merged into one message
         assertEquals(4, result.size)
         val injectedText = getMessageText(result[1])
         assertTrue(injectedText.contains("Higher priority"))
         assertTrue(injectedText.contains("Lower priority"))
-        // Higher priority should come first
         assertTrue(injectedText.indexOf("Higher priority") < injectedText.indexOf("Lower priority"))
     }
     // endregion
@@ -1215,12 +1255,13 @@ class PromptInjectionTransformerTest {
             lorebooks = emptyList()
         )
 
-        assertEquals(3, result.size)
+        assertEquals(2, result.size)
         val systemText = getMessageText(result[0])
         assertTrue(systemText.startsWith("Before"))
         assertTrue(systemText.contains("System"))
-        assertTrue(systemText.endsWith("After"))
-        assertEquals("Top", getMessageText(result[1]))
+        assertTrue(systemText.contains("After"))
+        assertTrue(systemText.contains("Top"))
+        assertTrue(systemText.indexOf("After") < systemText.indexOf("Top"))
     }
 
     @Test
@@ -1403,10 +1444,8 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `BOTTOM_OF_CHAT should not inject between USER and ASSISTANT with tools`() {
-        val injectionId = Uuid.random()
-        val injection = createModeInjection(
-            id = injectionId,
+    fun `BOTTOM_OF_CHAT lorebook entry should not inject between USER and ASSISTANT with tools`() {
+        val injection = createRegexInjection(
             position = InjectionPosition.BOTTOM_OF_CHAT,
             content = "Bottom injection"
         )
@@ -1418,12 +1457,7 @@ class PromptInjectionTransformerTest {
             createAssistantWithUnexecutedTool("call_1", "tool")
         )
 
-        val result = transformMessages(
-            messages = messages,
-            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
-            modeInjections = listOf(injection),
-            lorebooks = emptyList()
-        )
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
 
         assertEquals(4, result.size)
 
@@ -1437,10 +1471,8 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `BOTTOM_OF_CHAT should not inject inside legacy tool result chain`() {
-        val injectionId = Uuid.random()
-        val injection = createModeInjection(
-            id = injectionId,
+    fun `BOTTOM_OF_CHAT lorebook entry should not inject inside legacy tool result chain`() {
+        val injection = createRegexInjection(
             position = InjectionPosition.BOTTOM_OF_CHAT,
             content = "Bottom injection"
         )
@@ -1452,12 +1484,7 @@ class PromptInjectionTransformerTest {
             createLegacyToolMessage()
         )
 
-        val result = transformMessages(
-            messages = messages,
-            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
-            modeInjections = listOf(injection),
-            lorebooks = emptyList()
-        )
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
 
         assertEquals(5, result.size)
 
@@ -1472,10 +1499,8 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `AT_DEPTH should not inject between USER and ASSISTANT with tools`() {
-        val injectionId = Uuid.random()
-        val injection = createModeInjection(
-            id = injectionId,
+    fun `AT_DEPTH lorebook entry should not inject between USER and ASSISTANT with tools`() {
+        val injection = createRegexInjection(
             position = InjectionPosition.AT_DEPTH,
             injectDepth = 1,
             content = "Depth injection"
@@ -1488,12 +1513,7 @@ class PromptInjectionTransformerTest {
             createAssistantWithUnexecutedTool("call_1", "tool")
         )
 
-        val result = transformMessages(
-            messages = messages,
-            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
-            modeInjections = listOf(injection),
-            lorebooks = emptyList()
-        )
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
 
         assertEquals(4, result.size)
 
@@ -1506,10 +1526,8 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `injection after ASSISTANT with tools should work normally`() {
-        val injectionId = Uuid.random()
-        val injection = createModeInjection(
-            id = injectionId,
+    fun `BOTTOM_OF_CHAT lorebook entry after ASSISTANT with tools should work normally`() {
+        val injection = createRegexInjection(
             position = InjectionPosition.BOTTOM_OF_CHAT,
             content = "Bottom injection"
         )
@@ -1523,12 +1541,7 @@ class PromptInjectionTransformerTest {
             UIMessage.user("Thanks!")
         )
 
-        val result = transformMessages(
-            messages = messages,
-            assistant = createAssistant(modeInjectionIds = setOf(injectionId)),
-            modeInjections = listOf(injection),
-            lorebooks = emptyList()
-        )
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
 
         assertEquals(6, result.size)
 

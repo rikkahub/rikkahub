@@ -487,10 +487,10 @@ sealed class PromptInjection {
     abstract val position: InjectionPosition
     abstract val content: String
     abstract val injectDepth: Int  // 当 position 为 AT_DEPTH 时使用，表示从最新消息往前数的位置
-    abstract val role: MessageRole  // 注入角色：USER 或 ASSISTANT
+    abstract val role: MessageRole  // 注入角色：SYSTEM / USER / ASSISTANT
 
     /**
-     * 模式注入 - 基于开关状态触发
+     * 模式注入 - 基于开关状态触发，作为系统提示词补充
      */
     @Serializable
     @SerialName("mode")
@@ -502,7 +502,7 @@ sealed class PromptInjection {
         override val position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
         override val content: String = "",
         override val injectDepth: Int = 4,
-        override val role: MessageRole = MessageRole.USER,
+        override val role: MessageRole = MessageRole.SYSTEM,
     ) : PromptInjection()
 
     /**
@@ -538,6 +538,21 @@ sealed class PromptInjection {
         val stMetadata: Map<String, String> = emptyMap(),
     ) : PromptInjection()
 }
+
+fun InjectionPosition.normalizeForModeInjection(): InjectionPosition = when (this) {
+    InjectionPosition.BEFORE_SYSTEM_PROMPT -> InjectionPosition.BEFORE_SYSTEM_PROMPT
+    InjectionPosition.AFTER_SYSTEM_PROMPT,
+    InjectionPosition.TOP_OF_CHAT,
+    InjectionPosition.BOTTOM_OF_CHAT,
+    InjectionPosition.AT_DEPTH,
+    -> InjectionPosition.AFTER_SYSTEM_PROMPT
+}
+
+fun PromptInjection.ModeInjection.normalizedForSystemPromptSupplement(): PromptInjection.ModeInjection = copy(
+    position = position.normalizeForModeInjection(),
+    injectDepth = 4,
+    role = MessageRole.SYSTEM,
+)
 
 /**
  * Lorebook - 组织管理多个 RegexInjection
