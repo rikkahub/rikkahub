@@ -84,6 +84,7 @@ import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImportKind
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
 import me.rerere.rikkahub.ui.pages.assistant.detail.applyImportedAssistantForCreate
 import org.koin.androidx.compose.koinViewModel
@@ -468,6 +469,7 @@ private fun AssistantCreationSheet(
                     }
 
                     AssistantImporter(
+                        allowedKinds = setOf(AssistantImportKind.CHARACTER_CARD),
                         onImport = { payload, includeRegexes ->
                             val application = applyImportedAssistantForCreate(
                                 currentAssistant = assistant,

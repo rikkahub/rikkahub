@@ -80,17 +80,17 @@ class SillyTavernImportTest {
         )
 
         assertEquals(AssistantImportKind.PRESET, payload.kind)
-        assertEquals(listOf("main", "chatHistory"), payload.assistant.stPromptTemplate?.orderedPromptIds)
-        assertEquals(true, payload.assistant.stPromptTemplate?.findPromptOrder("main")?.enabled)
+        assertEquals(listOf("main", "chatHistory"), payload.presetTemplate?.orderedPromptIds)
+        assertEquals(true, payload.presetTemplate?.findPromptOrder("main")?.enabled)
         assertEquals(2, payload.regexes.size)
-        assertFalse(payload.assistant.stPromptTemplate?.findPrompt("main")?.content?.contains("<regex>") == true)
-        assertEquals(listOf("normal", "continue"), payload.assistant.stPromptTemplate?.findPrompt("main")?.injectionTriggers)
-        assertEquals("Prefill", payload.assistant.stPromptTemplate?.assistantPrefill)
-        assertEquals(true, payload.assistant.stPromptTemplate?.continuePrefill)
-        assertEquals("\n", payload.assistant.stPromptTemplate?.continuePostfix)
-        assertEquals("[Start]", payload.assistant.stPromptTemplate?.newChatPrompt)
-        assertEquals("[Examples]", payload.assistant.stPromptTemplate?.newExampleChatPrompt)
-        assertEquals(true, payload.assistant.stPromptTemplate?.squashSystemMessages)
+        assertFalse(payload.presetTemplate?.findPrompt("main")?.content?.contains("<regex>") == true)
+        assertEquals(listOf("normal", "continue"), payload.presetTemplate?.findPrompt("main")?.injectionTriggers)
+        assertEquals("Prefill", payload.presetTemplate?.assistantPrefill)
+        assertEquals(true, payload.presetTemplate?.continuePrefill)
+        assertEquals("\n", payload.presetTemplate?.continuePostfix)
+        assertEquals("[Start]", payload.presetTemplate?.newChatPrompt)
+        assertEquals("[Examples]", payload.presetTemplate?.newExampleChatPrompt)
+        assertEquals(true, payload.presetTemplate?.squashSystemMessages)
     }
 
     @Test
@@ -147,7 +147,7 @@ class SillyTavernImportTest {
         assertEquals(MessageRole.ASSISTANT, payload.assistant.stCharacterData?.depthPrompt?.role)
         assertEquals(1, payload.lorebooks.size)
         val entry = payload.lorebooks.single().entries.single()
-        assertNotNull(payload.assistant.stPromptTemplate)
+        assertNotNull(payload.presetTemplate)
         assertEquals(InjectionPosition.AT_DEPTH, entry.position)
         assertEquals(MessageRole.ASSISTANT, entry.role)
         assertEquals(true, entry.matchPersonaDescription)
@@ -236,55 +236,6 @@ class SillyTavernImportTest {
     }
 
     @Test
-    fun `preset import should route regexes to global collection instead of assistant`() {
-        val payload = parseAssistantImportFromJson(
-            jsonString = """
-                {
-                  "name": "Preset Regex Routing",
-                  "prompts": [
-                    { "identifier": "main", "role": "system", "content": "Main" }
-                  ],
-                  "prompt_order": [
-                    {
-                      "character_id": 100000,
-                      "order": [
-                        { "identifier": "main", "enabled": true }
-                      ]
-                    }
-                  ],
-                  "extensions": {
-                    "regex_scripts": [
-                      {
-                        "scriptName": "Preset Regex",
-                        "findRegex": "foo",
-                        "replaceString": "bar",
-                        "placement": [2]
-                      }
-                    ]
-                  }
-                }
-            """.trimIndent(),
-            sourceName = "preset-routing",
-        )
-
-        val currentAssistant = Assistant(
-            stPromptTemplate = defaultSillyTavernPromptTemplate(),
-        )
-        val currentGlobalRegexes = listOf(payload.regexes.first().copy(name = "Existing Global"))
-        val application = applyImportedAssistantToExisting(
-            currentAssistant = currentAssistant,
-            payload = payload,
-            existingLorebooks = emptyList(),
-            existingGlobalRegexes = currentGlobalRegexes,
-            includeRegexes = true,
-        )
-
-        assertEquals(0, application.assistant.regexes.size)
-        assertEquals(2, application.globalRegexes.size)
-        assertNull(application.assistant.stPromptTemplate)
-    }
-
-    @Test
     fun `character card import should keep regexes on assistant level`() {
         val payload = parseAssistantImportFromJson(
             jsonString = """
@@ -308,9 +259,7 @@ class SillyTavernImportTest {
             sourceName = "character-routing",
         )
 
-        val currentAssistant = Assistant(
-            stPromptTemplate = defaultSillyTavernPromptTemplate(),
-        )
+        val currentAssistant = Assistant()
         val application = applyImportedAssistantToExisting(
             currentAssistant = currentAssistant,
             payload = payload,
@@ -321,7 +270,6 @@ class SillyTavernImportTest {
 
         assertEquals(1, application.assistant.regexes.size)
         assertEquals(0, application.globalRegexes.size)
-        assertNull(application.assistant.stPromptTemplate)
     }
 
     @Test

@@ -29,6 +29,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun AssistantImporter(
     modifier: Modifier = Modifier,
+    allowedKinds: Set<AssistantImportKind> = setOf(
+        AssistantImportKind.PRESET,
+        AssistantImportKind.CHARACTER_CARD,
+    ),
     onImport: (AssistantImportPayload, Boolean) -> Unit,
 ) {
     Row(
@@ -36,12 +40,16 @@ fun AssistantImporter(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier,
     ) {
-        SillyTavernImporter(onImport = onImport)
+        SillyTavernImporter(
+            allowedKinds = allowedKinds,
+            onImport = onImport,
+        )
     }
 }
 
 @Composable
 private fun SillyTavernImporter(
+    allowedKinds: Set<AssistantImportKind>,
     onImport: (AssistantImportPayload, Boolean) -> Unit,
 ) {
     val context = LocalContext.current
@@ -64,7 +72,9 @@ private fun SillyTavernImporter(
                     filesManager = filesManager,
                 )
             }.onSuccess { payload ->
-                if (payload.regexes.isNotEmpty()) {
+                if (payload.kind !in allowedKinds) {
+                    toaster.show("这里只允许导入角色卡")
+                } else if (payload.regexes.isNotEmpty()) {
                     pendingImport = payload
                 } else {
                     onImport(payload, false)
@@ -90,7 +100,9 @@ private fun SillyTavernImporter(
                     filesManager = filesManager,
                 )
             }.onSuccess { payload ->
-                if (payload.regexes.isNotEmpty()) {
+                if (payload.kind !in allowedKinds) {
+                    toaster.show("这里只允许导入角色卡")
+                } else if (payload.regexes.isNotEmpty()) {
                     pendingImport = payload
                 } else {
                     onImport(payload, false)
@@ -119,7 +131,15 @@ private fun SillyTavernImporter(
             enabled = !isLoading,
         ) {
             AutoAIIcon(name = "tavern", modifier = Modifier.padding(end = 8.dp))
-            Text(if (isLoading) "Importing..." else "Import Tavern JSON / Preset")
+            Text(
+                if (isLoading) {
+                    "Importing..."
+                } else if (AssistantImportKind.PRESET in allowedKinds) {
+                    "Import Tavern JSON / Preset"
+                } else {
+                    "Import Tavern Character JSON"
+                }
+            )
         }
     }
 
@@ -131,7 +151,12 @@ private fun SillyTavernImporter(
             },
             text = {
                 Text(
-                    "检测到 ${payload.regexes.size} 条配套正则。预设 regex 会导入到全局，角色卡 regex 会导入到当前助手，是否一并导入？"
+                    when (payload.kind) {
+                        AssistantImportKind.PRESET ->
+                            "检测到 ${payload.regexes.size} 条配套正则。预设 regex 会导入到全局，是否一并导入？"
+                        AssistantImportKind.CHARACTER_CARD ->
+                            "检测到 ${payload.regexes.size} 条配套正则。角色卡 regex 会导入到当前助手，是否一并导入？"
+                    }
                 )
             },
             confirmButton = {

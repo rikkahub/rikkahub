@@ -42,26 +42,26 @@ class SillyTavernPromptTransformerTest {
                 ),
             )
         )
-        val assistant = Assistant(
-            stPromptTemplate = SillyTavernPromptTemplate(
-                wiFormat = "<wi>{0}</wi>",
-                prompts = listOf(
-                    SillyTavernPromptItem(identifier = "main", content = "Main Prompt"),
-                    SillyTavernPromptItem(identifier = "worldInfoBefore", marker = true),
-                    SillyTavernPromptItem(identifier = "charDescription", marker = true),
-                    SillyTavernPromptItem(identifier = "worldInfoAfter", marker = true),
-                    SillyTavernPromptItem(identifier = "chatHistory", marker = true),
-                    SillyTavernPromptItem(identifier = "jailbreak", content = "Preset Jailbreak"),
-                ),
-                orderedPromptIds = listOf(
-                    "main",
-                    "worldInfoBefore",
-                    "charDescription",
-                    "worldInfoAfter",
-                    "chatHistory",
-                    "jailbreak",
-                ),
+        val template = SillyTavernPromptTemplate(
+            wiFormat = "<wi>{0}</wi>",
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "main", content = "Main Prompt"),
+                SillyTavernPromptItem(identifier = "worldInfoBefore", marker = true),
+                SillyTavernPromptItem(identifier = "charDescription", marker = true),
+                SillyTavernPromptItem(identifier = "worldInfoAfter", marker = true),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+                SillyTavernPromptItem(identifier = "jailbreak", content = "Preset Jailbreak"),
             ),
+            orderedPromptIds = listOf(
+                "main",
+                "worldInfoBefore",
+                "charDescription",
+                "worldInfoAfter",
+                "chatHistory",
+                "jailbreak",
+            ),
+        )
+        val assistant = Assistant(
             stCharacterData = SillyTavernCharacterData(
                 description = "Character Description",
                 postHistoryInstructions = "Card Jailbreak",
@@ -77,7 +77,7 @@ class SillyTavernPromptTransformerTest {
             ),
             assistant = assistant,
             lorebooks = listOf(lorebook),
-            template = assistant.stPromptTemplate!!,
+            template = template,
         )
 
         assertEquals(
@@ -121,7 +121,7 @@ class SillyTavernPromptTransformerTest {
                 UIMessage.assistant("A1"),
                 UIMessage.user("U2"),
             ),
-            assistant = Assistant(stPromptTemplate = template),
+            assistant = Assistant(),
             lorebooks = emptyList(),
             template = template,
         )
@@ -159,7 +159,6 @@ class SillyTavernPromptTransformerTest {
                 UIMessage.user("U2"),
             ),
             assistant = Assistant(
-                stPromptTemplate = template,
                 stCharacterData = SillyTavernCharacterData(
                     depthPrompt = me.rerere.rikkahub.data.model.StDepthPrompt(
                         prompt = "Depth Prompt",
@@ -193,7 +192,7 @@ class SillyTavernPromptTransformerTest {
                 UIMessage.user("U1"),
                 UIMessage.assistant("A1"),
             ),
-            assistant = Assistant(stPromptTemplate = template),
+            assistant = Assistant(),
             lorebooks = emptyList(),
             template = template,
         )
@@ -226,7 +225,6 @@ class SillyTavernPromptTransformerTest {
                 UIMessage.user("Hello"),
             ),
             assistant = Assistant(
-                stPromptTemplate = template,
                 stCharacterData = SillyTavernCharacterData(description = "Character Description"),
             ),
             lorebooks = emptyList(),
@@ -261,7 +259,6 @@ class SillyTavernPromptTransformerTest {
             ),
             assistant = Assistant(
                 systemPrompt = "Assistant System",
-                stPromptTemplate = template,
             ),
             lorebooks = emptyList(),
             template = template,
@@ -303,7 +300,6 @@ class SillyTavernPromptTransformerTest {
                 UIMessage.user("Latest turn without match"),
             ),
             assistant = Assistant(
-                stPromptTemplate = template,
                 lorebookIds = setOf(lorebook.id),
             ),
             lorebooks = listOf(lorebook),
@@ -353,7 +349,6 @@ class SillyTavernPromptTransformerTest {
         val result = transformSillyTavernPrompt(
             messages = listOf(UIMessage.user("alpha trigger")),
             assistant = Assistant(
-                stPromptTemplate = template,
                 lorebookIds = setOf(lorebook.id),
             ),
             lorebooks = listOf(lorebook),
@@ -378,7 +373,6 @@ class SillyTavernPromptTransformerTest {
             messages = listOf(UIMessage.user("Hello")),
             assistant = Assistant(
                 userPersona = "Legacy assistant persona",
-                stPromptTemplate = template,
             ),
             lorebooks = emptyList(),
             template = template,
@@ -417,7 +411,6 @@ class SillyTavernPromptTransformerTest {
             messages = listOf(UIMessage.user("Hello")),
             assistant = Assistant(
                 userPersona = "Legacy assistant persona",
-                stPromptTemplate = template,
                 lorebookIds = setOf(lorebook.id),
             ),
             lorebooks = listOf(lorebook),
@@ -468,7 +461,6 @@ class SillyTavernPromptTransformerTest {
         val result = transformSillyTavernPrompt(
             messages = listOf(UIMessage.user("Hello")),
             assistant = Assistant(
-                stPromptTemplate = template,
                 lorebookIds = setOf(lorebook.id),
             ),
             settings = settings,
@@ -508,13 +500,13 @@ class SillyTavernPromptTransformerTest {
 
         val normalResult = transformSillyTavernPrompt(
             messages = listOf(UIMessage.user("Hello")),
-            assistant = Assistant(stPromptTemplate = template),
+            assistant = Assistant(),
             lorebooks = emptyList(),
             template = template,
         )
         val continueResult = transformSillyTavernPrompt(
             messages = listOf(UIMessage.user("Hello")),
-            assistant = Assistant(stPromptTemplate = template),
+            assistant = Assistant(),
             lorebooks = emptyList(),
             template = template,
             generationType = "continue",
@@ -546,7 +538,7 @@ class SillyTavernPromptTransformerTest {
                 UIMessage.user("U1"),
                 UIMessage.assistant("A1"),
             ),
-            assistant = Assistant(stPromptTemplate = template),
+            assistant = Assistant(),
             lorebooks = emptyList(),
             template = template,
             generationType = "continue",
@@ -579,7 +571,7 @@ class SillyTavernPromptTransformerTest {
                 UIMessage.user("U1"),
                 UIMessage.assistant("A1"),
             ),
-            assistant = Assistant(stPromptTemplate = template),
+            assistant = Assistant(),
             lorebooks = emptyList(),
             template = template,
             generationType = "continue",
@@ -611,7 +603,7 @@ class SillyTavernPromptTransformerTest {
                 UIMessage.user("U1"),
                 UIMessage.assistant("A1"),
             ),
-            assistant = Assistant(stPromptTemplate = template),
+            assistant = Assistant(),
             lorebooks = emptyList(),
             template = template,
             generationType = "impersonate",
@@ -642,7 +634,7 @@ class SillyTavernPromptTransformerTest {
                 UIMessage.user("Hello"),
                 UIMessage.assistant("Hi"),
             ),
-            assistant = Assistant(stPromptTemplate = template),
+            assistant = Assistant(),
             lorebooks = emptyList(),
             template = template,
         )

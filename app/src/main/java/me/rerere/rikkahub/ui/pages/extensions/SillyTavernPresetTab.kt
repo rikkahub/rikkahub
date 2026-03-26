@@ -82,7 +82,7 @@ fun SillyTavernPresetTab(
                 if (payload.kind != AssistantImportKind.PRESET) {
                     toaster.show(importOnlyJson)
                 } else {
-                    val template = payload.assistant.stPromptTemplate ?: defaultSillyTavernPromptTemplate()
+                    val template = payload.presetTemplate ?: defaultSillyTavernPromptTemplate()
                     val regexes = mergeImportedRegexes(
                         current = settings.regexes,
                         imported = payload.regexes,

@@ -365,7 +365,7 @@ class SettingsStore(
                 assistants = assistants,
                 ttsProviders = ttsProviders,
                 scheduledTasks = scheduledTasks,
-            ).normalizeLegacyStPresetState()
+            )
             assistants = normalizedSettings.assistants.toMutableList()
             var userPersonaProfiles = it.userPersonaProfiles
             var selectedUserPersonaProfileId = it.selectedUserPersonaProfileId
@@ -502,9 +502,9 @@ class SettingsStore(
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
-        val normalizedSettings = settings
-            .normalizeLegacyStPresetState()
-            .copy(lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized())
+        val normalizedSettings = settings.copy(
+            lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized()
+        )
         val previousSettings = settingsFlow.value
         if (!previousSettings.init) {
             val removedAvatarUris = previousSettings.referencedLocalUserAvatarUris() - normalizedSettings.referencedLocalUserAvatarUris()
@@ -756,40 +756,6 @@ private fun Settings.referencedLocalUserAvatarUris(): Set<String> = buildSet {
     userPersonaProfiles.forEach { profile ->
         addAvatar(profile.avatar)
     }
-}
-
-internal fun Settings.normalizeLegacyStPresetState(): Settings {
-    val migratedPresetTemplate = stPresetTemplate
-        ?: assistants.find { assistant -> assistant.id == assistantId }?.stPromptTemplate
-        ?: assistants.firstOrNull { assistant -> assistant.stPromptTemplate != null }?.stPromptTemplate
-    val hasLegacyAssistantTemplates = assistants.any { assistant -> assistant.stPromptTemplate != null }
-    val normalizedAssistants = if (hasLegacyAssistantTemplates) {
-        assistants.map { assistant ->
-            if (assistant.stPromptTemplate != null) {
-                assistant.copy(stPromptTemplate = null)
-            } else {
-                assistant
-            }
-        }
-    } else {
-        assistants
-    }
-    val nextPresetEnabled = when {
-        stPresetTemplate == null && migratedPresetTemplate != null -> true
-        else -> stPresetEnabled
-    }
-    if (
-        !hasLegacyAssistantTemplates &&
-        migratedPresetTemplate == stPresetTemplate &&
-        nextPresetEnabled == stPresetEnabled
-    ) {
-        return this
-    }
-    return copy(
-        assistants = normalizedAssistants,
-        stPresetTemplate = migratedPresetTemplate,
-        stPresetEnabled = nextPresetEnabled,
-    )
 }
 
 @Serializable

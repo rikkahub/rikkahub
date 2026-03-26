@@ -59,6 +59,7 @@ data class AssistantImportPayload(
     val kind: AssistantImportKind,
     val sourceName: String,
     val assistant: Assistant,
+    val presetTemplate: SillyTavernPromptTemplate? = null,
     val lorebooks: List<Lorebook> = emptyList(),
     val regexes: List<AssistantRegex> = emptyList(),
 )
@@ -139,48 +140,26 @@ internal fun applyImportedAssistantForCreate(
     existingGlobalRegexes: List<AssistantRegex> = emptyList(),
     includeRegexes: Boolean,
 ): AssistantImportApplication {
+    require(payload.kind == AssistantImportKind.CHARACTER_CARD) {
+        "Preset imports must be handled from the global ST preset page"
+    }
     val lorebooks = mergeLorebooks(existingLorebooks, payload.lorebooks)
-    val globalRegexes = when (payload.kind) {
-        AssistantImportKind.PRESET -> mergeImportedRegexes(
-            current = existingGlobalRegexes,
+    val assistant = currentAssistant.copy(
+        name = payload.assistant.name.ifBlank { currentAssistant.name },
+        avatar = (payload.assistant.avatar as? Avatar.Image) ?: currentAssistant.avatar,
+        presetMessages = payload.assistant.presetMessages.ifEmpty { currentAssistant.presetMessages },
+        stCharacterData = payload.assistant.stCharacterData ?: currentAssistant.stCharacterData,
+        lorebookIds = currentAssistant.lorebookIds + payload.lorebooks.map { it.id }.toSet(),
+        regexes = mergeImportedRegexes(
+            current = currentAssistant.regexes,
             imported = payload.regexes,
             includeImported = includeRegexes,
-        )
-        AssistantImportKind.CHARACTER_CARD -> existingGlobalRegexes
-    }
-    val assistant = when (payload.kind) {
-        AssistantImportKind.PRESET -> currentAssistant.copy(
-            name = currentAssistant.name.ifBlank { payload.assistant.name },
-            avatar = if (currentAssistant.avatar == Avatar.Dummy) payload.assistant.avatar else currentAssistant.avatar,
-            temperature = payload.assistant.temperature ?: currentAssistant.temperature,
-            topP = payload.assistant.topP ?: currentAssistant.topP,
-            maxTokens = payload.assistant.maxTokens ?: currentAssistant.maxTokens,
-            openAIReasoningEffort = payload.assistant.openAIReasoningEffort.ifBlank {
-                currentAssistant.openAIReasoningEffort
-            },
-            stPromptTemplate = null,
-            stCharacterData = currentAssistant.stCharacterData,
-            lorebookIds = currentAssistant.lorebookIds + payload.lorebooks.map { it.id }.toSet(),
-        )
-
-        AssistantImportKind.CHARACTER_CARD -> currentAssistant.copy(
-            name = payload.assistant.name.ifBlank { currentAssistant.name },
-            avatar = (payload.assistant.avatar as? Avatar.Image) ?: currentAssistant.avatar,
-            presetMessages = payload.assistant.presetMessages.ifEmpty { currentAssistant.presetMessages },
-            stPromptTemplate = null,
-            stCharacterData = payload.assistant.stCharacterData ?: currentAssistant.stCharacterData,
-            lorebookIds = currentAssistant.lorebookIds + payload.lorebooks.map { it.id }.toSet(),
-            regexes = mergeImportedRegexes(
-                current = currentAssistant.regexes,
-                imported = payload.regexes,
-                includeImported = includeRegexes,
-            ),
-        )
-    }
+        ),
+    )
     return AssistantImportApplication(
         assistant = assistant,
         lorebooks = lorebooks,
-        globalRegexes = globalRegexes,
+        globalRegexes = existingGlobalRegexes,
     )
 }
 
@@ -191,44 +170,26 @@ internal fun applyImportedAssistantToExisting(
     existingGlobalRegexes: List<AssistantRegex> = emptyList(),
     includeRegexes: Boolean,
 ): AssistantImportApplication {
+    require(payload.kind == AssistantImportKind.CHARACTER_CARD) {
+        "Preset imports must be handled from the global ST preset page"
+    }
     val mergedLorebooks = mergeLorebooks(existingLorebooks, payload.lorebooks)
-    val globalRegexes = when (payload.kind) {
-        AssistantImportKind.PRESET -> mergeImportedRegexes(
-            current = existingGlobalRegexes,
+    val nextAssistant = currentAssistant.copy(
+        name = payload.assistant.name.ifBlank { currentAssistant.name },
+        avatar = (payload.assistant.avatar as? Avatar.Image) ?: currentAssistant.avatar,
+        presetMessages = payload.assistant.presetMessages.ifEmpty { currentAssistant.presetMessages },
+        stCharacterData = payload.assistant.stCharacterData ?: currentAssistant.stCharacterData,
+        lorebookIds = currentAssistant.lorebookIds + payload.lorebooks.map { it.id }.toSet(),
+        regexes = mergeImportedRegexes(
+            current = currentAssistant.regexes,
             imported = payload.regexes,
             includeImported = includeRegexes,
-        )
-        AssistantImportKind.CHARACTER_CARD -> existingGlobalRegexes
-    }
-    val nextAssistant = when (payload.kind) {
-        AssistantImportKind.PRESET -> currentAssistant.copy(
-            temperature = payload.assistant.temperature ?: currentAssistant.temperature,
-            topP = payload.assistant.topP ?: currentAssistant.topP,
-            maxTokens = payload.assistant.maxTokens ?: currentAssistant.maxTokens,
-            openAIReasoningEffort = payload.assistant.openAIReasoningEffort.ifBlank {
-                currentAssistant.openAIReasoningEffort
-            },
-            stPromptTemplate = null,
-        )
-
-        AssistantImportKind.CHARACTER_CARD -> currentAssistant.copy(
-            name = payload.assistant.name.ifBlank { currentAssistant.name },
-            avatar = (payload.assistant.avatar as? Avatar.Image) ?: currentAssistant.avatar,
-            presetMessages = payload.assistant.presetMessages.ifEmpty { currentAssistant.presetMessages },
-            stPromptTemplate = null,
-            stCharacterData = payload.assistant.stCharacterData ?: currentAssistant.stCharacterData,
-            lorebookIds = currentAssistant.lorebookIds + payload.lorebooks.map { it.id }.toSet(),
-            regexes = mergeImportedRegexes(
-                current = currentAssistant.regexes,
-                imported = payload.regexes,
-                includeImported = includeRegexes,
-            ),
-        )
-    }
+        ),
+    )
     return AssistantImportApplication(
         assistant = nextAssistant,
         lorebooks = mergedLorebooks,
-        globalRegexes = globalRegexes,
+        globalRegexes = existingGlobalRegexes,
     )
 }
 
@@ -355,8 +316,8 @@ private fun parsePresetImport(
             topP = preset.topP?.toFloat(),
             maxTokens = preset.openAIMaxTokens,
             openAIReasoningEffort = preset.reasoningEffort.orEmpty(),
-            stPromptTemplate = template,
         ),
+        presetTemplate = template,
         regexes = regexes,
     )
 }
@@ -415,10 +376,10 @@ private fun parseCharacterCardImport(
             name = name,
             avatar = avatarUri?.let { Avatar.Image(it) } ?: Avatar.Dummy,
             presetMessages = firstMessage.takeIf { it.isNotBlank() }?.let { listOf(UIMessage.assistant(it)) } ?: emptyList(),
-            stPromptTemplate = defaultSillyTavernPromptTemplate(),
             stCharacterData = characterData,
             lorebookIds = lorebooks.map { it.id }.toSet(),
         ),
+        presetTemplate = defaultSillyTavernPromptTemplate(),
         lorebooks = lorebooks,
         regexes = regexes,
     )

@@ -52,7 +52,6 @@ data class Assistant(
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val openAIReasoningEffort: String = "",
-    val stPromptTemplate: SillyTavernPromptTemplate? = null,
     val stCharacterData: SillyTavernCharacterData? = null,
 )
 

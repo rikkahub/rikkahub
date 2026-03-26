@@ -196,15 +196,16 @@ private fun AssistantPromptContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "SillyTavern 导入",
+                    text = "SillyTavern 角色卡导入",
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "可导入预设 JSON、角色卡 PNG/JSON，以及角色卡内嵌世界书。预设会写入全局 ST 预设，角色卡与配套 lorebook/regex 仍按当前助手合并。",
+                    text = "可导入角色卡 PNG/JSON，以及角色卡内嵌世界书。角色卡配套 lorebook/regex 会合并到当前助手；若全局还没有 ST 预设，则自动补一份默认模板。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 AssistantImporter(
+                    allowedKinds = setOf(AssistantImportKind.CHARACTER_CARD),
                     onImport = { payload, includeRegexes ->
                         val application = applyImportedAssistantToExisting(
                             currentAssistant = assistant,
@@ -217,12 +218,8 @@ private fun AssistantPromptContent(
                             latestSettings.lorebooks.none { it.id == imported.id }
                         }
                         val nextAssistant = application.assistant
-                        val shouldSeedGlobalPreset = when (payload.kind) {
-                            AssistantImportKind.PRESET -> true
-                            AssistantImportKind.CHARACTER_CARD -> latestSettings.stPresetTemplate == null
-                        }
-                        val nextGlobalPreset = if (shouldSeedGlobalPreset) {
-                            payload.assistant.stPromptTemplate ?: latestSettings.stPresetTemplate
+                        val nextGlobalPreset = if (latestSettings.stPresetTemplate == null) {
+                            payload.presetTemplate
                         } else {
                             latestSettings.stPresetTemplate
                         }
@@ -236,10 +233,10 @@ private fun AssistantPromptContent(
                                         existing
                                     }
                                 },
-                                stPresetEnabled = when {
-                                    payload.kind == AssistantImportKind.PRESET && nextGlobalPreset != null -> true
-                                    shouldSeedGlobalPreset && nextGlobalPreset != null -> true
-                                    else -> latestSettings.stPresetEnabled
+                                stPresetEnabled = if (latestSettings.stPresetTemplate == null && nextGlobalPreset != null) {
+                                    true
+                                } else {
+                                    latestSettings.stPresetEnabled
                                 },
                                 regexes = application.globalRegexes,
                                 stPresetTemplate = nextGlobalPreset,
