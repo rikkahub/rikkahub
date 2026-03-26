@@ -413,6 +413,28 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
+    fun `AUTHOR_NOTE_TOP lorebook entry should fallback to top of chat in generic mode`() {
+        val injection = createRegexInjection(
+            position = InjectionPosition.AUTHOR_NOTE_TOP,
+            content = "Author note top content",
+            role = MessageRole.SYSTEM,
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            UIMessage.assistant("Hi!")
+        )
+
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
+
+        assertEquals(4, result.size)
+        assertEquals("Author note top content", getMessageText(result[1]))
+        assertEquals(MessageRole.SYSTEM, result[1].role)
+        assertEquals("Hello", getMessageText(result[2]))
+    }
+
+    @Test
     fun `lorebook entry with BOTTOM_OF_CHAT should insert before last message`() {
         val injection = createRegexInjection(
             position = InjectionPosition.BOTTOM_OF_CHAT,
@@ -432,6 +454,29 @@ class PromptInjectionTransformerTest {
         assertEquals(MessageRole.USER, result[3].role)
         assertEquals("Bottom of chat content", getMessageText(result[3]))
         assertEquals(MessageRole.USER, result[4].role)
+        assertEquals("How are you?", getMessageText(result[4]))
+    }
+
+    @Test
+    fun `EXAMPLE_MESSAGES_BOTTOM lorebook entry should fallback to bottom of chat in generic mode`() {
+        val injection = createRegexInjection(
+            position = InjectionPosition.EXAMPLE_MESSAGES_BOTTOM,
+            content = "Example bottom content",
+            role = MessageRole.SYSTEM,
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Hello"),
+            UIMessage.assistant("Hi!"),
+            UIMessage.user("How are you?")
+        )
+
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
+
+        assertEquals(5, result.size)
+        assertEquals("Example bottom content", getMessageText(result[3]))
+        assertEquals(MessageRole.SYSTEM, result[3].role)
         assertEquals("How are you?", getMessageText(result[4]))
     }
 

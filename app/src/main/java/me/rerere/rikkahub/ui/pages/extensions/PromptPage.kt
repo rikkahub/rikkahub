@@ -551,30 +551,118 @@ private fun InjectionPositionSelector(
 private fun getPositionLabel(position: InjectionPosition): String = when (position) {
     InjectionPosition.BEFORE_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_before_system)
     InjectionPosition.AFTER_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_after_system)
+    InjectionPosition.AUTHOR_NOTE_TOP -> stringResource(R.string.prompt_page_position_author_note_top)
+    InjectionPosition.AUTHOR_NOTE_BOTTOM -> stringResource(R.string.prompt_page_position_author_note_bottom)
     InjectionPosition.TOP_OF_CHAT -> stringResource(R.string.prompt_page_position_top_of_chat)
     InjectionPosition.BOTTOM_OF_CHAT -> stringResource(R.string.prompt_page_position_bottom_of_chat)
     InjectionPosition.AT_DEPTH -> stringResource(R.string.prompt_page_position_at_depth)
+    InjectionPosition.EXAMPLE_MESSAGES_TOP -> stringResource(R.string.prompt_page_position_example_messages_top)
+    InjectionPosition.EXAMPLE_MESSAGES_BOTTOM -> stringResource(R.string.prompt_page_position_example_messages_bottom)
+}
+
+private enum class LorebookInjectionPlacement {
+    BEFORE_SYSTEM_PROMPT,
+    AFTER_SYSTEM_PROMPT,
+    AUTHOR_NOTE_TOP,
+    AUTHOR_NOTE_BOTTOM,
+    SYSTEM_DEPTH,
+    USER_DEPTH,
+    ASSISTANT_DEPTH,
+    EXAMPLE_MESSAGES_TOP,
+    EXAMPLE_MESSAGES_BOTTOM,
+}
+
+private val lorebookInjectionPlacements = listOf(
+    LorebookInjectionPlacement.BEFORE_SYSTEM_PROMPT,
+    LorebookInjectionPlacement.AFTER_SYSTEM_PROMPT,
+    LorebookInjectionPlacement.AUTHOR_NOTE_TOP,
+    LorebookInjectionPlacement.AUTHOR_NOTE_BOTTOM,
+    LorebookInjectionPlacement.SYSTEM_DEPTH,
+    LorebookInjectionPlacement.USER_DEPTH,
+    LorebookInjectionPlacement.ASSISTANT_DEPTH,
+    LorebookInjectionPlacement.EXAMPLE_MESSAGES_TOP,
+    LorebookInjectionPlacement.EXAMPLE_MESSAGES_BOTTOM,
+)
+
+private fun PromptInjection.RegexInjection.toLorebookInjectionPlacement(): LorebookInjectionPlacement = when (position) {
+    InjectionPosition.BEFORE_SYSTEM_PROMPT -> LorebookInjectionPlacement.BEFORE_SYSTEM_PROMPT
+    InjectionPosition.AFTER_SYSTEM_PROMPT -> LorebookInjectionPlacement.AFTER_SYSTEM_PROMPT
+    InjectionPosition.AUTHOR_NOTE_TOP,
+    InjectionPosition.TOP_OF_CHAT,
+    -> LorebookInjectionPlacement.AUTHOR_NOTE_TOP
+    InjectionPosition.AUTHOR_NOTE_BOTTOM,
+    InjectionPosition.BOTTOM_OF_CHAT,
+    -> LorebookInjectionPlacement.AUTHOR_NOTE_BOTTOM
+    InjectionPosition.AT_DEPTH -> when (role) {
+        MessageRole.USER -> LorebookInjectionPlacement.USER_DEPTH
+        MessageRole.ASSISTANT -> LorebookInjectionPlacement.ASSISTANT_DEPTH
+        else -> LorebookInjectionPlacement.SYSTEM_DEPTH
+    }
+
+    InjectionPosition.EXAMPLE_MESSAGES_TOP -> LorebookInjectionPlacement.EXAMPLE_MESSAGES_TOP
+    InjectionPosition.EXAMPLE_MESSAGES_BOTTOM -> LorebookInjectionPlacement.EXAMPLE_MESSAGES_BOTTOM
+}
+
+private fun PromptInjection.RegexInjection.withLorebookInjectionPlacement(
+    placement: LorebookInjectionPlacement,
+): PromptInjection.RegexInjection = when (placement) {
+    LorebookInjectionPlacement.BEFORE_SYSTEM_PROMPT -> copy(position = InjectionPosition.BEFORE_SYSTEM_PROMPT)
+    LorebookInjectionPlacement.AFTER_SYSTEM_PROMPT -> copy(position = InjectionPosition.AFTER_SYSTEM_PROMPT)
+    LorebookInjectionPlacement.AUTHOR_NOTE_TOP -> copy(position = InjectionPosition.AUTHOR_NOTE_TOP)
+    LorebookInjectionPlacement.AUTHOR_NOTE_BOTTOM -> copy(position = InjectionPosition.AUTHOR_NOTE_BOTTOM)
+    LorebookInjectionPlacement.SYSTEM_DEPTH -> copy(
+        position = InjectionPosition.AT_DEPTH,
+        role = MessageRole.SYSTEM,
+    )
+
+    LorebookInjectionPlacement.USER_DEPTH -> copy(
+        position = InjectionPosition.AT_DEPTH,
+        role = MessageRole.USER,
+    )
+
+    LorebookInjectionPlacement.ASSISTANT_DEPTH -> copy(
+        position = InjectionPosition.AT_DEPTH,
+        role = MessageRole.ASSISTANT,
+    )
+
+    LorebookInjectionPlacement.EXAMPLE_MESSAGES_TOP -> copy(position = InjectionPosition.EXAMPLE_MESSAGES_TOP)
+    LorebookInjectionPlacement.EXAMPLE_MESSAGES_BOTTOM -> copy(position = InjectionPosition.EXAMPLE_MESSAGES_BOTTOM)
+}
+
+private fun LorebookInjectionPlacement.isDepthPlacement(): Boolean = when (this) {
+    LorebookInjectionPlacement.SYSTEM_DEPTH,
+    LorebookInjectionPlacement.USER_DEPTH,
+    LorebookInjectionPlacement.ASSISTANT_DEPTH,
+    -> true
+
+    else -> false
 }
 
 @Composable
-private fun InjectionRoleSelector(
-    role: MessageRole,
-    onSelect: (MessageRole) -> Unit
+private fun LorebookInjectionPlacementSelector(
+    placement: LorebookInjectionPlacement,
+    onSelect: (LorebookInjectionPlacement) -> Unit,
 ) {
     Select(
-        options = listOf(MessageRole.USER, MessageRole.ASSISTANT),
-        selectedOption = role,
+        options = lorebookInjectionPlacements,
+        selectedOption = placement,
         onOptionSelected = onSelect,
-        optionToString = { getRoleLabel(it) },
+        optionToString = { getLorebookInjectionPlacementLabel(it) },
         modifier = Modifier.fillMaxWidth()
     )
 }
 
 @Composable
-private fun getRoleLabel(role: MessageRole): String = when (role) {
-    MessageRole.USER -> stringResource(R.string.prompt_page_role_user)
-    MessageRole.ASSISTANT -> stringResource(R.string.prompt_page_role_assistant)
-    else -> role.name
+private fun getLorebookInjectionPlacementLabel(placement: LorebookInjectionPlacement): String = when (placement) {
+    LorebookInjectionPlacement.BEFORE_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_before_system)
+    LorebookInjectionPlacement.AFTER_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_after_system)
+    LorebookInjectionPlacement.AUTHOR_NOTE_TOP -> stringResource(R.string.prompt_page_position_author_note_top)
+    LorebookInjectionPlacement.AUTHOR_NOTE_BOTTOM -> stringResource(R.string.prompt_page_position_author_note_bottom)
+    LorebookInjectionPlacement.SYSTEM_DEPTH -> stringResource(R.string.prompt_page_position_system_depth)
+    LorebookInjectionPlacement.USER_DEPTH -> stringResource(R.string.prompt_page_position_user_depth)
+    LorebookInjectionPlacement.ASSISTANT_DEPTH -> stringResource(R.string.prompt_page_position_assistant_depth)
+    LorebookInjectionPlacement.EXAMPLE_MESSAGES_TOP -> stringResource(R.string.prompt_page_position_example_messages_top)
+    LorebookInjectionPlacement.EXAMPLE_MESSAGES_BOTTOM -> stringResource(R.string.prompt_page_position_example_messages_bottom)
 }
 
 // ==================== Lorebook Tab ====================
@@ -1227,6 +1315,7 @@ private fun RegexInjectionEditDialog(
     onEdit: (PromptInjection.RegexInjection) -> Unit
 ) {
     var newKeyword by remember { mutableStateOf("") }
+    val placement = entry.toLorebookInjectionPlacement()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1270,12 +1359,12 @@ private fun RegexInjectionEditDialog(
                     stringResource(R.string.prompt_page_injection_position),
                     style = MaterialTheme.typography.titleSmall
                 )
-                InjectionPositionSelector(
-                    position = entry.position,
-                    onSelect = { onEdit(entry.copy(position = it)) }
+                LorebookInjectionPlacementSelector(
+                    placement = placement,
+                    onSelect = { onEdit(entry.withLorebookInjectionPlacement(it)) }
                 )
 
-                AnimatedVisibility(visible = entry.position == InjectionPosition.AT_DEPTH) {
+                AnimatedVisibility(visible = placement.isDepthPlacement()) {
                     OutlinedTextField(
                         value = entry.injectDepth.toString(),
                         onValueChange = {
@@ -1374,15 +1463,6 @@ private fun RegexInjectionEditDialog(
                     label = { Text(stringResource(R.string.prompt_page_scan_depth)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-
-                Text(
-                    stringResource(R.string.prompt_page_injection_role),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                InjectionRoleSelector(
-                    role = entry.role,
-                    onSelect = { onEdit(entry.copy(role = it)) }
                 )
 
                 OutlinedTextField(

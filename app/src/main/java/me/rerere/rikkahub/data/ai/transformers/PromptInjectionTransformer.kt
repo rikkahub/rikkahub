@@ -182,8 +182,15 @@ internal fun applyInjections(
         }
     }
 
-    // 处理 TOP_OF_CHAT：在第一条用户消息之前插入
-    val topInjections = byPosition[InjectionPosition.TOP_OF_CHAT]
+    // 通用消息模式下没有 ST 的 AN / EM 锚点，这里退化成顶部 / 底部插入。
+    val topInjections = collectFallbackFloatingInjections(
+        byPosition = byPosition,
+        positions = listOf(
+            InjectionPosition.AUTHOR_NOTE_TOP,
+            InjectionPosition.EXAMPLE_MESSAGES_TOP,
+            InjectionPosition.TOP_OF_CHAT,
+        )
+    )
     if (!topInjections.isNullOrEmpty()) {
         // 重新计算索引（因为可能插入了系统消息）
         var insertIndex = result.indexOfFirst { it.role == MessageRole.USER }
@@ -195,8 +202,14 @@ internal fun applyInjections(
         }
     }
 
-    // 处理 BOTTOM_OF_CHAT：在最后一条消息之前插入
-    val bottomInjections = byPosition[InjectionPosition.BOTTOM_OF_CHAT]
+    val bottomInjections = collectFallbackFloatingInjections(
+        byPosition = byPosition,
+        positions = listOf(
+            InjectionPosition.AUTHOR_NOTE_BOTTOM,
+            InjectionPosition.EXAMPLE_MESSAGES_BOTTOM,
+            InjectionPosition.BOTTOM_OF_CHAT,
+        )
+    )
     if (!bottomInjections.isNullOrEmpty()) {
         var insertIndex = (result.size - 1).coerceAtLeast(0)
         insertIndex = findSafeInsertIndex(result, insertIndex)
@@ -225,6 +238,15 @@ internal fun applyInjections(
     }
 
     return result
+}
+
+private fun collectFallbackFloatingInjections(
+    byPosition: Map<InjectionPosition, List<PromptInjection>>,
+    positions: List<InjectionPosition>,
+): List<PromptInjection> {
+    return positions
+        .flatMap { byPosition[it].orEmpty() }
+        .sortedByDescending { it.priority }
 }
 
 /**

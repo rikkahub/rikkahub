@@ -194,7 +194,7 @@ class SillyTavernImportTest {
     }
 
     @Test
-    fun `should map character book positions 3 and 6 to bottom of chat`() {
+    fun `should preserve ST character book anchor positions`() {
         val json = """
             {
               "spec": "chara_card_v2",
@@ -203,17 +203,33 @@ class SillyTavernImportTest {
                 "character_book": {
                   "entries": [
                     {
-                      "comment": "Bottom A",
-                      "content": "Bottom A content",
+                      "comment": "AN Top",
+                      "content": "AN Top content",
                       "keys": ["alpha"],
+                      "extensions": {
+                        "position": 2
+                      }
+                    },
+                    {
+                      "comment": "AN Bottom",
+                      "content": "AN Bottom content",
+                      "keys": ["beta"],
                       "extensions": {
                         "position": 3
                       }
                     },
                     {
-                      "comment": "Bottom B",
-                      "content": "Bottom B content",
-                      "keys": ["beta"],
+                      "comment": "EM Top",
+                      "content": "EM Top content",
+                      "keys": ["gamma"],
+                      "extensions": {
+                        "position": 5
+                      }
+                    },
+                    {
+                      "comment": "EM Bottom",
+                      "content": "EM Bottom content",
+                      "keys": ["delta"],
                       "extensions": {
                         "position": 6
                       }
@@ -230,7 +246,12 @@ class SillyTavernImportTest {
         )
 
         assertEquals(
-            listOf(InjectionPosition.BOTTOM_OF_CHAT, InjectionPosition.BOTTOM_OF_CHAT),
+            listOf(
+                InjectionPosition.AUTHOR_NOTE_TOP,
+                InjectionPosition.AUTHOR_NOTE_BOTTOM,
+                InjectionPosition.EXAMPLE_MESSAGES_TOP,
+                InjectionPosition.EXAMPLE_MESSAGES_BOTTOM,
+            ),
             payload.lorebooks.single().entries.map { it.position }
         )
     }

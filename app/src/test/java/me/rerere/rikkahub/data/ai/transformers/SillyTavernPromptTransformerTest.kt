@@ -475,6 +475,54 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
+    fun `st lorebook example message anchors should wrap dialogue examples`() {
+        val lorebook = Lorebook(
+            id = Uuid.random(),
+            entries = listOf(
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    constantActive = true,
+                    position = InjectionPosition.EXAMPLE_MESSAGES_TOP,
+                    content = "User: Lore Before\nAssistant: Lore Before Reply",
+                ),
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    constantActive = true,
+                    position = InjectionPosition.EXAMPLE_MESSAGES_BOTTOM,
+                    content = "User: Lore After\nAssistant: Lore After Reply",
+                ),
+            )
+        )
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "dialogueExamples", marker = true),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("dialogueExamples", "chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = Assistant(
+                lorebookIds = setOf(lorebook.id),
+                stCharacterData = SillyTavernCharacterData(
+                    exampleMessagesRaw = "User: Base Example\nAssistant: Base Reply",
+                ),
+            ),
+            lorebooks = listOf(lorebook),
+            template = template,
+        )
+
+        assertEquals(
+            listOf(
+                "[Example Chat]\nUser: Lore Before\nAssistant: Lore Before Reply\n[Example Chat]\nUser: Base Example\nAssistant: Base Reply\n[Example Chat]\nUser: Lore After\nAssistant: Lore After Reply",
+                "Hello",
+            ),
+            result.map { it.toText() }
+        )
+    }
+
+    @Test
     fun `prompt order enablement should override prompt enabled and respect generation triggers`() {
         val template = SillyTavernPromptTemplate(
             prompts = listOf(

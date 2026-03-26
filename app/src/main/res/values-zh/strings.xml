@@ -713,8 +713,16 @@
   <string name="prompt_page_confirm">确定</string>
   <string name="prompt_page_position_before_system">系统提示词前</string>
   <string name="prompt_page_position_after_system">系统提示词后</string>
+  <string name="prompt_page_position_author_note_top">作者注释前</string>
+  <string name="prompt_page_position_author_note_bottom">作者注释后</string>
   <string name="prompt_page_position_top_of_chat">对话开头</string>
   <string name="prompt_page_position_bottom_of_chat">最新消息前</string>
+  <string name="prompt_page_position_at_depth">指定深度</string>
+  <string name="prompt_page_position_system_depth">系统D</string>
+  <string name="prompt_page_position_user_depth">用户D</string>
+  <string name="prompt_page_position_assistant_depth">助手D</string>
+  <string name="prompt_page_position_example_messages_top">示例消息前</string>
+  <string name="prompt_page_position_example_messages_bottom">示例消息后</string>
   <string name="prompt_page_lorebook_empty">暂无世界书</string>
   <string name="prompt_page_add_lorebook">添加世界书</string>
   <string name="prompt_page_unnamed_lorebook">未命名世界书</string>
@@ -780,7 +788,6 @@
   <string name="text_area_fullscreen_edit">全屏编辑</string>
   <string name="text_area_import_from_file">从文件导入</string>
   <string name="text_area_save">保存</string>
-  <string name="prompt_page_position_at_depth">在深度</string>
   <string name="prompt_page_inject_depth">注入深度</string>
   <string name="setting_page_request_logs">请求日志</string>
   <string name="setting_page_request_logs_desc">查看 HTTP 请求日志</string>

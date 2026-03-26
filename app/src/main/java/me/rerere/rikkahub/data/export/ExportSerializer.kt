@@ -217,9 +217,11 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
         return when (position) {
             0 -> InjectionPosition.BEFORE_SYSTEM_PROMPT
             1 -> InjectionPosition.AFTER_SYSTEM_PROMPT
-            2, 5 -> InjectionPosition.TOP_OF_CHAT
-            3, 6 -> InjectionPosition.BOTTOM_OF_CHAT
+            2 -> InjectionPosition.AUTHOR_NOTE_TOP
+            3 -> InjectionPosition.AUTHOR_NOTE_BOTTOM
             4 -> InjectionPosition.AT_DEPTH
+            5 -> InjectionPosition.EXAMPLE_MESSAGES_TOP
+            6 -> InjectionPosition.EXAMPLE_MESSAGES_BOTTOM
             else -> InjectionPosition.AFTER_SYSTEM_PROMPT
         }
     }

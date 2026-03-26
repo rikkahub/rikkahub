@@ -462,14 +462,26 @@ enum class InjectionPosition {
     @SerialName("after_system_prompt")
     AFTER_SYSTEM_PROMPT,    // 系统提示词之后（最常用）
 
+    @SerialName("author_note_top")
+    AUTHOR_NOTE_TOP,        // Author's Note 之前（ST 对齐）
+
+    @SerialName("author_note_bottom")
+    AUTHOR_NOTE_BOTTOM,     // Author's Note 之后（ST 对齐）
+
     @SerialName("top_of_chat")
-    TOP_OF_CHAT,            // 对话最开头（第一条用户消息之前）
+    TOP_OF_CHAT,            // 旧版兼容：对话最开头（第一条用户消息之前）
 
     @SerialName("bottom_of_chat")
-    BOTTOM_OF_CHAT,         // 最新消息之前（当前用户输入之前）
+    BOTTOM_OF_CHAT,         // 旧版兼容：最新消息之前（当前用户输入之前）
 
     @SerialName("at_depth")
     AT_DEPTH,               // 在指定深度位置插入（从最新消息往前数）
+
+    @SerialName("example_messages_top")
+    EXAMPLE_MESSAGES_TOP,   // 示例消息之前（ST 对齐）
+
+    @SerialName("example_messages_bottom")
+    EXAMPLE_MESSAGES_BOTTOM, // 示例消息之后（ST 对齐）
 }
 
 /**
@@ -518,7 +530,7 @@ sealed class PromptInjection {
         override val position: InjectionPosition = InjectionPosition.AFTER_SYSTEM_PROMPT,
         override val content: String = "",
         override val injectDepth: Int = 4,
-        override val role: MessageRole = MessageRole.USER,
+        override val role: MessageRole = MessageRole.SYSTEM,
         val keywords: List<String> = emptyList(),  // 触发关键词
         val secondaryKeywords: List<String> = emptyList(),
         val selective: Boolean = false,
@@ -542,9 +554,13 @@ sealed class PromptInjection {
 fun InjectionPosition.normalizeForModeInjection(): InjectionPosition = when (this) {
     InjectionPosition.BEFORE_SYSTEM_PROMPT -> InjectionPosition.BEFORE_SYSTEM_PROMPT
     InjectionPosition.AFTER_SYSTEM_PROMPT,
+    InjectionPosition.AUTHOR_NOTE_TOP,
+    InjectionPosition.AUTHOR_NOTE_BOTTOM,
     InjectionPosition.TOP_OF_CHAT,
     InjectionPosition.BOTTOM_OF_CHAT,
     InjectionPosition.AT_DEPTH,
+    InjectionPosition.EXAMPLE_MESSAGES_TOP,
+    InjectionPosition.EXAMPLE_MESSAGES_BOTTOM,
     -> InjectionPosition.AFTER_SYSTEM_PROMPT
 }
 

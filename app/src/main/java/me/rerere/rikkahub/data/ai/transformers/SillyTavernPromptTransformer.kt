@@ -95,6 +95,12 @@ internal fun transformSillyTavernPrompt(
         .filter { it.position == InjectionPosition.AFTER_SYSTEM_PROMPT }
         .joinToString("\n") { it.content.trim() }
         .trim()
+    val exampleMessagesBefore = triggeredLorebookEntries
+        .filter { it.position == InjectionPosition.EXAMPLE_MESSAGES_TOP }
+        .mapNotNull { it.content.trim().takeIf(String::isNotBlank) }
+    val exampleMessagesAfter = triggeredLorebookEntries
+        .filter { it.position == InjectionPosition.EXAMPLE_MESSAGES_BOTTOM }
+        .mapNotNull { it.content.trim().takeIf(String::isNotBlank) }
     val orderedPrompts = template.resolvePromptOrder()
         .mapNotNull { orderItem ->
             template.findPrompt(orderItem.identifier)?.let { prompt ->
@@ -125,7 +131,10 @@ internal fun transformSillyTavernPrompt(
     var processedHistoryMessages = applyAbsoluteMessages(runtimeBehavior.chatHistoryMessages, absoluteMessages)
 
     val floatingLorebookEntries = triggeredLorebookEntries.filter {
-        it.position == InjectionPosition.TOP_OF_CHAT || it.position == InjectionPosition.BOTTOM_OF_CHAT
+        it.position == InjectionPosition.AUTHOR_NOTE_TOP ||
+            it.position == InjectionPosition.AUTHOR_NOTE_BOTTOM ||
+            it.position == InjectionPosition.TOP_OF_CHAT ||
+            it.position == InjectionPosition.BOTTOM_OF_CHAT
     }
     if (floatingLorebookEntries.isNotEmpty()) {
         processedHistoryMessages = applyInjections(
@@ -161,6 +170,8 @@ internal fun transformSillyTavernPrompt(
             worldInfoAfter = worldInfoAfter,
             chatHistoryMessages = processedHistoryMessages,
             personaDescription = normalizedPersonaDescription,
+            exampleMessagesBefore = exampleMessagesBefore,
+            exampleMessagesAfter = exampleMessagesAfter,
         )
         appendResolvedMessages(
             promptIdentifier = prompt.identifier,
@@ -423,12 +434,16 @@ private fun resolveRelativePromptMessages(
     worldInfoAfter: String,
     chatHistoryMessages: List<UIMessage>,
     personaDescription: String,
+    exampleMessagesBefore: List<String>,
+    exampleMessagesAfter: List<String>,
 ): List<UIMessage> {
     return when (prompt.identifier) {
         "chatHistory" -> buildChatHistoryMessages(chatHistoryMessages, template)
-        "dialogueExamples" -> parseDialogueExampleMessages(
+        "dialogueExamples" -> buildDialogueExampleMessages(
             raw = characterData?.exampleMessagesRaw.orEmpty(),
             introPrompt = template.newExampleChatPrompt,
+            beforeEntries = exampleMessagesBefore,
+            afterEntries = exampleMessagesAfter,
         )
         "personaDescription" -> personaDescription
             .trim()
@@ -535,6 +550,17 @@ private fun applySendIfEmpty(
     }
 
     return chatHistoryMessages + UIMessage.user(sendIfEmpty)
+}
+
+private fun buildDialogueExampleMessages(
+    raw: String,
+    introPrompt: String,
+    beforeEntries: List<String> = emptyList(),
+    afterEntries: List<String> = emptyList(),
+): List<UIMessage> {
+    return beforeEntries.flatMap { parseDialogueExampleMessages(it, introPrompt) } +
+        parseDialogueExampleMessages(raw, introPrompt) +
+        afterEntries.flatMap { parseDialogueExampleMessages(it, introPrompt) }
 }
 
 private fun parseDialogueExampleMessages(

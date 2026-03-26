@@ -775,9 +775,16 @@
   <string name="prompt_page_confirm">Confirm</string>
   <string name="prompt_page_position_before_system">Before System Prompt</string>
   <string name="prompt_page_position_after_system">After System Prompt</string>
+  <string name="prompt_page_position_author_note_top">Author\'s Note (Top)</string>
+  <string name="prompt_page_position_author_note_bottom">Author\'s Note (Bottom)</string>
   <string name="prompt_page_position_top_of_chat">Top of Chat</string>
   <string name="prompt_page_position_bottom_of_chat">Before Latest Message</string>
   <string name="prompt_page_position_at_depth">At Depth</string>
+  <string name="prompt_page_position_system_depth">System D</string>
+  <string name="prompt_page_position_user_depth">User D</string>
+  <string name="prompt_page_position_assistant_depth">Assistant D</string>
+  <string name="prompt_page_position_example_messages_top">Example Messages (Top)</string>
+  <string name="prompt_page_position_example_messages_bottom">Example Messages (Bottom)</string>
   <string name="prompt_page_inject_depth">Inject Depth</string>
   <string name="prompt_page_injection_role">Injection Role</string>
   <string name="prompt_page_role_user">User (wrapped in system tag)</string>
