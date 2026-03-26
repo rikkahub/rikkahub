@@ -1,10 +1,14 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
@@ -41,6 +45,24 @@ class ClaudeProviderMessageTest {
         )
         method.isAccessible = true
         return method.invoke(provider, messages, false) as JsonArray
+    }
+
+    private fun invokeBuildRequestBody(params: TextGenerationParams): JsonObject {
+        val method = ClaudeProvider::class.java.getDeclaredMethod(
+            "buildMessageRequest",
+            ProviderSetting.Claude::class.java,
+            List::class.java,
+            TextGenerationParams::class.java,
+            java.lang.Boolean.TYPE
+        )
+        method.isAccessible = true
+        return method.invoke(
+            provider,
+            ProviderSetting.Claude(),
+            listOf(UIMessage.user("hello")),
+            params,
+            false
+        ) as JsonObject
     }
 
     @Test
@@ -346,6 +368,23 @@ class ClaudeProviderMessageTest {
             it.jsonObject["type"]?.jsonPrimitive?.content == "text"
         }?.jsonObject
         assertEquals("Hello, how are you?", textBlock?.get("text")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `claude request body should include top k when configured`() {
+        val requestBody = invokeBuildRequestBody(
+            TextGenerationParams(
+                model = Model(
+                    modelId = "claude-test",
+                    displayName = "claude-test",
+                ),
+                topK = 32,
+                stopSequences = listOf("User:", "System:"),
+            )
+        )
+
+        assertEquals("32", requestBody["top_k"]?.jsonPrimitive?.content)
+        assertEquals(listOf("User:", "System:"), requestBody["stop_sequences"]?.jsonArray?.map { it.jsonPrimitive.content })
     }
 
     // ==================== Helper Functions ====================

@@ -30,6 +30,8 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.openai.normalizedTopKOrNull
+import me.rerere.ai.provider.providers.normalizedStopSequencesOrNull
 import me.rerere.ai.ui.ImageGenerationResult
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -271,6 +273,10 @@ class ClaudeProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 params.temperature
             )
             if (params.topP != null) put("top_p", params.topP)
+            params.topK.normalizedTopKOrNull()?.let { put("top_k", it) }
+            params.stopSequences.normalizedStopSequencesOrNull()?.let { stopSequences ->
+                put("stop_sequences", json.encodeToJsonElement(stopSequences))
+            }
 
             put("stream", stream)
 

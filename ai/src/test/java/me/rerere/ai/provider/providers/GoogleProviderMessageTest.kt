@@ -1,10 +1,13 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
@@ -40,6 +43,16 @@ class GoogleProviderMessageTest {
         )
         method.isAccessible = true
         return method.invoke(provider, messages) as JsonArray
+    }
+
+    private fun invokeBuildRequestBody(params: TextGenerationParams): JsonObject {
+        val method = GoogleProvider::class.java.getDeclaredMethod(
+            "buildCompletionRequestBody",
+            List::class.java,
+            TextGenerationParams::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(provider, listOf(UIMessage.user("hello")), params) as JsonObject
     }
 
     @Test
@@ -413,6 +426,32 @@ class GoogleProviderMessageTest {
             response?.containsKey("result") == true)
         assertTrue("Result should contain expected output",
             response?.get("result")?.jsonPrimitive?.content?.contains("Expected output value") == true)
+    }
+
+    @Test
+    fun `google request body should include advanced generation config params`() {
+        val requestBody = invokeBuildRequestBody(
+            TextGenerationParams(
+                model = Model(
+                    modelId = "gemini-test",
+                    displayName = "gemini-test",
+                ),
+                topK = 40,
+                presencePenalty = 0.25f,
+                frequencyPenalty = -0.5f,
+                seed = 123L,
+                stopSequences = listOf("User:", "System:"),
+                googleResponseMimeType = "application/json",
+            )
+        )
+
+        val generationConfig = requestBody["generationConfig"]?.jsonObject
+        assertEquals("40", generationConfig?.get("topK")?.jsonPrimitive?.content)
+        assertEquals("0.25", generationConfig?.get("presencePenalty")?.jsonPrimitive?.content)
+        assertEquals("-0.5", generationConfig?.get("frequencyPenalty")?.jsonPrimitive?.content)
+        assertEquals("123", generationConfig?.get("seed")?.jsonPrimitive?.content)
+        assertEquals(listOf("User:", "System:"), generationConfig?.get("stopSequences")?.jsonArray?.map { it.jsonPrimitive.content })
+        assertEquals("application/json", generationConfig?.get("responseMimeType")?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================

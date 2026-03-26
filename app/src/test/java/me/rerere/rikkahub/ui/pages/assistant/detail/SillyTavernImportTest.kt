@@ -94,6 +94,129 @@ class SillyTavernImportTest {
     }
 
     @Test
+    fun `preset import should map advanced request params`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Params",
+                  "frequency_penalty": -0.5,
+                  "presence_penalty": 0.25,
+                  "min_p": 0.1,
+                  "top_k": 40,
+                  "top_a": 0.2,
+                  "repetition_penalty": 1.2,
+                  "seed": 123,
+                  "verbosity": "high",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            sourceName = "preset-params",
+        )
+
+        assertEquals(-0.5f, payload.assistant.frequencyPenalty)
+        assertEquals(0.25f, payload.assistant.presencePenalty)
+        assertEquals(0.1f, payload.assistant.minP)
+        assertEquals(40, payload.assistant.topK)
+        assertEquals(0.2f, payload.assistant.topA)
+        assertEquals(1.2f, payload.assistant.repetitionPenalty)
+        assertEquals(123L, payload.assistant.seed)
+        assertEquals("high", payload.assistant.openAIVerbosity)
+    }
+
+    @Test
+    fun `preset import should skip neutral advanced request params`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Defaults",
+                  "frequency_penalty": 0,
+                  "presence_penalty": 0,
+                  "min_p": 0,
+                  "top_a": 0,
+                  "repetition_penalty": 1,
+                  "seed": -1,
+                  "verbosity": "auto",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            sourceName = "preset-defaults",
+        )
+
+        assertNull(payload.assistant.frequencyPenalty)
+        assertNull(payload.assistant.presencePenalty)
+        assertNull(payload.assistant.minP)
+        assertNull(payload.assistant.topA)
+        assertNull(payload.assistant.repetitionPenalty)
+        assertNull(payload.assistant.seed)
+        assertEquals("", payload.assistant.openAIVerbosity)
+    }
+
+    @Test
+    fun `preset import should map stop string from chat squash`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Stop",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "SPreset": {
+                      "ChatSquash": {
+                        "enable_stop_string": true,
+                        "stop_string": "User:"
+                      }
+                    }
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "preset-stop",
+        )
+
+        assertEquals(listOf("User:"), payload.assistant.stopSequences)
+    }
+
+    @Test
     fun `should parse character card with embedded lorebook`() {
         val json = """
             {

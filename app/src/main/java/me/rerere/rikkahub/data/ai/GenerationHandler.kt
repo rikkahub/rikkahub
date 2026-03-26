@@ -410,9 +410,19 @@ class GenerationHandler(
             temperature = assistant.temperature,
             topP = assistant.topP,
             maxTokens = assistant.maxTokens,
+            frequencyPenalty = assistant.frequencyPenalty,
+            presencePenalty = assistant.presencePenalty,
+            minP = assistant.minP,
+            topK = assistant.topK,
+            topA = assistant.topA,
+            repetitionPenalty = assistant.repetitionPenalty,
+            seed = assistant.seed,
+            stopSequences = assistant.stopSequences,
+            googleResponseMimeType = assistant.googleResponseMimeType,
             tools = tools,
             thinkingBudget = assistant.thinkingBudget,
             openAIReasoningEffort = assistant.openAIReasoningEffort,
+            openAIVerbosity = assistant.openAIVerbosity,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
                 addAll(model.customHeaders)

@@ -375,6 +375,43 @@ class ResponseAPIMessageTest {
         assertEquals("auto", reasoning!!["effort"]?.jsonPrimitive?.content)
     }
 
+    @Test
+    fun `response api should place verbosity under text config`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(
+                baseUrl = "https://api.openai.com/v1"
+            ),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "test-model",
+                    displayName = "test-model",
+                ),
+                openAIVerbosity = "high",
+            )
+        )
+
+        val textConfig = requestBody["text"]?.jsonObject
+        assertEquals("high", textConfig?.get("verbosity")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `response api should ignore auto verbosity placeholder`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(
+                baseUrl = "https://api.openai.com/v1"
+            ),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "test-model",
+                    displayName = "test-model",
+                ),
+                openAIVerbosity = "auto",
+            )
+        )
+
+        assertFalse(requestBody.containsKey("text"))
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(

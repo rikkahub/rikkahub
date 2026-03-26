@@ -34,6 +34,10 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.openai.normalizedSeedOrNull
+import me.rerere.ai.provider.providers.openai.normalizedTopKOrNull
+import me.rerere.ai.provider.providers.normalizedNonBlankOrNull
+import me.rerere.ai.provider.providers.normalizedStopSequencesOrNull
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.ImageAspectRatio
@@ -338,6 +342,14 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
         put("generationConfig", buildJsonObject {
             if (params.temperature != null) put("temperature", params.temperature)
             if (params.topP != null) put("topP", params.topP)
+            params.topK.normalizedTopKOrNull()?.let { put("topK", it) }
+            if (params.presencePenalty != null) put("presencePenalty", params.presencePenalty)
+            if (params.frequencyPenalty != null) put("frequencyPenalty", params.frequencyPenalty)
+            params.seed.normalizedSeedOrNull()?.let { put("seed", it) }
+            params.stopSequences.normalizedStopSequencesOrNull()?.let { stopSequences ->
+                put("stopSequences", json.encodeToJsonElement(stopSequences))
+            }
+            params.googleResponseMimeType.normalizedNonBlankOrNull()?.let { put("responseMimeType", it) }
             if (params.maxTokens != null) put("maxOutputTokens", params.maxTokens)
             if (params.model.outputModalities.contains(Modality.IMAGE)) {
                 put("responseModalities", buildJsonArray {

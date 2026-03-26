@@ -190,6 +190,11 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                 if (params.topP != null) put("top_p", params.topP)
             }
             if (params.maxTokens != null) put("max_output_tokens", params.maxTokens)
+            params.openAIVerbosity.normalizedOpenAIVerbosityOrNull()?.let { verbosity ->
+                put("text", buildJsonObject {
+                    put("verbosity", verbosity)
+                })
+            }
 
             // system instructions
             if (messages.any { it.role == MessageRole.SYSTEM }) {

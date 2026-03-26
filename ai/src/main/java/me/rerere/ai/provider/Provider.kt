@@ -49,11 +49,21 @@ data class TextGenerationParams(
     val temperature: Float? = null,
     val topP: Float? = null,
     val maxTokens: Int? = null,
+    val frequencyPenalty: Float? = null,
+    val presencePenalty: Float? = null,
+    val minP: Float? = null,
+    val topK: Int? = null,
+    val topA: Float? = null,
+    val repetitionPenalty: Float? = null,
+    val seed: Long? = null,
+    val stopSequences: List<String> = emptyList(),
+    val googleResponseMimeType: String = "",
     val tools: List<Tool> = emptyList(),
     val thinkingBudget: Int? = null,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
     val openAIReasoningEffort: String = "",
+    val openAIVerbosity: String = "",
 )
 
 @Serializable

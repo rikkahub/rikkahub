@@ -32,6 +32,7 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
+import me.rerere.ai.provider.providers.normalizedStopSequencesOrNull
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
@@ -262,6 +263,16 @@ class ChatCompletionsAPI(
                 if (params.topP != null) put("top_p", params.topP)
             }
             if (params.maxTokens != null) put("max_tokens", params.maxTokens)
+            if (params.presencePenalty != null) put("presence_penalty", params.presencePenalty)
+            if (params.frequencyPenalty != null) put("frequency_penalty", params.frequencyPenalty)
+            params.seed.normalizedSeedOrNull()?.let { put("seed", it) }
+            params.topK.normalizedTopKOrNull()?.let { put("top_k", it) }
+            params.topA.normalizedNonNegativeOrNull()?.let { put("top_a", it) }
+            params.minP.normalizedNonNegativeOrNull()?.let { put("min_p", it) }
+            params.repetitionPenalty.normalizedNonNegativeOrNull()?.let { put("repetition_penalty", it) }
+            params.stopSequences.normalizedStopSequencesOrNull()?.let { stopSequences ->
+                put("stop", json.encodeToJsonElement(stopSequences))
+            }
 
             put("stream", stream)
             if (stream) {

@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -23,15 +23,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
@@ -48,6 +54,7 @@ import me.rerere.rikkahub.utils.toFixed
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.math.roundToInt
+import kotlin.uuid.Uuid
 import me.rerere.rikkahub.data.model.Tag as DataTag
 
 @Composable
@@ -58,6 +65,7 @@ fun AssistantBasicPage(id: String) {
         }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val providers by vm.providers.collectAsStateWithLifecycle()
     val tags by vm.tags.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -83,6 +91,7 @@ fun AssistantBasicPage(id: String) {
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
             providers = providers,
+            globalChatModelId = settings.chatModelId,
             tags = tags,
             onUpdate = { vm.update(it) },
             vm = vm
@@ -94,11 +103,60 @@ fun AssistantBasicPage(id: String) {
 internal fun AssistantBasicContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
-    providers: List<me.rerere.ai.provider.ProviderSetting>,
+    providers: List<ProviderSetting>,
+    globalChatModelId: Uuid?,
     tags: List<DataTag>,
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    val currentModelId = assistant.chatModelId ?: globalChatModelId
+    val currentModel = providers
+        .asSequence()
+        .flatMap { it.models.asSequence() }
+        .firstOrNull { it.id == currentModelId }
+    val currentProvider = currentModel?.findProvider(providers)
+    val openAIProvider = currentProvider as? ProviderSetting.OpenAI
+    val hasProviderSpecificRequestParams = assistant.hasProviderSpecificRequestParams()
+    val isGoogleProvider = currentProvider is ProviderSetting.Google
+    val isClaudeProvider = currentProvider is ProviderSetting.Claude
+    val showPresencePenaltyField = openAIProvider != null || isGoogleProvider || assistant.presencePenalty != null
+    val showFrequencyPenaltyField = openAIProvider != null || isGoogleProvider || assistant.frequencyPenalty != null
+    val showMinPField = openAIProvider != null || assistant.minP != null
+    val showTopKField = openAIProvider != null || isGoogleProvider || isClaudeProvider || assistant.topK != null
+    val showTopAField = openAIProvider != null || assistant.topA != null
+    val showRepetitionPenaltyField = openAIProvider != null || assistant.repetitionPenalty != null
+    val showStopSequencesField = (openAIProvider != null && !openAIProvider.useResponseApi) ||
+        isGoogleProvider ||
+        isClaudeProvider ||
+        assistant.stopSequences.isNotEmpty()
+    val showSeedField = openAIProvider != null || isGoogleProvider || assistant.seed != null
+    val showGoogleResponseMimeTypeField = isGoogleProvider || assistant.googleResponseMimeType.isNotBlank()
+    val showVerbosityField = openAIProvider != null || assistant.openAIVerbosity.isNotBlank()
+    val showAdvancedRequestParams = showPresencePenaltyField ||
+        showFrequencyPenaltyField ||
+        showMinPField ||
+        showTopKField ||
+        showTopAField ||
+        showRepetitionPenaltyField ||
+        showStopSequencesField ||
+        showSeedField ||
+        showGoogleResponseMimeTypeField ||
+        showVerbosityField
+    val requestParamsDescription = when {
+        openAIProvider != null && openAIProvider.useResponseApi ->
+            "Responses API uses only verbosity. Other sampler fields below are kept for compatibility and only affect Chat Completions-compatible endpoints."
+        openAIProvider != null ->
+            "Sent as OpenAI/OpenAI-compatible request fields."
+        isGoogleProvider ->
+            "Sent inside generationConfig for Gemini/Vertex-compatible backends."
+        isClaudeProvider ->
+            "Sent as Anthropic Messages API fields."
+        hasProviderSpecificRequestParams ->
+            "Only fields supported by the selected backend will be used."
+        else ->
+            "Only fields supported by the selected backend will be used."
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -494,6 +552,139 @@ internal fun AssistantBasicContent(
                     }
                 )
             }
+
+            if (showAdvancedRequestParams) {
+                HorizontalDivider()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Advanced request params",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = requestParamsDescription,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                if (showPresencePenaltyField) {
+                    HorizontalDivider()
+                    OptionalFloatRequestParamField(
+                        label = "Presence penalty",
+                        value = assistant.presencePenalty,
+                        description = "OpenAI/Google penalty for tokens that already appeared.",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(presencePenalty = value))
+                        }
+                    )
+                }
+                if (showFrequencyPenaltyField) {
+                    HorizontalDivider()
+                    OptionalFloatRequestParamField(
+                        label = "Frequency penalty",
+                        value = assistant.frequencyPenalty,
+                        description = "OpenAI/Google penalty based on repeated token frequency.",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(frequencyPenalty = value))
+                        }
+                    )
+                }
+                if (showMinPField) {
+                    HorizontalDivider()
+                    OptionalFloatRequestParamField(
+                        label = "Min P",
+                        value = assistant.minP,
+                        description = "Alternative sampling floor used by some OpenAI-compatible backends.",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(minP = value))
+                        }
+                    )
+                }
+                if (showTopKField) {
+                    HorizontalDivider()
+                    OptionalIntRequestParamField(
+                        label = "Top K",
+                        value = assistant.topK,
+                        description = "Candidate cutoff used by OpenAI-compatible, Google, and Claude-compatible backends.",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(topK = value))
+                        }
+                    )
+                }
+                if (showTopAField) {
+                    HorizontalDivider()
+                    OptionalFloatRequestParamField(
+                        label = "Top A",
+                        value = assistant.topA,
+                        description = "Adaptive sampling factor used by some OpenAI-compatible backends.",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(topA = value))
+                        }
+                    )
+                }
+                if (showRepetitionPenaltyField) {
+                    HorizontalDivider()
+                    OptionalFloatRequestParamField(
+                        label = "Repetition penalty",
+                        value = assistant.repetitionPenalty,
+                        description = "Discourage repeated tokens on compatible backends.",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(repetitionPenalty = value))
+                        }
+                    )
+                }
+                if (showStopSequencesField) {
+                    HorizontalDivider()
+                    OptionalStringLinesRequestParamField(
+                        label = "Stop sequences",
+                        value = assistant.stopSequences,
+                        description = "One per line. Supported by OpenAI Chat Completions, Google, and Claude.",
+                        placeholder = "User:",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(stopSequences = value))
+                        }
+                    )
+                }
+                if (showSeedField) {
+                    HorizontalDivider()
+                    OptionalLongRequestParamField(
+                        label = "Seed",
+                        value = assistant.seed,
+                        description = "Supported by OpenAI-compatible and Google-compatible backends. Leave empty for backend default.",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(seed = value))
+                        }
+                    )
+                }
+                if (showGoogleResponseMimeTypeField) {
+                    HorizontalDivider()
+                    OptionalStringRequestParamField(
+                        label = "Response MIME type",
+                        value = assistant.googleResponseMimeType,
+                        description = "Google generationConfig.responseMimeType. Common values: text/plain, application/json.",
+                        placeholder = "text/plain / application/json",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(googleResponseMimeType = value))
+                        }
+                    )
+                }
+                if (showVerbosityField) {
+                    HorizontalDivider()
+                    OptionalStringRequestParamField(
+                        label = "Verbosity",
+                        value = assistant.openAIVerbosity,
+                        description = "OpenAI Responses API text verbosity. Use low, medium, or high.",
+                        placeholder = "low / medium / high",
+                        onValueChange = { value ->
+                            onUpdate(assistant.copy(openAIVerbosity = value))
+                        }
+                    )
+                }
+            }
         }
 
         Card(
@@ -603,5 +794,180 @@ internal fun AssistantBasicContent(
                 }
             }
         }
+    }
+}
+
+private fun Assistant.hasProviderSpecificRequestParams(): Boolean {
+    return frequencyPenalty != null ||
+        presencePenalty != null ||
+        minP != null ||
+        topK != null ||
+        topA != null ||
+        repetitionPenalty != null ||
+        seed != null ||
+        stopSequences.isNotEmpty() ||
+        googleResponseMimeType.isNotBlank() ||
+        openAIVerbosity.isNotBlank()
+}
+
+@Composable
+private fun OptionalFloatRequestParamField(
+    label: String,
+    value: Float?,
+    description: String,
+    onValueChange: (Float?) -> Unit,
+) {
+    ParsedRequestParamField(
+        label = label,
+        description = description,
+        value = value,
+        keyboardType = KeyboardType.Decimal,
+        parse = { it.toFloatOrNull() },
+        onValueChange = onValueChange,
+    )
+}
+
+@Composable
+private fun OptionalIntRequestParamField(
+    label: String,
+    value: Int?,
+    description: String,
+    onValueChange: (Int?) -> Unit,
+) {
+    ParsedRequestParamField(
+        label = label,
+        description = description,
+        value = value,
+        keyboardType = KeyboardType.Number,
+        parse = { it.toIntOrNull() },
+        onValueChange = onValueChange,
+    )
+}
+
+@Composable
+private fun OptionalLongRequestParamField(
+    label: String,
+    value: Long?,
+    description: String,
+    onValueChange: (Long?) -> Unit,
+) {
+    ParsedRequestParamField(
+        label = label,
+        description = description,
+        value = value,
+        keyboardType = KeyboardType.Number,
+        parse = { it.toLongOrNull() },
+        onValueChange = onValueChange,
+    )
+}
+
+@Composable
+private fun OptionalStringRequestParamField(
+    label: String,
+    value: String,
+    description: String,
+    placeholder: String = "Default",
+    onValueChange: (String) -> Unit,
+) {
+    var text by rememberSaveable(value) { mutableStateOf(value) }
+    FormItem(
+        modifier = Modifier.padding(8.dp),
+        label = {
+            Text(label)
+        },
+        description = {
+            Text(description)
+        }
+    ) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { input ->
+                text = input
+                onValueChange(input)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = {
+                Text(placeholder)
+            }
+        )
+    }
+}
+
+@Composable
+private fun OptionalStringLinesRequestParamField(
+    label: String,
+    value: List<String>,
+    description: String,
+    placeholder: String = "One per line",
+    onValueChange: (List<String>) -> Unit,
+) {
+    val externalValue = value.joinToString("\n")
+    var text by rememberSaveable(externalValue) { mutableStateOf(externalValue) }
+
+    FormItem(
+        modifier = Modifier.padding(8.dp),
+        label = {
+            Text(label)
+        },
+        description = {
+            Text(description)
+        }
+    ) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { input ->
+                text = input
+                onValueChange(
+                    input.lineSequence()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .toList()
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = {
+                Text(placeholder)
+            },
+            minLines = 3,
+        )
+    }
+}
+
+@Composable
+private fun <T> ParsedRequestParamField(
+    label: String,
+    value: T?,
+    description: String,
+    keyboardType: KeyboardType,
+    parse: (String) -> T?,
+    onValueChange: (T?) -> Unit,
+) {
+    val externalValue = value?.toString().orEmpty()
+    var text by rememberSaveable(externalValue) { mutableStateOf(externalValue) }
+
+    FormItem(
+        modifier = Modifier.padding(8.dp),
+        label = {
+            Text(label)
+        },
+        description = {
+            Text(description)
+        }
+    ) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { input ->
+                text = input
+                when {
+                    input.isBlank() -> onValueChange(null)
+                    else -> parse(input)?.let(onValueChange)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = {
+                Text("Default")
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        )
     }
 }

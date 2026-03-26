@@ -36,6 +36,15 @@ data class Assistant(
     val regexes: List<AssistantRegex> = emptyList(),
     val thinkingBudget: Int? = 1024,
     val maxTokens: Int? = null,
+    val frequencyPenalty: Float? = null,
+    val presencePenalty: Float? = null,
+    val minP: Float? = null,
+    val topK: Int? = null,
+    val topA: Float? = null,
+    val repetitionPenalty: Float? = null,
+    val seed: Long? = null,
+    val stopSequences: List<String> = emptyList(),
+    val googleResponseMimeType: String = "",
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBodies: List<CustomBody> = emptyList(),
     val mcpServers: Set<Uuid> = emptySet(),
@@ -52,6 +61,7 @@ data class Assistant(
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val openAIReasoningEffort: String = "",
+    val openAIVerbosity: String = "",
     val stCharacterData: SillyTavernCharacterData? = null,
 )
 

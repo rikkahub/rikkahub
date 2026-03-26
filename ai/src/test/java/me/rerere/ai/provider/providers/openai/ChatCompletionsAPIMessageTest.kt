@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -399,6 +400,51 @@ class ChatCompletionsAPIMessageTest {
         )
 
         assertEquals("auto", requestBody["reasoning_effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `chat completions should include advanced sampler params when configured`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "test-model",
+                    displayName = "test-model",
+                ),
+                presencePenalty = -0.5f,
+                frequencyPenalty = 0.75f,
+                minP = 0.1f,
+                topK = 64,
+                topA = 0.2f,
+                repetitionPenalty = 1.15f,
+                seed = 42L,
+            )
+        )
+
+        assertEquals("-0.5", requestBody["presence_penalty"]?.jsonPrimitive?.content)
+        assertEquals("0.75", requestBody["frequency_penalty"]?.jsonPrimitive?.content)
+        assertEquals("0.1", requestBody["min_p"]?.jsonPrimitive?.content)
+        assertEquals("64", requestBody["top_k"]?.jsonPrimitive?.content)
+        assertEquals("0.2", requestBody["top_a"]?.jsonPrimitive?.content)
+        assertEquals("1.15", requestBody["repetition_penalty"]?.jsonPrimitive?.content)
+        assertEquals(42L, requestBody["seed"]?.jsonPrimitive?.longOrNull)
+    }
+
+    @Test
+    fun `chat completions should include stop sequences when configured`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "test-model",
+                    displayName = "test-model",
+                ),
+                stopSequences = listOf("User:", "Assistant:"),
+            )
+        )
+
+        val stop = requestBody["stop"]?.jsonArray
+        assertEquals(listOf("User:", "Assistant:"), stop?.map { it.jsonPrimitive.content })
     }
 
     // ==================== Helper Functions ====================

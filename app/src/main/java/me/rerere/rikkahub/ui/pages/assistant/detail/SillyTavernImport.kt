@@ -19,8 +19,6 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.json.doubleOrNull
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.transformers.stripInlineRegexBlocks
@@ -198,6 +196,7 @@ private fun parsePresetImport(
     sourceName: String,
 ): AssistantImportPayload {
     val preset = ImportJson.decodeFromJsonElement<StPresetImport>(json)
+    val stopSequences = resolvePresetStopSequences(json, preset)
     val selectedOrder = selectPresetOrder(preset.promptOrder)
     val promptOrder = selectedOrder
         .mapNotNull { item ->
@@ -315,7 +314,30 @@ private fun parsePresetImport(
             temperature = preset.temperature?.toFloat(),
             topP = preset.topP?.toFloat(),
             maxTokens = preset.openAIMaxTokens,
+            frequencyPenalty = preset.frequencyPenalty
+                ?.takeUnless { it == 0.0 }
+                ?.toFloat(),
+            presencePenalty = preset.presencePenalty
+                ?.takeUnless { it == 0.0 }
+                ?.toFloat(),
+            minP = preset.minP
+                ?.takeUnless { it == 0.0 }
+                ?.toFloat(),
+            topK = preset.topK
+                ?.takeUnless { it == 0 },
+            topA = preset.topA
+                ?.takeUnless { it == 0.0 }
+                ?.toFloat(),
+            repetitionPenalty = preset.repetitionPenalty
+                ?.takeUnless { it == 1.0 }
+                ?.toFloat(),
+            seed = preset.seed
+                ?.takeIf { it >= 0L },
+            stopSequences = stopSequences,
             openAIReasoningEffort = preset.reasoningEffort.orEmpty(),
+            openAIVerbosity = preset.verbosity
+                ?.takeUnless { it.equals("auto", ignoreCase = true) }
+                .orEmpty(),
         ),
         presetTemplate = template,
         regexes = regexes,
@@ -578,6 +600,48 @@ private fun selectPresetOrder(promptOrders: List<StPresetOrderList>): List<StPre
         ?: emptyList()
 }
 
+private fun resolvePresetStopSequences(
+    json: JsonObject,
+    preset: StPresetImport,
+): List<String> {
+    val topLevelStopSequences = when {
+        preset.stopStrings.isNotEmpty() -> preset.stopStrings
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        preset.enableStopString == true -> listOfNotNull(
+            preset.stopString?.trim()?.takeIf { it.isNotEmpty() }
+        )
+        else -> emptyList()
+    }
+    if (topLevelStopSequences.isNotEmpty()) return topLevelStopSequences
+
+    val chatSquash = json["extensions"]
+        ?.jsonObjectOrNull()
+        ?.get("SPreset")
+        ?.jsonObjectOrNull()
+        ?.get("ChatSquash")
+        ?.jsonObjectOrNull()
+
+    val chatSquashStopEnabled = chatSquash
+        ?.get("enable_stop_string")
+        ?.jsonPrimitiveOrNull
+        ?.booleanOrNull
+        ?: false
+
+    val chatSquashStopString = chatSquash
+        ?.get("stop_string")
+        ?.jsonPrimitiveOrNull
+        ?.contentOrNull
+        ?.trim()
+        .orEmpty()
+
+    return if (chatSquashStopEnabled && chatSquashStopString.isNotEmpty()) {
+        listOf(chatSquashStopString)
+    } else {
+        emptyList()
+    }
+}
+
 private fun parseRegexScripts(element: JsonElement?, sourceName: String): List<AssistantRegex> {
     val scripts = element?.jsonArrayOrNull()
         ?.mapNotNull { runCatching { ImportJson.decodeFromJsonElement<StRegexScriptImport>(it) }.getOrNull() }
@@ -783,6 +847,17 @@ private data class StPresetImport(
     val temperature: Double? = null,
     val top_p: Double? = null,
     val openai_max_tokens: Int? = null,
+    val frequency_penalty: Double? = null,
+    val presence_penalty: Double? = null,
+    val min_p: Double? = null,
+    val top_k: Int? = null,
+    val top_a: Double? = null,
+    val repetition_penalty: Double? = null,
+    val seed: Long? = null,
+    val verbosity: String? = null,
+    val enable_stop_string: Boolean? = null,
+    val stop_string: String? = null,
+    val stop_strings: List<String> = emptyList(),
     val names_behavior: Int? = null,
     val send_if_empty: String? = null,
     val assistant_prefill: String? = null,
@@ -809,6 +884,33 @@ private data class StPresetImport(
 
     val openAIMaxTokens: Int?
         get() = openai_max_tokens
+
+    val frequencyPenalty: Double?
+        get() = frequency_penalty
+
+    val presencePenalty: Double?
+        get() = presence_penalty
+
+    val minP: Double?
+        get() = min_p
+
+    val topK: Int?
+        get() = top_k
+
+    val topA: Double?
+        get() = top_a
+
+    val repetitionPenalty: Double?
+        get() = repetition_penalty
+
+    val enableStopString: Boolean?
+        get() = enable_stop_string
+
+    val stopString: String?
+        get() = stop_string
+
+    val stopStrings: List<String>
+        get() = stop_strings
 
     val namesBehavior: Int?
         get() = names_behavior
