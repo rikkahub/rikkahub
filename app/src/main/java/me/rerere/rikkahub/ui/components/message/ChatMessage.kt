@@ -83,6 +83,7 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.effectiveUserAvatar
 import me.rerere.rikkahub.data.model.effectiveUserName
@@ -452,6 +453,7 @@ private fun MessagePartsBlock(
                                         scope = AssistantAffectScope.USER,
                                         phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                         messageDepthFromEnd = messageDepthFromEnd,
+                                        placement = AssistantRegexPlacement.USER_INPUT,
                                     )
                                 }
                                 Surface(
@@ -482,6 +484,7 @@ private fun MessagePartsBlock(
                                     scope = AssistantAffectScope.ASSISTANT,
                                     phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                     messageDepthFromEnd = messageDepthFromEnd,
+                                    placement = AssistantRegexPlacement.AI_OUTPUT,
                                 )
                             }
                             if (settings.displaySetting.showAssistantBubble) {

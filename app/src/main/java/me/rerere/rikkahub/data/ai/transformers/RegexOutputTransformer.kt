@@ -5,6 +5,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.chatMessageDepthFromEndMap
 import me.rerere.rikkahub.data.model.effectiveRegexes
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -34,7 +35,8 @@ object RegexOutputTransformer : OutputMessageTransformer, KoinComponent {
                                     settings = ctx.settings,
                                     scope = scope,
                                     phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
-                                    messageDepthFromEnd = messageDepth
+                                    messageDepthFromEnd = messageDepth,
+                                    placement = AssistantRegexPlacement.AI_OUTPUT,
                                 )
                             )
                         }
@@ -46,7 +48,8 @@ object RegexOutputTransformer : OutputMessageTransformer, KoinComponent {
                                     settings = ctx.settings,
                                     scope = scope,
                                     phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
-                                    messageDepthFromEnd = messageDepth
+                                    messageDepthFromEnd = messageDepth,
+                                    placement = AssistantRegexPlacement.REASONING,
                                 )
                             )
                         }

@@ -28,6 +28,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
@@ -338,6 +339,10 @@ private fun parsePresetImport(
             it.promptOnly.toString(),
             it.minDepth?.toString().orEmpty(),
             it.maxDepth?.toString().orEmpty(),
+            it.trimStrings.joinToString("\u0000"),
+            it.runOnEdit.toString(),
+            it.substituteRegex.toString(),
+            it.stPlacements.sorted().joinToString(","),
         ).joinToString("|")
     }
 
@@ -366,6 +371,7 @@ private fun parseCharacterCardImport(
     val description = data["description"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
     val personality = data["personality"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
     val scenario = data["scenario"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
+    val version = data["character_version"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
     val firstMessage = data["first_mes"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
     val exampleMessagesRaw = data["mes_example"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
     val systemPromptOverride = data["system_prompt"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
@@ -385,6 +391,7 @@ private fun parseCharacterCardImport(
     val characterData = SillyTavernCharacterData(
         sourceName = sourceName,
         name = name,
+        version = version,
         description = description,
         personality = personality,
         scenario = scenario,
@@ -497,6 +504,8 @@ private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
             ?: emptyList()
         val useRegex = entry["use_regex"]?.jsonPrimitiveOrNull?.booleanOrNull
             ?: (keywords.any(::isSlashDelimitedRegex) || secondaryKeywords.any(::isSlashDelimitedRegex))
+        val useProbability = extensions?.get("useProbability")?.jsonPrimitiveOrNull?.booleanOrNull ?: true
+        val probability = extensions?.get("probability")?.jsonPrimitiveOrNull?.intOrNull
         PromptInjection.RegexInjection(
             id = Uuid.random(),
             name = entry["comment"]?.jsonPrimitiveOrNull?.contentOrNull
@@ -522,7 +531,7 @@ private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
                     ?: false
                 ),
             matchWholeWords = extensions?.get("match_whole_words")?.jsonPrimitiveOrNull?.booleanOrNull ?: false,
-            probability = extensions?.get("probability")?.jsonPrimitiveOrNull?.intOrNull,
+            probability = probability?.takeIf { useProbability },
             scanDepth = extensions?.get("scan_depth")?.jsonPrimitiveOrNull?.intOrNull ?: bookScanDepth ?: 4,
             constantActive = entry["constant"]?.jsonPrimitiveOrNull?.booleanOrNull ?: false,
             matchCharacterDescription = extensions?.get("match_character_description")?.jsonPrimitiveOrNull?.booleanOrNull
@@ -541,10 +550,17 @@ private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
                 putIfPresent("group", extensions?.get("group"))
                 putIfPresent("group_override", extensions?.get("group_override"))
                 putIfPresent("group_weight", extensions?.get("group_weight"))
+                putIfPresent("use_group_scoring", extensions?.get("use_group_scoring"))
                 putIfPresent("sticky", extensions?.get("sticky"))
                 putIfPresent("cooldown", extensions?.get("cooldown"))
                 putIfPresent("delay", extensions?.get("delay"))
                 putIfPresent("delay_until_recursion", extensions?.get("delay_until_recursion"))
+                putIfPresent("triggers", extensions?.get("triggers"))
+                putIfPresent("ignore_budget", extensions?.get("ignore_budget"))
+                putIfPresent("outlet_name", extensions?.get("outlet_name"))
+                putIfPresent("displayIndex", extensions?.get("display_index"))
+                putIfPresent("useProbability", JsonPrimitive(useProbability))
+                putIfPresent("probability", JsonPrimitive(probability))
                 putIfPresent("vectorized", extensions?.get("vectorized"))
                 putIfPresent("automation_id", extensions?.get("automation_id"))
                 putIfPresent("entry_index", JsonPrimitive(index))
@@ -615,6 +631,9 @@ private fun parseRegexScripts(element: JsonElement?, sourceName: String): List<A
             markdownOnly = script.markdownOnly,
             minDepth = script.minDepth,
             maxDepth = script.maxDepth,
+            trimStrings = script.trimStrings,
+            runOnEdit = script.runOnEdit,
+            substituteRegex = script.substituteRegex,
         )
     }
 }
@@ -643,6 +662,7 @@ private fun parseInlinePromptRegexes(prompt: SillyTavernPromptItem): List<Assist
             minDepth = null,
             maxDepth = null,
             affectingScopeOverride = setOf(AssistantAffectScope.SYSTEM),
+            stPlacementsOverride = emptySet(),
         )
     }.toList()
 }
@@ -658,12 +678,22 @@ private fun mapRegexScript(
     markdownOnly: Boolean,
     minDepth: Int?,
     maxDepth: Int?,
+    trimStrings: List<String> = emptyList(),
+    runOnEdit: Boolean = true,
+    substituteRegex: Int = 0,
     affectingScopeOverride: Set<AssistantAffectScope>? = null,
+    stPlacementsOverride: Set<Int>? = null,
 ): AssistantRegex? {
     val normalizedPattern = normalizeImportedRegexPattern(findRegex) ?: return null
+    val normalizedPlacement = placement.ifEmpty { listOf(AssistantRegexPlacement.AI_OUTPUT) }
     val affectingScope = affectingScopeOverride ?: buildSet {
-        if (placement.contains(1)) add(AssistantAffectScope.USER)
-        if (placement.contains(2)) add(AssistantAffectScope.ASSISTANT)
+        if (normalizedPlacement.contains(AssistantRegexPlacement.USER_INPUT)) add(AssistantAffectScope.USER)
+        if (
+            normalizedPlacement.contains(AssistantRegexPlacement.AI_OUTPUT) ||
+            normalizedPlacement.contains(AssistantRegexPlacement.REASONING)
+        ) {
+            add(AssistantAffectScope.ASSISTANT)
+        }
     }.ifEmpty {
         setOf(AssistantAffectScope.ASSISTANT)
     }
@@ -679,6 +709,10 @@ private fun mapRegexScript(
         promptOnly = promptOnly,
         minDepth = minDepth,
         maxDepth = maxDepth,
+        trimStrings = trimStrings,
+        runOnEdit = runOnEdit,
+        substituteRegex = substituteRegex,
+        stPlacements = stPlacementsOverride ?: normalizedPlacement.toSet(),
     )
 }
 
@@ -698,6 +732,10 @@ internal fun mergeImportedRegexes(
             it.promptOnly.toString(),
             it.minDepth?.toString().orEmpty(),
             it.maxDepth?.toString().orEmpty(),
+            it.trimStrings.joinToString("\u0000"),
+            it.runOnEdit.toString(),
+            it.substituteRegex.toString(),
+            it.stPlacements.sorted().joinToString(","),
         ).joinToString("|")
     }
 }
@@ -935,4 +973,7 @@ private data class StRegexScriptImport(
     val promptOnly: Boolean = false,
     val minDepth: Int? = null,
     val maxDepth: Int? = null,
+    val trimStrings: List<String> = emptyList(),
+    val runOnEdit: Boolean = true,
+    val substituteRegex: Int = 0,
 )

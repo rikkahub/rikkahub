@@ -2,7 +2,11 @@ package me.rerere.rikkahub.data.ai.transformers
 
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.AssistantRegex
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
@@ -423,6 +427,57 @@ class SillyTavernPromptTransformerTest {
 
         assertEquals(
             listOf("Persona lore", "Hello"),
+            result.map { it.toText() }
+        )
+    }
+
+    @Test
+    fun `world info regex placement should transform lorebook content in prompt phase`() {
+        val lorebook = Lorebook(
+            id = Uuid.random(),
+            entries = listOf(
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    constantActive = true,
+                    position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
+                    content = "hero archive",
+                )
+            )
+        )
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "worldInfoBefore", marker = true),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("worldInfoBefore", "chatHistory"),
+        )
+        val settings = Settings(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "hero",
+                    replaceString = "legend",
+                    affectingScope = setOf(AssistantAffectScope.SYSTEM),
+                    promptOnly = true,
+                    stPlacements = setOf(AssistantRegexPlacement.WORLD_INFO),
+                )
+            )
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = Assistant(
+                stPromptTemplate = template,
+                lorebookIds = setOf(lorebook.id),
+            ),
+            settings = settings,
+            lorebooks = listOf(lorebook),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("legend archive", "Hello"),
             result.map { it.toText() }
         )
     }

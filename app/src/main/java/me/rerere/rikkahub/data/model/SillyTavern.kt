@@ -65,6 +65,7 @@ enum class StPromptInjectionPosition {
 data class SillyTavernCharacterData(
     val sourceName: String = "",
     val name: String = "",
+    val version: String = "",
     val description: String = "",
     val personality: String = "",
     val scenario: String = "",
@@ -93,6 +94,7 @@ data class LorebookTriggerContext(
     val scenario: String = "",
     val creatorNotes: String = "",
     val characterDepthPrompt: String = "",
+    val generationType: String = "normal",
 )
 
 fun SillyTavernPromptTemplate.findPrompt(identifier: String): SillyTavernPromptItem? {

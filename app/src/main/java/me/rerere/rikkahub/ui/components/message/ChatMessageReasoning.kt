@@ -45,6 +45,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
@@ -172,6 +173,7 @@ private fun ReasoningContent(
                     scope = AssistantAffectScope.ASSISTANT,
                     phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                     messageDepthFromEnd = messageDepthFromEnd,
+                    placement = AssistantRegexPlacement.REASONING,
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxSize(),

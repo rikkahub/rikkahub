@@ -789,6 +789,26 @@
   <string name="prompt_page_edit_lorebook">Edit Lorebook</string>
   <string name="prompt_page_description">Description</string>
   <string name="prompt_page_entries_format">Entries (%d)</string>
+  <string name="prompt_page_lorebook_global_title">Global Worldbook Settings</string>
+  <string name="prompt_page_lorebook_global_desc">Default SillyTavern-style scan behavior used by all lorebooks in this app.</string>
+  <string name="prompt_page_lorebook_global_scan_depth">Default Scan Depth</string>
+  <string name="prompt_page_lorebook_global_min_activations">Minimum Activations</string>
+  <string name="prompt_page_lorebook_global_min_activations_depth_max">Min Activations Depth Max</string>
+  <string name="prompt_page_lorebook_global_budget_percent">Budget Percent</string>
+  <string name="prompt_page_lorebook_global_budget_cap">Budget Cap</string>
+  <string name="prompt_page_lorebook_global_max_recursion_steps">Max Recursion Steps</string>
+  <string name="prompt_page_lorebook_global_character_strategy">Character Strategy</string>
+  <string name="prompt_page_lorebook_global_character_strategy_evenly">Evenly</string>
+  <string name="prompt_page_lorebook_global_character_strategy_character_first">Character First</string>
+  <string name="prompt_page_lorebook_global_character_strategy_global_first">Global First</string>
+  <string name="prompt_page_lorebook_global_include_names">Include Speaker Names</string>
+  <string name="prompt_page_lorebook_global_include_names_desc">Prefix scanned chat lines with user and character names.</string>
+  <string name="prompt_page_lorebook_global_recursive">Recursive Scanning</string>
+  <string name="prompt_page_lorebook_global_recursive_desc">Allow triggered entries to activate more entries in later passes.</string>
+  <string name="prompt_page_lorebook_global_case_sensitive">Global Case Sensitive</string>
+  <string name="prompt_page_lorebook_global_match_whole_words">Global Whole Word Match</string>
+  <string name="prompt_page_lorebook_global_group_scoring">Global Group Scoring</string>
+  <string name="prompt_page_lorebook_global_overflow_alert">Overflow Alert</string>
   <string name="prompt_page_add_entry">Add Entry</string>
   <string name="prompt_page_unnamed_entry">Unnamed Entry</string>
   <string name="prompt_page_keywords_format">Keywords: %s</string>
@@ -1491,4 +1511,3 @@
   <string name="prompt_page_st_preset_editor_trigger_quiet">Quiet</string>
   <string name="prompt_page_st_preset_editor_trigger_impersonate">Impersonate</string>
 </resources>
-

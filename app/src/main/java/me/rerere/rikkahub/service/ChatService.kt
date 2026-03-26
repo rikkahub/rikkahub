@@ -94,6 +94,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.ScheduledPromptTask
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -251,6 +252,7 @@ class ChatService(
     private fun resetConversationStMacroState(conversationId: Uuid) {
         sessions[conversationId]?.let { session ->
             session.resetStMacroLocalVariables()
+            session.resetLorebookRuntimeState()
             session.stGenerationType = "normal"
         }
     }
@@ -352,7 +354,11 @@ class ChatService(
             commandModeEnabled = commandModeEnabled
         )
         val processedContent = if (directCommand.isDirect) {
-            listOf(UIMessagePart.Text(TermuxDirectCommandParser.toSlashCommandText(directCommand.command)))
+            preprocessUserInputParts(
+                parts = listOf(UIMessagePart.Text(TermuxDirectCommandParser.toSlashCommandText(directCommand.command))),
+                messageDepthFromEnd = 1,
+                placement = AssistantRegexPlacement.SLASH_COMMAND,
+            )
         } else {
             preprocessUserInputParts(content, messageDepthFromEnd = 1)
         }
@@ -495,12 +501,16 @@ class ChatService(
     private fun preprocessUserInputParts(
         parts: List<UIMessagePart>,
         messageDepthFromEnd: Int = 1,
+        placement: Int = AssistantRegexPlacement.USER_INPUT,
+        isEdit: Boolean = false,
     ): List<UIMessagePart> {
         val assistant = settingsStore.settingsFlow.value.getCurrentAssistant()
         return preprocessUserInputParts(
             parts = parts,
             assistant = assistant,
-            messageDepthFromEnd = messageDepthFromEnd
+            messageDepthFromEnd = messageDepthFromEnd,
+            placement = placement,
+            isEdit = isEdit,
         )
     }
 
@@ -508,6 +518,8 @@ class ChatService(
         parts: List<UIMessagePart>,
         assistant: Assistant,
         messageDepthFromEnd: Int = 1,
+        placement: Int = AssistantRegexPlacement.USER_INPUT,
+        isEdit: Boolean = false,
     ): List<UIMessagePart> {
         return parts.map { part ->
             when (part) {
@@ -518,7 +530,9 @@ class ChatService(
                             settings = settingsStore.settingsFlow.value,
                             scope = AssistantAffectScope.USER,
                             phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
-                            messageDepthFromEnd = messageDepthFromEnd
+                            messageDepthFromEnd = messageDepthFromEnd,
+                            placement = placement,
+                            isEdit = isEdit,
                         )
                     )
                 }
@@ -805,6 +819,7 @@ class ChatService(
         notifyOnCompletion: Boolean = true,
         stGenerationType: String = "normal",
     ) {
+        val session = getOrCreateSession(conversationId)
         setConversationStGenerationType(conversationId, stGenerationType)
         val settings = settingsStore.settingsFlow.first()
         val conversation = getConversationFlow(conversationId).value
@@ -854,6 +869,7 @@ class ChatService(
                 },
                 stGenerationType = stGenerationType,
                 stMacroState = getConversationStMacroState(conversationId),
+                lorebookRuntimeState = session.getLorebookRuntimeState(),
                 inputTransformers = buildList {
                     addAll(inputTransformers)
                     add(templateTransformer)
@@ -1490,7 +1506,8 @@ class ChatService(
 
         val processedParts = preprocessUserInputParts(
             parts = parts,
-            messageDepthFromEnd = currentConversation.messageNodes.size - targetNodeIndex
+            messageDepthFromEnd = currentConversation.messageNodes.size - targetNodeIndex,
+            isEdit = true,
         )
 
         var edited = false

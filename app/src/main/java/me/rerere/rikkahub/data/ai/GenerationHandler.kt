@@ -32,6 +32,7 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxApprovalBlacklistMatcher
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
+import me.rerere.rikkahub.data.ai.transformers.LorebookRuntimeState
 import me.rerere.rikkahub.data.ai.transformers.StMacroState
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
@@ -85,6 +86,7 @@ class GenerationHandler(
         maxSteps: Int = 256,
         stGenerationType: String = "normal",
         stMacroState: StMacroState? = null,
+        lorebookRuntimeState: LorebookRuntimeState? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -140,6 +142,7 @@ class GenerationHandler(
                             settings = settings,
                             stGenerationType = stGenerationType,
                             stMacroState = stMacroState,
+                            lorebookRuntimeState = lorebookRuntimeState,
                         )
                         emit(
                             GenerationChunk.Messages(
@@ -151,6 +154,7 @@ class GenerationHandler(
                                     settings = settings,
                                     stGenerationType = stGenerationType,
                                     stMacroState = stMacroState,
+                                    lorebookRuntimeState = lorebookRuntimeState,
                                 )
                             )
                         )
@@ -164,6 +168,7 @@ class GenerationHandler(
                     stream = assistant.streamOutput,
                     stGenerationType = stGenerationType,
                     stMacroState = stMacroState,
+                    lorebookRuntimeState = lorebookRuntimeState,
                 )
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
@@ -173,6 +178,7 @@ class GenerationHandler(
                     settings = settings,
                     stGenerationType = stGenerationType,
                     stMacroState = stMacroState,
+                    lorebookRuntimeState = lorebookRuntimeState,
                 )
                 messages = messages.onGenerationFinish(
                     transformers = outputTransformers,
@@ -182,6 +188,7 @@ class GenerationHandler(
                     settings = settings,
                     stGenerationType = stGenerationType,
                     stMacroState = stMacroState,
+                    lorebookRuntimeState = lorebookRuntimeState,
                 )
                 messages = messages.slice(0 until messages.lastIndex) + messages.last().copy(
                     finishedAt = Clock.System.now()
@@ -328,6 +335,7 @@ class GenerationHandler(
                         settings = settings,
                         stGenerationType = stGenerationType,
                         stMacroState = stMacroState,
+                        lorebookRuntimeState = lorebookRuntimeState,
                     )
                 )
             )
@@ -349,6 +357,7 @@ class GenerationHandler(
         stream: Boolean,
         stGenerationType: String,
         stMacroState: StMacroState?,
+        lorebookRuntimeState: LorebookRuntimeState?,
     ) {
         val internalMessages = buildList {
             val system = buildString {
@@ -392,6 +401,7 @@ class GenerationHandler(
             settings = settings,
             stGenerationType = stGenerationType,
             stMacroState = stMacroState,
+            lorebookRuntimeState = lorebookRuntimeState,
         )
 
         var messages: List<UIMessage> = messages

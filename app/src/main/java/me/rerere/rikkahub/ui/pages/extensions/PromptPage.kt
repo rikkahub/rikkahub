@@ -88,7 +88,9 @@ import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -173,7 +175,11 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
 
                 2 -> LorebookTab(
                     lorebooks = settings.lorebooks,
-                    onUpdate = { vm.updateSettings(settings.copy(lorebooks = it)) }
+                    globalSettings = settings.lorebookGlobalSettings,
+                    onUpdateLorebooks = { vm.updateSettings(settings.copy(lorebooks = it)) },
+                    onUpdateGlobalSettings = {
+                        vm.updateSettings(settings.copy(lorebookGlobalSettings = it))
+                    },
                 )
             }
         }
@@ -583,7 +589,9 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
 @Composable
 private fun LorebookTab(
     lorebooks: List<Lorebook>,
-    onUpdate: (List<Lorebook>) -> Unit
+    globalSettings: LorebookGlobalSettings,
+    onUpdateLorebooks: (List<Lorebook>) -> Unit,
+    onUpdateGlobalSettings: (LorebookGlobalSettings) -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
     val lazyListState = rememberLazyListState()
@@ -593,21 +601,21 @@ private fun LorebookTab(
         val newList = lorebooks.toMutableList()
         val item = newList.removeAt(from.index)
         newList.add(to.index, item)
-        onUpdate(newList)
+        onUpdateLorebooks(newList)
     }
     val editState = useEditState<Lorebook> { edited ->
         val index = lorebooks.indexOfFirst { it.id == edited.id }
         if (index >= 0) {
-            onUpdate(lorebooks.toMutableList().apply { set(index, edited) })
+            onUpdateLorebooks(lorebooks.toMutableList().apply { set(index, edited) })
         } else {
-            onUpdate(lorebooks + edited)
+            onUpdateLorebooks(lorebooks + edited)
         }
     }
     val importSuccessMsg = stringResource(R.string.export_import_success)
     val importFailedMsg = stringResource(R.string.export_import_failed)
     val importer = rememberImporter(LorebookSerializer) { result ->
         result.onSuccess { imported ->
-            onUpdate(currentLorebooks + imported)
+            onUpdateLorebooks(currentLorebooks + imported)
             toaster.show(importSuccessMsg)
         }.onFailure { error ->
             toaster.show(importFailedMsg.format(error.message))
@@ -627,6 +635,12 @@ private fun LorebookTab(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             state = lazyListState
         ) {
+            item {
+                LorebookGlobalSettingsCard(
+                    settings = globalSettings,
+                    onEdit = onUpdateGlobalSettings,
+                )
+            }
             if (lorebooks.isEmpty()) {
                 item {
                     Column(
@@ -665,7 +679,7 @@ private fun LorebookTab(
                                     }
                                 },
                             onEdit = { editState.open(book) },
-                            onDelete = { onUpdate(lorebooks - book) }
+                            onDelete = { onUpdateLorebooks(lorebooks - book) }
                         )
                     }
                 }
@@ -710,6 +724,180 @@ private fun LorebookTab(
             )
         }
     }
+}
+
+@Composable
+private fun LorebookGlobalSettingsCard(
+    settings: LorebookGlobalSettings,
+    onEdit: (LorebookGlobalSettings) -> Unit,
+) {
+    fun updateMinActivations(value: Int) {
+        onEdit(
+            settings.copy(
+                minActivations = value,
+                maxRecursionSteps = if (value > 0) 0 else settings.maxRecursionSteps,
+            )
+        )
+    }
+
+    fun updateMaxRecursionSteps(value: Int) {
+        onEdit(
+            settings.copy(
+                maxRecursionSteps = value,
+                minActivations = if (value > 0) 0 else settings.minActivations,
+            )
+        )
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.prompt_page_lorebook_global_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = stringResource(R.string.prompt_page_lorebook_global_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_scan_depth),
+                value = settings.scanDepth,
+                onValueChange = { onEdit(settings.copy(scanDepth = it)) }
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_min_activations),
+                value = settings.minActivations,
+                onValueChange = ::updateMinActivations
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_min_activations_depth_max),
+                value = settings.minActivationsDepthMax,
+                onValueChange = { onEdit(settings.copy(minActivationsDepthMax = it)) }
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_budget_percent),
+                value = settings.budgetPercent,
+                onValueChange = { onEdit(settings.copy(budgetPercent = it.coerceIn(0, 100))) }
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_budget_cap),
+                value = settings.budgetCap,
+                onValueChange = { onEdit(settings.copy(budgetCap = it)) }
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_max_recursion_steps),
+                value = settings.maxRecursionSteps,
+                onValueChange = ::updateMaxRecursionSteps
+            )
+
+            Text(
+                text = stringResource(R.string.prompt_page_lorebook_global_character_strategy),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Select(
+                options = WorldInfoCharacterStrategy.entries,
+                selectedOption = settings.characterStrategy,
+                onOptionSelected = { onEdit(settings.copy(characterStrategy = it)) },
+                optionToString = { getWorldInfoCharacterStrategyLabel(it) },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_include_names)) },
+                description = { Text(stringResource(R.string.prompt_page_lorebook_global_include_names_desc)) },
+                tail = {
+                    Switch(
+                        checked = settings.includeNames,
+                        onCheckedChange = { onEdit(settings.copy(includeNames = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_recursive)) },
+                description = { Text(stringResource(R.string.prompt_page_lorebook_global_recursive_desc)) },
+                tail = {
+                    Switch(
+                        checked = settings.recursiveScanning,
+                        onCheckedChange = { onEdit(settings.copy(recursiveScanning = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_case_sensitive)) },
+                tail = {
+                    Switch(
+                        checked = settings.caseSensitive,
+                        onCheckedChange = { onEdit(settings.copy(caseSensitive = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_match_whole_words)) },
+                tail = {
+                    Switch(
+                        checked = settings.matchWholeWords,
+                        onCheckedChange = { onEdit(settings.copy(matchWholeWords = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_group_scoring)) },
+                tail = {
+                    Switch(
+                        checked = settings.useGroupScoring,
+                        onCheckedChange = { onEdit(settings.copy(useGroupScoring = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_overflow_alert)) },
+                tail = {
+                    Switch(
+                        checked = settings.overflowAlert,
+                        onCheckedChange = { onEdit(settings.copy(overflowAlert = it)) }
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LorebookGlobalNumberField(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+) {
+    OutlinedTextField(
+        value = value.toString(),
+        onValueChange = { input ->
+            input.toIntOrNull()?.let(onValueChange)
+            if (input.isBlank()) onValueChange(0)
+        },
+        label = { Text(label) },
+        modifier = Modifier.fillMaxWidth(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true,
+    )
+}
+
+@Composable
+private fun getWorldInfoCharacterStrategyLabel(strategy: WorldInfoCharacterStrategy): String = when (strategy) {
+    WorldInfoCharacterStrategy.EVENLY -> stringResource(R.string.prompt_page_lorebook_global_character_strategy_evenly)
+    WorldInfoCharacterStrategy.CHARACTER_FIRST -> stringResource(R.string.prompt_page_lorebook_global_character_strategy_character_first)
+    WorldInfoCharacterStrategy.GLOBAL_FIRST -> stringResource(R.string.prompt_page_lorebook_global_character_strategy_global_first)
 }
 
 @Composable

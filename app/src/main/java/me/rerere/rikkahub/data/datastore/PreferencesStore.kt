@@ -44,6 +44,7 @@ import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.DEFAULT_TEXT_SELECTION_ACTIONS
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.ScheduledPromptTask
@@ -163,6 +164,7 @@ class SettingsStore(
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
+        val LOREBOOK_GLOBAL_SETTINGS = stringPreferencesKey("lorebook_global_settings")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
         val REGEXES = stringPreferencesKey("regexes")
         val ST_PRESET_ENABLED = booleanPreferencesKey("st_preset_enabled")
@@ -280,6 +282,9 @@ class SettingsStore(
                 lorebooks = preferences[LOREBOOKS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                lorebookGlobalSettings = preferences[LOREBOOK_GLOBAL_SETTINGS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: LorebookGlobalSettings(),
                 quickMessages = preferences[QUICK_MESSAGES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -481,6 +486,7 @@ class SettingsStore(
                     },
                 textSelectionConfig = textSelectionConfig,
                 quickMessages = settings.quickMessages.distinctBy { it.id },
+                lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized(),
             )
         }
         .onEach {
@@ -496,7 +502,9 @@ class SettingsStore(
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
-        val normalizedSettings = settings.normalizeLegacyStPresetState()
+        val normalizedSettings = settings
+            .normalizeLegacyStPresetState()
+            .copy(lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized())
         val previousSettings = settingsFlow.value
         if (!previousSettings.init) {
             val removedAvatarUris = previousSettings.referencedLocalUserAvatarUris() - normalizedSettings.referencedLocalUserAvatarUris()
@@ -562,6 +570,7 @@ class SettingsStore(
             } ?: preferences.remove(SELECTED_TTS_PROVIDER)
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(normalizedSettings.modeInjections)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(normalizedSettings.lorebooks)
+            preferences[LOREBOOK_GLOBAL_SETTINGS] = JsonInstant.encodeToString(normalizedSettings.lorebookGlobalSettings)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(normalizedSettings.quickMessages)
             preferences[REGEXES] = JsonInstant.encodeToString(normalizedSettings.regexes)
             preferences[ST_PRESET_ENABLED] = normalizedSettings.stPresetEnabled
@@ -713,6 +722,7 @@ data class Settings(
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
+    val lorebookGlobalSettings: LorebookGlobalSettings = LorebookGlobalSettings(),
     val quickMessages: List<QuickMessage> = emptyList(),
     val regexes: List<AssistantRegex> = emptyList(),
     val stPresetEnabled: Boolean = false,

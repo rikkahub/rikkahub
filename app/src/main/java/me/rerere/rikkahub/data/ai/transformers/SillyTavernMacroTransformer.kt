@@ -7,7 +7,19 @@ import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.effectiveUserName
 import me.rerere.rikkahub.data.model.effectiveUserPersona
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime as JavaLocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import kotlin.math.absoluteValue
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 object SillyTavernMacroTransformer : InputMessageTransformer {
@@ -15,6 +27,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
     private val macroRegex = Regex("""\{\{([^{}]*)\}\}""", setOf(RegexOption.DOT_MATCHES_ALL))
     private val diceRegex = Regex("""^\s*(\d*)d(\d+)([+-]\d+)?\s*$""", setOf(RegexOption.IGNORE_CASE))
     private val legacyTrimRegex = Regex("""(?:\r?\n)*\{\{trim\}\}(?:\r?\n)*""", setOf(RegexOption.IGNORE_CASE))
+    private val scopedCommentRegex = Regex("""\{\{//\}\}[\s\S]*?\{\{///\}\}""")
 
     override suspend fun transform(
         ctx: TransformerContext,
@@ -68,6 +81,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         text: String,
         env: StMacroEnvironment,
         state: StMacroState,
+        rootHash: Int = text.hashCode(),
     ): String {
         if (!text.contains("{{")) return text
 
@@ -80,7 +94,14 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
                 changed = true
             }
             result = macroRegex.replace(result) { match ->
-                val replacement = replaceMacro(match.value, match.groupValues[1], env, state)
+                val replacement = replaceMacro(
+                    raw = match.value,
+                    body = match.groupValues[1],
+                    env = env,
+                    state = state,
+                    macroOffset = match.range.first,
+                    rootHash = rootHash,
+                )
                 if (replacement != match.value) {
                     changed = true
                 }
@@ -104,7 +125,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         env: StMacroEnvironment,
         state: StMacroState,
     ): String {
-        var result = text
+        var result = scopedCommentRegex.replace(text, "")
         while (true) {
             val scopedMacro = findInnermostScopedMacro(result) ?: return result
             val replacement = evaluateScopedMacro(scopedMacro, result, env, state)
@@ -117,6 +138,8 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         body: String,
         env: StMacroEnvironment,
         state: StMacroState,
+        macroOffset: Int,
+        rootHash: Int,
     ): String {
         val parsed = ParsedMacro.parse(body) ?: return raw
         val name = parsed.name.lowercase()
@@ -141,6 +164,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
             "trim" -> raw
             "space" -> " ".repeat(parsePositiveInt(arg(0)).coerceAtLeast(1))
             "newline" -> "\n".repeat(parsePositiveInt(arg(0)).coerceAtLeast(1))
+            "input" -> env.input
             "user" -> env.user
             "char" -> env.char
             "group", "charifnotgroup" -> env.group
@@ -156,10 +180,30 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
             "creatornotes", "charcreatornotes" -> env.creatorNotes
             "mesexamplesraw" -> env.exampleMessagesRaw
             "mesexamples" -> env.exampleMessagesRaw
+            "charversion", "version", "char_version" -> env.charVersion
             "model" -> env.modelName
+            "original" -> env.original
+            "ismobile" -> env.isMobile.toString()
             "lastmessage", "lastchatmessage" -> env.lastChatMessage
+            "lastmessageid" -> env.lastMessageId
             "lastusermessage" -> env.lastUserMessage
             "lastcharmessage" -> env.lastAssistantMessage
+            "firstincludedmessageid" -> env.firstIncludedMessageId
+            "firstdisplayedmessageid" -> env.firstDisplayedMessageId
+            "lastswipeid" -> env.lastSwipeId
+            "currentswipeid" -> env.currentSwipeId
+            "time" -> env.now.formatTime(arg(0))
+            "date" -> env.now.formatDate()
+            "weekday" -> env.now.formatWeekday()
+            "isotime" -> env.now.format(DateTimeFormatter.ofPattern("HH:mm"))
+            "isodate" -> env.now.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            "datetimeformat" -> env.now.formatMomentStyle(arg(0))
+            "idleduration", "idle_duration" -> formatIdleDuration(env)
+            "timediff" -> formatTimeDiff(arg(0), arg(1), env)
+            "lastgenerationtype" -> env.generationType
+            "hasextension" -> env.hasExtension(arg(0)).toString()
+            "maxprompt" -> env.maxPrompt
+            "reverse" -> arg(0).reversed()
             "setvar" -> {
                 state.localVariables[arg(0)] = tail(1)
                 ""
@@ -179,7 +223,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
                 state.localVariables[arg(0)] = value
                 value
             }
-            "hasvar", "varexists" -> (state.localVariables.containsKey(arg(0))).toString()
+            "hasvar", "varexists" -> state.localVariables.containsKey(arg(0)).toString()
             "deletevar", "flushvar" -> {
                 state.localVariables.remove(arg(0))
                 ""
@@ -203,7 +247,34 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
                 state.globalVariables[arg(0)] = value
                 value
             }
+            "hasglobalvar", "globalvarexists" -> state.globalVariables.containsKey(arg(0)).toString()
+            "deleteglobalvar", "flushglobalvar" -> {
+                state.globalVariables.remove(arg(0))
+                ""
+            }
             "random" -> pickRandom(parsed.args)
+            "pick" -> pickDeterministic(parsed.args, body, state, macroOffset, rootHash)
+            "banned" -> ""
+            "outlet" -> env.outlets[arg(0)] ?: ""
+            "instructstorystringprefix" -> env.instructStoryStringPrefix
+            "instructstorystringsuffix" -> env.instructStoryStringSuffix
+            "instructuserprefix", "instructinput" -> env.instructUserPrefix
+            "instructusersuffix" -> env.instructUserSuffix
+            "instructassistantprefix", "instructoutput" -> env.instructAssistantPrefix
+            "instructassistantsuffix", "instructseparator" -> env.instructAssistantSuffix
+            "instructsystemprefix" -> env.instructSystemPrefix
+            "instructsystemsuffix" -> env.instructSystemSuffix
+            "instructfirstassistantprefix", "instructfirstoutputprefix" -> env.instructFirstAssistantPrefix
+            "instructlastassistantprefix", "instructlastoutputprefix" -> env.instructLastAssistantPrefix
+            "instructstop" -> env.instructStop
+            "instructuserfiller" -> env.instructUserFiller
+            "instructsysteminstructionprefix" -> env.instructSystemInstructionPrefix
+            "instructfirstuserprefix", "instructfirstinput" -> env.instructFirstUserPrefix
+            "instructlastuserprefix", "instructlastinput" -> env.instructLastUserPrefix
+            "defaultsystemprompt", "instructsystem", "instructsystemprompt" -> env.defaultSystemPrompt
+            "systemprompt" -> env.systemPrompt
+            "exampleseparator", "chatseparator" -> env.exampleSeparator
+            "chatstart" -> env.chatStart
             "roll" -> rollDice(parsed.args)
             else -> raw
         }
@@ -218,6 +289,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         val content = text.substring(macro.open.endIndex + 1, macro.close.startIndex)
         return when (macro.open.name) {
             "trim" -> trimScopedContent(resolveMacros(content, env, state))
+            "//" -> ""
             "if" -> {
                 val split = splitTopLevelElse(content)
                 val chosenBranch = if (evaluateCondition(macro.open.args.firstOrNull().orEmpty(), env, state)) {
@@ -262,12 +334,46 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         if (condition.isBlank()) return ""
         val parsed = ParsedMacro.parse(condition) ?: return condition
         val raw = "{{${condition}}}"
-        val resolved = replaceMacro(raw, condition, env, state)
+        val resolved = replaceMacro(
+            raw = raw,
+            body = condition,
+            env = env,
+            state = state,
+            macroOffset = 0,
+            rootHash = parsed.hashCode(),
+        )
         return if (resolved == raw) condition else resolved
     }
 
     private fun pickRandom(args: List<String>): String {
-        val options = when {
+        val options = parseChoiceOptions(args)
+        if (options.isEmpty()) return ""
+        return options.random(Random.Default)
+    }
+
+    private fun pickDeterministic(
+        args: List<String>,
+        body: String,
+        state: StMacroState,
+        macroOffset: Int,
+        rootHash: Int,
+    ): String {
+        val options = parseChoiceOptions(args)
+        if (options.isEmpty()) return ""
+
+        val cacheKey = "$rootHash::$macroOffset::$body"
+        val existingIndex = state.pickCache[cacheKey]
+        if (existingIndex != null && existingIndex in options.indices) {
+            return options[existingIndex]
+        }
+
+        val nextIndex = Random(cacheKey.hashCode().toLong()).nextInt(options.size)
+        state.pickCache[cacheKey] = nextIndex
+        return options[nextIndex]
+    }
+
+    private fun parseChoiceOptions(args: List<String>): List<String> {
+        return when {
             args.size > 1 -> args
             args.isEmpty() -> emptyList()
             else -> args.single()
@@ -275,8 +381,6 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
                 .split(',')
                 .map { it.replace("\u0000", ",").trim() }
         }.filter { it.isNotEmpty() }
-        if (options.isEmpty()) return ""
-        return options.random(Random.Default)
     }
 
     private fun rollDice(args: List<String>): String {
@@ -319,6 +423,21 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
 
     private fun parsePositiveInt(value: String): Int {
         return value.trim().toIntOrNull() ?: 1
+    }
+
+    private fun formatIdleDuration(env: StMacroEnvironment): String {
+        val lastUserTime = env.lastUserMessageCreatedAt ?: return "just now"
+        return Duration.between(lastUserTime.atZone(env.now.zone), env.now).humanize(withSuffix = false)
+    }
+
+    private fun formatTimeDiff(
+        left: String,
+        right: String,
+        env: StMacroEnvironment,
+    ): String {
+        val leftDateTime = parseDateTime(left, env.now.zone) ?: return ""
+        val rightDateTime = parseDateTime(right, env.now.zone) ?: return ""
+        return Duration.between(rightDateTime, leftDateTime).humanize(withSuffix = true)
     }
 
     private fun parseInlineIfArguments(body: String): InlineIfArguments? {
@@ -391,6 +510,26 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         return value.trim().lowercase() in setOf("off", "false", "0")
     }
 
+    private fun parseDateTime(
+        rawValue: String,
+        zoneId: ZoneId,
+    ): ZonedDateTime? {
+        val trimmed = rawValue.trim()
+        if (trimmed.isEmpty()) return null
+
+        runCatching { return ZonedDateTime.parse(trimmed) }
+        runCatching { return OffsetDateTime.parse(trimmed).toZonedDateTime() }
+        runCatching { return Instant.parse(trimmed).atZone(zoneId) }
+        runCatching { return JavaLocalDateTime.parse(trimmed, DateTimeFormatter.ISO_LOCAL_DATE_TIME).atZone(zoneId) }
+        runCatching { return LocalDate.parse(trimmed, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay(zoneId) }
+
+        COMMON_DATE_TIME_PATTERNS.forEach { formatter ->
+            runCatching { return JavaLocalDateTime.parse(trimmed, formatter).atZone(zoneId) }
+            runCatching { return LocalDate.parse(trimmed, formatter).atStartOfDay(zoneId) }
+        }
+        return null
+    }
+
     private fun squashSystemMessages(
         messages: List<UIMessage>,
         template: SillyTavernPromptTemplate,
@@ -426,6 +565,120 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
     }
 }
 
+private val COMMON_DATE_TIME_PATTERNS = listOf(
+    DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss"),
+    DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm"),
+    DateTimeFormatter.ofPattern("uuuu/MM/dd HH:mm:ss"),
+    DateTimeFormatter.ofPattern("uuuu/MM/dd HH:mm"),
+    DateTimeFormatter.ofPattern("uuuu-MM-dd"),
+    DateTimeFormatter.ofPattern("uuuu/MM/dd"),
+)
+private val UTC_OFFSET_REGEX = Regex("""^UTC([+-]\d{1,2})(?::?(\d{2}))?$""", setOf(RegexOption.IGNORE_CASE))
+
+private fun Duration.humanize(withSuffix: Boolean): String {
+    val absoluteDuration = if (isNegative) negated() else this
+    val totalSeconds = absoluteDuration.seconds
+    if (totalSeconds <= 0) return "just now"
+
+    val totalMinutes = absoluteDuration.toMinutes()
+    val totalHours = absoluteDuration.toHours()
+    val totalDays = absoluteDuration.toDays()
+    val phrase = when {
+        totalSeconds < 45 -> "a few seconds"
+        totalSeconds < 90 -> "a minute"
+        totalMinutes < 45 -> "${totalMinutes.coerceAtLeast(1)} minutes"
+        totalMinutes < 90 -> "an hour"
+        totalHours < 22 -> "${totalHours.coerceAtLeast(1)} hours"
+        totalHours < 36 -> "a day"
+        totalDays < 26 -> "${totalDays.coerceAtLeast(1)} days"
+        totalDays < 45 -> "a month"
+        totalDays < 320 -> "${(totalDays / 30.0).roundToInt().coerceAtLeast(1)} months"
+        totalDays < 548 -> "a year"
+        else -> "${(totalDays / 365.0).roundToInt().coerceAtLeast(1)} years"
+    }
+    if (!withSuffix) return phrase
+    return if (isNegative) "$phrase ago" else "in $phrase"
+}
+
+private fun ZonedDateTime.formatTime(offsetSpec: String): String {
+    val formatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+    val target = UTC_OFFSET_REGEX.matchEntire(offsetSpec.trim())?.let { match ->
+        val hours = match.groupValues[1].toIntOrNull() ?: return@let null
+        val minutes = match.groupValues[2].ifBlank { "0" }.toIntOrNull() ?: return@let null
+        ZoneOffset.ofHoursMinutes(hours, hours.signCompatibleMinutes(minutes))
+    } ?: offset
+    return withZoneSameInstant(target).format(formatter)
+}
+
+private fun ZonedDateTime.formatDate(): String {
+    return format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG))
+}
+
+private fun ZonedDateTime.formatWeekday(): String {
+    return format(DateTimeFormatter.ofPattern("EEEE"))
+}
+
+private fun Int.signCompatibleMinutes(minutes: Int): Int {
+    return when {
+        this < 0 -> -minutes.absoluteValue
+        this > 0 -> minutes.absoluteValue
+        else -> minutes
+    }
+}
+
+private fun ZonedDateTime.formatMomentStyle(rawFormat: String): String {
+    val trimmed = rawFormat.trim()
+    if (trimmed.isEmpty()) return format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    return when (trimmed) {
+        "LT" -> format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
+        "L" -> format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT))
+        "LL" -> format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG))
+        "LLL" -> format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.LONG, FormatStyle.SHORT))
+        "LLLL" -> format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.FULL, FormatStyle.SHORT))
+        else -> {
+            val javaPattern = trimmed.toJavaDateTimePattern()
+            runCatching { format(DateTimeFormatter.ofPattern(javaPattern)) }
+                .getOrElse { format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) }
+        }
+    }
+}
+
+private fun String.toJavaDateTimePattern(): String {
+    val replacements = listOf(
+        "YYYY" to "uuuu",
+        "YY" to "uu",
+        "dddd" to "EEEE",
+        "ddd" to "EEE",
+        "DD" to "dd",
+        "D" to "d",
+        "MMMM" to "MMMM",
+        "MMM" to "MMM",
+        "MM" to "MM",
+        "M" to "M",
+        "HH" to "HH",
+        "H" to "H",
+        "hh" to "hh",
+        "h" to "h",
+        "mm" to "mm",
+        "m" to "m",
+        "ss" to "ss",
+        "s" to "s",
+        "A" to "a",
+        "a" to "a",
+        "ZZ" to "xx",
+        "Z" to "XXX",
+    )
+    var value = this
+    replacements.forEach { (momentToken, javaToken) ->
+        value = value.replace(momentToken, javaToken)
+    }
+    return value
+}
+
+private fun kotlinx.datetime.LocalDateTime.toJavaLocalDateTime(): JavaLocalDateTime {
+    return JavaLocalDateTime.of(year, monthNumber, day, hour, minute, second, nanosecond)
+}
+
 private data class IfBranches(
     val thenBranch: String,
     val elseBranch: String?,
@@ -453,6 +706,7 @@ private data class MacroTag(
         return when (name) {
             "if" -> !isClosing && args.size <= 1
             "trim" -> !isClosing
+            "//" -> !isClosing
             else -> false
         }
     }
@@ -511,6 +765,7 @@ private data class ParsedMacro(
 data class StMacroState(
     val localVariables: MutableMap<String, String> = linkedMapOf(),
     val globalVariables: MutableMap<String, String> = linkedMapOf(),
+    val pickCache: MutableMap<String, Int> = linkedMapOf(),
 )
 
 internal data class StMacroEnvironment(
@@ -532,7 +787,45 @@ internal data class StMacroEnvironment(
     val lastUserMessage: String,
     val lastAssistantMessage: String,
     val modelName: String,
+    val input: String = "",
+    val original: String = "",
+    val charVersion: String = "",
+    val lastMessageId: String = "",
+    val firstIncludedMessageId: String = "",
+    val firstDisplayedMessageId: String = "",
+    val lastSwipeId: String = "",
+    val currentSwipeId: String = "",
+    val maxPrompt: String = "",
+    val defaultSystemPrompt: String = "",
+    val systemPrompt: String = "",
+    val generationType: String = "normal",
+    val instructStoryStringPrefix: String = "",
+    val instructStoryStringSuffix: String = "",
+    val instructUserPrefix: String = "",
+    val instructUserSuffix: String = "",
+    val instructAssistantPrefix: String = "",
+    val instructAssistantSuffix: String = "",
+    val instructSystemPrefix: String = "",
+    val instructSystemSuffix: String = "",
+    val instructFirstAssistantPrefix: String = "",
+    val instructLastAssistantPrefix: String = "",
+    val instructStop: String = "",
+    val instructUserFiller: String = "",
+    val instructSystemInstructionPrefix: String = "",
+    val instructFirstUserPrefix: String = "",
+    val instructLastUserPrefix: String = "",
+    val exampleSeparator: String = "",
+    val chatStart: String = "",
+    val isMobile: Boolean = true,
+    val outlets: Map<String, String> = emptyMap(),
+    val availableExtensions: Set<String> = emptySet(),
+    val now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault()),
+    val lastUserMessageCreatedAt: JavaLocalDateTime? = null,
 ) {
+    fun hasExtension(name: String): Boolean {
+        return name.trim().lowercase() in availableExtensions
+    }
+
     companion object {
         fun from(
             ctx: TransformerContext,
@@ -544,11 +837,17 @@ internal data class StMacroEnvironment(
             val charName = ctx.assistant.name.ifBlank {
                 characterData?.name?.ifBlank { "assistant" } ?: "assistant"
             }
-            val lastChatMessage = messages.lastOrNull { it.role != MessageRole.SYSTEM }?.toText().orEmpty()
-            val lastUserMessage = messages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
-            val lastAssistantMessage = messages.lastOrNull { it.role == MessageRole.ASSISTANT }?.toText().orEmpty()
+            val chatMessages = messages.filter { it.role != MessageRole.SYSTEM }
+            val lastChatMessage = chatMessages.lastOrNull()?.toText().orEmpty()
+            val lastUserMessageEntry = chatMessages.lastOrNull { it.role == MessageRole.USER }
+            val lastAssistantMessageEntry = chatMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+            val lastUserMessage = lastUserMessageEntry?.toText().orEmpty()
+            val lastAssistantMessage = lastAssistantMessageEntry?.toText().orEmpty()
             val groupValue = charName
             val notCharValue = userName
+            val assistantSystemPrompt = ctx.assistant.systemPrompt
+            val characterSystemPrompt = characterData?.systemPromptOverride.orEmpty()
+            val activeSystemPrompt = characterSystemPrompt.ifBlank { assistantSystemPrompt }
 
             return StMacroEnvironment(
                 user = userName,
@@ -560,7 +859,7 @@ internal data class StMacroEnvironment(
                 characterPersonality = characterData?.personality.orEmpty(),
                 scenario = characterData?.scenario.orEmpty(),
                 persona = ctx.settings.effectiveUserPersona(ctx.assistant),
-                charPrompt = characterData?.systemPromptOverride.orEmpty(),
+                charPrompt = characterSystemPrompt,
                 charInstruction = characterData?.postHistoryInstructions.orEmpty(),
                 charDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),
                 creatorNotes = characterData?.creatorNotes.orEmpty(),
@@ -569,6 +868,21 @@ internal data class StMacroEnvironment(
                 lastUserMessage = lastUserMessage,
                 lastAssistantMessage = lastAssistantMessage,
                 modelName = ctx.model.displayName.ifBlank { template?.sourceName.orEmpty() },
+                input = lastUserMessage,
+                original = lastUserMessage,
+                charVersion = characterData?.version.orEmpty(),
+                lastMessageId = chatMessages.lastIndex.takeIf { it >= 0 }?.toString().orEmpty(),
+                firstIncludedMessageId = chatMessages.firstOrNull()?.let { "0" }.orEmpty(),
+                firstDisplayedMessageId = chatMessages.firstOrNull()?.let { "0" }.orEmpty(),
+                maxPrompt = ctx.assistant.contextMessageSize.takeIf { it > 0 }?.toString().orEmpty(),
+                defaultSystemPrompt = assistantSystemPrompt,
+                systemPrompt = activeSystemPrompt,
+                generationType = ctx.stGenerationType.trim().lowercase().ifBlank { "normal" },
+                exampleSeparator = template?.newExampleChatPrompt.orEmpty(),
+                chatStart = template?.newChatPrompt.orEmpty(),
+                isMobile = true,
+                now = ZonedDateTime.now(ZoneId.systemDefault()),
+                lastUserMessageCreatedAt = lastUserMessageEntry?.createdAt?.toJavaLocalDateTime(),
             )
         }
     }

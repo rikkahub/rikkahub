@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.model
 
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.data.datastore.Settings
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -129,6 +130,139 @@ class AssistantRegexTest {
                 settings = settings,
                 scope = AssistantAffectScope.USER,
                 phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
+    }
+
+    @Test
+    fun `st placement should filter imported regex scripts by target`() {
+        val assistant = Assistant(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "foo",
+                    replaceString = "bar",
+                    affectingScope = setOf(AssistantAffectScope.ASSISTANT),
+                    stPlacements = setOf(AssistantRegexPlacement.AI_OUTPUT),
+                )
+            )
+        )
+
+        assertEquals(
+            "foo",
+            "foo".replaceRegexes(
+                assistant = assistant,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+                placement = AssistantRegexPlacement.USER_INPUT,
+            )
+        )
+        assertEquals(
+            "bar",
+            "foo".replaceRegexes(
+                assistant = assistant,
+                scope = AssistantAffectScope.ASSISTANT,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+                placement = AssistantRegexPlacement.AI_OUTPUT,
+            )
+        )
+    }
+
+    @Test
+    fun `trim strings should be removed from captured replacements`() {
+        val assistant = Assistant(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "(Sir )?(Lancelot)",
+                    replaceString = "[$1$2]",
+                    affectingScope = setOf(AssistantAffectScope.USER),
+                    trimStrings = listOf("Sir "),
+                )
+            )
+        )
+
+        assertEquals(
+            "[Lancelot]",
+            "Sir Lancelot".replaceRegexes(
+                assistant = assistant,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
+    }
+
+    @Test
+    fun `escaped substitute regex should treat char macro as literal text`() {
+        val assistant = Assistant(
+            name = "Fallback",
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "{{char}}",
+                    replaceString = "matched",
+                    affectingScope = setOf(AssistantAffectScope.ASSISTANT),
+                    substituteRegex = AssistantRegexSubstituteStrategy.ESCAPED,
+                    stPlacements = setOf(AssistantRegexPlacement.AI_OUTPUT),
+                )
+            ),
+            stCharacterData = SillyTavernCharacterData(
+                name = "A+B",
+            ),
+        )
+        val settings = Settings(
+            displaySetting = DisplaySetting(userNickname = "User"),
+        )
+
+        assertEquals(
+            "matched",
+            "A+B".replaceRegexes(
+                assistant = assistant,
+                settings = settings,
+                scope = AssistantAffectScope.ASSISTANT,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+                placement = AssistantRegexPlacement.AI_OUTPUT,
+            )
+        )
+    }
+
+    @Test
+    fun `run on edit false should skip regex during edits`() {
+        val assistant = Assistant(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "draft",
+                    replaceString = "final",
+                    affectingScope = setOf(AssistantAffectScope.USER),
+                    runOnEdit = false,
+                    stPlacements = setOf(AssistantRegexPlacement.USER_INPUT),
+                )
+            )
+        )
+
+        assertEquals(
+            "draft",
+            "draft".replaceRegexes(
+                assistant = assistant,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+                placement = AssistantRegexPlacement.USER_INPUT,
+                isEdit = true,
+            )
+        )
+        assertEquals(
+            "final",
+            "draft".replaceRegexes(
+                assistant = assistant,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+                placement = AssistantRegexPlacement.USER_INPUT,
+                isEdit = false,
             )
         )
     }

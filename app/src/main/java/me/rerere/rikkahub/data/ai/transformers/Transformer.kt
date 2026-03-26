@@ -13,6 +13,7 @@ class TransformerContext(
     val settings: Settings,
     val stGenerationType: String = "normal",
     val stMacroState: StMacroState? = null,
+    val lorebookRuntimeState: LorebookRuntimeState? = null,
 )
 
 interface MessageTransformer {
@@ -65,6 +66,7 @@ suspend fun List<UIMessage>.transforms(
     settings: Settings,
     stGenerationType: String = "normal",
     stMacroState: StMacroState? = null,
+    lorebookRuntimeState: LorebookRuntimeState? = null,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -73,6 +75,7 @@ suspend fun List<UIMessage>.transforms(
         settings = settings,
         stGenerationType = stGenerationType,
         stMacroState = stMacroState,
+        lorebookRuntimeState = lorebookRuntimeState,
     )
     return transformers.fold(this) { acc, transformer ->
         transformer.transform(ctx, acc)
@@ -87,6 +90,7 @@ suspend fun List<UIMessage>.visualTransforms(
     settings: Settings,
     stGenerationType: String = "normal",
     stMacroState: StMacroState? = null,
+    lorebookRuntimeState: LorebookRuntimeState? = null,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -95,6 +99,7 @@ suspend fun List<UIMessage>.visualTransforms(
         settings = settings,
         stGenerationType = stGenerationType,
         stMacroState = stMacroState,
+        lorebookRuntimeState = lorebookRuntimeState,
     )
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {
@@ -113,6 +118,7 @@ suspend fun List<UIMessage>.onGenerationFinish(
     settings: Settings,
     stGenerationType: String = "normal",
     stMacroState: StMacroState? = null,
+    lorebookRuntimeState: LorebookRuntimeState? = null,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -121,6 +127,7 @@ suspend fun List<UIMessage>.onGenerationFinish(
         settings = settings,
         stGenerationType = stGenerationType,
         stMacroState = stMacroState,
+        lorebookRuntimeState = lorebookRuntimeState,
     )
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {

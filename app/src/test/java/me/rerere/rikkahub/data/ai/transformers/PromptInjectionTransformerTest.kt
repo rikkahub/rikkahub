@@ -3,10 +3,13 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
-import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.LorebookGlobalSettings
+import me.rerere.rikkahub.data.model.PromptInjection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -929,6 +932,222 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
+    fun `lorebook should respect generation type triggers`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    keywords = listOf("magic"),
+                    content = "Continue lore",
+                ).copy(
+                    stMetadata = mapOf("triggers" to "[continue]")
+                )
+            )
+        )
+
+        val normalResult = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("magic")),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+            generationType = "normal",
+        )
+        val continueResult = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("magic")),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+            generationType = "continue",
+        )
+
+        assertEquals("System prompt", getMessageText(normalResult[0]))
+        assertTrue(getMessageText(continueResult[0]).contains("Continue lore"))
+    }
+
+    @Test
+    fun `lorebook token budget should keep ignore budget entries`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            tokenBudget = 3,
+            entries = listOf(
+                createRegexInjection(
+                    keywords = emptyList(),
+                    constantActive = true,
+                    priority = 300,
+                    content = "alpha beta",
+                ),
+                createRegexInjection(
+                    keywords = emptyList(),
+                    constantActive = true,
+                    priority = 200,
+                    content = "gamma delta",
+                ),
+                createRegexInjection(
+                    keywords = emptyList(),
+                    constantActive = true,
+                    priority = 100,
+                    content = "epsilon",
+                ).copy(
+                    stMetadata = mapOf("ignore_budget" to "true")
+                )
+            )
+        )
+
+        val result = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("hello")),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+        )
+
+        val systemText = getMessageText(result[0])
+        assertTrue(systemText.contains("alpha beta"))
+        assertTrue(systemText.contains("epsilon"))
+        assertTrue(!systemText.contains("gamma delta"))
+    }
+
+    @Test
+    fun `lorebook inclusion groups should keep the highest score winner`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    keywords = listOf("alpha"),
+                    priority = 100,
+                    content = "Single score",
+                ).copy(
+                    stMetadata = mapOf(
+                        "group" to "facts",
+                        "use_group_scoring" to "true",
+                    )
+                ),
+                createRegexInjection(
+                    keywords = listOf("alpha", "beta"),
+                    priority = 100,
+                    content = "Higher score",
+                ).copy(
+                    stMetadata = mapOf(
+                        "group" to "facts",
+                        "use_group_scoring" to "true",
+                    )
+                )
+            )
+        )
+
+        val result = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("alpha beta")),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+        )
+
+        val systemText = getMessageText(result[0])
+        assertTrue(systemText.contains("Higher score"))
+        assertTrue(!systemText.contains("Single score"))
+    }
+
+    @Test
+    fun `sticky and cooldown worldbook effects should persist across turns`() {
+        val lorebookId = Uuid.random()
+        val runtimeState = LorebookRuntimeState()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    keywords = listOf("alpha"),
+                    scanDepth = 1,
+                    content = "Timed lore",
+                ).copy(
+                    stMetadata = mapOf(
+                        "sticky" to "3",
+                        "cooldown" to "2",
+                    )
+                )
+            )
+        )
+        val assistant = createAssistant(lorebookIds = setOf(lorebookId))
+
+        val firstTurn = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("alpha")),
+            assistant = assistant,
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+            runtimeState = runtimeState,
+        )
+        val stickyTurn = transformMessages(
+            messages = listOf(
+                UIMessage.system("System prompt"),
+                UIMessage.user("alpha"),
+                UIMessage.assistant("ack"),
+                UIMessage.user("no match"),
+            ),
+            assistant = assistant,
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+            runtimeState = runtimeState,
+        )
+        val cooldownTurn = transformMessages(
+            messages = listOf(
+                UIMessage.system("System prompt"),
+                UIMessage.user("alpha"),
+                UIMessage.assistant("ack"),
+                UIMessage.user("no match"),
+                UIMessage.assistant("ack2"),
+                UIMessage.user("still nothing"),
+            ),
+            assistant = assistant,
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+            runtimeState = runtimeState,
+        )
+
+        assertTrue(getMessageText(firstTurn[0]).contains("Timed lore"))
+        assertTrue(getMessageText(stickyTurn[0]).contains("Timed lore"))
+        assertEquals("System prompt", getMessageText(cooldownTurn[0]))
+    }
+
+    @Test
+    fun `delay effect should suppress lorebook until enough turns exist`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    keywords = emptyList(),
+                    constantActive = true,
+                    content = "Delayed lore",
+                ).copy(
+                    stMetadata = mapOf("delay" to "3")
+                )
+            )
+        )
+
+        val earlyResult = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("one")),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+        )
+        val readyResult = transformMessages(
+            messages = listOf(
+                UIMessage.system("System prompt"),
+                UIMessage.user("one"),
+                UIMessage.assistant("two"),
+                UIMessage.user("three"),
+            ),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+        )
+
+        assertEquals("System prompt", getMessageText(earlyResult[0]))
+        assertTrue(getMessageText(readyResult[0]).contains("Delayed lore"))
+    }
+
+    @Test
     fun `disabled world book should not trigger`() {
         val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
@@ -1317,6 +1536,70 @@ class PromptInjectionTransformerTest {
         val injectedIndex = result.indexOfFirst { getMessageText(it).contains("Bottom injection") }
         val lastUserIndex = result.indexOfLast { it.role == MessageRole.USER && getMessageText(it) == "Thanks!" }
         assertEquals(lastUserIndex - 1, injectedIndex)
+    }
+
+    @Test
+    fun `global lorebook settings should allow name-prefixed matching`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    keywords = listOf("Alice: hello"),
+                    scanDepth = 4,
+                    content = "Matched with names",
+                )
+            )
+        )
+
+        val result = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("hello")),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)).copy(name = "Seraphina"),
+            settings = Settings(
+                displaySetting = DisplaySetting(userNickname = "Alice"),
+                lorebookGlobalSettings = LorebookGlobalSettings(includeNames = true)
+            ),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+        )
+
+        assertTrue(getMessageText(result[0]).contains("Matched with names"))
+    }
+
+    @Test
+    fun `global lorebook min activations should expand scan depth`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    keywords = listOf("ancient sigil"),
+                    scanDepth = 4,
+                    content = "Expanded depth hit",
+                )
+            )
+        )
+
+        val result = transformMessages(
+            messages = listOf(
+                UIMessage.system("System prompt"),
+                UIMessage.user("ancient sigil"),
+                UIMessage.assistant("ack"),
+                UIMessage.user("latest message"),
+            ),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            settings = Settings(
+                lorebookGlobalSettings = LorebookGlobalSettings(
+                    scanDepth = 1,
+                    minActivations = 1,
+                    minActivationsDepthMax = 3,
+                )
+            ),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+        )
+
+        assertTrue(getMessageText(result[0]).contains("Expanded depth hit"))
     }
     // endregion
 }

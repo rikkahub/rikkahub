@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.findPromptOrder
@@ -321,5 +322,93 @@ class SillyTavernImportTest {
         assertEquals(1, application.assistant.regexes.size)
         assertEquals(0, application.globalRegexes.size)
         assertNull(application.assistant.stPromptTemplate)
+    }
+
+    @Test
+    fun `preset regex import should preserve trim edit and placement semantics`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Regex Semantics",
+                  "prompts": [
+                    { "identifier": "main", "role": "system", "content": "Main" }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "regex_scripts": [
+                      {
+                        "scriptName": "Reasoning Trim",
+                        "findRegex": "(foo)",
+                        "replaceString": "$1",
+                        "placement": [6],
+                        "trimStrings": ["f"],
+                        "runOnEdit": false,
+                        "substituteRegex": 2
+                      }
+                    ]
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "preset-semantics",
+        )
+
+        val regex = payload.regexes.single()
+        assertEquals(listOf("f"), regex.trimStrings)
+        assertEquals(false, regex.runOnEdit)
+        assertEquals(2, regex.substituteRegex)
+        assertEquals(setOf(AssistantRegexPlacement.REASONING), regex.stPlacements)
+    }
+
+    @Test
+    fun `character book import should preserve extended worldbook metadata`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "spec": "chara_card_v2",
+                  "data": {
+                    "name": "Metadata Character",
+                    "character_book": {
+                      "entries": [
+                        {
+                          "comment": "Metadata Entry",
+                          "content": "Metadata content",
+                          "keys": ["alpha"],
+                          "extensions": {
+                            "probability": 25,
+                            "useProbability": false,
+                            "group": "facts",
+                            "group_override": true,
+                            "group_weight": 250,
+                            "use_group_scoring": true,
+                            "triggers": ["continue"],
+                            "ignore_budget": true,
+                            "outlet_name": "memory"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "character-metadata",
+        )
+
+        val entry = payload.lorebooks.single().entries.single()
+        assertNull(entry.probability)
+        assertEquals("facts", entry.stMetadata["group"])
+        assertEquals("true", entry.stMetadata["group_override"])
+        assertEquals("250", entry.stMetadata["group_weight"])
+        assertEquals("true", entry.stMetadata["use_group_scoring"])
+        assertEquals("[\"continue\"]", entry.stMetadata["triggers"])
+        assertEquals("true", entry.stMetadata["ignore_budget"])
+        assertEquals("memory", entry.stMetadata["outlet_name"])
+        assertEquals("false", entry.stMetadata["useProbability"])
     }
 }

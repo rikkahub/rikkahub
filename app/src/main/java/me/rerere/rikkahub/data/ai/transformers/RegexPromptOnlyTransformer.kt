@@ -5,6 +5,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.chatMessageDepthFromEndMap
 import me.rerere.rikkahub.data.model.effectiveRegexes
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -26,6 +27,11 @@ object RegexPromptOnlyTransformer : InputMessageTransformer {
                 MessageRole.ASSISTANT -> AssistantAffectScope.ASSISTANT
                 else -> return@mapIndexed message
             }
+            val placement = when (message.role) {
+                MessageRole.USER -> AssistantRegexPlacement.USER_INPUT
+                MessageRole.ASSISTANT -> AssistantRegexPlacement.AI_OUTPUT
+                else -> null
+            }
 
             val messageDepth = depthMap[index]
             message.copy(
@@ -38,7 +44,8 @@ object RegexPromptOnlyTransformer : InputMessageTransformer {
                                     settings = ctx.settings,
                                     scope = scope,
                                     phase = AssistantRegexApplyPhase.PROMPT_ONLY,
-                                    messageDepthFromEnd = messageDepth
+                                    messageDepthFromEnd = messageDepth,
+                                    placement = placement,
                                 )
                             )
                         }
@@ -50,7 +57,8 @@ object RegexPromptOnlyTransformer : InputMessageTransformer {
                                     settings = ctx.settings,
                                     scope = scope,
                                     phase = AssistantRegexApplyPhase.PROMPT_ONLY,
-                                    messageDepthFromEnd = messageDepth
+                                    messageDepthFromEnd = messageDepth,
+                                    placement = AssistantRegexPlacement.REASONING,
                                 )
                             )
                         }

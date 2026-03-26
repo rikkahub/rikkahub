@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.ai.transformers.LorebookRuntimeState
 import me.rerere.rikkahub.data.ai.transformers.StMacroState
 import me.rerere.rikkahub.data.model.Conversation
 import java.util.concurrent.ConcurrentHashMap
@@ -31,6 +32,7 @@ class ConversationSession(
 
     // ST 宏局部变量按会话保存，避免每轮生成都重新归零
     private val stMacroLocalVariables = ConcurrentHashMap<String, String>()
+    private val lorebookRuntimeState = LorebookRuntimeState()
 
     var stGenerationType: String = "normal"
 
@@ -93,8 +95,14 @@ class ConversationSession(
         )
     }
 
+    fun getLorebookRuntimeState(): LorebookRuntimeState = lorebookRuntimeState
+
     fun resetStMacroLocalVariables() {
         stMacroLocalVariables.clear()
+    }
+
+    fun resetLorebookRuntimeState() {
+        lorebookRuntimeState.clear()
     }
 
     private fun scheduleIdleCheck() {
@@ -117,5 +125,6 @@ class ConversationSession(
         _generationJob.value = null
         idleCheckJob?.cancel()
         idleCheckJob = null
+        lorebookRuntimeState.clear()
     }
 }

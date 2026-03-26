@@ -127,12 +127,30 @@ data class AssistantRegex(
     val promptOnly: Boolean = false, // 是否仅影响发送给 LLM 的提示词
     val minDepth: Int? = null, // 最小深度：仅在倒数第 x 条及更早消息生效（包含 x）
     val maxDepth: Int? = null, // 最大深度：仅在倒数第 x 条消息内生效（包含 x）
+    val trimStrings: List<String> = emptyList(),
+    val runOnEdit: Boolean = true,
+    val substituteRegex: Int = AssistantRegexSubstituteStrategy.NONE,
+    val stPlacements: Set<Int> = emptySet(),
 )
 
 enum class AssistantRegexApplyPhase {
     ACTUAL_MESSAGE, // 实际消息（会影响保存与后续上下文）
     VISUAL_ONLY, // 仅视觉渲染
     PROMPT_ONLY, // 仅发送给 LLM 的提示词
+}
+
+object AssistantRegexPlacement {
+    const val USER_INPUT = 1
+    const val AI_OUTPUT = 2
+    const val SLASH_COMMAND = 3
+    const val WORLD_INFO = 5
+    const val REASONING = 6
+}
+
+object AssistantRegexSubstituteStrategy {
+    const val NONE = 0
+    const val RAW = 1
+    const val ESCAPED = 2
 }
 
 fun List<UIMessage>.chatMessageDepthFromEndMap(): Map<Int, Int> {
@@ -150,22 +168,45 @@ fun String.replaceRegexes(
     scope: AssistantAffectScope,
     phase: AssistantRegexApplyPhase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
     messageDepthFromEnd: Int? = null,
+    placement: Int? = null,
+    isEdit: Boolean = false,
+    characterOverride: String? = null,
 ): String {
     val effectiveRegexes = settings?.effectiveRegexes(assistant) ?: assistant?.regexes.orEmpty()
     if (effectiveRegexes.isEmpty()) return this
     return effectiveRegexes.fold(this) { acc, regex ->
         if (
             regex.enabled &&
-            regex.matchesPhase(phase) &&
-            regex.affectingScope.contains(scope) &&
+            regex.matchesPlacement(
+                scope = scope,
+                phase = phase,
+                placement = placement,
+                isEdit = isEdit,
+            ) &&
             regex.matchesDepth(messageDepthFromEnd)
         ) {
             try {
-                val result = acc.replace(
-                    regex = Regex(regex.findRegex),
-                    replacement = regex.replaceString,
+                val pattern = regex.resolveFindRegex(
+                    assistant = assistant,
+                    settings = settings,
+                    characterOverride = characterOverride,
                 )
-                // println("Regex: ${regex.findRegex} -> ${result}")
+                val compiledRegex = Regex(pattern)
+                val result = if (regex.requiresCustomReplacement()) {
+                    compiledRegex.replace(acc) { matchResult ->
+                        regex.buildReplacement(
+                            matchResult = matchResult,
+                            assistant = assistant,
+                            settings = settings,
+                            characterOverride = characterOverride,
+                        )
+                    }
+                } else {
+                    acc.replace(
+                        regex = compiledRegex,
+                        replacement = regex.replaceString,
+                    )
+                }
                 result
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -190,12 +231,30 @@ fun Settings.effectiveRegexes(assistant: Assistant?): List<AssistantRegex> {
                 regex.promptOnly.toString(),
                 regex.minDepth?.toString().orEmpty(),
                 regex.maxDepth?.toString().orEmpty(),
+                regex.trimStrings.joinToString("\u0000"),
+                regex.runOnEdit.toString(),
+                regex.substituteRegex.toString(),
+                regex.stPlacements.sorted().joinToString(","),
             ).joinToString("|")
         }
 }
 
-private fun AssistantRegex.matchesPhase(phase: AssistantRegexApplyPhase): Boolean {
-    if (visualOnly && promptOnly) return false
+private fun AssistantRegex.matchesPlacement(
+    scope: AssistantAffectScope,
+    phase: AssistantRegexApplyPhase,
+    placement: Int?,
+    isEdit: Boolean,
+): Boolean {
+    if (isEdit && !runOnEdit) return false
+    if (stPlacements.isNotEmpty()) {
+        if (placement == null || placement !in stPlacements) return false
+        return when (phase) {
+            AssistantRegexApplyPhase.ACTUAL_MESSAGE -> !visualOnly && !promptOnly
+            AssistantRegexApplyPhase.VISUAL_ONLY -> visualOnly
+            AssistantRegexApplyPhase.PROMPT_ONLY -> promptOnly
+        }
+    }
+    if (!affectingScope.contains(scope)) return false
     return when (phase) {
         AssistantRegexApplyPhase.ACTUAL_MESSAGE -> !visualOnly && !promptOnly
         AssistantRegexApplyPhase.VISUAL_ONLY -> visualOnly
@@ -210,6 +269,187 @@ private fun AssistantRegex.matchesDepth(messageDepthFromEnd: Int?): Boolean {
     if (effectiveMinDepth != null && depth < effectiveMinDepth) return false
     if (effectiveMaxDepth != null && depth > effectiveMaxDepth) return false
     return true
+}
+
+private fun AssistantRegex.resolveFindRegex(
+    assistant: Assistant?,
+    settings: Settings?,
+    characterOverride: String?,
+): String {
+    return when (substituteRegex) {
+        AssistantRegexSubstituteStrategy.RAW -> {
+            substituteRegexMacros(
+                text = findRegex,
+                assistant = assistant,
+                settings = settings,
+                characterOverride = characterOverride,
+                escapeReplacement = false,
+            )
+        }
+
+        AssistantRegexSubstituteStrategy.ESCAPED -> {
+            substituteRegexMacros(
+                text = findRegex,
+                assistant = assistant,
+                settings = settings,
+                characterOverride = characterOverride,
+                escapeReplacement = true,
+            )
+        }
+
+        else -> findRegex
+    }
+}
+
+private fun AssistantRegex.requiresCustomReplacement(): Boolean {
+    return trimStrings.isNotEmpty() ||
+        stPlacements.isNotEmpty() ||
+        substituteRegex != AssistantRegexSubstituteStrategy.NONE ||
+        replaceString.contains("{{match}}", ignoreCase = true) ||
+        replaceString.contains("\$<") ||
+        replaceString.contains("\${")
+}
+
+private fun AssistantRegex.buildReplacement(
+    matchResult: MatchResult,
+    assistant: Assistant?,
+    settings: Settings?,
+    characterOverride: String?,
+): String {
+    val template = replaceString.replace(Regex("\\{\\{match}}", RegexOption.IGNORE_CASE), "\$0")
+    val resolved = StringBuilder()
+    var index = 0
+    while (index < template.length) {
+        val current = template[index]
+        if (current != '$') {
+            resolved.append(current)
+            index++
+            continue
+        }
+
+        if (index + 1 >= template.length) {
+            resolved.append(current)
+            index++
+            continue
+        }
+
+        val next = template[index + 1]
+        when {
+            next == '$' -> {
+                resolved.append('$')
+                index += 2
+            }
+
+            next == '<' -> {
+                val closing = template.indexOf('>', startIndex = index + 2)
+                if (closing > index + 2) {
+                    val groupName = template.substring(index + 2, closing)
+                    val groupValue = matchResult.groups[groupName]?.value.orEmpty()
+                    resolved.append(filterTrimStrings(groupValue, assistant, settings, characterOverride))
+                    index = closing + 1
+                } else {
+                    resolved.append('$')
+                    index++
+                }
+            }
+
+            next == '{' -> {
+                val closing = template.indexOf('}', startIndex = index + 2)
+                if (closing > index + 2) {
+                    val groupName = template.substring(index + 2, closing)
+                    val groupValue = matchResult.groups[groupName]?.value.orEmpty()
+                    resolved.append(filterTrimStrings(groupValue, assistant, settings, characterOverride))
+                    index = closing + 1
+                } else {
+                    resolved.append('$')
+                    index++
+                }
+            }
+
+            next.isDigit() -> {
+                var end = index + 2
+                while (end < template.length && template[end].isDigit()) {
+                    end++
+                }
+                val groupIndex = template.substring(index + 1, end).toIntOrNull()
+                val groupValue = groupIndex
+                    ?.let { resolvedGroupIndex -> matchResult.groups[resolvedGroupIndex]?.value }
+                    .orEmpty()
+                resolved.append(filterTrimStrings(groupValue, assistant, settings, characterOverride))
+                index = end
+            }
+
+            else -> {
+                resolved.append('$')
+                index++
+            }
+        }
+    }
+
+    return substituteRegexMacros(
+        text = resolved.toString(),
+        assistant = assistant,
+        settings = settings,
+        characterOverride = characterOverride,
+        escapeReplacement = false,
+    )
+}
+
+private fun AssistantRegex.filterTrimStrings(
+    value: String,
+    assistant: Assistant?,
+    settings: Settings?,
+    characterOverride: String?,
+): String {
+    if (value.isEmpty() || trimStrings.isEmpty()) return value
+    return trimStrings.fold(value) { acc, trimString ->
+        val resolvedTrim = substituteRegexMacros(
+            text = trimString,
+            assistant = assistant,
+            settings = settings,
+            characterOverride = characterOverride,
+            escapeReplacement = false,
+        )
+        if (resolvedTrim.isEmpty()) {
+            acc
+        } else {
+            acc.replace(resolvedTrim, "")
+        }
+    }
+}
+
+private fun substituteRegexMacros(
+    text: String,
+    assistant: Assistant?,
+    settings: Settings?,
+    characterOverride: String?,
+    escapeReplacement: Boolean,
+): String {
+    if (text.isEmpty()) return text
+    val characterName = characterOverride
+        ?.takeIf { it.isNotBlank() }
+        ?: assistant?.stCharacterData?.name
+            ?.takeIf { it.isNotBlank() }
+        ?: assistant?.name
+            ?.takeIf { it.isNotBlank() }
+        ?: "char"
+    val userName = settings?.effectiveUserName()
+        ?.takeIf { it.isNotBlank() }
+        ?: "user"
+    val replacements = mapOf(
+        "char" to characterName,
+        "bot" to characterName,
+        "name2" to characterName,
+        "user" to userName,
+        "name1" to userName,
+    ).mapValues { (_, value) ->
+        if (escapeReplacement) Regex.escape(value) else value
+    }
+    return replacements.entries.fold(text) { acc, (key, value) ->
+        acc
+            .replace("{{$key}}", value, ignoreCase = true)
+            .replace("{${key}}", value, ignoreCase = true)
+    }
 }
 
 /**
@@ -322,11 +562,24 @@ data class Lorebook(
  */
 fun PromptInjection.RegexInjection.isTriggered(
     context: String,
-    triggerContext: LorebookTriggerContext = LorebookTriggerContext(recentMessagesText = context)
+    triggerContext: LorebookTriggerContext = LorebookTriggerContext(recentMessagesText = context),
+    globalSettings: LorebookGlobalSettings? = null,
+): Boolean {
+    if (!matchesTriggerKeywords(context, triggerContext, globalSettings)) return false
+    return passesProbabilityCheck()
+}
+
+fun PromptInjection.RegexInjection.matchesTriggerKeywords(
+    context: String,
+    triggerContext: LorebookTriggerContext = LorebookTriggerContext(recentMessagesText = context),
+    globalSettings: LorebookGlobalSettings? = null,
 ): Boolean {
     if (!enabled) return false
-    if (constantActive) return passesProbabilityCheck()
+    if (constantActive) return true
+    if (!matchesGenerationType(triggerContext.generationType)) return false
     if (keywords.isEmpty()) return false
+    val caseSensitive = effectiveCaseSensitive(globalSettings)
+    val matchWholeWords = effectiveMatchWholeWords(globalSettings)
 
     val haystacks = buildList {
         if (triggerContext.recentMessagesText.isNotBlank()) add(triggerContext.recentMessagesText)
@@ -352,7 +605,7 @@ fun PromptInjection.RegexInjection.isTriggered(
     if (!hasPrimaryMatch) return false
 
     if (!selective || secondaryKeywords.isEmpty()) {
-        return passesProbabilityCheck()
+        return true
     }
 
     val secondaryMatches = secondaryKeywords.map { keyword ->
@@ -374,14 +627,94 @@ fun PromptInjection.RegexInjection.isTriggered(
         else -> secondaryMatches.any { it } // AND_ANY
     }
 
-    return selectiveMatched && passesProbabilityCheck()
+    return selectiveMatched
 }
 
-private fun PromptInjection.RegexInjection.passesProbabilityCheck(): Boolean {
+fun PromptInjection.RegexInjection.matchScore(
+    context: String,
+    triggerContext: LorebookTriggerContext = LorebookTriggerContext(recentMessagesText = context),
+    globalSettings: LorebookGlobalSettings? = null,
+): Int {
+    if (!enabled || !matchesGenerationType(triggerContext.generationType) || keywords.isEmpty()) {
+        return 0
+    }
+    val caseSensitive = effectiveCaseSensitive(globalSettings)
+    val matchWholeWords = effectiveMatchWholeWords(globalSettings)
+
+    val haystacks = buildList {
+        if (triggerContext.recentMessagesText.isNotBlank()) add(triggerContext.recentMessagesText)
+        if (matchCharacterDescription && triggerContext.characterDescription.isNotBlank()) add(triggerContext.characterDescription)
+        if (matchCharacterPersonality && triggerContext.characterPersonality.isNotBlank()) add(triggerContext.characterPersonality)
+        if (matchPersonaDescription && triggerContext.personaDescription.isNotBlank()) add(triggerContext.personaDescription)
+        if (matchScenario && triggerContext.scenario.isNotBlank()) add(triggerContext.scenario)
+        if (matchCreatorNotes && triggerContext.creatorNotes.isNotBlank()) add(triggerContext.creatorNotes)
+        if (matchCharacterDepthPrompt && triggerContext.characterDepthPrompt.isNotBlank()) add(triggerContext.characterDepthPrompt)
+    }.ifEmpty { listOf(context) }
+
+    val primaryScore = keywords.count { keyword ->
+        haystacks.any { haystack ->
+            keywordMatches(
+                keyword = keyword,
+                context = haystack,
+                useRegex = useRegex,
+                caseSensitive = caseSensitive,
+                matchWholeWords = matchWholeWords,
+            )
+        }
+    }
+    if (primaryScore == 0) return 0
+
+    val secondaryScore = secondaryKeywords.count { keyword ->
+        haystacks.any { haystack ->
+            keywordMatches(
+                keyword = keyword,
+                context = haystack,
+                useRegex = useRegex,
+                caseSensitive = caseSensitive,
+                matchWholeWords = matchWholeWords,
+            )
+        }
+    }
+    if (secondaryKeywords.isEmpty()) return primaryScore
+
+    return when (selectiveLogic) {
+        0 -> primaryScore + secondaryScore
+        3 -> if (secondaryScore == secondaryKeywords.size) primaryScore + secondaryScore else primaryScore
+        else -> primaryScore
+    }
+}
+
+fun PromptInjection.RegexInjection.passesProbabilityCheck(forceSuccess: Boolean = false): Boolean {
+    if (forceSuccess) return true
+    val useProbability = stMetadata["useProbability"]?.trim()?.let { rawValue ->
+        rawValue.equals("true", ignoreCase = true) || rawValue == "1"
+    } ?: true
+    if (!useProbability) return true
     val chance = probability ?: return true
     if (chance >= 100) return true
     if (chance <= 0) return false
     return kotlin.random.Random.nextInt(100) < chance
+}
+
+fun PromptInjection.RegexInjection.matchesGenerationType(generationType: String): Boolean {
+    val normalizedType = generationType.trim().lowercase().ifBlank { "normal" }
+    val rawTriggers = stMetadata["triggers"]
+        ?.takeIf { it.isNotBlank() }
+        ?: return true
+    val triggers = Regex("[,\\n]")
+        .split(rawTriggers)
+        .mapNotNull { trigger ->
+            trigger
+                .trim()
+                .removePrefix("[")
+                .removeSuffix("]")
+                .removePrefix("\"")
+                .removeSuffix("\"")
+                .lowercase()
+                .takeIf { it.isNotBlank() }
+        }
+        .distinct()
+    return triggers.isEmpty() || normalizedType in triggers
 }
 
 private fun keywordMatches(
@@ -447,6 +780,18 @@ private fun parseSlashRegex(input: String, caseSensitive: Boolean): Regex? {
     return runCatching { Regex(pattern, options) }.getOrNull()
 }
 
+private fun PromptInjection.RegexInjection.effectiveCaseSensitive(
+    globalSettings: LorebookGlobalSettings?,
+): Boolean {
+    return caseSensitive || globalSettings?.caseSensitive == true
+}
+
+private fun PromptInjection.RegexInjection.effectiveMatchWholeWords(
+    globalSettings: LorebookGlobalSettings?,
+): Boolean {
+    return matchWholeWords || globalSettings?.matchWholeWords == true
+}
+
 /**
  * 从消息列表中提取用于匹配的上下文文本
  *
@@ -456,11 +801,28 @@ private fun parseSlashRegex(input: String, caseSensitive: Boolean): Regex? {
  */
 fun extractContextForMatching(
     messages: List<UIMessage>,
-    scanDepth: Int
+    scanDepth: Int,
+    includeNames: Boolean = false,
+    userName: String = "User",
+    assistantName: String = "Assistant",
 ): String {
     return messages
         .takeLast(scanDepth.coerceAtLeast(0))
-        .joinToString("\n") { it.toText() }
+        .joinToString("\n") { message ->
+            if (!includeNames) {
+                return@joinToString message.toText()
+            }
+            val speaker = when (message.role) {
+                MessageRole.USER -> userName
+                MessageRole.ASSISTANT -> assistantName
+                else -> null
+            }
+            if (speaker == null) {
+                message.toText()
+            } else {
+                "$speaker: ${message.toText()}"
+            }
+        }
 }
 
 /**

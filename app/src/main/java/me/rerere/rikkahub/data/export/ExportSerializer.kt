@@ -148,7 +148,7 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
         }.getOrNull()
     }
 
-    private fun tryImportSillyTavern(json: String, fileName: String?): Lorebook? {
+    internal fun tryImportSillyTavern(json: String, fileName: String?): Lorebook? {
         return runCatching {
             val stLorebook = ExportSerializer.DefaultJson.decodeFromString(
                 SillyTavernLorebook.serializer(),
@@ -162,6 +162,10 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
                 recursiveScanning = stLorebook.recursiveScanning ?: false,
                 tokenBudget = stLorebook.tokenBudget,
                 entries = stLorebook.entries.values.map { entry ->
+                    val useRegex = entry.useRegex ?: (
+                        entry.key.any(::isSlashDelimitedRegex) || entry.secondaryKeys.any(::isSlashDelimitedRegex)
+                        )
+                    val useProbability = entry.useProbability ?: true
                     PromptInjection.RegexInjection(
                         id = Uuid.random(),
                         name = entry.comment.orEmpty().ifEmpty { entry.key.firstOrNull().orEmpty() },
@@ -173,10 +177,10 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
                         keywords = entry.key,
                         secondaryKeywords = entry.secondaryKeys,
                         selective = entry.selective,
-                        useRegex = false, // SillyTavern 格式不支持 useRegex
+                        useRegex = useRegex,
                         caseSensitive = entry.caseSensitive ?: false,
                         matchWholeWords = entry.matchWholeWords ?: false,
-                        probability = entry.probability?.takeIf { entry.useProbability == true || it > 0 },
+                        probability = entry.probability?.takeIf { useProbability },
                         scanDepth = entry.scanDepth ?: 4,
                         constantActive = entry.constant,
                         role = mapSillyTavernRole(entry.role),
@@ -188,10 +192,16 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
                             putIfPresent("group", entry.group)
                             putIfPresent("group_override", entry.groupOverride)
                             putIfPresent("group_weight", entry.groupWeight)
+                            putIfPresent("use_group_scoring", entry.useGroupScoring)
                             putIfPresent("sticky", entry.sticky)
                             putIfPresent("cooldown", entry.cooldown)
                             putIfPresent("delay", entry.delay)
                             putIfPresent("delay_until_recursion", entry.delayUntilRecursion)
+                            putIfPresent("triggers", entry.triggers)
+                            putIfPresent("ignore_budget", entry.ignoreBudget)
+                            putIfPresent("outlet_name", entry.outletName)
+                            putIfPresent("useProbability", useProbability)
+                            putIfPresent("probability", entry.probability)
                             putIfPresent("vectorized", entry.vectorized)
                             putIfPresent("automation_id", entry.automationId)
                         },
@@ -311,6 +321,11 @@ private data class SillyTavernEntry(
     val scanDepth: Int? = null,
     val caseSensitive: Boolean? = null,
     val matchWholeWords: Boolean? = null,
+    val useGroupScoring: Boolean? = null,
+    val triggers: List<String> = emptyList(),
+    val ignoreBudget: Boolean? = null,
+    val outletName: String? = null,
+    val useRegex: Boolean? = null,
     val automationId: String? = null,
 )
 
@@ -326,4 +341,9 @@ private fun MutableMap<String, String>.putIfPresent(key: String, value: Any?) {
         }
         else -> put(key, value.toString())
     }
+}
+
+private fun isSlashDelimitedRegex(value: String): Boolean {
+    return Regex("""^/(.*?)(?<!\\)/([a-zA-Z]*)$""", setOf(RegexOption.DOT_MATCHES_ALL))
+        .matches(value.trim())
 }

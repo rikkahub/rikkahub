@@ -6,6 +6,9 @@ import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class SillyTavernMacroTransformerTest {
     @Test
@@ -214,5 +217,114 @@ class SillyTavernMacroTransformerTest {
 
         assertEquals(1, result.size)
         assertEquals("Gentle / Moon", result.single().toText())
+    }
+
+    @Test
+    fun `macros should expose extended st environment state`() {
+        val state = StMacroState()
+        val env = StMacroEnvironment(
+            user = "Alice",
+            char = "Seraphina",
+            group = "Seraphina",
+            groupNotMuted = "Seraphina",
+            notChar = "Alice",
+            characterDescription = "Guardian",
+            characterPersonality = "Warm",
+            scenario = "Forest",
+            persona = "Archivist",
+            charPrompt = "Character Prompt",
+            charInstruction = "Instruction",
+            charDepthPrompt = "Depth",
+            creatorNotes = "Creator Notes",
+            exampleMessagesRaw = "<START>",
+            lastChatMessage = "Latest reply",
+            lastUserMessage = "Current input",
+            lastAssistantMessage = "Latest reply",
+            modelName = "Test Model",
+            input = "Current input",
+            original = "Current input",
+            charVersion = "3.0",
+            lastMessageId = "5",
+            firstIncludedMessageId = "1",
+            firstDisplayedMessageId = "0",
+            maxPrompt = "8192",
+            defaultSystemPrompt = "Default System",
+            systemPrompt = "Character Prompt",
+            generationType = "continue",
+            availableExtensions = setOf("regex"),
+            now = ZonedDateTime.of(2026, 3, 26, 14, 30, 0, 0, ZoneId.of("UTC")),
+            lastUserMessageCreatedAt = LocalDateTime.of(2026, 3, 26, 12, 30, 0),
+        )
+
+        val firstPick = SillyTavernMacroTransformer.applySillyTavernMacros(
+            messages = listOf(
+                UIMessage.system("{{pick::red::blue}}"),
+            ),
+            env = env,
+            state = state,
+        ).single().toText()
+        val secondPick = SillyTavernMacroTransformer.applySillyTavernMacros(
+            messages = listOf(
+                UIMessage.system("{{pick::red::blue}}"),
+            ),
+            env = env,
+            state = state,
+        ).single().toText()
+        val stateResult = SillyTavernMacroTransformer.applySillyTavernMacros(
+            messages = listOf(
+                UIMessage.system(
+                    "{{input}} / {{original}} / {{charVersion}} / {{lastMessageId}} / " +
+                        "{{firstIncludedMessageId}} / {{firstDisplayedMessageId}} / {{maxPrompt}} / " +
+                        "{{lastGenerationType}} / {{hasExtension::regex}} / {{reverse::abc}} / " +
+                        "{{systemPrompt}} / {{defaultSystemPrompt}} / {{idleDuration}} / " +
+                        "{{datetimeformat::YYYY-MM-DD HH:mm}}"
+                ),
+            ),
+            env = env,
+            state = state,
+        ).single().toText()
+
+        assertTrue(firstPick == "red" || firstPick == "blue")
+        assertEquals(firstPick, secondPick)
+        assertEquals(
+            "Current input / Current input / 3.0 / 5 / 1 / 0 / 8192 / continue / true / cba / " +
+                "Character Prompt / Default System / 2 hours / 2026-03-26 14:30",
+            stateResult
+        )
+    }
+
+    @Test
+    fun `macros should support time diff and scoped comments`() {
+        val env = StMacroEnvironment(
+            user = "Alice",
+            char = "Seraphina",
+            group = "Seraphina",
+            groupNotMuted = "Seraphina",
+            notChar = "Alice",
+            characterDescription = "",
+            characterPersonality = "",
+            scenario = "",
+            persona = "",
+            charPrompt = "",
+            charInstruction = "",
+            charDepthPrompt = "",
+            creatorNotes = "",
+            exampleMessagesRaw = "",
+            lastChatMessage = "",
+            lastUserMessage = "",
+            lastAssistantMessage = "",
+            modelName = "Test Model",
+            now = ZonedDateTime.of(2026, 3, 26, 8, 0, 0, 0, ZoneId.of("UTC")),
+        )
+
+        val result = SillyTavernMacroTransformer.applySillyTavernMacros(
+            messages = listOf(
+                UIMessage.system("{{//}}hidden{{///}}show"),
+                UIMessage.system("{{timeDiff::2026-03-26 15:00:00::2026-03-26 12:00:00}}"),
+            ),
+            env = env,
+        )
+
+        assertEquals(listOf("show", "in 3 hours"), result.map { it.toText() })
     }
 }

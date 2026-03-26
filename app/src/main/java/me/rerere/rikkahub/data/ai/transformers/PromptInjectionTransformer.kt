@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
@@ -23,10 +24,13 @@ object PromptInjectionTransformer : InputMessageTransformer {
         return transformMessages(
             messages = messages,
             assistant = ctx.assistant,
+            settings = ctx.settings,
             modeInjections = ctx.settings.modeInjections,
             lorebooks = ctx.settings.lorebooks,
             personaDescription = ctx.settings.effectiveUserPersona(ctx.assistant),
             stPromptTemplateActive = ctx.settings.stPresetEnabled && ctx.settings.stPresetTemplate != null,
+            generationType = ctx.stGenerationType,
+            runtimeState = ctx.lorebookRuntimeState,
         )
     }
 }
@@ -37,19 +41,25 @@ object PromptInjectionTransformer : InputMessageTransformer {
 internal fun transformMessages(
     messages: List<UIMessage>,
     assistant: Assistant,
+    settings: Settings? = null,
     modeInjections: List<PromptInjection.ModeInjection>,
     lorebooks: List<Lorebook>,
     personaDescription: String = assistant.userPersona,
     stPromptTemplateActive: Boolean = false,
+    generationType: String = "normal",
+    runtimeState: LorebookRuntimeState? = null,
 ): List<UIMessage> {
     // 收集所有需要注入的内容
     val injections = collectInjections(
         messages = messages,
         assistant = assistant,
+        settings = settings,
         modeInjections = modeInjections,
         lorebooks = lorebooks,
         personaDescription = personaDescription,
         stPromptTemplateActive = stPromptTemplateActive,
+        generationType = generationType,
+        runtimeState = runtimeState,
     )
 
     if (injections.isEmpty()) {
@@ -71,10 +81,13 @@ internal fun transformMessages(
 internal fun collectInjections(
     messages: List<UIMessage>,
     assistant: Assistant,
+    settings: Settings? = null,
     modeInjections: List<PromptInjection.ModeInjection>,
     lorebooks: List<Lorebook>,
     personaDescription: String = assistant.userPersona,
     stPromptTemplateActive: Boolean = false,
+    generationType: String = "normal",
+    runtimeState: LorebookRuntimeState? = null,
 ): List<PromptInjection> {
     val injections = mutableListOf<PromptInjection>()
 
@@ -94,7 +107,10 @@ internal fun collectInjections(
             lorebooks = enabledLorebooks,
             triggerContext = LorebookTriggerContext(
                 personaDescription = personaDescription,
+                generationType = generationType,
             ),
+            settings = settings,
+            runtimeState = runtimeState,
         )
     }
 

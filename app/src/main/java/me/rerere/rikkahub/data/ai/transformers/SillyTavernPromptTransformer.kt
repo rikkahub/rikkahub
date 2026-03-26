@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
@@ -30,10 +31,12 @@ object SillyTavernPromptTransformer : InputMessageTransformer {
         return transformSillyTavernPrompt(
             messages = messages,
             assistant = ctx.assistant,
+            settings = ctx.settings,
             lorebooks = ctx.settings.lorebooks,
             template = template,
             generationType = ctx.stGenerationType,
             personaDescription = ctx.settings.effectiveUserPersona(ctx.assistant),
+            runtimeState = ctx.lorebookRuntimeState,
         )
     }
 }
@@ -41,10 +44,12 @@ object SillyTavernPromptTransformer : InputMessageTransformer {
 internal fun transformSillyTavernPrompt(
     messages: List<UIMessage>,
     assistant: Assistant,
+    settings: Settings? = null,
     lorebooks: List<Lorebook>,
     template: SillyTavernPromptTemplate,
     generationType: String = "normal",
     personaDescription: String = assistant.userPersona,
+    runtimeState: LorebookRuntimeState? = null,
 ): List<UIMessage> {
     val normalizedGenerationType = generationType.trim().lowercase().ifBlank { "normal" }
     val normalizedPersonaDescription = personaDescription.trim()
@@ -76,7 +81,10 @@ internal fun transformSillyTavernPrompt(
             scenario = characterData?.scenario.orEmpty(),
             creatorNotes = characterData?.creatorNotes.orEmpty(),
             characterDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),
+            generationType = generationType,
         ),
+        settings = settings,
+        runtimeState = runtimeState,
     )
 
     val worldInfoBefore = triggeredLorebookEntries
