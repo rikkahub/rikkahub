@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,7 +43,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,6 +61,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
@@ -88,13 +92,16 @@ fun SillyTavernPresetEditorCard(
     template: SillyTavernPromptTemplate,
     onUpdate: (SillyTavernPromptTemplate) -> Unit,
     modifier: Modifier = Modifier,
-    title: String = "SillyTavern 预设编辑",
-    description: String = "这里按 ST 的模板字段、prompt order 和 prompt definitions 组织。",
+    title: String? = null,
+    description: String? = null,
 ) {
+    val context = LocalContext.current
     var formatExpanded by rememberSaveable { mutableStateOf(false) }
     var runtimeExpanded by rememberSaveable { mutableStateOf(false) }
     var promptExpanded by rememberSaveable { mutableStateOf(true) }
     val haptic = LocalHapticFeedback.current
+    val resolvedTitle = title ?: stringResource(R.string.prompt_page_st_preset_editor_title)
+    val resolvedDescription = description ?: stringResource(R.string.prompt_page_st_preset_editor_desc)
     val editorTemplate = remember(template) {
         normalizeSillyTavernTemplateForEditor(template)
     }
@@ -131,11 +138,11 @@ fun SillyTavernPresetEditorCard(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = title,
+                    text = resolvedTitle,
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = description,
+                    text = resolvedDescription,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -144,20 +151,20 @@ fun SillyTavernPresetEditorCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Tag(type = TagType.INFO) {
-                        Text("共 ${promptOrder.size} 项")
+                        Text(stringResource(R.string.prompt_page_st_preset_editor_count, promptOrder.size))
                     }
                     Tag(type = TagType.SUCCESS) {
-                        Text("启用 $enabledPromptCount 项")
+                        Text(stringResource(R.string.prompt_page_st_preset_editor_enabled_count, enabledPromptCount))
                     }
                     Tag(type = TagType.WARNING) {
-                        Text("长按把手拖动")
+                        Text(stringResource(R.string.prompt_page_st_preset_editor_drag_hint))
                     }
                 }
             }
 
             StEditorSectionCard(
-                title = "模板与格式",
-                description = "预设名称与 Scenario / Personality / World Info 包装格式。",
+                title = stringResource(R.string.prompt_page_st_preset_editor_format_section_title),
+                description = stringResource(R.string.prompt_page_st_preset_editor_format_section_desc),
                 expanded = formatExpanded,
                 onExpandedChange = { formatExpanded = it }
             ) {
@@ -169,7 +176,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("预设名称") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_name)) },
                     singleLine = true,
                 )
 
@@ -181,7 +188,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Scenario 格式") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_scenario_format)) },
                 )
 
                 OutlinedTextField(
@@ -192,7 +199,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Personality 格式") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_personality_format)) },
                 )
 
                 OutlinedTextField(
@@ -203,18 +210,18 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("World Info 格式") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_world_info_format)) },
                 )
             }
 
             StEditorSectionCard(
-                title = "运行时选项",
-                description = "系统提示词、Continue 行为和默认注入文案。",
+                title = stringResource(R.string.prompt_page_st_preset_editor_runtime_section_title),
+                description = stringResource(R.string.prompt_page_st_preset_editor_runtime_section_desc),
                 expanded = runtimeExpanded,
                 onExpandedChange = { runtimeExpanded = it }
             ) {
                 StBooleanSettingRow(
-                    title = "复用系统提示词",
+                    title = stringResource(R.string.prompt_page_st_preset_editor_reuse_system_prompt),
                     checked = editorTemplate.useSystemPrompt,
                     onCheckedChange = { checked ->
                         updateTemplate { current ->
@@ -224,7 +231,7 @@ fun SillyTavernPresetEditorCard(
                 )
 
                 StBooleanSettingRow(
-                    title = "压缩连续 system 消息",
+                    title = stringResource(R.string.prompt_page_st_preset_editor_squash_system_messages),
                     checked = editorTemplate.squashSystemMessages,
                     onCheckedChange = { checked ->
                         updateTemplate { current ->
@@ -234,7 +241,7 @@ fun SillyTavernPresetEditorCard(
                 )
 
                 StBooleanSettingRow(
-                    title = "Continue 时使用 assistant prefill",
+                    title = stringResource(R.string.prompt_page_st_preset_editor_continue_prefill),
                     checked = editorTemplate.continuePrefill,
                     onCheckedChange = { checked ->
                         updateTemplate { current ->
@@ -251,7 +258,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("新聊天提示") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_new_chat_prompt)) },
                     minLines = 2,
                 )
 
@@ -263,7 +270,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("新群聊提示") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_new_group_chat_prompt)) },
                     minLines = 2,
                 )
 
@@ -275,7 +282,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("示例聊天提示") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_example_chat_prompt)) },
                     minLines = 2,
                 )
 
@@ -287,7 +294,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Continue Nudge Prompt") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_continue_nudge_prompt)) },
                     minLines = 2,
                 )
 
@@ -299,7 +306,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Group Nudge Prompt") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_group_nudge_prompt)) },
                     minLines = 2,
                 )
 
@@ -311,7 +318,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Impersonation Prompt") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_impersonation_prompt)) },
                     minLines = 2,
                 )
 
@@ -323,7 +330,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Assistant Prefill") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_assistant_prefill)) },
                     minLines = 2,
                 )
 
@@ -335,7 +342,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Assistant Impersonation") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_assistant_impersonation)) },
                     minLines = 2,
                 )
 
@@ -347,7 +354,7 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Continue Postfix") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_continue_postfix)) },
                 )
 
                 OutlinedTextField(
@@ -358,14 +365,14 @@ fun SillyTavernPresetEditorCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Send If Empty") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_send_if_empty)) },
                     minLines = 2,
                 )
             }
 
             StEditorSectionCard(
-                title = "Prompt 顺序与定义",
-                description = "长按左侧把手拖动排序，切换开关启停，点设置编辑详情。",
+                title = stringResource(R.string.prompt_page_st_preset_editor_prompt_section_title),
+                description = stringResource(R.string.prompt_page_st_preset_editor_prompt_section_desc),
                 expanded = promptExpanded,
                 onExpandedChange = { promptExpanded = it }
             ) {
@@ -374,7 +381,7 @@ fun SillyTavernPresetEditorCard(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "快速补回常见段落",
+                            text = stringResource(R.string.prompt_page_st_preset_editor_restore_common),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -400,7 +407,7 @@ fun SillyTavernPresetEditorCard(
 
                 if (promptOrder.isEmpty()) {
                     Text(
-                        text = "当前还没有提示项，先添加一个自定义项或补回默认段落。",
+                        text = stringResource(R.string.prompt_page_st_preset_editor_empty),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -466,7 +473,12 @@ fun SillyTavernPresetEditorCard(
                         updateTemplate { current ->
                             appendStPromptDefinition(
                                 template = current,
-                                prompt = buildCustomStPrompt(current),
+                                prompt = buildCustomStPrompt(current) { index ->
+                                    context.getString(
+                                        R.string.prompt_page_st_preset_editor_custom_prompt_name,
+                                        index,
+                                    )
+                                },
                                 enabled = true,
                             )
                         }
@@ -475,7 +487,7 @@ fun SillyTavernPresetEditorCard(
                 ) {
                     Icon(Lucide.Plus, null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("添加自定义提示项")
+                    Text(stringResource(R.string.prompt_page_st_preset_editor_add_custom))
                 }
             }
         }
@@ -655,27 +667,27 @@ private fun StPromptListItem(
                 ) {
                     if (prompt.marker) {
                         Tag(type = TagType.WARNING) {
-                            Text("Marker")
+                            Text(stringResource(R.string.prompt_page_st_preset_editor_marker))
                         }
                     }
                     if (prompt.systemPrompt) {
                         Tag(type = TagType.INFO) {
-                            Text("System Prompt")
+                            Text(stringResource(R.string.assistant_page_system_prompt))
                         }
                     }
                     if (prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE) {
                         Tag(type = TagType.WARNING) {
-                            Text("Absolute")
+                            Text(stringResource(R.string.prompt_page_st_preset_editor_absolute))
                         }
                     }
                     if (prompt.forbidOverrides) {
                         Tag(type = TagType.WARNING) {
-                            Text("禁止覆盖")
+                            Text(stringResource(R.string.prompt_page_st_preset_editor_no_override))
                         }
                     }
                     if (prompt.injectionTriggers.isNotEmpty()) {
                         Tag(type = TagType.SUCCESS) {
-                            Text(prompt.injectionTriggers.joinToString(" / ") { stPromptGenerationTypeLabel(it) })
+                            Text(stPromptTriggerLabels(prompt.injectionTriggers))
                         }
                     }
                 }
@@ -686,7 +698,7 @@ private fun StPromptListItem(
                 onCheckedChange = onEnabledChange
             )
             IconButton(onClick = onEdit) {
-                Icon(Lucide.Settings2, "编辑提示项")
+                Icon(Lucide.Settings2, stringResource(R.string.prompt_page_st_preset_editor_edit_item))
             }
         }
     }
@@ -742,7 +754,7 @@ private fun StPromptEditSheet(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "编辑提示项",
+                    text = stringResource(R.string.prompt_page_st_preset_editor_edit_item),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -756,9 +768,9 @@ private fun StPromptEditSheet(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 FormItem(
-                    label = { Text("已启用") },
+                    label = { Text(stringResource(R.string.enabled)) },
                     description = {
-                        Text("关闭后会保留定义，但不会参与 prompt order。")
+                        Text(stringResource(R.string.prompt_page_st_preset_editor_enabled_desc))
                     },
                     tail = {
                         Switch(
@@ -780,12 +792,12 @@ private fun StPromptEditSheet(
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Identifier") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_identifier)) },
                     singleLine = true,
                 )
 
                 Text(
-                    text = "Identifier 留空或与现有项重复时，会保留原值。",
+                    text = stringResource(R.string.prompt_page_st_preset_editor_identifier_duplicate_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -800,7 +812,7 @@ private fun StPromptEditSheet(
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("显示名称") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_display_name)) },
                     singleLine = true,
                 )
 
@@ -815,7 +827,7 @@ private fun StPromptEditSheet(
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    optionToString = { stRoleLabel(it) }
+                    optionToString = { stringResource(stRoleLabelRes(it)) }
                 )
 
                 Select(
@@ -829,7 +841,7 @@ private fun StPromptEditSheet(
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    optionToString = { stInjectionPositionLabel(it) }
+                    optionToString = { stringResource(stInjectionPositionLabelRes(it)) }
                 )
 
                 Row(
@@ -849,7 +861,7 @@ private fun StPromptEditSheet(
                             }
                         },
                         modifier = Modifier.weight(1f),
-                        label = { Text("Depth") },
+                        label = { Text(stringResource(R.string.prompt_page_st_preset_editor_depth)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                     )
@@ -867,7 +879,7 @@ private fun StPromptEditSheet(
                             }
                         },
                         modifier = Modifier.weight(1f),
-                        label = { Text("Order") },
+                        label = { Text(stringResource(R.string.prompt_page_st_preset_editor_order)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                     )
@@ -877,7 +889,7 @@ private fun StPromptEditSheet(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "触发类型",
+                        text = stringResource(R.string.prompt_page_st_preset_editor_trigger_types),
                         style = MaterialTheme.typography.labelMedium
                     )
                     FlowRow(
@@ -901,7 +913,7 @@ private fun StPromptEditSheet(
                                     )
                                 }
                             ) {
-                                Text(stPromptGenerationTypeLabel(trigger))
+                                Text(stringResource(stPromptGenerationTypeLabelRes(trigger)))
                             }
                         }
                     }
@@ -912,7 +924,7 @@ private fun StPromptEditSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     StCheckboxField(
-                        label = "System Prompt",
+                        label = stringResource(R.string.assistant_page_system_prompt),
                         checked = state.prompt.systemPrompt,
                         onCheckedChange = { checked ->
                             onEdit(
@@ -923,7 +935,7 @@ private fun StPromptEditSheet(
                         }
                     )
                     StCheckboxField(
-                        label = "Marker",
+                        label = stringResource(R.string.prompt_page_st_preset_editor_marker),
                         checked = state.prompt.marker,
                         onCheckedChange = { checked ->
                             onEdit(
@@ -934,7 +946,7 @@ private fun StPromptEditSheet(
                         }
                     )
                     StCheckboxField(
-                        label = "禁止覆盖",
+                        label = stringResource(R.string.prompt_page_st_preset_editor_no_override),
                         checked = state.prompt.forbidOverrides,
                         onCheckedChange = { checked ->
                             onEdit(
@@ -958,7 +970,7 @@ private fun StPromptEditSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 220.dp),
-                    label = { Text("Prompt 内容") },
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_prompt_content)) },
                     minLines = 6,
                 )
             }
@@ -968,7 +980,7 @@ private fun StPromptEditSheet(
             ) {
                 Icon(Lucide.Trash2, null)
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("删除该项")
+                Text(stringResource(R.string.prompt_page_st_preset_editor_delete_item))
             }
 
             Row(
@@ -979,13 +991,13 @@ private fun StPromptEditSheet(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("取消")
+                    Text(stringResource(R.string.cancel))
                 }
                 Button(
                     onClick = onConfirm,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("保存")
+                    Text(stringResource(R.string.save))
                 }
             }
         }
@@ -1177,7 +1189,10 @@ private fun applyStPromptEditorState(
     )
 }
 
-private fun buildCustomStPrompt(template: SillyTavernPromptTemplate): SillyTavernPromptItem {
+private fun buildCustomStPrompt(
+    template: SillyTavernPromptTemplate,
+    nameForIndex: (Int) -> String,
+): SillyTavernPromptItem {
     val normalized = normalizeSillyTavernTemplateForEditor(template)
     var index = 1
     var identifier = "customPrompt$index"
@@ -1187,7 +1202,7 @@ private fun buildCustomStPrompt(template: SillyTavernPromptTemplate): SillyTaver
     }
     return SillyTavernPromptItem(
         identifier = identifier,
-        name = "Custom Prompt $index",
+        name = nameForIndex(index),
         role = MessageRole.SYSTEM,
         systemPrompt = true,
     )
@@ -1207,47 +1222,61 @@ private fun stPromptDisplayName(prompt: SillyTavernPromptItem): String {
     return prompt.name.ifBlank { defaultStPromptDefinition(prompt.identifier).name.ifBlank { prompt.identifier } }
 }
 
+@Composable
 private fun stPromptSummary(prompt: SillyTavernPromptItem): String {
     return buildList {
         add(prompt.identifier)
-        add(stRoleLabel(prompt.role))
+        add(stringResource(stRoleLabelRes(prompt.role)))
         if (!prompt.marker) {
-            add("Depth ${prompt.injectionDepth}")
-            add("Order ${prompt.injectionOrder}")
+            add(stringResource(R.string.prompt_page_st_preset_editor_depth_value, prompt.injectionDepth))
+            add(stringResource(R.string.prompt_page_st_preset_editor_order_value, prompt.injectionOrder))
         }
     }.joinToString(" · ")
 }
 
+@Composable
 private fun stPromptPreview(prompt: SillyTavernPromptItem): String {
     return when {
         prompt.content.isNotBlank() -> prompt.content
-        prompt.marker -> "Marker 节点，不直接写入文本内容。"
-        else -> "点击进入详情，填写或修改这段提示词内容。"
+        prompt.marker -> stringResource(R.string.prompt_page_st_preset_editor_marker_preview)
+        else -> stringResource(R.string.prompt_page_st_preset_editor_empty_content_preview)
     }
 }
 
-private fun stRoleLabel(role: MessageRole): String {
+@Composable
+private fun stPromptTriggerLabels(triggers: List<String>): String {
+    val labels = mutableListOf<String>()
+    for (trigger in triggers) {
+        labels += stringResource(stPromptGenerationTypeLabelRes(trigger))
+    }
+    return labels.joinToString(" / ")
+}
+
+@StringRes
+private fun stRoleLabelRes(role: MessageRole): Int {
     return when (role) {
-        MessageRole.SYSTEM -> "System"
-        MessageRole.USER -> "User"
-        MessageRole.ASSISTANT -> "Assistant"
-        else -> role.name.lowercase().replaceFirstChar { it.uppercase() }
+        MessageRole.SYSTEM -> R.string.prompt_page_st_preset_editor_role_system
+        MessageRole.USER -> R.string.prompt_page_st_preset_editor_role_user
+        MessageRole.ASSISTANT -> R.string.prompt_page_st_preset_editor_role_assistant
+        else -> R.string.prompt_page_st_preset_editor_role_system
     }
 }
 
-private fun stInjectionPositionLabel(position: StPromptInjectionPosition): String {
+@StringRes
+private fun stInjectionPositionLabelRes(position: StPromptInjectionPosition): Int {
     return when (position) {
-        StPromptInjectionPosition.RELATIVE -> "Relative"
-        StPromptInjectionPosition.ABSOLUTE -> "Absolute"
+        StPromptInjectionPosition.RELATIVE -> R.string.prompt_page_st_preset_editor_position_relative
+        StPromptInjectionPosition.ABSOLUTE -> R.string.prompt_page_st_preset_editor_position_absolute
     }
 }
 
-private fun stPromptGenerationTypeLabel(trigger: String): String {
+@StringRes
+private fun stPromptGenerationTypeLabelRes(trigger: String): Int {
     return when (trigger) {
-        "normal" -> "Normal"
-        "continue" -> "Continue"
-        "quiet" -> "Quiet"
-        "impersonate" -> "Impersonate"
-        else -> trigger
+        "normal" -> R.string.prompt_page_st_preset_editor_trigger_normal
+        "continue" -> R.string.prompt_page_st_preset_editor_trigger_continue
+        "quiet" -> R.string.prompt_page_st_preset_editor_trigger_quiet
+        "impersonate" -> R.string.prompt_page_st_preset_editor_trigger_impersonate
+        else -> R.string.prompt_page_st_preset_editor_trigger_normal
     }
 }

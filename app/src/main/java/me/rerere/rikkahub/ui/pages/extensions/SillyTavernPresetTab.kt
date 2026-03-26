@@ -25,10 +25,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImportKind
@@ -46,6 +48,9 @@ fun SillyTavernPresetTab(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val importedPresetName = stringResource(R.string.prompt_page_st_preset_imported_name)
+    val importOnlyJson = stringResource(R.string.prompt_page_st_preset_import_only_json)
+    val importFailed = stringResource(R.string.assistant_importer_import_failed)
     var isImporting by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -67,15 +72,15 @@ fun SillyTavernPresetTab(
                     context.contentResolver.openInputStream(uri)
                         ?.bufferedReader()
                         ?.use { it.readText() }
-                        ?: error("Failed to read import file")
+                        ?: error(context.getString(R.string.prompt_page_st_preset_import_read_failed))
                 }
                 parseAssistantImportFromJson(
                     jsonString = jsonString,
-                    sourceName = fileName?.substringBeforeLast('.')?.ifBlank { "Imported Preset" } ?: "Imported Preset",
+                    sourceName = fileName?.substringBeforeLast('.')?.ifBlank { importedPresetName } ?: importedPresetName,
                 )
             }.onSuccess { payload ->
                 if (payload.kind != AssistantImportKind.PRESET) {
-                    toaster.show("这里只支持导入 ST 预设 JSON")
+                    toaster.show(importOnlyJson)
                 } else {
                     val template = payload.assistant.stPromptTemplate ?: defaultSillyTavernPromptTemplate()
                     val regexes = mergeImportedRegexes(
@@ -91,14 +96,19 @@ fun SillyTavernPresetTab(
                         )
                     )
                     if (payload.regexes.isNotEmpty()) {
-                        toaster.show("已导入 ST 预设，并追加 ${payload.regexes.size} 条全局 regex")
+                        toaster.show(
+                            context.getString(
+                                R.string.prompt_page_st_preset_import_success_with_regex,
+                                payload.regexes.size,
+                            )
+                        )
                     } else {
-                        toaster.show("已导入 ST 预设")
+                        toaster.show(context.getString(R.string.prompt_page_st_preset_import_success))
                     }
                 }
             }.onFailure { exception ->
                 exception.printStackTrace()
-                toaster.show(exception.message ?: "Import failed")
+                toaster.show(exception.message ?: importFailed)
             }
             isImporting = false
         }
@@ -119,16 +129,16 @@ fun SillyTavernPresetTab(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "SillyTavern 预设",
+                    text = stringResource(R.string.prompt_page_st_preset_tab_title),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "全局 ST 提示词预设，对所有助手生效。角色卡和预设聊天消息仍绑定助手，regex 仍在这里统一管理。",
+                    text = stringResource(R.string.prompt_page_st_preset_tab_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 RowLabelSwitch(
-                    title = "启用全局 ST 预设",
+                    title = stringResource(R.string.prompt_page_st_preset_tab_enable),
                     checked = settings.stPresetEnabled,
                     onCheckedChange = { enabled ->
                         onUpdate(
@@ -145,11 +155,16 @@ fun SillyTavernPresetTab(
                 )
                 settings.stPresetTemplate?.let { template ->
                     Text(
-                        text = "当前预设: ${template.sourceName.ifBlank { "SillyTavern Default" }}",
+                        text = stringResource(
+                            R.string.prompt_page_st_preset_tab_current,
+                            template.sourceName.ifBlank {
+                                context.getString(R.string.prompt_page_st_preset_tab_default_name)
+                            }
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 } ?: Text(
-                    text = "当前尚未配置 ST 预设，可导入预设 JSON 或直接创建默认预设。",
+                    text = stringResource(R.string.prompt_page_st_preset_tab_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -163,7 +178,13 @@ fun SillyTavernPresetTab(
                         },
                         enabled = !isImporting,
                     ) {
-                        Text(if (isImporting) "导入中..." else "导入 ST 预设 JSON")
+                        Text(
+                            if (isImporting) {
+                                stringResource(R.string.prompt_page_st_preset_tab_importing)
+                            } else {
+                                stringResource(R.string.prompt_page_st_preset_tab_import)
+                            }
+                        )
                     }
                     OutlinedButton(
                         onClick = {
@@ -175,7 +196,13 @@ fun SillyTavernPresetTab(
                             )
                         }
                     ) {
-                        Text(if (settings.stPresetTemplate == null) "创建默认预设" else "恢复默认预设")
+                        Text(
+                            if (settings.stPresetTemplate == null) {
+                                stringResource(R.string.prompt_page_st_preset_tab_create_default)
+                            } else {
+                                stringResource(R.string.prompt_page_st_preset_tab_restore_default)
+                            }
+                        )
                     }
                 }
             }
@@ -202,8 +229,8 @@ fun SillyTavernPresetTab(
                     settings.copy(regexes = regexes)
                 )
             },
-            title = "全局 Regex",
-            description = "默认对所有助手生效。适合放通用 ST 预设 regex、美化 regex 和通用格式整理规则。",
+            title = stringResource(R.string.prompt_page_st_preset_tab_regex_title),
+            description = stringResource(R.string.prompt_page_st_preset_tab_regex_desc),
         )
     }
 }
