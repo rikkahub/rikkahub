@@ -457,10 +457,10 @@ private fun substituteRegexMacros(
 @Serializable
 enum class InjectionPosition {
     @SerialName("before_system_prompt")
-    BEFORE_SYSTEM_PROMPT,   // 系统提示词之前
+    BEFORE_SYSTEM_PROMPT,   // 兼容命名：ST 语义更接近角色定义区块之前
 
     @SerialName("after_system_prompt")
-    AFTER_SYSTEM_PROMPT,    // 系统提示词之后（最常用）
+    AFTER_SYSTEM_PROMPT,    // 兼容命名：ST 语义更接近角色定义区块之后（最常用）
 
     @SerialName("author_note_top")
     AUTHOR_NOTE_TOP,        // Author's Note 之前（ST 对齐）

@@ -773,8 +773,8 @@
   <string name="prompt_page_injection_content">Injection Content</string>
   <string name="prompt_page_cancel">Cancel</string>
   <string name="prompt_page_confirm">Confirm</string>
-  <string name="prompt_page_position_before_system">Before System Prompt</string>
-  <string name="prompt_page_position_after_system">After System Prompt</string>
+  <string name="prompt_page_position_before_system">Before Character Definition</string>
+  <string name="prompt_page_position_after_system">After Character Definition</string>
   <string name="prompt_page_position_author_note_top">Author\'s Note (Top)</string>
   <string name="prompt_page_position_author_note_bottom">Author\'s Note (Bottom)</string>
   <string name="prompt_page_position_top_of_chat">Top of Chat</string>

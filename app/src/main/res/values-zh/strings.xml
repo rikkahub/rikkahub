@@ -711,8 +711,8 @@
   <string name="prompt_page_injection_content">注入内容</string>
   <string name="prompt_page_cancel">取消</string>
   <string name="prompt_page_confirm">确定</string>
-  <string name="prompt_page_position_before_system">系统提示词前</string>
-  <string name="prompt_page_position_after_system">系统提示词后</string>
+  <string name="prompt_page_position_before_system">角色定义前</string>
+  <string name="prompt_page_position_after_system">角色定义后</string>
   <string name="prompt_page_position_author_note_top">作者注释前</string>
   <string name="prompt_page_position_author_note_bottom">作者注释后</string>
   <string name="prompt_page_position_top_of_chat">对话开头</string>

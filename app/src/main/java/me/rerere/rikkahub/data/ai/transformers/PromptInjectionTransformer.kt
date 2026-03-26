@@ -133,7 +133,8 @@ internal fun applyInjections(
     // 找到系统消息的索引（通常是第一条）
     val systemIndex = result.indexOfFirst { it.role == MessageRole.SYSTEM }
 
-    // 处理 BEFORE_SYSTEM_PROMPT 和 AFTER_SYSTEM_PROMPT
+    // 处理兼容命名的 BEFORE/AFTER_SYSTEM_PROMPT。
+    // 在 ST 语义下它们更接近角色定义区块前/后，而不是全局系统提示词前/后。
     if (systemIndex >= 0) {
         val beforeContent = byPosition[InjectionPosition.BEFORE_SYSTEM_PROMPT]
             ?.joinToString("\n") { it.content } ?: ""
