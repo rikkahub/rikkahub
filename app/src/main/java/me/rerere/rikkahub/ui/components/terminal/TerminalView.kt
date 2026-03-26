@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +72,7 @@ fun TerminalView(
 ) {
     val scrollState = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
+    val annotatedOutput by remember(output) { derivedStateOf { parseAnsi(output) } }
 
     LaunchedEffect(output) {
         scrollState.animateScrollTo(scrollState.maxValue)
@@ -85,7 +87,7 @@ fun TerminalView(
     Box(modifier = modifier.background(TerminalColors.Background)) {
         // Terminal output
         Text(
-            text = output,
+            text = annotatedOutput,
             style = TextStyle(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 13.sp,
