@@ -12,6 +12,8 @@ import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.effectiveUserPersona
 import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 
+internal const val DEFAULT_ST_AUTHOR_NOTE_DEPTH = 4
+
 /**
  * 提示词注入转换器
  *
@@ -182,11 +184,12 @@ internal fun applyInjections(
         }
     }
 
-    // 通用消息模式下没有 ST 的 AN / EM 锚点，这里退化成顶部 / 底部插入。
+    applyAuthorNoteInjection(result, byPosition)
+
+    // 通用消息模式下没有 ST 的 EM 锚点，这里退化成顶部 / 底部插入。
     val topInjections = collectFallbackFloatingInjections(
         byPosition = byPosition,
         positions = listOf(
-            InjectionPosition.AUTHOR_NOTE_TOP,
             InjectionPosition.EXAMPLE_MESSAGES_TOP,
             InjectionPosition.TOP_OF_CHAT,
         )
@@ -205,7 +208,6 @@ internal fun applyInjections(
     val bottomInjections = collectFallbackFloatingInjections(
         byPosition = byPosition,
         positions = listOf(
-            InjectionPosition.AUTHOR_NOTE_BOTTOM,
             InjectionPosition.EXAMPLE_MESSAGES_BOTTOM,
             InjectionPosition.BOTTOM_OF_CHAT,
         )
@@ -247,6 +249,48 @@ private fun collectFallbackFloatingInjections(
     return positions
         .flatMap { byPosition[it].orEmpty() }
         .sortedByDescending { it.priority }
+}
+
+private fun applyAuthorNoteInjection(
+    result: MutableList<UIMessage>,
+    byPosition: Map<InjectionPosition, List<PromptInjection>>,
+) {
+    val topEntries = byPosition[InjectionPosition.AUTHOR_NOTE_TOP].orEmpty()
+    val bottomEntries = byPosition[InjectionPosition.AUTHOR_NOTE_BOTTOM].orEmpty()
+    val authorNoteContent = buildAuthorNoteContent(topEntries, bottomEntries)
+    if (authorNoteContent.isBlank()) return
+
+    var insertIndex = findChatDepthInsertIndex(
+        messages = result,
+        depth = DEFAULT_ST_AUTHOR_NOTE_DEPTH,
+    )
+    insertIndex = findSafeInsertIndex(result, insertIndex)
+    result.add(insertIndex, UIMessage.system(authorNoteContent))
+}
+
+internal fun buildAuthorNoteContent(
+    topEntries: List<PromptInjection>,
+    bottomEntries: List<PromptInjection>,
+): String {
+    val top = topEntries
+        .joinToString("\n") { it.content.trim() }
+        .trim()
+    val bottom = bottomEntries
+        .joinToString("\n") { it.content.trim() }
+        .trim()
+    return listOf(top, bottom)
+        .filter { it.isNotBlank() }
+        .joinToString("\n")
+}
+
+private fun findChatDepthInsertIndex(
+    messages: List<UIMessage>,
+    depth: Int,
+): Int {
+    val leadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
+    val chatMessageCount = (messages.size - leadingSystemCount).coerceAtLeast(0)
+    val relativeIndex = (chatMessageCount - depth.coerceAtLeast(1)).coerceIn(0, chatMessageCount)
+    return leadingSystemCount + relativeIndex
 }
 
 /**

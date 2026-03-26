@@ -360,6 +360,64 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
+    fun `st lorebook author note anchors should inject as a dedicated depth note`() {
+        val lorebook = Lorebook(
+            id = Uuid.random(),
+            entries = listOf(
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    constantActive = true,
+                    position = InjectionPosition.AUTHOR_NOTE_TOP,
+                    content = "AN top",
+                ),
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    constantActive = true,
+                    position = InjectionPosition.AUTHOR_NOTE_BOTTOM,
+                    content = "AN bottom",
+                ),
+            )
+        )
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+                UIMessage.user("U2"),
+                UIMessage.assistant("A2"),
+                UIMessage.user("U3"),
+            ),
+            assistant = Assistant(
+                lorebookIds = setOf(lorebook.id),
+            ),
+            lorebooks = listOf(lorebook),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("U1", "AN top\nAN bottom", "A1", "U2", "A2", "U3"),
+            result.map { it.toText() }
+        )
+        assertEquals(
+            listOf(
+                MessageRole.USER,
+                MessageRole.SYSTEM,
+                MessageRole.ASSISTANT,
+                MessageRole.USER,
+                MessageRole.ASSISTANT,
+                MessageRole.USER,
+            ),
+            result.map { it.role }
+        )
+    }
+
+    @Test
     fun `persona description prompt should render effective global persona`() {
         val template = SillyTavernPromptTemplate(
             prompts = listOf(

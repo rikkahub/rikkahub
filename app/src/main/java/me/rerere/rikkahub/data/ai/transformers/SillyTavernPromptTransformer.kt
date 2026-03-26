@@ -95,6 +95,7 @@ internal fun transformSillyTavernPrompt(
         .filter { it.position == InjectionPosition.AFTER_SYSTEM_PROMPT }
         .joinToString("\n") { it.content.trim() }
         .trim()
+    val authorNoteMessage = buildAuthorNoteAbsoluteMessage(triggeredLorebookEntries)
     val exampleMessagesBefore = triggeredLorebookEntries
         .filter { it.position == InjectionPosition.EXAMPLE_MESSAGES_TOP }
         .mapNotNull { it.content.trim().takeIf(String::isNotBlank) }
@@ -115,7 +116,7 @@ internal fun transformSillyTavernPrompt(
         worldInfoBefore = worldInfoBefore,
         worldInfoAfter = worldInfoAfter,
         generationType = generationType,
-    ) + triggeredLorebookEntries
+    ) + listOfNotNull(authorNoteMessage) + triggeredLorebookEntries
         .filter { it.position == InjectionPosition.AT_DEPTH }
         .mapNotNull { entry ->
             entry.content.trim().takeIf { it.isNotBlank() }?.let { content ->
@@ -131,9 +132,7 @@ internal fun transformSillyTavernPrompt(
     var processedHistoryMessages = applyAbsoluteMessages(runtimeBehavior.chatHistoryMessages, absoluteMessages)
 
     val floatingLorebookEntries = triggeredLorebookEntries.filter {
-        it.position == InjectionPosition.AUTHOR_NOTE_TOP ||
-            it.position == InjectionPosition.AUTHOR_NOTE_BOTTOM ||
-            it.position == InjectionPosition.TOP_OF_CHAT ||
+        it.position == InjectionPosition.TOP_OF_CHAT ||
             it.position == InjectionPosition.BOTTOM_OF_CHAT
     }
     if (floatingLorebookEntries.isNotEmpty()) {
@@ -423,6 +422,22 @@ private fun buildAbsoluteMessages(
     } else {
         promptMessages
     }
+}
+
+private fun buildAuthorNoteAbsoluteMessage(
+    entries: List<PromptInjection.RegexInjection>,
+): StAbsoluteMessage? {
+    val topEntries = entries.filter { it.position == InjectionPosition.AUTHOR_NOTE_TOP }
+    val bottomEntries = entries.filter { it.position == InjectionPosition.AUTHOR_NOTE_BOTTOM }
+    val content = buildAuthorNoteContent(topEntries, bottomEntries)
+    if (content.isBlank()) return null
+
+    return StAbsoluteMessage(
+        depth = DEFAULT_ST_AUTHOR_NOTE_DEPTH,
+        order = Int.MAX_VALUE,
+        role = MessageRole.SYSTEM,
+        content = content,
+    )
 }
 
 private fun resolveRelativePromptMessages(

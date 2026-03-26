@@ -413,7 +413,7 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `AUTHOR_NOTE_TOP lorebook entry should fallback to top of chat in generic mode`() {
+    fun `AUTHOR_NOTE_TOP lorebook entry should create a dedicated note in generic mode`() {
         val injection = createRegexInjection(
             position = InjectionPosition.AUTHOR_NOTE_TOP,
             content = "Author note top content",
@@ -422,16 +422,20 @@ class PromptInjectionTransformerTest {
 
         val messages = listOf(
             UIMessage.system("System prompt"),
-            UIMessage.user("Hello"),
-            UIMessage.assistant("Hi!")
+            UIMessage.user("Message 1"),
+            UIMessage.assistant("Response 1"),
+            UIMessage.user("Message 2"),
+            UIMessage.assistant("Response 2"),
+            UIMessage.user("Message 3"),
         )
 
         val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
 
-        assertEquals(4, result.size)
-        assertEquals("Author note top content", getMessageText(result[1]))
-        assertEquals(MessageRole.SYSTEM, result[1].role)
-        assertEquals("Hello", getMessageText(result[2]))
+        assertEquals(7, result.size)
+        assertEquals("Message 1", getMessageText(result[1]))
+        assertEquals("Author note top content", getMessageText(result[2]))
+        assertEquals(MessageRole.SYSTEM, result[2].role)
+        assertEquals("Response 1", getMessageText(result[3]))
     }
 
     @Test
@@ -478,6 +482,41 @@ class PromptInjectionTransformerTest {
         assertEquals("Example bottom content", getMessageText(result[3]))
         assertEquals(MessageRole.SYSTEM, result[3].role)
         assertEquals("How are you?", getMessageText(result[4]))
+    }
+
+    @Test
+    fun `author note top and bottom should combine into one system note in generic mode`() {
+        val top = createRegexInjection(
+            position = InjectionPosition.AUTHOR_NOTE_TOP,
+            content = "AN top",
+        )
+        val bottom = createRegexInjection(
+            position = InjectionPosition.AUTHOR_NOTE_BOTTOM,
+            content = "AN bottom",
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Message 1"),
+            UIMessage.assistant("Response 1"),
+            UIMessage.user("Message 2"),
+            UIMessage.assistant("Response 2"),
+            UIMessage.user("Message 3"),
+        )
+
+        val result = applyInjections(
+            messages = messages,
+            byPosition = mapOf(
+                InjectionPosition.AUTHOR_NOTE_TOP to listOf(top),
+                InjectionPosition.AUTHOR_NOTE_BOTTOM to listOf(bottom),
+            )
+        )
+
+        assertEquals(7, result.size)
+        assertEquals("Message 1", getMessageText(result[1]))
+        assertEquals("AN top\nAN bottom", getMessageText(result[2]))
+        assertEquals(MessageRole.SYSTEM, result[2].role)
+        assertEquals("Response 1", getMessageText(result[3]))
     }
 
     @Test
