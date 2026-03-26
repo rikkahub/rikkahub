@@ -1,25 +1,21 @@
 package me.rerere.rikkahub.ui.components.terminal
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,19 +23,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.ArrowRight01
 
 object TerminalColors {
     val Background = Color(0xFF0D1117)
@@ -53,120 +52,146 @@ enum class TerminalViewState {
 }
 
 /**
- * A reusable terminal view component that displays terminal output and an input bar.
+ * A reusable terminal view with inline keyboard input (no separate input bar).
+ * Tap the terminal to show the soft keyboard; keystrokes are forwarded to [onInput] immediately.
  *
  * @param output The terminal output text to display.
- * @param state The current state of the terminal (RUNNING or EXITED).
- * @param onSendLine Called when the user submits a line of input.
- * @param onRestart Called when the user requests to restart after exit.
+ * @param state The current state of the terminal.
+ * @param onInput Called with raw characters as the user types. Enter is sent as `\r`, backspace as `\u007F`.
+ * @param onRestart Called when the user requests restart after the process exits.
  * @param modifier Modifier for the root container.
  */
 @Composable
 fun TerminalView(
     output: String,
     state: TerminalViewState,
-    onSendLine: (String) -> Unit,
+    onInput: (String) -> Unit,
     onRestart: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
+    val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(output) {
         scrollState.animateScrollTo(scrollState.maxValue)
     }
 
+    LaunchedEffect(state) {
+        if (state == TerminalViewState.RUNNING) {
+            focusRequester.requestFocus()
+        }
+    }
+
     Box(modifier = modifier.background(TerminalColors.Background)) {
-        // Output area
-        Box(
+        // Terminal output
+        Text(
+            text = output,
+            style = TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
+                color = TerminalColors.Text,
+                lineHeight = 18.sp,
+            ),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 44.dp) // Reserve space for input/exit bar
                 .verticalScroll(scrollState)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {
+                    focusRequester.requestFocus()
+                }
                 .padding(8.dp),
-        ) {
-            SelectionContainer {
-                Text(
-                    text = output,
-                    style = TextStyle(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                        color = TerminalColors.Text,
-                        lineHeight = 18.sp,
-                    ),
-                )
-            }
+        )
+
+        // Hidden input capture — invisible BasicTextField that receives keyboard events
+        if (state == TerminalViewState.RUNNING) {
+            TerminalInputCapture(
+                onInput = onInput,
+                focusRequester = focusRequester,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .alpha(0f),
+            )
         }
 
-        // Bottom bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter),
-        ) {
-            if (state == TerminalViewState.RUNNING) {
-                TerminalInputBar(onSend = onSendLine)
-            } else {
-                TerminalExitedBar(onRestart = onRestart)
-            }
+        if (state == TerminalViewState.EXITED) {
+            TerminalExitedBar(
+                onRestart = onRestart,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter),
+            )
         }
     }
 }
 
+/**
+ * Invisible text field that captures keyboard input and forwards it to the PTY.
+ *
+ * Keeps a single dummy space so that backspace events are detectable.
+ * During IME composition, text accumulates until committed.
+ */
 @Composable
-private fun TerminalInputBar(onSend: (String) -> Unit) {
-    var input by rememberSaveable { mutableStateOf("") }
+private fun TerminalInputCapture(
+    onInput: (String) -> Unit,
+    focusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    var tfv by remember { mutableStateOf(TextFieldValue(DUMMY, TextRange(DUMMY.length))) }
 
+    BasicTextField(
+        value = tfv,
+        onValueChange = { newValue ->
+            val isComposing = newValue.composition != null
+
+            if (isComposing) {
+                // IME is composing — let it accumulate
+                tfv = newValue
+                return@BasicTextField
+            }
+
+            // Composition committed or regular typing
+            val newText = newValue.text
+
+            when {
+                newText.length > DUMMY.length -> {
+                    // New characters after the dummy space
+                    val added = newText.substring(DUMMY.length)
+                    onInput(added.replace('\n', '\r'))
+                }
+
+                newText.isEmpty() -> {
+                    // Backspace deleted the dummy space
+                    onInput("\u007F")
+                }
+            }
+
+            // Reset to dummy
+            tfv = TextFieldValue(DUMMY, TextRange(DUMMY.length))
+        },
+        modifier = modifier
+            .focusRequester(focusRequester),
+        textStyle = TextStyle(color = Color.Transparent, fontSize = 1.sp),
+        cursorBrush = SolidColor(Color.Transparent),
+        keyboardOptions = KeyboardOptions(
+            autoCorrect = false,
+            imeAction = ImeAction.None,
+        ),
+    )
+}
+
+@Composable
+private fun TerminalExitedBar(
+    onRestart: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         color = TerminalColors.InputBackground,
-        tonalElevation = 2.dp,
+        modifier = modifier,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BasicTextField(
-                value = input,
-                onValueChange = { input = it },
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState()),
-                textStyle = TextStyle(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp,
-                    color = TerminalColors.Text,
-                ),
-                cursorBrush = SolidColor(TerminalColors.Text),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = {
-                    onSend(input)
-                    input = ""
-                }),
-            )
-            Spacer(Modifier.width(4.dp))
-            IconButton(
-                onClick = {
-                    onSend(input)
-                    input = ""
-                },
-                modifier = Modifier.size(32.dp),
-            ) {
-                Icon(
-                    HugeIcons.ArrowRight01,
-                    contentDescription = "发送",
-                    tint = TerminalColors.Accent,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TerminalExitedBar(onRestart: () -> Unit) {
-    Surface(color = TerminalColors.InputBackground) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -186,3 +211,5 @@ private fun TerminalExitedBar(onRestart: () -> Unit) {
         }
     }
 }
+
+private const val DUMMY = " "

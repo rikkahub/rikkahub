@@ -74,9 +74,9 @@ class SandboxDetailVM(
         }
     }
 
-    fun sendLine(text: String) {
+    fun sendInput(text: String) {
         viewModelScope.launch {
-            session?.writeLine(text)
+            session?.write(text)
         }
     }
 

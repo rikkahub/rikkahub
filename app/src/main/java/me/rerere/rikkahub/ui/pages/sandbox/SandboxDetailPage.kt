@@ -88,7 +88,7 @@ fun SandboxDetailPage(sandboxId: String) {
                             TerminalState.RUNNING -> TerminalViewState.RUNNING
                             else -> TerminalViewState.EXITED
                         },
-                        onSendLine = { vm.sendLine(it) },
+                        onInput = { vm.sendInput(it) },
                         onRestart = { vm.startSession() },
                         modifier = Modifier.fillMaxSize(),
                     )
