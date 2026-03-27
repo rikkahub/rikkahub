@@ -10,7 +10,9 @@ import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
@@ -19,9 +21,13 @@ class PromptInjectionTransformerTest {
 
     // region Helper functions
     private fun createAssistant(
+        id: Uuid = Uuid.random(),
+        name: String = "",
         modeInjectionIds: Set<Uuid> = emptySet(),
         lorebookIds: Set<Uuid> = emptySet()
     ) = Assistant(
+        id = id,
+        name = name,
         modeInjectionIds = modeInjectionIds,
         lorebookIds = lorebookIds
     )
@@ -1697,6 +1703,76 @@ class PromptInjectionTransformerTest {
         )
 
         assertTrue(getMessageText(result[0]).contains("Expanded depth hit"))
+    }
+
+    @Test
+    fun `character strategy should change which lorebook wins shared budget`() {
+        val assistantId = Uuid.random()
+        val characterLorebookId = Uuid.random()
+        val assistant = createAssistant(
+            id = assistantId,
+            lorebookIds = setOf(characterLorebookId),
+        )
+        val characterLorebook = createLorebook(
+            id = characterLorebookId,
+            name = "Character Lorebook",
+            entries = listOf(
+                createRegexInjection(
+                    priority = 10,
+                    position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
+                    role = MessageRole.SYSTEM,
+                    content = "character",
+                    keywords = emptyList(),
+                    constantActive = true,
+                )
+            )
+        )
+        val globalLorebook = createLorebook(
+            name = "Global Lorebook",
+            entries = listOf(
+                createRegexInjection(
+                    priority = 100,
+                    position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
+                    role = MessageRole.SYSTEM,
+                    content = "global",
+                    keywords = emptyList(),
+                    constantActive = true,
+                )
+            )
+        )
+
+        fun transformWithStrategy(strategy: WorldInfoCharacterStrategy): List<UIMessage> {
+            return transformMessages(
+                messages = listOf(
+                    UIMessage.system("System prompt"),
+                    UIMessage.user("hello"),
+                ),
+                assistant = assistant,
+                settings = Settings(
+                    assistants = listOf(assistant),
+                    lorebookGlobalSettings = LorebookGlobalSettings(
+                        budgetPercent = 0,
+                        budgetCap = 2,
+                        characterStrategy = strategy,
+                    ),
+                ),
+                modeInjections = emptyList(),
+                lorebooks = listOf(characterLorebook, globalLorebook),
+            )
+        }
+
+        val characterFirst = transformWithStrategy(WorldInfoCharacterStrategy.CHARACTER_FIRST)
+        val globalFirst = transformWithStrategy(WorldInfoCharacterStrategy.GLOBAL_FIRST)
+        val evenly = transformWithStrategy(WorldInfoCharacterStrategy.EVENLY)
+
+        assertTrue(getMessageText(characterFirst.first()).contains("character"))
+        assertFalse(characterFirst.any { getMessageText(it).contains("global") })
+
+        assertTrue(getMessageText(globalFirst.first()).contains("global"))
+        assertFalse(globalFirst.any { getMessageText(it).contains("character") })
+
+        assertTrue(getMessageText(evenly.first()).contains("global"))
+        assertFalse(evenly.any { getMessageText(it).contains("character") })
     }
     // endregion
 }

@@ -17,6 +17,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -403,9 +404,9 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
-    fun `chat completions should include advanced sampler params when configured`() {
+    fun `chat completions should include advanced sampler params for compatible hosts`() {
         val requestBody = invokeBuildRequestBody(
-            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://openrouter.ai/api/v1"),
             params = TextGenerationParams(
                 model = Model(
                     modelId = "test-model",
@@ -428,6 +429,36 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("0.2", requestBody["top_a"]?.jsonPrimitive?.content)
         assertEquals("1.15", requestBody["repetition_penalty"]?.jsonPrimitive?.content)
         assertEquals(42L, requestBody["seed"]?.jsonPrimitive?.longOrNull)
+    }
+
+    @Test
+    fun `chat completions should omit unsupported advanced sampler params for official openai`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "test-model",
+                    displayName = "test-model",
+                ),
+                presencePenalty = -0.5f,
+                frequencyPenalty = 0.75f,
+                minP = 0.1f,
+                topK = 64,
+                topA = 0.2f,
+                repetitionPenalty = 1.15f,
+                seed = 42L,
+                stopSequences = listOf("User:"),
+            )
+        )
+
+        assertEquals("-0.5", requestBody["presence_penalty"]?.jsonPrimitive?.content)
+        assertEquals("0.75", requestBody["frequency_penalty"]?.jsonPrimitive?.content)
+        assertEquals(42L, requestBody["seed"]?.jsonPrimitive?.longOrNull)
+        assertEquals(listOf("User:"), requestBody["stop"]?.jsonArray?.map { it.jsonPrimitive.content })
+        assertFalse(requestBody.containsKey("min_p"))
+        assertFalse(requestBody.containsKey("top_k"))
+        assertFalse(requestBody.containsKey("top_a"))
+        assertFalse(requestBody.containsKey("repetition_penalty"))
     }
 
     @Test

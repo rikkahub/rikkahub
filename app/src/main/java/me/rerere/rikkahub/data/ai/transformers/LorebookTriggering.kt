@@ -11,6 +11,7 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.LorebookTriggerContext
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
 import me.rerere.rikkahub.data.model.effectiveUserName
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.matchScore
@@ -32,18 +33,21 @@ internal fun collectTriggeredLorebookEntries(
     settings: Settings? = null,
     runtimeState: LorebookRuntimeState? = null,
 ): List<PromptInjection.RegexInjection> {
-    val enabledLorebooks = lorebooks.filter {
-        it.enabled && assistant.lorebookIds.contains(it.id)
-    }
-    if (enabledLorebooks.isEmpty()) return emptyList()
+    val globalSettings = settings?.lorebookGlobalSettings ?: LorebookGlobalSettings()
+    val applicableLorebooks = resolveApplicableLorebooks(
+        assistant = assistant,
+        lorebooks = lorebooks,
+        settings = settings,
+    )
+    if (applicableLorebooks.isEmpty()) return emptyList()
 
     val nonSystemMessages = historyMessages.filter { it.role != MessageRole.SYSTEM }
-    val globalSettings = settings?.lorebookGlobalSettings ?: LorebookGlobalSettings()
     val userName = settings?.effectiveUserName().orEmpty().ifBlank { "User" }
     val assistantName = assistant.stCharacterData?.name?.ifBlank { assistant.name } ?: assistant.name.ifBlank { "Assistant" }
-    return enabledLorebooks
-        .flatMap { lorebook ->
-            lorebook.collectTriggeredEntries(
+    val sharedBudget = resolveSharedLorebookBudget(assistant, globalSettings)
+    return selectTriggeredLorebookEntries(
+        entries = applicableLorebooks.flatMap { scopedLorebook ->
+            scopedLorebook.lorebook.collectTriggeredEntries(
                 historyMessages = nonSystemMessages,
                 triggerContext = triggerContext,
                 assistant = assistant,
@@ -52,9 +56,17 @@ internal fun collectTriggeredLorebookEntries(
                 globalSettings = globalSettings,
                 userName = userName,
                 assistantName = assistantName,
-            )
-        }
-        .sortedByDescending { it.priority }
+                budget = scopedLorebook.lorebook.explicitBudgetOrNull(),
+            ).map { entry ->
+                ActivatedLorebookEntry(
+                    entry = entry,
+                    scope = scopedLorebook.scope,
+                )
+            }
+        },
+        budget = sharedBudget,
+        strategy = globalSettings.characterStrategy,
+    )
 }
 
 private data class LorebookCandidate(
@@ -62,6 +74,109 @@ private data class LorebookCandidate(
     val isSticky: Boolean,
     val score: Int,
 )
+
+private enum class LorebookScope {
+    CHARACTER,
+    GLOBAL,
+}
+
+private data class ScopedLorebook(
+    val lorebook: Lorebook,
+    val scope: LorebookScope,
+)
+
+private data class ActivatedLorebookEntry(
+    val entry: PromptInjection.RegexInjection,
+    val scope: LorebookScope,
+)
+
+private fun resolveApplicableLorebooks(
+    assistant: Assistant,
+    lorebooks: List<Lorebook>,
+    settings: Settings?,
+): List<ScopedLorebook> {
+    val enabledLorebooks = lorebooks.filter { it.enabled }
+    if (enabledLorebooks.isEmpty()) return emptyList()
+
+    if (settings == null) {
+        return enabledLorebooks
+            .filter { assistant.lorebookIds.contains(it.id) }
+            .map { lorebook ->
+                ScopedLorebook(
+                    lorebook = lorebook,
+                    scope = LorebookScope.CHARACTER,
+                )
+            }
+    }
+
+    val restrictedLorebookIds = settings.assistants
+        .flatMapTo(mutableSetOf()) { it.lorebookIds }
+
+    return enabledLorebooks.mapNotNull { lorebook ->
+        when {
+            assistant.lorebookIds.contains(lorebook.id) -> ScopedLorebook(
+                lorebook = lorebook,
+                scope = LorebookScope.CHARACTER,
+            )
+
+            lorebook.id !in restrictedLorebookIds -> ScopedLorebook(
+                lorebook = lorebook,
+                scope = LorebookScope.GLOBAL,
+            )
+
+            else -> null
+        }
+    }
+}
+
+private fun selectTriggeredLorebookEntries(
+    entries: List<ActivatedLorebookEntry>,
+    budget: Int?,
+    strategy: WorldInfoCharacterStrategy,
+): List<PromptInjection.RegexInjection> {
+    if (entries.isEmpty()) return emptyList()
+
+    val orderedEntries = when (strategy) {
+        WorldInfoCharacterStrategy.EVENLY -> entries.sortedByDescending { it.entry.priority }
+        WorldInfoCharacterStrategy.CHARACTER_FIRST -> entries.sortedWith(
+            compareBy<ActivatedLorebookEntry> { if (it.scope == LorebookScope.CHARACTER) 0 else 1 }
+                .thenByDescending { it.entry.priority }
+        )
+
+        WorldInfoCharacterStrategy.GLOBAL_FIRST -> entries.sortedWith(
+            compareBy<ActivatedLorebookEntry> { if (it.scope == LorebookScope.GLOBAL) 0 else 1 }
+                .thenByDescending { it.entry.priority }
+        )
+    }
+
+    if (budget == null || budget <= 0) {
+        return orderedEntries.map { it.entry }
+    }
+
+    val selected = mutableListOf<PromptInjection.RegexInjection>()
+    var currentBudget = 0
+    var overflowed = false
+    var remainingIgnoreBudget = orderedEntries.count { it.entry.ignoreBudget() }
+
+    for (candidate in orderedEntries) {
+        remainingIgnoreBudget -= if (candidate.entry.ignoreBudget()) 1 else 0
+        if (overflowed && !candidate.entry.ignoreBudget()) {
+            if (remainingIgnoreBudget > 0) continue
+            break
+        }
+
+        val contentTokens = estimateLorebookTokenCount(candidate.entry.content)
+        if (!candidate.entry.ignoreBudget() && currentBudget + contentTokens >= budget) {
+            overflowed = true
+            continue
+        }
+
+        currentBudget += contentTokens
+        selected += candidate.entry
+    }
+
+    return selected
+}
 
 private fun Lorebook.collectTriggeredEntries(
     historyMessages: List<UIMessage>,
@@ -72,6 +187,7 @@ private fun Lorebook.collectTriggeredEntries(
     globalSettings: LorebookGlobalSettings,
     userName: String,
     assistantName: String,
+    budget: Int?,
 ): List<PromptInjection.RegexInjection> {
     if (entries.isEmpty()) return emptyList()
 
@@ -91,7 +207,6 @@ private fun Lorebook.collectTriggeredEntries(
     val recursiveEnabled = recursiveScanning || globalSettings.recursiveScanning
     val maxRecursionSteps = globalSettings.maxRecursionSteps.takeIf { it > 0 }
     val minActivations = globalSettings.minActivations.takeIf { it > 0 && maxRecursionSteps == null } ?: 0
-    val budget = resolveLorebookBudget(assistant, globalSettings)
     var recursiveContents = emptyList<String>()
     var recursionLevel = 0
     var depthSkew = 0
@@ -213,11 +328,14 @@ private fun Lorebook.collectTriggeredEntries(
     }
 }
 
-private fun Lorebook.resolveLorebookBudget(
+private fun Lorebook.explicitBudgetOrNull(): Int? {
+    return tokenBudget?.takeIf { it > 0 }
+}
+
+private fun resolveSharedLorebookBudget(
     assistant: Assistant,
     globalSettings: LorebookGlobalSettings,
 ): Int? {
-    val explicitBudget = tokenBudget?.takeIf { it > 0 }
     val percentBudget = assistant.maxTokens
         ?.takeIf { it > 0 && globalSettings.budgetPercent > 0 }
         ?.let { maxTokens ->
@@ -225,7 +343,7 @@ private fun Lorebook.resolveLorebookBudget(
                 .roundToInt()
                 .coerceAtLeast(1)
         }
-    val baseBudget = explicitBudget ?: percentBudget ?: globalSettings.budgetCap.takeIf { it > 0 }
+    val baseBudget = percentBudget ?: globalSettings.budgetCap.takeIf { it > 0 }
     return baseBudget?.let { budget ->
         if (globalSettings.budgetCap > 0) {
             min(budget, globalSettings.budgetCap)

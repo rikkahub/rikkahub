@@ -43,6 +43,19 @@ class ImageUtilsTest {
         assertEquals(json, extracted)
     }
 
+    @Test
+    fun `base64 encoded tavern character metadata should preserve unicode text`() {
+        val sourcePng = Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO8B9pQAAAAASUVORK5CYII="
+        )
+        val json = """{"spec":"chara_card_v2","data":{"name":"测试角色"}}"""
+
+        val embedded = ImageUtils.embedTavernCharacterMetaIntoPngBytes(sourcePng, json.base64Encode())
+        val extracted = ImageUtils.extractTavernCharacterMetaFromPngBytes(embedded).base64Decode()
+
+        assertEquals(json, extracted)
+    }
+
     private fun buildPngWithTextChunks(vararg chunks: Pair<String, String>): ByteArray {
         val output = ByteArrayOutputStream()
         output.write(PNG_SIGNATURE)

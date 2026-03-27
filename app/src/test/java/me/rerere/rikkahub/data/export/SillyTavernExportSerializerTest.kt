@@ -145,4 +145,21 @@ class SillyTavernExportSerializerTest {
                 ?.content
         )
     }
+
+    @Test
+    fun `character card png export file name should sanitize reserved characters`() {
+        val fileName = SillyTavernCharacterCardPngSerializer.getExportFileName(
+            SillyTavernCharacterCardExportData(
+                assistant = Assistant(
+                    name = "Fallback",
+                    stCharacterData = SillyTavernCharacterData(
+                        name = "A/B:C",
+                    ),
+                ),
+                lorebooks = emptyList(),
+            )
+        )
+
+        assertEquals("A_B_C.png", fileName)
+    }
 }

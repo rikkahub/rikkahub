@@ -254,6 +254,7 @@ class ChatCompletionsAPI(
         stream: Boolean = false,
     ): JsonObject {
         val host = providerSetting.baseUrl.toHttpUrl().host
+        val capabilities = resolveChatCompletionsProviderCapabilities(host)
         return buildJsonObject {
             put("model", params.model.modelId)
             put("messages", buildMessages(messages))
@@ -266,10 +267,12 @@ class ChatCompletionsAPI(
             if (params.presencePenalty != null) put("presence_penalty", params.presencePenalty)
             if (params.frequencyPenalty != null) put("frequency_penalty", params.frequencyPenalty)
             params.seed.normalizedSeedOrNull()?.let { put("seed", it) }
-            params.topK.normalizedTopKOrNull()?.let { put("top_k", it) }
-            params.topA.normalizedNonNegativeOrNull()?.let { put("top_a", it) }
-            params.minP.normalizedNonNegativeOrNull()?.let { put("min_p", it) }
-            params.repetitionPenalty.normalizedNonNegativeOrNull()?.let { put("repetition_penalty", it) }
+            if (capabilities.supportsAdvancedSamplers) {
+                params.topK.normalizedTopKOrNull()?.let { put("top_k", it) }
+                params.topA.normalizedNonNegativeOrNull()?.let { put("top_a", it) }
+                params.minP.normalizedNonNegativeOrNull()?.let { put("min_p", it) }
+                params.repetitionPenalty.normalizedNonNegativeOrNull()?.let { put("repetition_penalty", it) }
+            }
             params.stopSequences.normalizedStopSequencesOrNull()?.let { stopSequences ->
                 put("stop", json.encodeToJsonElement(stopSequences))
             }
@@ -701,5 +704,19 @@ class ChatCompletionsAPI(
         val gonnaSend = filter { it is UIMessagePart.Text || it is UIMessagePart.Image }.size
         val texts = filter { it is UIMessagePart.Text }.size
         return gonnaSend == texts && texts == 1
+    }
+}
+
+internal data class ChatCompletionsProviderCapabilities(
+    val supportsAdvancedSamplers: Boolean = true,
+)
+
+internal fun resolveChatCompletionsProviderCapabilities(host: String): ChatCompletionsProviderCapabilities {
+    return when (host) {
+        "api.openai.com" -> ChatCompletionsProviderCapabilities(
+            supportsAdvancedSamplers = false,
+        )
+
+        else -> ChatCompletionsProviderCapabilities()
     }
 }

@@ -102,14 +102,11 @@ internal fun collectInjections(
         .forEach { injections.add(it) }
 
     // 2. 获取关联的 Lorebook 中被触发的 RegexInjection
-    val enabledLorebooks = lorebooks.filter {
-        it.enabled && assistant.lorebookIds.contains(it.id)
-    }
-    if (enabledLorebooks.isNotEmpty() && !stPromptTemplateActive) {
+    if (lorebooks.any { it.enabled } && !stPromptTemplateActive) {
         injections += collectTriggeredLorebookEntries(
             historyMessages = messages,
             assistant = assistant,
-            lorebooks = enabledLorebooks,
+            lorebooks = lorebooks,
             triggerContext = LorebookTriggerContext(
                 personaDescription = personaDescription,
                 generationType = generationType,

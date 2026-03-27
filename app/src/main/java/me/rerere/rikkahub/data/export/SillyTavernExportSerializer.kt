@@ -37,6 +37,7 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.parseAssistantImportFromJson
 import me.rerere.rikkahub.ui.pages.assistant.detail.toSillyTavernPreset
 import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.JsonInstantPretty
+import me.rerere.rikkahub.utils.base64Encode
 import java.io.ByteArrayOutputStream
 
 object SillyTavernPresetExportSerializer : ExportSerializer<SillyTavernPreset> {
@@ -348,11 +349,11 @@ object SillyTavernCharacterCardPngSerializer : ExportSerializer<SillyTavernChara
         val name = data.assistant.stCharacterData?.name
             ?.takeIf { it.isNotBlank() }
             ?: data.assistant.name.ifBlank { "character-card" }
-        return "$name.png"
+        return "${sanitizeExportName(name, "character-card")}.png"
     }
 
     override fun exportToBytes(context: Context, data: SillyTavernCharacterCardExportData): ByteArray {
-        val json = SillyTavernCharacterCardSerializer.exportToJson(data)
+        val json = SillyTavernCharacterCardSerializer.exportToJson(data).base64Encode()
         val basePng = loadBaseCardPngBytes(context, data.assistant)
         return ImageUtils.embedTavernCharacterMetaIntoPngBytes(basePng, json)
     }
