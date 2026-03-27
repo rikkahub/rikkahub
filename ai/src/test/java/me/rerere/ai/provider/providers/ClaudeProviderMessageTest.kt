@@ -36,10 +36,11 @@ class ClaudeProviderMessageTest {
     private fun invokeBuildMessages(messages: List<UIMessage>): JsonArray {
         val method = ClaudeProvider::class.java.getDeclaredMethod(
             "buildMessages",
-            List::class.java
+            List::class.java,
+            Boolean::class.javaPrimitiveType
         )
         method.isAccessible = true
-        return method.invoke(provider, messages) as JsonArray
+        return method.invoke(provider, messages, false) as JsonArray
     }
 
     @Test
