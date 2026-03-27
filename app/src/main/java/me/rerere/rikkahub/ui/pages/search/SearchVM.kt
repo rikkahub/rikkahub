@@ -5,12 +5,37 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import java.time.Instant
+
+sealed interface SearchResult {
+    val conversationId: String
+    val title: String
+    val updateAt: Instant
+
+    data class Title(
+        override val conversationId: String,
+        override val title: String,
+        override val updateAt: Instant,
+    ) : SearchResult
+
+    data class Message(
+        val nodeId: String,
+        val messageId: String,
+        override val conversationId: String,
+        override val title: String,
+        override val updateAt: Instant,
+        val snippet: String,
+    ) : SearchResult
+}
 
 class SearchVM(
     private val conversationRepo: ConversationRepository,
@@ -19,7 +44,7 @@ class SearchVM(
 
     var searchQuery by mutableStateOf("")
         private set
-    var results by mutableStateOf<List<MessageSearchResult>>(emptyList())
+    var results by mutableStateOf<List<SearchResult>>(emptyList())
         private set
     var isLoading by mutableStateOf(false)
         private set
@@ -68,9 +93,32 @@ class SearchVM(
         }
         isLoading = true
         try {
-            results = conversationRepo.searchMessages(query)
+            results = coroutineScope {
+                val titleResults = async {
+                    conversationRepo.searchConversationTitles(query).map { it.toSearchResult() }
+                }
+                val messageResults = async {
+                    conversationRepo.searchMessages(query).map { it.toSearchResult() }
+                }
+                titleResults.await() + messageResults.await()
+            }
         } finally {
             isLoading = false
         }
     }
 }
+
+private fun Conversation.toSearchResult() = SearchResult.Title(
+    conversationId = id.toString(),
+    title = title,
+    updateAt = updateAt,
+)
+
+private fun MessageSearchResult.toSearchResult() = SearchResult.Message(
+    nodeId = nodeId,
+    messageId = messageId,
+    conversationId = conversationId,
+    title = title,
+    updateAt = updateAt,
+    snippet = snippet,
+)

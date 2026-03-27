@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import dayjs from "dayjs";
-import { Circle, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "~/components/ui/button";
@@ -45,6 +45,44 @@ function SnippetText({ snippet }: { snippet: string }) {
     );
     index = end + 1;
   }
+  return <>{parts}</>;
+}
+
+function HighlightedText({
+  text,
+  query,
+}: {
+  text: string;
+  query: string;
+}) {
+  if (!query) {
+    return <>{text}</>;
+  }
+
+  const parts: React.ReactNode[] = [];
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  let index = 0;
+  let keyIdx = 0;
+
+  while (index < text.length) {
+    const matchIndex = lowerText.indexOf(lowerQuery, index);
+    if (matchIndex === -1) {
+      parts.push(text.substring(index));
+      break;
+    }
+    if (matchIndex > index) {
+      parts.push(text.substring(index, matchIndex));
+    }
+    const matchEnd = matchIndex + query.length;
+    parts.push(
+      <mark key={keyIdx++} className="bg-transparent font-semibold text-foreground not-italic">
+        {text.substring(matchIndex, matchEnd)}
+      </mark>,
+    );
+    index = matchEnd;
+  }
+
   return <>{parts}</>;
 }
 
@@ -173,31 +211,44 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
 
             {!searching &&
               !error &&
-              results.map((item) => (
-                <button
-                  key={`${item.conversationId}-${item.messageId}`}
-                  type="button"
-                  className="flex w-full items-start gap-3 rounded-md px-2 py-2 text-left transition hover:bg-muted"
-                  onClick={() => {
-                    onSelect(item.conversationId);
-                    setOpen(false);
-                  }}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {item.title || t("conversation_search.unnamed_conversation")}
-                      </span>
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {formatRelativeTime(item.updateAt, t)}
-                      </span>
+              results.map((item) => {
+                const isTitleMatch = item.nodeId.length === 0;
+                const title = item.title || t("conversation_search.unnamed_conversation");
+
+                return (
+                  <button
+                    key={`${item.conversationId}-${item.messageId}`}
+                    type="button"
+                    className="flex w-full items-start gap-3 rounded-md px-2 py-2 text-left transition hover:bg-muted"
+                    onClick={() => {
+                      onSelect(item.conversationId);
+                      setOpen(false);
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-medium">
+                          {isTitleMatch ? (
+                            <HighlightedText text={title} query={query.trim()} />
+                          ) : (
+                            title
+                          )}
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {formatRelativeTime(item.updateAt, t)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                        {isTitleMatch ? (
+                          t("conversation_search.title_match")
+                        ) : (
+                          <SnippetText snippet={item.snippet} />
+                        )}
+                      </p>
                     </div>
-                    <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                      <SnippetText snippet={item.snippet} />
-                    </p>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
           </div>
         </ScrollArea>
       </DialogContent>
