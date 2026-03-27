@@ -1,13 +1,10 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.ArrowDown01
-import me.rerere.hugeicons.stroke.ArrowUp01
-import me.rerere.hugeicons.stroke.Delete01
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -35,13 +32,37 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
+import kotlin.uuid.Uuid
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
+import me.rerere.rikkahub.data.model.AssistantRegexSubstituteStrategy
+import me.rerere.rikkahub.ui.components.ui.EditorGuideAction
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.theme.CustomColors
-import kotlin.uuid.Uuid
+
+private val regexPlacementOptions = listOf(
+    AssistantRegexPlacement.USER_INPUT,
+    AssistantRegexPlacement.AI_OUTPUT,
+    AssistantRegexPlacement.SLASH_COMMAND,
+    AssistantRegexPlacement.WORLD_INFO,
+    AssistantRegexPlacement.REASONING,
+)
+
+private val regexSubstituteOptions = listOf(
+    AssistantRegexSubstituteStrategy.NONE,
+    AssistantRegexSubstituteStrategy.RAW,
+    AssistantRegexSubstituteStrategy.ESCAPED,
+)
 
 @Composable
 fun RegexEditorSection(
@@ -62,6 +83,12 @@ fun RegexEditorSection(
             },
             description = {
                 Text(description)
+            },
+            tail = {
+                EditorGuideAction(
+                    title = stringResource(R.string.assistant_page_regex_help_title),
+                    body = stringResource(R.string.assistant_page_regex_help_body_markdown),
+                )
             }
         )
         Column(
@@ -87,6 +114,7 @@ fun RegexEditorSection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(HugeIcons.Add01, null)
+                Text(stringResource(R.string.add))
             }
         }
     }
@@ -100,6 +128,19 @@ private fun RegexEditorCard(
     onUpdate: (List<AssistantRegex>) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+
+    fun updateRegex(transform: (AssistantRegex) -> AssistantRegex) {
+        onUpdate(
+            regexes.mapIndexed { i, reg ->
+                if (i == index) {
+                    transform(reg)
+                } else {
+                    reg
+                }
+            }
+        )
+    }
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -112,22 +153,30 @@ private fun RegexEditorCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = regex.name,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .widthIn(max = 200.dp)
-                )
+                        .widthIn(max = 240.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = regex.name.ifBlank { stringResource(R.string.assistant_page_regex_unnamed) },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = regex.findRegex.ifBlank { stringResource(R.string.assistant_page_regex_summary_placeholder) },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Switch(
                     checked = regex.enabled,
                     onCheckedChange = { enabled ->
-                        onUpdate(
-                            regexes.mapIndexed { i, reg ->
-                                if (i == index) reg.copy(enabled = enabled) else reg
-                            }
-                        )
+                        updateRegex { it.copy(enabled = enabled) }
                     },
                     modifier = Modifier.padding(start = 8.dp)
                 )
@@ -148,11 +197,7 @@ private fun RegexEditorCard(
             OutlinedTextField(
                 value = regex.name,
                 onValueChange = { name ->
-                    onUpdate(
-                        regexes.mapIndexed { i, reg ->
-                            if (i == index) reg.copy(name = name) else reg
-                        }
-                    )
+                    updateRegex { it.copy(name = name) }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.assistant_page_regex_name)) }
@@ -161,40 +206,69 @@ private fun RegexEditorCard(
             OutlinedTextField(
                 value = regex.findRegex,
                 onValueChange = { findRegex ->
-                    onUpdate(
-                        regexes.mapIndexed { i, reg ->
-                            if (i == index) reg.copy(findRegex = findRegex.trim()) else reg
-                        }
-                    )
+                    updateRegex { it.copy(findRegex = findRegex.trim()) }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.assistant_page_regex_find_regex)) },
-                placeholder = { Text("e.g., \\b\\w+@\\w+\\.\\w+\\b") },
+                placeholder = { Text(stringResource(R.string.assistant_page_regex_find_regex_placeholder)) },
+            )
+
+            Select(
+                options = regexSubstituteOptions,
+                selectedOption = regex.substituteRegex,
+                onOptionSelected = { strategy ->
+                    updateRegex { it.copy(substituteRegex = strategy) }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                optionToString = { stringResource(regexSubstituteLabelRes(it)) }
+            )
+
+            Text(
+                text = stringResource(R.string.assistant_page_regex_substitute_regex_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             OutlinedTextField(
                 value = regex.replaceString,
                 onValueChange = { replaceString ->
-                    onUpdate(
-                        regexes.mapIndexed { i, reg ->
-                            if (i == index) reg.copy(replaceString = replaceString) else reg
-                        }
-                    )
+                    updateRegex { it.copy(replaceString = replaceString) }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.assistant_page_regex_replace_string)) },
-                placeholder = { Text("e.g., [EMAIL]") }
+                placeholder = { Text(stringResource(R.string.assistant_page_regex_replace_string_placeholder)) }
             )
 
-            Column {
+            OutlinedTextField(
+                value = regex.trimStrings.joinToString("\n"),
+                onValueChange = { value ->
+                    updateRegex {
+                        it.copy(trimStrings = parseRegexMultilineList(value))
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.assistant_page_regex_trim_strings)) },
+                minLines = 2,
+            )
+
+            Text(
+                text = stringResource(R.string.assistant_page_regex_trim_strings_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.assistant_page_regex_affecting_scopes),
                     style = MaterialTheme.typography.labelMedium
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    AssistantAffectScope.entries.forEach { scope ->
+                    AssistantAffectScope.entries.fastForEach { scope ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -207,15 +281,11 @@ private fun RegexEditorCard(
                                     } else {
                                         regex.affectingScope - scope
                                     }
-                                    onUpdate(
-                                        regexes.mapIndexed { i, reg ->
-                                            if (i == index) reg.copy(affectingScope = newScopes) else reg
-                                        }
-                                    )
+                                    updateRegex { it.copy(affectingScope = newScopes) }
                                 }
                             )
                             Text(
-                                text = scope.name.lowercase().replaceFirstChar { it.uppercase() },
+                                text = stringResource(regexScopeLabelRes(scope)),
                                 style = MaterialTheme.typography.labelMedium
                             )
                         }
@@ -223,57 +293,81 @@ private fun RegexEditorCard(
                 }
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Checkbox(
-                    checked = regex.visualOnly,
-                    onCheckedChange = { visualOnly ->
-                        onUpdate(
-                            regexes.mapIndexed { i, reg ->
-                                if (i == index) {
-                                    reg.copy(
-                                        visualOnly = visualOnly,
-                                        promptOnly = if (visualOnly) false else reg.promptOnly
-                                    )
-                                } else {
-                                    reg
-                                }
-                            }
-                        )
-                    }
-                )
                 Text(
-                    text = stringResource(R.string.assistant_page_regex_visual_only),
+                    text = stringResource(R.string.assistant_page_regex_st_placements),
                     style = MaterialTheme.typography.labelMedium
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    regexPlacementOptions.fastForEach { placement ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Checkbox(
+                                checked = placement in regex.stPlacements,
+                                onCheckedChange = { checked ->
+                                    val updatedPlacements = if (checked) {
+                                        regex.stPlacements + placement
+                                    } else {
+                                        regex.stPlacements - placement
+                                    }
+                                    updateRegex { it.copy(stPlacements = updatedPlacements) }
+                                }
+                            )
+                            Text(
+                                text = stringResource(regexPlacementLabelRes(placement)),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = stringResource(R.string.assistant_page_regex_st_placements_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Checkbox(
-                    checked = regex.promptOnly,
-                    onCheckedChange = { promptOnly ->
-                        onUpdate(
-                            regexes.mapIndexed { i, reg ->
-                                if (i == index) {
-                                    reg.copy(
-                                        promptOnly = promptOnly,
-                                        visualOnly = if (promptOnly) false else reg.visualOnly
-                                    )
-                                } else {
-                                    reg
-                                }
-                            }
-                        )
+                RegexCheckboxField(
+                    label = stringResource(R.string.assistant_page_regex_visual_only),
+                    checked = regex.visualOnly,
+                    onCheckedChange = { visualOnly ->
+                        updateRegex {
+                            it.copy(
+                                visualOnly = visualOnly,
+                                promptOnly = if (visualOnly) false else it.promptOnly
+                            )
+                        }
                     }
                 )
-                Text(
-                    text = stringResource(R.string.assistant_page_regex_prompt_only),
-                    style = MaterialTheme.typography.labelMedium
+                RegexCheckboxField(
+                    label = stringResource(R.string.assistant_page_regex_prompt_only),
+                    checked = regex.promptOnly,
+                    onCheckedChange = { promptOnly ->
+                        updateRegex {
+                            it.copy(
+                                promptOnly = promptOnly,
+                                visualOnly = if (promptOnly) false else it.visualOnly
+                            )
+                        }
+                    }
+                )
+                RegexCheckboxField(
+                    label = stringResource(R.string.assistant_page_regex_run_on_edit),
+                    checked = regex.runOnEdit,
+                    onCheckedChange = { runOnEdit ->
+                        updateRegex { it.copy(runOnEdit = runOnEdit) }
+                    }
                 )
             }
 
@@ -286,11 +380,7 @@ private fun RegexEditorCard(
                     onValueChange = { value ->
                         if (value.isNotEmpty() && value.any { !it.isDigit() }) return@OutlinedTextField
                         val minDepth = value.toIntOrNull()?.takeIf { it > 0 }
-                        onUpdate(
-                            regexes.mapIndexed { i, reg ->
-                                if (i == index) reg.copy(minDepth = minDepth) else reg
-                            }
-                        )
+                        updateRegex { it.copy(minDepth = minDepth) }
                     },
                     modifier = Modifier.weight(1f),
                     label = { Text(stringResource(R.string.assistant_page_regex_min_depth)) },
@@ -303,11 +393,7 @@ private fun RegexEditorCard(
                     onValueChange = { value ->
                         if (value.isNotEmpty() && value.any { !it.isDigit() }) return@OutlinedTextField
                         val maxDepth = value.toIntOrNull()?.takeIf { it > 0 }
-                        onUpdate(
-                            regexes.mapIndexed { i, reg ->
-                                if (i == index) reg.copy(maxDepth = maxDepth) else reg
-                            }
-                        )
+                        updateRegex { it.copy(maxDepth = maxDepth) }
                     },
                     modifier = Modifier.weight(1f),
                     label = { Text(stringResource(R.string.assistant_page_regex_max_depth)) },
@@ -337,5 +423,64 @@ private fun RegexEditorCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RegexCheckboxField(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium
+        )
+    }
+}
+
+private fun parseRegexMultilineList(value: String): List<String> {
+    return value.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .toList()
+}
+
+@StringRes
+private fun regexSubstituteLabelRes(strategy: Int): Int {
+    return when (strategy) {
+        AssistantRegexSubstituteStrategy.RAW -> R.string.assistant_page_regex_substitute_regex_raw
+        AssistantRegexSubstituteStrategy.ESCAPED -> R.string.assistant_page_regex_substitute_regex_escaped
+        else -> R.string.assistant_page_regex_substitute_regex_none
+    }
+}
+
+@StringRes
+private fun regexPlacementLabelRes(placement: Int): Int {
+    return when (placement) {
+        AssistantRegexPlacement.USER_INPUT -> R.string.assistant_page_regex_st_placement_user_input
+        AssistantRegexPlacement.AI_OUTPUT -> R.string.assistant_page_regex_st_placement_ai_output
+        AssistantRegexPlacement.SLASH_COMMAND -> R.string.assistant_page_regex_st_placement_slash_command
+        AssistantRegexPlacement.WORLD_INFO -> R.string.assistant_page_regex_st_placement_world_info
+        AssistantRegexPlacement.REASONING -> R.string.assistant_page_regex_st_placement_reasoning
+        else -> R.string.assistant_page_regex_st_placement_ai_output
+    }
+}
+
+@StringRes
+private fun regexScopeLabelRes(scope: AssistantAffectScope): Int {
+    return when (scope) {
+        AssistantAffectScope.SYSTEM -> R.string.assistant_page_regex_scope_system
+        AssistantAffectScope.USER -> R.string.assistant_page_regex_scope_user
+        AssistantAffectScope.ASSISTANT -> R.string.assistant_page_regex_scope_assistant
     }
 }

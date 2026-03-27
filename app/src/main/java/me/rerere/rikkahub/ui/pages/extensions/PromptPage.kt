@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
+import androidx.annotation.StringRes
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.ArrowRight01
@@ -39,10 +40,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
@@ -85,6 +86,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -102,6 +105,7 @@ import me.rerere.rikkahub.data.model.normalizeForModeInjection
 import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.EditorGuideAction
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
@@ -131,6 +135,12 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
             LargeFlexibleTopAppBar(
                 navigationIcon = { BackButton() },
                 title = { Text(stringResource(R.string.prompt_page_title)) },
+                actions = {
+                    EditorGuideAction(
+                        title = stringResource(R.string.prompt_page_help_title),
+                        body = stringResource(R.string.prompt_page_help_body_markdown),
+                    )
+                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
@@ -149,27 +159,27 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("提示词管理") },
+                    title = { Text(stringResource(R.string.prompt_page_overview_title)) },
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.StPresets) },
                         leadingContent = { Icon(HugeIcons.MagicWand01, null) },
-                        headlineContent = { Text("SillyTavern 预设") },
-                        supportingContent = { Text("管理多个 ST 预设、切换当前预设，并导出为 ST JSON。") },
+                        headlineContent = { Text(stringResource(R.string.prompt_page_overview_st_preset_title)) },
+                        supportingContent = { Text(stringResource(R.string.prompt_page_overview_st_preset_desc)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.ModeInjections) },
                         leadingContent = { Icon(HugeIcons.Tools, null) },
-                        headlineContent = { Text("模式注入") },
-                        supportingContent = { Text("单独维护模式注入规则，不再和世界书、预设堆在一个页签里。") },
+                        headlineContent = { Text(stringResource(R.string.prompt_page_overview_mode_injection_title)) },
+                        supportingContent = { Text(stringResource(R.string.prompt_page_overview_mode_injection_desc)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Lorebooks) },
                         leadingContent = { Icon(HugeIcons.Book01, null) },
-                        headlineContent = { Text("世界书") },
-                        supportingContent = { Text("管理世界书条目、全局启用状态，以及绑定到哪些助手。") },
+                        headlineContent = { Text(stringResource(R.string.prompt_page_overview_lorebook_title)) },
+                        supportingContent = { Text(stringResource(R.string.prompt_page_overview_lorebook_desc)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }
@@ -187,7 +197,13 @@ fun ModeInjectionsPage(vm: PromptVM = koinViewModel()) {
         topBar = {
             LargeFlexibleTopAppBar(
                 navigationIcon = { BackButton() },
-                title = { Text("模式注入") },
+                title = { Text(stringResource(R.string.prompt_page_mode_injection_title)) },
+                actions = {
+                    EditorGuideAction(
+                        title = stringResource(R.string.prompt_page_mode_injection_help_title),
+                        body = stringResource(R.string.prompt_page_mode_injection_help_body_markdown),
+                    )
+                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
@@ -213,7 +229,13 @@ fun LorebooksPage(vm: PromptVM = koinViewModel()) {
         topBar = {
             LargeFlexibleTopAppBar(
                 navigationIcon = { BackButton() },
-                title = { Text("世界书") },
+                title = { Text(stringResource(R.string.prompt_page_lorebook_title)) },
+                actions = {
+                    EditorGuideAction(
+                        title = stringResource(R.string.prompt_page_lorebook_help_title),
+                        body = stringResource(R.string.prompt_page_lorebook_help_body_markdown),
+                    )
+                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
@@ -1149,16 +1171,21 @@ private fun LorebookCard(
                             }
                         }
                         Tag(type = TagType.DEFAULT) {
-                            Text("助手 ${boundAssistantIds.size}")
+                            Text(
+                                stringResource(
+                                    R.string.prompt_page_lorebook_assistant_count,
+                                    boundAssistantIds.size,
+                                )
+                            )
                         }
                         if (book.recursiveScanning) {
                             Tag(type = TagType.SUCCESS) {
-                                Text("递归扫描")
+                                Text(stringResource(R.string.prompt_page_lorebook_recursive_badge))
                             }
                         }
                         book.tokenBudget?.let { budget ->
                             Tag(type = TagType.INFO) {
-                                Text("Budget $budget")
+                                Text(stringResource(R.string.prompt_page_lorebook_budget_badge, budget))
                             }
                         }
                     }
@@ -1168,7 +1195,7 @@ private fun LorebookCard(
                     onCheckedChange = onToggleEnabled,
                 )
                 IconButton(onClick = { showBindingsSheet = true }) {
-                    Icon(HugeIcons.Link01, "绑定助手")
+                    Icon(HugeIcons.Link01, stringResource(R.string.prompt_page_lorebook_manage_bindings))
                 }
                 IconButton(onClick = { showExportDialog = true }) {
                     Icon(HugeIcons.Share03, stringResource(R.string.export_title))
@@ -1232,18 +1259,18 @@ private fun LorebookBindingSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "管理世界书绑定",
+                text = stringResource(R.string.prompt_page_lorebook_binding_title),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
             Text(
-                text = book.name.ifBlank { "未命名世界书" },
+                text = book.name.ifBlank { stringResource(R.string.prompt_page_unnamed_lorebook) },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (assistants.isEmpty()) {
                 Text(
-                    text = "暂无助手可绑定。",
+                    text = stringResource(R.string.prompt_page_lorebook_binding_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1255,7 +1282,7 @@ private fun LorebookBindingSheet(
                     items(assistants, key = { it.id }) { assistant ->
                         ListItem(
                             headlineContent = {
-                                Text(assistant.name.ifBlank { "未命名助手" })
+                                Text(assistant.name.ifBlank { stringResource(R.string.prompt_page_lorebook_binding_unnamed_assistant) })
                             },
                             trailingContent = {
                                 Switch(
@@ -1321,11 +1348,20 @@ private fun LorebookEditSheet(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = stringResource(R.string.prompt_page_edit_lorebook),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.prompt_page_edit_lorebook),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                EditorGuideAction(
+                    title = stringResource(R.string.prompt_page_lorebook_editor_help_title),
+                    body = stringResource(R.string.prompt_page_lorebook_editor_help_body_markdown),
+                )
+            }
 
             Column(
                 modifier = Modifier
@@ -1358,8 +1394,8 @@ private fun LorebookEditSheet(
                 )
 
                 FormItem(
-                    label = { Text("递归扫描") },
-                    description = { Text("允许已触发条目的内容继续触发后续条目。") },
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_book_recursive)) },
+                    description = { Text(stringResource(R.string.prompt_page_lorebook_book_recursive_desc)) },
                     tail = {
                         Switch(
                             checked = book.recursiveScanning,
@@ -1380,7 +1416,7 @@ private fun LorebookEditSheet(
                             }
                         }
                     },
-                    label = { Text("Token Budget") },
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_book_token_budget)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
@@ -1478,6 +1514,31 @@ private fun RegexInjectionEntryCard(
                             Text(stringResource(R.string.prompt_page_disabled))
                         }
                     }
+                    if (entry.constantActive) {
+                        Tag(type = TagType.INFO) {
+                            Text(stringResource(R.string.prompt_page_constant_active))
+                        }
+                    }
+                    if (entry.secondaryKeywords.isNotEmpty()) {
+                        Tag(type = TagType.DEFAULT) {
+                            Text(
+                                stringResource(
+                                    R.string.prompt_page_lorebook_secondary_keywords_badge,
+                                    entry.secondaryKeywords.size,
+                                )
+                            )
+                        }
+                    }
+                    entry.probability?.let { probability ->
+                        Tag(type = TagType.SUCCESS) {
+                            Text(
+                                stringResource(
+                                    R.string.prompt_page_lorebook_probability_badge,
+                                    probability,
+                                )
+                            )
+                        }
+                    }
                 }
             }
             IconButton(onClick = onEdit) {
@@ -1498,16 +1559,54 @@ private fun RegexInjectionEditDialog(
     onConfirm: () -> Unit,
     onEdit: (PromptInjection.RegexInjection) -> Unit
 ) {
-    var newKeyword by remember { mutableStateOf("") }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var newKeyword by remember(entry.id) { mutableStateOf("") }
+    var newSecondaryKeyword by remember(entry.id) { mutableStateOf("") }
     val placement = entry.toLorebookInjectionPlacement()
+    val useProbability = entry.metadataBoolean("useProbability", default = true)
+    val triggers = entry.metadataList("triggers")
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.prompt_page_edit_entry)) },
-        text = {
+        sheetState = sheetState,
+        sheetGesturesEnabled = false,
+        dragHandle = {
+            IconButton(onClick = {
+                scope.launch {
+                    sheetState.hide()
+                    onDismiss()
+                }
+            }) {
+                Icon(HugeIcons.ArrowDown01, null)
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.95f)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.prompt_page_edit_entry),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                EditorGuideAction(
+                    title = stringResource(R.string.prompt_page_lorebook_entry_help_title),
+                    body = stringResource(R.string.prompt_page_lorebook_entry_help_body_markdown),
+                )
+            }
+
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1540,12 +1639,221 @@ private fun RegexInjectionEditDialog(
                 )
 
                 Text(
-                    stringResource(R.string.prompt_page_injection_position),
+                    text = stringResource(R.string.prompt_page_lorebook_entry_trigger_section),
+                    style = MaterialTheme.typography.titleSmall
+                )
+
+                EditableStringChipField(
+                    label = stringResource(R.string.prompt_page_keywords_label),
+                    values = entry.keywords,
+                    inputValue = newKeyword,
+                    onInputChange = { newKeyword = it },
+                    onAdd = { keyword ->
+                        onEdit(entry.copy(keywords = (entry.keywords + keyword).distinct()))
+                        newKeyword = ""
+                    },
+                    onRemove = { keyword ->
+                        onEdit(entry.copy(keywords = entry.keywords - keyword))
+                    },
+                    newItemLabel = stringResource(R.string.prompt_page_new_keyword),
+                    description = stringResource(R.string.prompt_page_lorebook_entry_primary_keywords_desc),
+                )
+
+                EditableStringChipField(
+                    label = stringResource(R.string.prompt_page_lorebook_secondary_keywords),
+                    values = entry.secondaryKeywords,
+                    inputValue = newSecondaryKeyword,
+                    onInputChange = { newSecondaryKeyword = it },
+                    onAdd = { keyword ->
+                        onEdit(entry.copy(secondaryKeywords = (entry.secondaryKeywords + keyword).distinct()))
+                        newSecondaryKeyword = ""
+                    },
+                    onRemove = { keyword ->
+                        onEdit(entry.copy(secondaryKeywords = entry.secondaryKeywords - keyword))
+                    },
+                    newItemLabel = stringResource(R.string.prompt_page_lorebook_secondary_keyword_new),
+                    description = stringResource(R.string.prompt_page_lorebook_secondary_keywords_desc),
+                )
+
+                FormItem(
+                    label = { Text(stringResource(R.string.prompt_page_use_regex)) },
+                    tail = {
+                        Switch(
+                            checked = entry.useRegex,
+                            onCheckedChange = { onEdit(entry.copy(useRegex = it)) }
+                        )
+                    }
+                )
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_case_sensitive),
+                        checked = entry.caseSensitive,
+                        onCheckedChange = { onEdit(entry.copy(caseSensitive = it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_match_whole_words),
+                        checked = entry.matchWholeWords,
+                        onCheckedChange = { onEdit(entry.copy(matchWholeWords = it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_constant_active),
+                        checked = entry.constantActive,
+                        onCheckedChange = { onEdit(entry.copy(constantActive = it)) }
+                    )
+                }
+
+                Text(
+                    text = stringResource(R.string.prompt_page_constant_active_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                FormItem(
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_selective)) },
+                    description = { Text(stringResource(R.string.prompt_page_lorebook_selective_desc)) },
+                    tail = {
+                        Switch(
+                            checked = entry.selective,
+                            onCheckedChange = { onEdit(entry.copy(selective = it)) }
+                        )
+                    }
+                )
+
+                AnimatedVisibility(visible = entry.selective) {
+                    Select(
+                        options = lorebookSelectiveLogicOptions,
+                        selectedOption = entry.selectiveLogic,
+                        onOptionSelected = { onEdit(entry.copy(selectiveLogic = it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        optionToString = { stringResource(lorebookSelectiveLogicLabelRes(it)) }
+                    )
+                }
+
+                OutlinedTextField(
+                    value = entry.scanDepth.toString(),
+                    onValueChange = {
+                        it.toIntOrNull()?.let { d -> onEdit(entry.copy(scanDepth = d)) }
+                    },
+                    label = { Text(stringResource(R.string.prompt_page_scan_depth)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+
+                FormItem(
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_use_probability)) },
+                    description = { Text(stringResource(R.string.prompt_page_lorebook_use_probability_desc)) },
+                    tail = {
+                        Switch(
+                            checked = useProbability,
+                            onCheckedChange = {
+                                onEdit(entry.withMetadataBoolean("useProbability", it, persistFalse = true))
+                            }
+                        )
+                    }
+                )
+
+                AnimatedVisibility(visible = useProbability) {
+                    OutlinedTextField(
+                        value = entry.probability?.toString().orEmpty(),
+                        onValueChange = { value ->
+                            val normalized = value.trim()
+                            onEdit(
+                                entry.copy(
+                                    probability = normalized.toIntOrNull()?.coerceIn(0, 100)
+                                )
+                            )
+                        },
+                        label = { Text(stringResource(R.string.prompt_page_lorebook_probability)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                }
+
+                Text(
+                    text = stringResource(R.string.prompt_page_lorebook_trigger_sources),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_match_character_description),
+                        checked = entry.matchCharacterDescription,
+                        onCheckedChange = { onEdit(entry.copy(matchCharacterDescription = it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_match_character_personality),
+                        checked = entry.matchCharacterPersonality,
+                        onCheckedChange = { onEdit(entry.copy(matchCharacterPersonality = it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_match_persona_description),
+                        checked = entry.matchPersonaDescription,
+                        onCheckedChange = { onEdit(entry.copy(matchPersonaDescription = it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_match_scenario),
+                        checked = entry.matchScenario,
+                        onCheckedChange = { onEdit(entry.copy(matchScenario = it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_match_creator_notes),
+                        checked = entry.matchCreatorNotes,
+                        onCheckedChange = { onEdit(entry.copy(matchCreatorNotes = it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_match_depth_prompt),
+                        checked = entry.matchCharacterDepthPrompt,
+                        onCheckedChange = { onEdit(entry.copy(matchCharacterDepthPrompt = it)) }
+                    )
+                }
+
+                Text(
+                    text = stringResource(R.string.prompt_page_lorebook_generation_triggers),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    lorebookGenerationTypes.forEach { trigger ->
+                        val selected = trigger in triggers
+                        Tag(
+                            type = if (selected) TagType.INFO else TagType.DEFAULT,
+                            onClick = {
+                                val updatedTriggers = if (selected) {
+                                    triggers - trigger
+                                } else {
+                                    (triggers + trigger).distinct()
+                                }
+                                onEdit(entry.withMetadataList("triggers", updatedTriggers))
+                            }
+                        ) {
+                            Text(stringResource(lorebookGenerationTypeLabelRes(trigger)))
+                        }
+                    }
+                }
+
+                Text(
+                    text = stringResource(R.string.prompt_page_lorebook_entry_injection_section),
                     style = MaterialTheme.typography.titleSmall
                 )
                 LorebookInjectionPlacementSelector(
                     placement = placement,
                     onSelect = { onEdit(entry.withLorebookInjectionPlacement(it)) }
+                )
+
+                Select(
+                    options = lorebookEntryRoles,
+                    selectedOption = entry.role,
+                    onOptionSelected = { onEdit(entry.copy(role = it)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    optionToString = { stringResource(lorebookRoleLabelRes(it)) }
                 )
 
                 AnimatedVisibility(visible = placement.isDepthPlacement()) {
@@ -1560,93 +1868,126 @@ private fun RegexInjectionEditDialog(
                     )
                 }
 
-                // 关键词
-                Text(stringResource(R.string.prompt_page_keywords_label), style = MaterialTheme.typography.titleSmall)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    entry.keywords.forEach { keyword ->
-                        InputChip(
-                            selected = false,
-                            onClick = {},
-                            label = { Text(keyword) },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = {
-                                        onEdit(entry.copy(keywords = entry.keywords - keyword))
-                                    },
-                                    modifier = Modifier.size(16.dp)
-                                ) {
-                                    Icon(HugeIcons.Cancel01, null, modifier = Modifier.size(12.dp))
-                                }
-                            }
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newKeyword,
-                        onValueChange = { newKeyword = it },
-                        label = { Text(stringResource(R.string.prompt_page_new_keyword)) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    IconButton(
-                        onClick = {
-                            if (newKeyword.isNotBlank()) {
-                                onEdit(entry.copy(keywords = entry.keywords + newKeyword.trim()))
-                                newKeyword = ""
-                            }
-                        }
-                    ) {
-                        Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add))
-                    }
-                }
-
-                FormItem(
-                    label = { Text(stringResource(R.string.prompt_page_use_regex)) },
-                    tail = {
-                        Switch(
-                            checked = entry.useRegex,
-                            onCheckedChange = { onEdit(entry.copy(useRegex = it)) }
-                        )
-                    }
+                Text(
+                    text = stringResource(R.string.prompt_page_lorebook_advanced_section),
+                    style = MaterialTheme.typography.titleSmall
                 )
-
-                FormItem(
-                    label = { Text(stringResource(R.string.prompt_page_case_sensitive)) },
-                    tail = {
-                        Switch(
-                            checked = entry.caseSensitive,
-                            onCheckedChange = { onEdit(entry.copy(caseSensitive = it)) }
-                        )
-                    }
-                )
-
-                FormItem(
-                    label = { Text(stringResource(R.string.prompt_page_constant_active)) },
-                    description = { Text(stringResource(R.string.prompt_page_constant_active_desc)) },
-                    tail = {
-                        Switch(
-                            checked = entry.constantActive,
-                            onCheckedChange = { onEdit(entry.copy(constantActive = it)) }
-                        )
-                    }
+                Text(
+                    text = stringResource(R.string.prompt_page_lorebook_advanced_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 OutlinedTextField(
-                    value = entry.scanDepth.toString(),
-                    onValueChange = {
-                        it.toIntOrNull()?.let { d -> onEdit(entry.copy(scanDepth = d)) }
-                    },
-                    label = { Text(stringResource(R.string.prompt_page_scan_depth)) },
+                    value = entry.metadataText("group"),
+                    onValueChange = { onEdit(entry.withMetadataText("group", it)) },
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_group_names)) },
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = entry.metadataInt("group_weight")?.toString().orEmpty(),
+                        onValueChange = { value ->
+                            onEdit(entry.withMetadataInt("group_weight", value.toIntOrNull()))
+                        },
+                        label = { Text(stringResource(R.string.prompt_page_lorebook_group_weight)) },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    OutlinedTextField(
+                        value = entry.metadataInt("delay")?.toString().orEmpty(),
+                        onValueChange = { value ->
+                            onEdit(entry.withMetadataInt("delay", value.toIntOrNull()))
+                        },
+                        label = { Text(stringResource(R.string.prompt_page_lorebook_delay_messages)) },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = entry.metadataInt("sticky")?.toString().orEmpty(),
+                        onValueChange = { value ->
+                            onEdit(entry.withMetadataInt("sticky", value.toIntOrNull()))
+                        },
+                        label = { Text(stringResource(R.string.prompt_page_lorebook_sticky_messages)) },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    OutlinedTextField(
+                        value = entry.metadataInt("cooldown")?.toString().orEmpty(),
+                        onValueChange = { value ->
+                            onEdit(entry.withMetadataInt("cooldown", value.toIntOrNull()))
+                        },
+                        label = { Text(stringResource(R.string.prompt_page_lorebook_cooldown_messages)) },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                }
+
+                OutlinedTextField(
+                    value = entry.metadataText("delay_until_recursion"),
+                    onValueChange = { onEdit(entry.withMetadataText("delay_until_recursion", it)) },
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_delay_until_recursion)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_group_override),
+                        checked = entry.metadataBoolean("group_override"),
+                        onCheckedChange = { onEdit(entry.withMetadataBoolean("group_override", it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_use_group_scoring),
+                        checked = entry.metadataBoolean("use_group_scoring"),
+                        onCheckedChange = { onEdit(entry.withMetadataBoolean("use_group_scoring", it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_exclude_recursion),
+                        checked = entry.metadataBoolean("exclude_recursion"),
+                        onCheckedChange = { onEdit(entry.withMetadataBoolean("exclude_recursion", it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_prevent_recursion),
+                        checked = entry.metadataBoolean("prevent_recursion"),
+                        onCheckedChange = { onEdit(entry.withMetadataBoolean("prevent_recursion", it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_ignore_budget),
+                        checked = entry.metadataBoolean("ignore_budget"),
+                        onCheckedChange = { onEdit(entry.withMetadataBoolean("ignore_budget", it)) }
+                    )
+                    LorebookCheckboxField(
+                        label = stringResource(R.string.prompt_page_lorebook_vectorized),
+                        checked = entry.metadataBoolean("vectorized"),
+                        onCheckedChange = { onEdit(entry.withMetadataBoolean("vectorized", it)) }
+                    )
+                }
+
+                OutlinedTextField(
+                    value = entry.metadataText("outlet_name"),
+                    onValueChange = { onEdit(entry.withMetadataText("outlet_name", it)) },
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_outlet_name)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = entry.metadataText("automation_id"),
+                    onValueChange = { onEdit(entry.withMetadataText("automation_id", it)) },
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_automation_id)) },
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 OutlinedTextField(
@@ -1655,24 +1996,246 @@ private fun RegexInjectionEditDialog(
                     label = { Text(stringResource(R.string.prompt_page_injection_content)) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(150.dp),
-                    minLines = 4
+                        .height(180.dp),
+                    minLines = 5
                 )
             }
-        },
-        confirmButton = {
+
             val canSave = entry.keywords.isNotEmpty() || entry.constantActive
-            TextButton(
-                onClick = onConfirm,
-                enabled = canSave
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
             ) {
-                Text(stringResource(R.string.prompt_page_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.prompt_page_cancel))
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.prompt_page_cancel))
+                }
+                TextButton(
+                    onClick = onConfirm,
+                    enabled = canSave
+                ) {
+                    Text(stringResource(R.string.prompt_page_confirm))
+                }
             }
         }
-    )
+    }
+}
+
+private val lorebookSelectiveLogicOptions = listOf(0, 1, 2, 3)
+private val lorebookGenerationTypes = listOf("normal", "continue", "quiet", "impersonate")
+private val lorebookEntryRoles = listOf(
+    MessageRole.SYSTEM,
+    MessageRole.USER,
+    MessageRole.ASSISTANT,
+)
+
+@Composable
+private fun EditableStringChipField(
+    label: String,
+    values: List<String>,
+    inputValue: String,
+    onInputChange: (String) -> Unit,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    newItemLabel: String,
+    description: String? = null,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall
+        )
+        if (!description.isNullOrBlank()) {
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            values.forEach { value ->
+                InputChip(
+                    selected = false,
+                    onClick = {},
+                    label = { Text(value) },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { onRemove(value) },
+                            modifier = Modifier.size(16.dp)
+                        ) {
+                            Icon(HugeIcons.Cancel01, null, modifier = Modifier.size(12.dp))
+                        }
+                    }
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = inputValue,
+                onValueChange = onInputChange,
+                label = { Text(newItemLabel) },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            IconButton(
+                onClick = {
+                    inputValue.trim()
+                        .takeIf { it.isNotEmpty() }
+                        ?.let(onAdd)
+                }
+            ) {
+                Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LorebookCheckboxField(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium
+        )
+    }
+}
+
+private fun PromptInjection.RegexInjection.metadataBoolean(
+    key: String,
+    default: Boolean = false,
+): Boolean {
+    return stMetadata[key]?.trim()?.let { value ->
+        value.equals("true", ignoreCase = true) || value == "1"
+    } ?: default
+}
+
+private fun PromptInjection.RegexInjection.metadataInt(key: String): Int? {
+    return stMetadata[key]?.trim()?.toIntOrNull()
+}
+
+private fun PromptInjection.RegexInjection.metadataText(key: String): String {
+    return stMetadata[key].orEmpty()
+}
+
+private fun PromptInjection.RegexInjection.metadataList(key: String): List<String> {
+    return Regex("[,\\n]")
+        .split(stMetadata[key].orEmpty())
+        .mapNotNull { value ->
+            value
+                .trim()
+                .removePrefix("[")
+                .removeSuffix("]")
+                .removePrefix("\"")
+                .removeSuffix("\"")
+                .takeIf { it.isNotBlank() }
+        }
+        .distinct()
+}
+
+private fun PromptInjection.RegexInjection.withMetadataText(
+    key: String,
+    value: String,
+): PromptInjection.RegexInjection {
+    val normalized = value.trim()
+    val updated = stMetadata.toMutableMap()
+    if (normalized.isEmpty()) {
+        updated.remove(key)
+    } else {
+        updated[key] = normalized
+    }
+    return copy(stMetadata = updated)
+}
+
+private fun PromptInjection.RegexInjection.withMetadataBoolean(
+    key: String,
+    value: Boolean,
+    persistFalse: Boolean = false,
+): PromptInjection.RegexInjection {
+    val updated = stMetadata.toMutableMap()
+    when {
+        value -> updated[key] = "true"
+        persistFalse -> updated[key] = "false"
+        else -> updated.remove(key)
+    }
+    return copy(stMetadata = updated)
+}
+
+private fun PromptInjection.RegexInjection.withMetadataInt(
+    key: String,
+    value: Int?,
+): PromptInjection.RegexInjection {
+    val updated = stMetadata.toMutableMap()
+    if (value == null || value <= 0) {
+        updated.remove(key)
+    } else {
+        updated[key] = value.toString()
+    }
+    return copy(stMetadata = updated)
+}
+
+private fun PromptInjection.RegexInjection.withMetadataList(
+    key: String,
+    values: List<String>,
+): PromptInjection.RegexInjection {
+    val normalized = values
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+    val updated = stMetadata.toMutableMap()
+    if (normalized.isEmpty()) {
+        updated.remove(key)
+    } else {
+        updated[key] = buildJsonArray {
+            normalized.forEach { add(JsonPrimitive(it)) }
+        }.toString()
+    }
+    return copy(stMetadata = updated)
+}
+
+@StringRes
+private fun lorebookSelectiveLogicLabelRes(value: Int): Int {
+    return when (value) {
+        1 -> R.string.prompt_page_lorebook_selective_logic_not_all
+        2 -> R.string.prompt_page_lorebook_selective_logic_not_any
+        3 -> R.string.prompt_page_lorebook_selective_logic_all
+        else -> R.string.prompt_page_lorebook_selective_logic_any
+    }
+}
+
+@StringRes
+private fun lorebookGenerationTypeLabelRes(value: String): Int {
+    return when (value) {
+        "continue" -> R.string.prompt_page_st_preset_editor_trigger_continue
+        "quiet" -> R.string.prompt_page_st_preset_editor_trigger_quiet
+        "impersonate" -> R.string.prompt_page_st_preset_editor_trigger_impersonate
+        else -> R.string.prompt_page_st_preset_editor_trigger_normal
+    }
+}
+
+@StringRes
+private fun lorebookRoleLabelRes(role: MessageRole): Int {
+    return when (role) {
+        MessageRole.USER -> R.string.prompt_page_st_preset_editor_role_user
+        MessageRole.ASSISTANT -> R.string.prompt_page_st_preset_editor_role_assistant
+        else -> R.string.prompt_page_st_preset_editor_role_system
+    }
 }

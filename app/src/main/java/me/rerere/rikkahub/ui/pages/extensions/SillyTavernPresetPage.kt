@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -17,12 +18,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -34,12 +36,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
@@ -58,10 +62,12 @@ import me.rerere.rikkahub.data.model.configuredValueCount
 import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.ensureStPresetLibrary
 import me.rerere.rikkahub.data.model.removeStPreset
+import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.data.model.selectStPreset
 import me.rerere.rikkahub.data.model.selectedStPreset
 import me.rerere.rikkahub.data.model.upsertStPreset
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.EditorGuideAction
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImportKind
@@ -80,6 +86,12 @@ fun SillyTavernPresetPage(vm: PromptVM = koinViewModel()) {
             LargeFlexibleTopAppBar(
                 navigationIcon = { BackButton() },
                 title = { Text(stringResource(R.string.prompt_page_st_preset_tab_title)) },
+                actions = {
+                    EditorGuideAction(
+                        title = stringResource(R.string.prompt_page_st_preset_help_title),
+                        body = stringResource(R.string.prompt_page_st_preset_help_body_markdown),
+                    )
+                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
@@ -111,6 +123,22 @@ private fun SillyTavernPresetPageContent(
     val selectedPreset = settings.selectedStPreset()
     var presetPendingDelete by remember { mutableStateOf<SillyTavernPreset?>(null) }
     var isImporting by remember { mutableStateOf(false) }
+    var showLibrarySheet by rememberSaveable { mutableStateOf(false) }
+    var presetSearch by rememberSaveable { mutableStateOf("") }
+    val filteredPresets = remember(presets, presetSearch) {
+        val query = presetSearch.trim()
+        if (query.isBlank()) {
+            presets
+        } else {
+            presets.filter { preset ->
+                preset.displayName.contains(query, ignoreCase = true) ||
+                    preset.template.prompts.any { prompt ->
+                        prompt.name.contains(query, ignoreCase = true) ||
+                            prompt.identifier.contains(query, ignoreCase = true)
+                    }
+            }
+        }
+    }
 
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -133,7 +161,10 @@ private fun SillyTavernPresetPageContent(
                 }
                 parseAssistantImportFromJson(
                     jsonString = jsonString,
-                    sourceName = fileName?.substringBeforeLast('.')?.ifBlank { "Imported Preset" } ?: "Imported Preset",
+                    sourceName = fileName
+                        ?.substringBeforeLast('.')
+                        ?.ifBlank { context.getString(R.string.prompt_page_st_preset_imported_name) }
+                        ?: context.getString(R.string.prompt_page_st_preset_imported_name),
                 )
             }.onSuccess { payload ->
                 if (payload.kind != AssistantImportKind.PRESET) {
@@ -213,7 +244,10 @@ private fun SillyTavernPresetPageContent(
                         OutlinedButton(
                             onClick = {
                                 val template = defaultSillyTavernPromptTemplate().copy(
-                                    sourceName = "Preset ${presets.size + 1}",
+                                    sourceName = context.getString(
+                                        R.string.prompt_page_st_preset_generated_name,
+                                        presets.size + 1,
+                                    ),
                                 )
                                 onUpdate(
                                     settings
@@ -225,6 +259,19 @@ private fun SillyTavernPresetPageContent(
                             Icon(HugeIcons.Add01, null)
                             Spacer(modifier = Modifier.padding(horizontal = 2.dp))
                             Text(stringResource(R.string.prompt_page_st_preset_tab_create_default))
+                        }
+                        OutlinedButton(
+                            onClick = { showLibrarySheet = true },
+                            enabled = presets.isNotEmpty(),
+                        ) {
+                            Icon(HugeIcons.Share03, null)
+                            Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+                            Text(
+                                stringResource(
+                                    R.string.prompt_page_st_preset_tab_manage_library,
+                                    presets.size,
+                                )
+                            )
                         }
                     }
                 }
@@ -244,19 +291,10 @@ private fun SillyTavernPresetPageContent(
             }
         } else {
             item {
-                Text(
-                    text = stringResource(R.string.prompt_page_st_preset_editor_title),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-            items(presets, key = { it.id }) { preset ->
-                PresetLibraryCard(
-                    preset = preset,
-                    selected = preset.id == settings.selectedStPresetId,
-                    onSelect = {
-                        onUpdate(settings.selectStPreset(preset.id))
-                    },
-                    onDelete = { presetPendingDelete = preset },
+                PresetSelectionCard(
+                    preset = selectedPreset,
+                    presetCount = presets.size,
+                    onManageLibrary = { showLibrarySheet = true },
                 )
             }
         }
@@ -312,7 +350,14 @@ private fun SillyTavernPresetPageContent(
         AlertDialog(
             onDismissRequest = { presetPendingDelete = null },
             title = { Text(stringResource(R.string.prompt_page_delete)) },
-            text = { Text("删除预设“${preset.displayName}”后无法恢复。") },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.prompt_page_st_preset_delete_confirm,
+                        preset.displayName,
+                    )
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -329,6 +374,123 @@ private fun SillyTavernPresetPageContent(
                 }
             },
         )
+    }
+
+    if (showLibrarySheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showLibrarySheet = false },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.9f)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.prompt_page_st_preset_library_title),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    text = stringResource(R.string.prompt_page_st_preset_library_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = presetSearch,
+                    onValueChange = { presetSearch = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.prompt_page_st_preset_library_search)) },
+                    singleLine = true,
+                )
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (filteredPresets.isEmpty()) {
+                        item {
+                            Card(colors = CustomColors.listItemCardColors) {
+                                Text(
+                                    text = stringResource(R.string.prompt_page_st_preset_library_empty_search),
+                                    modifier = Modifier.padding(16.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    } else {
+                        items(filteredPresets, key = { it.id }) { preset ->
+                            PresetLibraryCard(
+                                preset = preset,
+                                selected = preset.id == settings.selectedStPresetId,
+                                onSelect = {
+                                    onUpdate(settings.selectStPreset(preset.id))
+                                    showLibrarySheet = false
+                                },
+                                onDelete = { presetPendingDelete = preset },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PresetSelectionCard(
+    preset: SillyTavernPreset?,
+    presetCount: Int,
+    onManageLibrary: () -> Unit,
+) {
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.prompt_page_st_preset_current_card_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (preset == null) {
+                Text(
+                    text = stringResource(R.string.prompt_page_st_preset_current_card_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.prompt_page_st_preset_tab_current, preset.displayName),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = stringResource(
+                        R.string.prompt_page_st_preset_current_card_summary,
+                        preset.regexes.size,
+                        preset.sampling.configuredValueCount(),
+                        preset.template.resolvePromptOrder().size,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.prompt_page_st_preset_library_count, presetCount),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = onManageLibrary) {
+                    Text(stringResource(R.string.prompt_page_st_preset_open_library))
+                }
+            }
+        }
     }
 }
 
@@ -375,10 +537,20 @@ private fun PresetLibraryCard(
                 )
                 Text(
                     text = buildString {
-                        append("Regex ${preset.regexes.size} 条")
+                        append(
+                            stringResource(
+                                R.string.prompt_page_st_preset_library_regex_count,
+                                preset.regexes.size,
+                            )
+                        )
                         val samplingCount = preset.sampling.configuredValueCount()
                         if (samplingCount > 0) {
-                            append(" · 采样 $samplingCount 项")
+                            append(
+                                stringResource(
+                                    R.string.prompt_page_st_preset_library_sampling_count,
+                                    samplingCount,
+                                )
+                            )
                         }
                     },
                     style = MaterialTheme.typography.bodySmall,

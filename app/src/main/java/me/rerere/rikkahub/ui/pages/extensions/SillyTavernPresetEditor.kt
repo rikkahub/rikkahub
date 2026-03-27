@@ -80,6 +80,7 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import sh.calvin.reorderable.ReorderableColumn
 
 private val stPromptGenerationTypes = listOf("normal", "continue", "quiet", "impersonate")
+private val stNamesBehaviorOptions = listOf<Int?>(null, -1, 0, 1, 2)
 
 private data class StPromptEditorState(
     val originalIdentifier: String,
@@ -249,6 +250,31 @@ fun SillyTavernPresetEditorCard(
                         }
                     }
                 )
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.prompt_page_st_preset_editor_names_behavior),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Select(
+                        options = stNamesBehaviorOptions,
+                        selectedOption = editorTemplate.namesBehavior,
+                        onOptionSelected = { value ->
+                            updateTemplate { current ->
+                                current.copy(namesBehavior = value)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        optionToString = { stringResource(stNamesBehaviorLabelRes(it)) }
+                    )
+                    Text(
+                        text = stringResource(R.string.prompt_page_st_preset_editor_names_behavior_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 OutlinedTextField(
                     value = editorTemplate.newChatPrompt,
@@ -1278,5 +1304,17 @@ private fun stPromptGenerationTypeLabelRes(trigger: String): Int {
         "quiet" -> R.string.prompt_page_st_preset_editor_trigger_quiet
         "impersonate" -> R.string.prompt_page_st_preset_editor_trigger_impersonate
         else -> R.string.prompt_page_st_preset_editor_trigger_normal
+    }
+}
+
+@StringRes
+private fun stNamesBehaviorLabelRes(value: Int?): Int {
+    return when (value) {
+        null -> R.string.prompt_page_st_preset_editor_names_behavior_unspecified
+        -1 -> R.string.prompt_page_st_preset_editor_names_behavior_none
+        0 -> R.string.prompt_page_st_preset_editor_names_behavior_default
+        1 -> R.string.prompt_page_st_preset_editor_names_behavior_completion
+        2 -> R.string.prompt_page_st_preset_editor_names_behavior_content
+        else -> R.string.prompt_page_st_preset_editor_names_behavior_unspecified
     }
 }
