@@ -31,6 +31,7 @@ import androidx.compose.ui.window.Dialog
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AlertCircle
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.ui.theme.CustomColors
 
 /**
  * 权限请求说明对话框
@@ -171,8 +172,9 @@ private fun PermissionItem(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        colors = CustomColors.cardColorsForContainer(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            preferredContentColor = MaterialTheme.colorScheme.onSurface,
         ),
         shape = RoundedCornerShape(8.dp)
     ) {
@@ -212,8 +214,9 @@ private fun PermissionItem(
 
                     if (isPermanentlyDenied) {
                         Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                            colors = CustomColors.cardColorsForContainer(
+                                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                preferredContentColor = MaterialTheme.colorScheme.onError,
                             ),
                             shape = RoundedCornerShape(4.dp)
                         ) {

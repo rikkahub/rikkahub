@@ -113,7 +113,8 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = CustomColors.topBarColors.containerColor
+        containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
             // providers_header 已移除，搜索服务从索引 0 开始

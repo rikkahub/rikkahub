@@ -86,6 +86,7 @@ fun SillyTavernPresetPage(vm: PromptVM = koinViewModel()) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         SillyTavernPresetPageContent(
             settings = settings,
@@ -232,7 +233,7 @@ private fun SillyTavernPresetPageContent(
 
         if (presets.isEmpty()) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = CustomColors.listItemColors.containerColor)) {
+                Card(colors = CustomColors.listItemCardColors) {
                     Text(
                         text = stringResource(R.string.prompt_page_st_preset_tab_empty),
                         modifier = Modifier.padding(16.dp),
@@ -343,12 +344,17 @@ private fun PresetLibraryCard(
 
     Card(
         onClick = onSelect,
-        colors = CardDefaults.cardColors(
+        colors = CustomColors.cardColorsForContainer(
             containerColor = if (selected) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
             } else {
-                CustomColors.listItemColors.containerColor
-            }
+                CustomColors.listItemSurfaceColors.containerColor
+            },
+            preferredContentColor = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                CustomColors.listItemSurfaceColors.contentColor
+            },
         ),
     ) {
         Row(

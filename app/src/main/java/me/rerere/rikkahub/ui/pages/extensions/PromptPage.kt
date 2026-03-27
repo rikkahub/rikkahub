@@ -137,6 +137,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -193,6 +194,7 @@ fun ModeInjectionsPage(vm: PromptVM = koinViewModel()) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         ModeInjectionTab(
             modifier = Modifier.padding(innerPadding),
@@ -218,6 +220,7 @@ fun LorebooksPage(vm: PromptVM = koinViewModel()) {
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
         LorebookTab(
             modifier = Modifier.padding(innerPadding),
