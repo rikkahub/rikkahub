@@ -42,7 +42,7 @@ class OpenAIProvider(
     private val keyRoulette = KeyRoulette.default()
 
     private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
-    private val responseAPI = ResponseAPI(client = client)
+    private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
 
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
