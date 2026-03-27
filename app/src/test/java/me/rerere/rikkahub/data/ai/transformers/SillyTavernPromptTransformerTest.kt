@@ -750,4 +750,66 @@ class SillyTavernPromptTransformerTest {
             result.map { it.toText() }
         )
     }
+
+    @Test
+    fun `names behavior 1 should fall back to content prefixing`() {
+        val template = SillyTavernPromptTemplate(
+            namesBehavior = 1,
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("Hello"),
+                UIMessage.assistant("Hi"),
+            ),
+            assistant = Assistant(),
+            lorebooks = emptyList(),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("{{user}}: Hello", "{{char}}: Hi"),
+            result.map { it.toText() }
+        )
+    }
+
+    @Test
+    fun `outlet lorebook entries should populate macro state without injecting prompt text`() {
+        val lorebook = Lorebook(
+            id = Uuid.random(),
+            entries = listOf(
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    constantActive = true,
+                    position = InjectionPosition.OUTLET,
+                    content = "Stored memory",
+                    stMetadata = mapOf("outlet_name" to "memory"),
+                )
+            )
+        )
+        val stMacroState = StMacroState()
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = Assistant(
+                lorebookIds = setOf(lorebook.id),
+            ),
+            lorebooks = listOf(lorebook),
+            template = template,
+            stMacroState = stMacroState,
+        )
+
+        assertEquals(listOf("Hello"), result.map { it.toText() })
+        assertEquals("Stored memory", stMacroState.outlets["memory"])
+    }
 }

@@ -8,6 +8,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
+import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.SillyTavernCharacterData
@@ -66,6 +67,37 @@ class SillyTavernExportSerializerTest {
     }
 
     @Test
+    fun `preset export should preserve markdown flag when regex is also prompt only`() {
+        val preset = SillyTavernPreset(
+            template = defaultSillyTavernPromptTemplate().copy(sourceName = "Dual Phase Preset"),
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    name = "Dual Phase",
+                    findRegex = "foo",
+                    replaceString = "bar",
+                    affectingScope = setOf(AssistantAffectScope.ASSISTANT),
+                    visualOnly = true,
+                    promptOnly = true,
+                    stPlacements = setOf(2),
+                )
+            ),
+        )
+
+        val regexJson = Json.parseToJsonElement(
+            SillyTavernPresetExportSerializer.exportToJson(preset)
+        ).jsonObject["extensions"]
+            ?.jsonObject
+            ?.get("regex_scripts")
+            ?.jsonArray
+            ?.first()
+            ?.jsonObject
+
+        assertEquals("true", regexJson?.get("markdownOnly")?.jsonPrimitive?.content)
+        assertEquals("true", regexJson?.get("promptOnly")?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `character card export should embed lorebooks and regexes`() {
         val assistant = Assistant(
             name = "Tester",
@@ -98,6 +130,8 @@ class SillyTavernExportSerializerTest {
                     keywords = listOf("moon"),
                     content = "The moon is red.",
                     role = MessageRole.SYSTEM,
+                    position = InjectionPosition.OUTLET,
+                    stMetadata = mapOf("outlet_name" to "memory"),
                 )
             ),
         )
@@ -127,6 +161,22 @@ class SillyTavernExportSerializerTest {
                 ?.first()
                 ?.jsonObject
                 ?.get("name")
+                ?.jsonPrimitive
+                ?.content
+        )
+        assertEquals(
+            "7",
+            exported["data"]
+                ?.jsonObject
+                ?.get("character_book")
+                ?.jsonObject
+                ?.get("entries")
+                ?.jsonArray
+                ?.first()
+                ?.jsonObject
+                ?.get("extensions")
+                ?.jsonObject
+                ?.get("position")
                 ?.jsonPrimitive
                 ?.content
         )

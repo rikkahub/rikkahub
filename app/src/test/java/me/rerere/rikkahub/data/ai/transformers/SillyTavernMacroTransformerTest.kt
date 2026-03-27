@@ -327,4 +327,36 @@ class SillyTavernMacroTransformerTest {
 
         assertEquals(listOf("show", "in 3 hours"), result.map { it.toText() })
     }
+
+    @Test
+    fun `macros should resolve lorebook outlet values`() {
+        val env = StMacroEnvironment(
+            user = "Alice",
+            char = "Seraphina",
+            group = "Seraphina",
+            groupNotMuted = "Seraphina",
+            notChar = "Alice",
+            characterDescription = "",
+            characterPersonality = "",
+            scenario = "",
+            persona = "",
+            charPrompt = "",
+            charInstruction = "",
+            charDepthPrompt = "",
+            creatorNotes = "",
+            exampleMessagesRaw = "",
+            lastChatMessage = "",
+            lastUserMessage = "",
+            lastAssistantMessage = "",
+            modelName = "Test Model",
+            outlets = mapOf("memory" to "Stored memory"),
+        )
+
+        val result = SillyTavernMacroTransformer.applySillyTavernMacros(
+            messages = listOf(UIMessage.system("{{outlet::memory}}")),
+            env = env,
+        )
+
+        assertEquals(listOf("Stored memory"), result.map { it.toText() })
+    }
 }

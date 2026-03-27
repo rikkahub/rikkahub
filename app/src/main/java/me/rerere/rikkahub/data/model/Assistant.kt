@@ -8,6 +8,7 @@ import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.datastore.Settings
+import kotlin.random.Random
 import kotlin.uuid.Uuid
 
 private val DEFAULT_SCHEDULED_TASK_ASSISTANT_ID = Uuid.parse("0950e2dc-9bd5-4801-afa3-aa887aa36b4e")
@@ -64,6 +65,43 @@ data class Assistant(
     val openAIVerbosity: String = "",
     val stCharacterData: SillyTavernCharacterData? = null,
 )
+
+fun Assistant.resolveConversationStarterMessages(
+    random: Random = Random.Default,
+): List<UIMessage> {
+    val greetingCandidates = buildList {
+        stCharacterData?.firstMessage
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(::add)
+        stCharacterData?.alternateGreetings
+            .orEmpty()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .forEach(::add)
+    }.distinct()
+    if (greetingCandidates.isEmpty()) return presetMessages
+
+    val selectedGreeting = greetingCandidates.random(random)
+    if (presetMessages.isEmpty()) {
+        return listOf(UIMessage.assistant(selectedGreeting))
+    }
+
+    var replacedGreeting = false
+    val updatedPresetMessages = presetMessages.map { message ->
+        if (!replacedGreeting && message.role == MessageRole.ASSISTANT) {
+            replacedGreeting = true
+            UIMessage.assistant(selectedGreeting)
+        } else {
+            message
+        }
+    }
+    return if (replacedGreeting) {
+        updatedPresetMessages
+    } else {
+        updatedPresetMessages + UIMessage.assistant(selectedGreeting)
+    }
+}
 
 @Serializable
 data class ScheduledPromptTask(
@@ -492,6 +530,9 @@ enum class InjectionPosition {
 
     @SerialName("example_messages_bottom")
     EXAMPLE_MESSAGES_BOTTOM, // 示例消息之后（ST 对齐）
+
+    @SerialName("outlet")
+    OUTLET,                  // ST Outlet，仅通过 {{outlet::name}} 等宏显式引用
 }
 
 /**
@@ -571,6 +612,7 @@ fun InjectionPosition.normalizeForModeInjection(): InjectionPosition = when (thi
     InjectionPosition.AT_DEPTH,
     InjectionPosition.EXAMPLE_MESSAGES_TOP,
     InjectionPosition.EXAMPLE_MESSAGES_BOTTOM,
+    InjectionPosition.OUTLET,
     -> InjectionPosition.AFTER_SYSTEM_PROMPT
 }
 

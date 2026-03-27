@@ -622,6 +622,7 @@ private fun getPositionLabel(position: InjectionPosition): String = when (positi
     InjectionPosition.AT_DEPTH -> stringResource(R.string.prompt_page_position_at_depth)
     InjectionPosition.EXAMPLE_MESSAGES_TOP -> stringResource(R.string.prompt_page_position_example_messages_top)
     InjectionPosition.EXAMPLE_MESSAGES_BOTTOM -> stringResource(R.string.prompt_page_position_example_messages_bottom)
+    InjectionPosition.OUTLET -> stringResource(R.string.prompt_page_position_outlet)
 }
 
 private enum class LorebookInjectionPlacement {
@@ -634,6 +635,7 @@ private enum class LorebookInjectionPlacement {
     ASSISTANT_DEPTH,
     EXAMPLE_MESSAGES_TOP,
     EXAMPLE_MESSAGES_BOTTOM,
+    OUTLET,
 }
 
 private val lorebookInjectionPlacements = listOf(
@@ -646,6 +648,7 @@ private val lorebookInjectionPlacements = listOf(
     LorebookInjectionPlacement.ASSISTANT_DEPTH,
     LorebookInjectionPlacement.EXAMPLE_MESSAGES_TOP,
     LorebookInjectionPlacement.EXAMPLE_MESSAGES_BOTTOM,
+    LorebookInjectionPlacement.OUTLET,
 )
 
 private fun PromptInjection.RegexInjection.toLorebookInjectionPlacement(): LorebookInjectionPlacement = when (position) {
@@ -665,6 +668,7 @@ private fun PromptInjection.RegexInjection.toLorebookInjectionPlacement(): Loreb
 
     InjectionPosition.EXAMPLE_MESSAGES_TOP -> LorebookInjectionPlacement.EXAMPLE_MESSAGES_TOP
     InjectionPosition.EXAMPLE_MESSAGES_BOTTOM -> LorebookInjectionPlacement.EXAMPLE_MESSAGES_BOTTOM
+    InjectionPosition.OUTLET -> LorebookInjectionPlacement.OUTLET
 }
 
 private fun PromptInjection.RegexInjection.withLorebookInjectionPlacement(
@@ -691,6 +695,7 @@ private fun PromptInjection.RegexInjection.withLorebookInjectionPlacement(
 
     LorebookInjectionPlacement.EXAMPLE_MESSAGES_TOP -> copy(position = InjectionPosition.EXAMPLE_MESSAGES_TOP)
     LorebookInjectionPlacement.EXAMPLE_MESSAGES_BOTTOM -> copy(position = InjectionPosition.EXAMPLE_MESSAGES_BOTTOM)
+    LorebookInjectionPlacement.OUTLET -> copy(position = InjectionPosition.OUTLET)
 }
 
 private fun LorebookInjectionPlacement.isDepthPlacement(): Boolean = when (this) {
@@ -727,6 +732,7 @@ private fun getLorebookInjectionPlacementLabel(placement: LorebookInjectionPlace
     LorebookInjectionPlacement.ASSISTANT_DEPTH -> stringResource(R.string.prompt_page_position_assistant_depth)
     LorebookInjectionPlacement.EXAMPLE_MESSAGES_TOP -> stringResource(R.string.prompt_page_position_example_messages_top)
     LorebookInjectionPlacement.EXAMPLE_MESSAGES_BOTTOM -> stringResource(R.string.prompt_page_position_example_messages_bottom)
+    LorebookInjectionPlacement.OUTLET -> stringResource(R.string.prompt_page_position_outlet)
 }
 
 // ==================== Lorebook Tab ====================

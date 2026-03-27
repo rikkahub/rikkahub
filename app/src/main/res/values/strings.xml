@@ -785,6 +785,7 @@
   <string name="prompt_page_position_assistant_depth">Assistant D</string>
   <string name="prompt_page_position_example_messages_top">Example Messages (Top)</string>
   <string name="prompt_page_position_example_messages_bottom">Example Messages (Bottom)</string>
+  <string name="prompt_page_position_outlet">Outlet</string>
   <string name="prompt_page_inject_depth">Inject Depth</string>
   <string name="prompt_page_injection_role">Injection Role</string>
   <string name="prompt_page_role_user">User (wrapped in system tag)</string>
@@ -1581,7 +1582,7 @@
   <string name="prompt_page_lorebook_match_persona_description">Persona description</string>
   <string name="prompt_page_lorebook_match_scenario">Scenario</string>
   <string name="prompt_page_lorebook_match_whole_words">Match whole words</string>
-  <string name="prompt_page_lorebook_outlet_name">Outlet name (export only)</string>
+  <string name="prompt_page_lorebook_outlet_name">Outlet name</string>
   <string name="prompt_page_lorebook_prevent_recursion">Prevent recursion</string>
   <string name="prompt_page_lorebook_probability">Activation probability (0-100)</string>
   <string name="prompt_page_lorebook_probability_badge">%1$d%% chance</string>
@@ -1957,4 +1958,3 @@ The app preserves ST compatibility here. The **Content** mode is the one fully m
 
 &gt; If you imported many presets before, use the library drawer first. Do not try to manage everything from the main page.</string>
 </resources>
-

@@ -38,6 +38,7 @@ object SillyTavernPromptTransformer : InputMessageTransformer {
             generationType = ctx.stGenerationType,
             personaDescription = ctx.settings.effectiveUserPersona(ctx.assistant),
             runtimeState = ctx.lorebookRuntimeState,
+            stMacroState = ctx.stMacroState,
         )
     }
 }
@@ -51,6 +52,7 @@ internal fun transformSillyTavernPrompt(
     generationType: String = "normal",
     personaDescription: String = assistant.userPersona,
     runtimeState: LorebookRuntimeState? = null,
+    stMacroState: StMacroState? = null,
 ): List<UIMessage> {
     val normalizedGenerationType = generationType.trim().lowercase().ifBlank { "normal" }
     val normalizedPersonaDescription = personaDescription.trim()
@@ -86,6 +88,10 @@ internal fun transformSillyTavernPrompt(
         ),
         settings = settings,
         runtimeState = runtimeState,
+    )
+    updateActiveLorebookOutlets(
+        entries = triggeredLorebookEntries,
+        stMacroState = stMacroState,
     )
 
     val worldInfoBefore = triggeredLorebookEntries
@@ -290,7 +296,7 @@ private fun applyNamesBehaviorToChatHistory(
     chatHistoryMessages: List<UIMessage>,
     template: SillyTavernPromptTemplate,
 ): List<UIMessage> {
-    if (template.namesBehavior != 2) {
+    if (template.namesBehavior != 1 && template.namesBehavior != 2) {
         return chatHistoryMessages
     }
 
@@ -301,6 +307,35 @@ private fun applyNamesBehaviorToChatHistory(
             else -> message
         }
     }
+}
+
+private fun updateActiveLorebookOutlets(
+    entries: List<PromptInjection.RegexInjection>,
+    stMacroState: StMacroState?,
+) {
+    val outlets = stMacroState?.outlets ?: return
+    outlets.clear()
+    entries
+        .asSequence()
+        .filter { it.position == InjectionPosition.OUTLET }
+        .groupBy { entry ->
+            entry.stMetadata["outlet_name"]
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: entry.name.trim().takeIf { it.isNotEmpty() }
+                ?: return@groupBy ""
+        }
+        .forEach { (name, groupedEntries) ->
+            if (name.isBlank()) return@forEach
+            val content = groupedEntries
+                .sortedByDescending { it.priority }
+                .mapNotNull { it.content.trim().takeIf(String::isNotBlank) }
+                .joinToString("\n")
+                .trim()
+            if (content.isNotEmpty()) {
+                outlets[name] = content
+            }
+        }
 }
 
 private fun prefixMessageContent(

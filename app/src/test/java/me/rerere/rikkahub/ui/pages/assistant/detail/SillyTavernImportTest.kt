@@ -380,6 +380,38 @@ class SillyTavernImportTest {
     }
 
     @Test
+    fun `should preserve ST outlet position`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "spec": "chara_card_v2",
+                  "data": {
+                    "name": "Seraphina",
+                    "character_book": {
+                      "entries": [
+                        {
+                          "comment": "Memory",
+                          "content": "Stored memory",
+                          "keys": ["alpha"],
+                          "extensions": {
+                            "position": 7,
+                            "outlet_name": "memory"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "character-outlet",
+        )
+
+        val entry = payload.lorebooks.single().entries.single()
+        assertEquals(InjectionPosition.OUTLET, entry.position)
+        assertEquals("memory", entry.stMetadata["outlet_name"])
+    }
+
+    @Test
     fun `character card import should keep regexes on assistant level`() {
         val payload = parseAssistantImportFromJson(
             jsonString = """
@@ -456,6 +488,46 @@ class SillyTavernImportTest {
         assertEquals(false, regex.runOnEdit)
         assertEquals(2, regex.substituteRegex)
         assertEquals(setOf(AssistantRegexPlacement.REASONING), regex.stPlacements)
+    }
+
+    @Test
+    fun `preset regex import should preserve markdown and prompt phases together`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Regex Dual Phase",
+                  "prompts": [
+                    { "identifier": "main", "role": "system", "content": "Main" }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "regex_scripts": [
+                      {
+                        "scriptName": "Dual Phase",
+                        "findRegex": "foo",
+                        "replaceString": "bar",
+                        "placement": [2],
+                        "promptOnly": true,
+                        "markdownOnly": true
+                      }
+                    ]
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "preset-dual-phase",
+        )
+
+        val regex = payload.regexes.single()
+        assertEquals(true, regex.promptOnly)
+        assertEquals(true, regex.visualOnly)
+        assertEquals(setOf(AssistantRegexPlacement.AI_OUTPUT), regex.stPlacements)
     }
 
     @Test

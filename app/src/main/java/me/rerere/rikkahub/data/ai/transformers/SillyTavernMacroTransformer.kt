@@ -767,6 +767,7 @@ data class StMacroState(
     val localVariables: MutableMap<String, String> = linkedMapOf(),
     val globalVariables: MutableMap<String, String> = linkedMapOf(),
     val pickCache: MutableMap<String, Int> = linkedMapOf(),
+    val outlets: MutableMap<String, String> = linkedMapOf(),
 )
 
 internal data class StMacroEnvironment(
@@ -882,6 +883,7 @@ internal data class StMacroEnvironment(
                 exampleSeparator = template?.newExampleChatPrompt.orEmpty(),
                 chatStart = template?.newChatPrompt.orEmpty(),
                 isMobile = true,
+                outlets = ctx.stMacroState?.outlets.orEmpty(),
                 now = ZonedDateTime.now(ZoneId.systemDefault()),
                 lastUserMessageCreatedAt = lastUserMessageEntry?.createdAt?.toJavaLocalDateTime(),
             )

@@ -391,7 +391,7 @@ private fun buildRegexScript(regex: AssistantRegex): JsonObject {
             regex.exportPlacements().forEach { add(JsonPrimitive(it)) }
         })
         put("disabled", !regex.enabled)
-        put("markdownOnly", regex.visualOnly && !regex.promptOnly)
+        put("markdownOnly", regex.visualOnly)
         put("promptOnly", regex.promptOnly)
         regex.minDepth?.let { put("minDepth", it) }
         regex.maxDepth?.let { put("maxDepth", it) }
@@ -412,6 +412,7 @@ private fun InjectionPosition.toStCharacterBookPosition(): Int {
         InjectionPosition.AT_DEPTH -> 4
         InjectionPosition.EXAMPLE_MESSAGES_TOP -> 5
         InjectionPosition.EXAMPLE_MESSAGES_BOTTOM -> 6
+        InjectionPosition.OUTLET -> 7
         InjectionPosition.TOP_OF_CHAT,
         InjectionPosition.BOTTOM_OF_CHAT,
         -> 1

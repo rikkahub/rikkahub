@@ -16,6 +16,32 @@ object RegexOutputTransformer : OutputMessageTransformer, KoinComponent {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
+        return applyAssistantOutputRegexes(
+            ctx = ctx,
+            messages = messages,
+            phases = listOf(
+                AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+                AssistantRegexApplyPhase.VISUAL_ONLY,
+            ),
+        )
+    }
+
+    override suspend fun onGenerationFinish(
+        ctx: TransformerContext,
+        messages: List<UIMessage>,
+    ): List<UIMessage> {
+        return applyAssistantOutputRegexes(
+            ctx = ctx,
+            messages = messages,
+            phases = listOf(AssistantRegexApplyPhase.ACTUAL_MESSAGE),
+        )
+    }
+
+    private fun applyAssistantOutputRegexes(
+        ctx: TransformerContext,
+        messages: List<UIMessage>,
+        phases: List<AssistantRegexApplyPhase>,
+    ): List<UIMessage> {
         val assistant = ctx.assistant
         if (ctx.settings.effectiveRegexes(assistant).isEmpty()) return messages
         val depthMap = messages.chatMessageDepthFromEndMap()
@@ -30,27 +56,31 @@ object RegexOutputTransformer : OutputMessageTransformer, KoinComponent {
                     when (part) {
                         is UIMessagePart.Text -> {
                             part.copy(
-                                text = part.text.replaceRegexes(
-                                    assistant = assistant,
-                                    settings = ctx.settings,
-                                    scope = scope,
-                                    phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
-                                    messageDepthFromEnd = messageDepth,
-                                    placement = AssistantRegexPlacement.AI_OUTPUT,
-                                )
+                                text = phases.fold(part.text) { acc, phase ->
+                                    acc.replaceRegexes(
+                                        assistant = assistant,
+                                        settings = ctx.settings,
+                                        scope = scope,
+                                        phase = phase,
+                                        messageDepthFromEnd = messageDepth,
+                                        placement = AssistantRegexPlacement.AI_OUTPUT,
+                                    )
+                                }
                             )
                         }
 
                         is UIMessagePart.Reasoning -> {
                             part.copy(
-                                reasoning = part.reasoning.replaceRegexes(
-                                    assistant = assistant,
-                                    settings = ctx.settings,
-                                    scope = scope,
-                                    phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
-                                    messageDepthFromEnd = messageDepth,
-                                    placement = AssistantRegexPlacement.REASONING,
-                                )
+                                reasoning = phases.fold(part.reasoning) { acc, phase ->
+                                    acc.replaceRegexes(
+                                        assistant = assistant,
+                                        settings = ctx.settings,
+                                        scope = scope,
+                                        phase = phase,
+                                        messageDepthFromEnd = messageDepth,
+                                        placement = AssistantRegexPlacement.REASONING,
+                                    )
+                                }
                             )
                         }
 

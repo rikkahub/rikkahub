@@ -540,6 +540,7 @@ private fun mapCharacterBookPosition(position: String?, extensionPosition: Int?)
         4 -> InjectionPosition.AT_DEPTH
         5 -> InjectionPosition.EXAMPLE_MESSAGES_TOP
         6 -> InjectionPosition.EXAMPLE_MESSAGES_BOTTOM
+        7 -> InjectionPosition.OUTLET
         else -> InjectionPosition.AFTER_SYSTEM_PROMPT
     }
 }
@@ -693,7 +694,7 @@ private fun mapRegexScript(
         findRegex = normalizedPattern,
         replaceString = replaceString,
         affectingScope = affectingScope,
-        visualOnly = markdownOnly && !promptOnly,
+        visualOnly = markdownOnly,
         promptOnly = promptOnly,
         minDepth = minDepth,
         maxDepth = maxDepth,
