@@ -15,9 +15,10 @@ import kotlinx.serialization.json.encodeToJsonElement
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.MessageInjectionTemplate
-import me.rerere.rikkahub.data.model.withNewNodeIds
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.StLorebookEntryExtension
 import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
+import me.rerere.rikkahub.data.model.withNewNodeIds
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDateTime
 import kotlin.uuid.Uuid
@@ -192,27 +193,7 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
                         scanDepth = entry.scanDepth ?: 4,
                         constantActive = entry.constant,
                         role = mapSillyTavernRole(entry.role),
-                        stMetadata = buildMap {
-                            putIfPresent("uid", entry.uid)
-                            putIfPresent("displayIndex", entry.displayIndex)
-                            putIfPresent("exclude_recursion", entry.excludeRecursion)
-                            putIfPresent("prevent_recursion", entry.preventRecursion)
-                            putIfPresent("group", entry.group)
-                            putIfPresent("group_override", entry.groupOverride)
-                            putIfPresent("group_weight", entry.groupWeight)
-                            putIfPresent("use_group_scoring", entry.useGroupScoring)
-                            putIfPresent("sticky", entry.sticky)
-                            putIfPresent("cooldown", entry.cooldown)
-                            putIfPresent("delay", entry.delay)
-                            putIfPresent("delay_until_recursion", entry.delayUntilRecursion)
-                            putIfPresent("triggers", entry.triggers)
-                            putIfPresent("ignore_budget", entry.ignoreBudget)
-                            putIfPresent("outlet_name", entry.outletName)
-                            putIfPresent("useProbability", useProbability)
-                            putIfPresent("probability", entry.probability)
-                            putIfPresent("vectorized", entry.vectorized)
-                            putIfPresent("automation_id", entry.automationId)
-                        },
+                        stMetadata = buildStLorebookMetadata(entry, useProbability),
                     )
                 }
             )
@@ -328,7 +309,7 @@ private data class SillyTavernEntry(
     val depth: Int = 4,
     val role: Int? = null,
     val vectorized: Boolean? = null,
-    val delayUntilRecursion: Boolean? = null,
+    val delayUntilRecursion: JsonElement? = null,
     val scanDepth: Int? = null,
     val caseSensitive: Boolean? = null,
     val matchWholeWords: Boolean? = null,
@@ -339,6 +320,40 @@ private data class SillyTavernEntry(
     val useRegex: Boolean? = null,
     val automationId: String? = null,
 )
+
+private fun buildStLorebookMetadata(
+    entry: SillyTavernEntry,
+    useProbability: Boolean,
+): Map<String, String> {
+    return StLorebookEntryExtension(
+        group = entry.group.orEmpty(),
+        groupOverride = entry.groupOverride ?: false,
+        groupWeight = entry.groupWeight,
+        useGroupScoring = entry.useGroupScoring ?: false,
+        sticky = entry.sticky,
+        cooldown = entry.cooldown,
+        delay = entry.delay,
+        delayUntilRecursion = entry.delayUntilRecursion.toMetadataValue(),
+        triggers = entry.triggers,
+        outletName = entry.outletName.orEmpty(),
+        useProbability = useProbability,
+        ignoreBudget = entry.ignoreBudget ?: false,
+        excludeRecursion = entry.excludeRecursion ?: false,
+        preventRecursion = entry.preventRecursion ?: false,
+        vectorized = entry.vectorized ?: false,
+        automationId = entry.automationId.orEmpty(),
+        extra = buildMap {
+            putIfPresent("uid", entry.uid)
+            putIfPresent("display_index", entry.displayIndex)
+            putIfPresent("probability", entry.probability)
+        },
+    ).toMetadataMap()
+}
+
+private fun JsonElement?.toMetadataValue(): String {
+    val element = this ?: return ""
+    return (element as? JsonPrimitive)?.contentOrNull ?: element.toString()
+}
 
 private fun MutableMap<String, String>.putIfPresent(key: String, value: Any?) {
     when (value) {

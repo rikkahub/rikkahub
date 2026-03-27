@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.transformers
 
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.stExtension
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
@@ -145,8 +146,11 @@ class LorebookRuntimeState {
 }
 
 private fun PromptInjection.RegexInjection.timedEffectValue(key: String): Int? {
-    return stMetadata[key]
-        ?.trim()
-        ?.toIntOrNull()
-        ?.takeIf { it > 0 }
+    val extension = stExtension()
+    return when (key) {
+        "sticky" -> extension.sticky
+        "cooldown" -> extension.cooldown
+        "delay" -> extension.delay
+        else -> stMetadata[key]?.trim()?.toIntOrNull()
+    }?.takeIf { it > 0 }
 }

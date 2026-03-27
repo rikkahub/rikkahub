@@ -6,6 +6,7 @@ import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.findPromptOrder
+import me.rerere.rikkahub.data.model.stExtension
 import me.rerere.rikkahub.utils.base64Encode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -571,9 +572,11 @@ class SillyTavernImportTest {
                             "group_override": true,
                             "group_weight": 250,
                             "use_group_scoring": true,
+                            "delay_until_recursion": 2,
                             "triggers": ["continue"],
                             "ignore_budget": true,
-                            "outlet_name": "memory"
+                            "outlet_name": "memory",
+                            "custom_toggle": true
                           }
                         }
                       ]
@@ -586,13 +589,17 @@ class SillyTavernImportTest {
 
         val entry = payload.lorebooks.single().entries.single()
         assertNull(entry.probability)
-        assertEquals("facts", entry.stMetadata["group"])
-        assertEquals("true", entry.stMetadata["group_override"])
-        assertEquals("250", entry.stMetadata["group_weight"])
-        assertEquals("true", entry.stMetadata["use_group_scoring"])
+        assertEquals("facts", entry.stExtension().group)
+        assertEquals(true, entry.stExtension().groupOverride)
+        assertEquals(250, entry.stExtension().groupWeight)
+        assertEquals(true, entry.stExtension().useGroupScoring)
+        assertEquals("2", entry.stExtension().delayUntilRecursion)
+        assertEquals(2, entry.stExtension().recursionDelayLevel())
+        assertEquals(listOf("continue"), entry.stExtension().triggers)
+        assertEquals(true, entry.stExtension().ignoreBudget)
+        assertEquals("memory", entry.stExtension().outletName)
         assertEquals("[\"continue\"]", entry.stMetadata["triggers"])
-        assertEquals("true", entry.stMetadata["ignore_budget"])
-        assertEquals("memory", entry.stMetadata["outlet_name"])
         assertEquals("false", entry.stMetadata["useProbability"])
+        assertEquals("true", entry.stMetadata["custom_toggle"])
     }
 }

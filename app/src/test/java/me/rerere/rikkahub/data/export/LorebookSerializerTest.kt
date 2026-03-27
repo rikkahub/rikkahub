@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.export
 
+import me.rerere.rikkahub.data.model.stExtension
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -48,13 +49,42 @@ class LorebookSerializerTest {
         assertEquals(128, parsed.tokenBudget)
         assertEquals(true, entry.useRegex)
         assertNull(entry.probability)
-        assertEquals("facts", entry.stMetadata["group"])
-        assertEquals("true", entry.stMetadata["group_override"])
-        assertEquals("75", entry.stMetadata["group_weight"])
-        assertEquals("true", entry.stMetadata["use_group_scoring"])
-        assertEquals("[continue]", entry.stMetadata["triggers"])
-        assertEquals("true", entry.stMetadata["ignore_budget"])
-        assertEquals("memory", entry.stMetadata["outlet_name"])
+        assertEquals("facts", entry.stExtension().group)
+        assertEquals(true, entry.stExtension().groupOverride)
+        assertEquals(75, entry.stExtension().groupWeight)
+        assertEquals(true, entry.stExtension().useGroupScoring)
+        assertEquals(listOf("continue"), entry.stExtension().triggers)
+        assertEquals(true, entry.stExtension().ignoreBudget)
+        assertEquals("memory", entry.stExtension().outletName)
+        assertEquals("false", entry.stMetadata["useProbability"])
+        assertEquals("[\"continue\"]", entry.stMetadata["triggers"])
+    }
+
+    @Test
+    fun `standalone sillytavern lorebook import should preserve non boolean recursion delay metadata`() {
+        val lorebook = LorebookSerializer.tryImportSillyTavern(
+            json = """
+                {
+                  "entries": {
+                    "0": {
+                      "key": ["hero"],
+                      "content": "Standalone content",
+                      "delayUntilRecursion": 2,
+                      "probability": 40,
+                      "useProbability": false
+                    }
+                  }
+                }
+            """.trimIndent(),
+            fileName = "Standalone Delay",
+        )
+
+        assertNotNull(lorebook)
+        val entry = lorebook!!.entries.single()
+        assertNull(entry.probability)
+        assertEquals("2", entry.stExtension().delayUntilRecursion)
+        assertEquals(2, entry.stExtension().recursionDelayLevel())
+        assertEquals("40", entry.stMetadata["probability"])
         assertEquals("false", entry.stMetadata["useProbability"])
     }
 }

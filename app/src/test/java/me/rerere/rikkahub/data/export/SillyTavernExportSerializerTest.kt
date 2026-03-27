@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.SillyTavernPresetSampling
 import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
@@ -194,6 +195,55 @@ class SillyTavernExportSerializerTest {
                 ?.jsonPrimitive
                 ?.content
         )
+    }
+
+    @Test
+    fun `character card export should preserve disabled probability metadata without leaking internal keys`() {
+        val exportedEntryExtensions = Json.parseToJsonElement(
+            SillyTavernCharacterCardSerializer.exportToJson(
+                SillyTavernCharacterCardExportData(
+                    assistant = Assistant(
+                        name = "Tester",
+                        stCharacterData = SillyTavernCharacterData(name = "Tester"),
+                    ),
+                    lorebooks = listOf(
+                        Lorebook(
+                            name = "World",
+                            entries = listOf(
+                                PromptInjection.RegexInjection(
+                                    name = "World Entry",
+                                    keywords = listOf("moon"),
+                                    content = "The moon is red.",
+                                    stMetadata = mapOf(
+                                        "probability" to "40",
+                                        "useProbability" to "false",
+                                        "display_index" to "9",
+                                        "entry_index" to "3",
+                                        "custom_toggle" to "true",
+                                    ),
+                                )
+                            ),
+                        )
+                    ),
+                )
+            )
+        ).jsonObject["data"]
+            ?.jsonObject
+            ?.get("character_book")
+            ?.jsonObject
+            ?.get("entries")
+            ?.jsonArray
+            ?.first()
+            ?.jsonObject
+            ?.get("extensions")
+            ?.jsonObject
+
+        assertEquals("40", exportedEntryExtensions?.get("probability")?.jsonPrimitive?.content)
+        assertEquals("false", exportedEntryExtensions?.get("useProbability")?.jsonPrimitive?.content)
+        assertEquals("true", exportedEntryExtensions?.get("custom_toggle")?.jsonPrimitive?.content)
+        assertEquals("0", exportedEntryExtensions?.get("display_index")?.jsonPrimitive?.content)
+        assertNull(exportedEntryExtensions?.get("displayIndex"))
+        assertNull(exportedEntryExtensions?.get("entry_index"))
     }
 
     @Test

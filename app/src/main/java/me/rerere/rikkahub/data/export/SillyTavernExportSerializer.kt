@@ -32,6 +32,7 @@ import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import me.rerere.rikkahub.data.model.resolvePromptOrder
+import me.rerere.rikkahub.data.model.stExtension
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImportKind
 import me.rerere.rikkahub.ui.pages.assistant.detail.parseAssistantImportFromJson
 import me.rerere.rikkahub.ui.pages.assistant.detail.toSillyTavernPreset
@@ -284,6 +285,9 @@ object SillyTavernCharacterCardSerializer : ExportSerializer<SillyTavernCharacte
             }
             append(entry.name)
         }.trim()
+        val extension = entry.stExtension()
+        val probability = entry.exportProbabilityValue()
+        val useProbability = extension.useProbability ?: (probability != null)
 
         return buildJsonObject {
             put("keys", buildJsonArray {
@@ -322,11 +326,13 @@ object SillyTavernCharacterCardSerializer : ExportSerializer<SillyTavernCharacte
                 put("match_character_depth_prompt", entry.matchCharacterDepthPrompt)
                 put("match_scenario", entry.matchScenario)
                 put("match_creator_notes", entry.matchCreatorNotes)
-                entry.probability?.let { probability ->
-                    put("probability", probability)
-                    put("useProbability", true)
+                probability?.let {
+                    put("probability", it)
                 }
-                entry.stMetadata.forEach { (key, rawValue) ->
+                if (extension.useProbability != null || probability != null) {
+                    put("useProbability", useProbability)
+                }
+                extension.toMetadataMap().forEach { (key, rawValue) ->
                     if (key in RESERVED_LOREBOOK_EXTENSION_KEYS) return@forEach
                     put(key, rawJsonValue(rawValue))
                 }
@@ -364,6 +370,7 @@ object SillyTavernCharacterCardPngSerializer : ExportSerializer<SillyTavernChara
 }
 
 private val RESERVED_LOREBOOK_EXTENSION_KEYS = setOf(
+    "uid",
     "position",
     "depth",
     "selectiveLogic",
@@ -380,6 +387,8 @@ private val RESERVED_LOREBOOK_EXTENSION_KEYS = setOf(
     "probability",
     "useProbability",
     "display_index",
+    "displayIndex",
+    "entry_index",
 )
 
 private fun buildRegexScript(regex: AssistantRegex): JsonObject {
@@ -443,6 +452,10 @@ private fun rawJsonValue(rawValue: String): JsonElement {
     trimmed.toDoubleOrNull()?.let { return JsonPrimitive(it) }
     return runCatching { Json.parseToJsonElement(trimmed) }
         .getOrElse { JsonPrimitive(rawValue) }
+}
+
+private fun PromptInjection.RegexInjection.exportProbabilityValue(): Int? {
+    return probability ?: stMetadata["probability"]?.trim()?.toIntOrNull()
 }
 
 private fun AssistantRegex.exportPlacements(): List<Int> {

@@ -768,9 +768,8 @@ fun PromptInjection.RegexInjection.matchScore(
 
 fun PromptInjection.RegexInjection.passesProbabilityCheck(forceSuccess: Boolean = false): Boolean {
     if (forceSuccess) return true
-    val useProbability = stMetadata["useProbability"]?.trim()?.let { rawValue ->
-        rawValue.equals("true", ignoreCase = true) || rawValue == "1"
-    } ?: true
+    val extension = stExtension()
+    val useProbability = extension.useProbability ?: true
     if (!useProbability) return true
     val chance = probability ?: return true
     if (chance >= 100) return true
@@ -780,20 +779,9 @@ fun PromptInjection.RegexInjection.passesProbabilityCheck(forceSuccess: Boolean 
 
 fun PromptInjection.RegexInjection.matchesGenerationType(generationType: String): Boolean {
     val normalizedType = generationType.trim().lowercase().ifBlank { "normal" }
-    val rawTriggers = stMetadata["triggers"]
-        ?.takeIf { it.isNotBlank() }
-        ?: return true
-    val triggers = Regex("[,\\n]")
-        .split(rawTriggers)
+    val triggers = stExtension().triggers
         .mapNotNull { trigger ->
-            trigger
-                .trim()
-                .removePrefix("[")
-                .removeSuffix("]")
-                .removePrefix("\"")
-                .removeSuffix("\"")
-                .lowercase()
-                .takeIf { it.isNotBlank() }
+            trigger.trim().lowercase().takeIf { it.isNotBlank() }
         }
         .distinct()
     return triggers.isEmpty() || normalizedType in triggers
