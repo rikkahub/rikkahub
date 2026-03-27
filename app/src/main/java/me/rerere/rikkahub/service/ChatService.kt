@@ -319,13 +319,13 @@ class ChatService(
 
     suspend fun initializeConversation(conversationId: Uuid) {
         getOrCreateSession(conversationId) // 确保 session 存在
-        resetConversationStMacroState(conversationId)
         val conversation = conversationRepo.getConversationById(conversationId)
         if (conversation != null) {
             updateConversation(conversationId, conversation)
             settingsStore.updateAssistant(conversation.assistantId)
         } else {
             // 新建对话, 并添加预设消息
+            resetConversationStMacroState(conversationId)
             val currentSettings = settingsStore.settingsFlowRaw.first()
             val assistant = currentSettings.getCurrentAssistant()
             val newConversation = Conversation.ofId(

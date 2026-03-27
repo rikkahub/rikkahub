@@ -10,6 +10,8 @@ import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.SillyTavernCharacterData
+import me.rerere.rikkahub.data.model.StDepthPrompt
 import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -23,13 +25,17 @@ class PromptInjectionTransformerTest {
     private fun createAssistant(
         id: Uuid = Uuid.random(),
         name: String = "",
+        userPersona: String = "",
         modeInjectionIds: Set<Uuid> = emptySet(),
-        lorebookIds: Set<Uuid> = emptySet()
+        lorebookIds: Set<Uuid> = emptySet(),
+        stCharacterData: SillyTavernCharacterData? = null,
     ) = Assistant(
         id = id,
         name = name,
+        userPersona = userPersona,
         modeInjectionIds = modeInjectionIds,
-        lorebookIds = lorebookIds
+        lorebookIds = lorebookIds,
+        stCharacterData = stCharacterData,
     )
 
     private fun createModeInjection(
@@ -67,6 +73,11 @@ class PromptInjectionTransformerTest {
         scanDepth: Int = 5,
         constantActive: Boolean = false,
         matchPersonaDescription: Boolean = false,
+        matchCharacterDescription: Boolean = false,
+        matchCharacterPersonality: Boolean = false,
+        matchScenario: Boolean = false,
+        matchCreatorNotes: Boolean = false,
+        matchCharacterDepthPrompt: Boolean = false,
     ) = PromptInjection.RegexInjection(
         id = id,
         name = name,
@@ -82,6 +93,11 @@ class PromptInjectionTransformerTest {
         scanDepth = scanDepth,
         constantActive = constantActive,
         matchPersonaDescription = matchPersonaDescription,
+        matchCharacterDescription = matchCharacterDescription,
+        matchCharacterPersonality = matchCharacterPersonality,
+        matchScenario = matchScenario,
+        matchCreatorNotes = matchCreatorNotes,
+        matchCharacterDepthPrompt = matchCharacterDepthPrompt,
     )
 
     private fun createLorebook(
@@ -1278,6 +1294,64 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
+    fun `generic lorebook triggering should include character card fields`() {
+        val lorebookId = Uuid.random()
+        val lorebook = createLorebook(
+            id = lorebookId,
+            entries = listOf(
+                createRegexInjection(
+                    keywords = listOf("forest guardian"),
+                    content = "Matched description",
+                    matchCharacterDescription = true,
+                ),
+                createRegexInjection(
+                    keywords = listOf("warm and patient"),
+                    content = "Matched personality",
+                    matchCharacterPersonality = true,
+                ),
+                createRegexInjection(
+                    keywords = listOf("moonlit ruins"),
+                    content = "Matched scenario",
+                    matchScenario = true,
+                ),
+                createRegexInjection(
+                    keywords = listOf("speak softly"),
+                    content = "Matched creator notes",
+                    matchCreatorNotes = true,
+                ),
+                createRegexInjection(
+                    keywords = listOf("hidden vow"),
+                    content = "Matched depth prompt",
+                    matchCharacterDepthPrompt = true,
+                ),
+            )
+        )
+
+        val result = transformMessages(
+            messages = listOf(UIMessage.system("System prompt"), UIMessage.user("hello")),
+            assistant = createAssistant(
+                lorebookIds = setOf(lorebookId),
+                stCharacterData = SillyTavernCharacterData(
+                    description = "forest guardian",
+                    personality = "warm and patient",
+                    scenario = "moonlit ruins",
+                    creatorNotes = "speak softly",
+                    depthPrompt = StDepthPrompt(prompt = "hidden vow"),
+                ),
+            ),
+            modeInjections = emptyList(),
+            lorebooks = listOf(lorebook),
+        )
+
+        val systemText = getMessageText(result.first())
+        assertTrue(systemText.contains("Matched description"))
+        assertTrue(systemText.contains("Matched personality"))
+        assertTrue(systemText.contains("Matched scenario"))
+        assertTrue(systemText.contains("Matched creator notes"))
+        assertTrue(systemText.contains("Matched depth prompt"))
+    }
+
+    @Test
     fun `disabled world book should not trigger`() {
         val lorebookId = Uuid.random()
         val regexInjection = createRegexInjection(
@@ -1752,7 +1826,7 @@ class PromptInjectionTransformerTest {
                     assistants = listOf(assistant),
                     lorebookGlobalSettings = LorebookGlobalSettings(
                         budgetPercent = 0,
-                        budgetCap = 2,
+                        budgetCap = 1,
                         characterStrategy = strategy,
                     ),
                 ),
@@ -1773,6 +1847,98 @@ class PromptInjectionTransformerTest {
 
         assertTrue(getMessageText(evenly.first()).contains("global"))
         assertFalse(evenly.any { getMessageText(it).contains("character") })
+    }
+
+    @Test
+    fun `shared lorebook budget should allow exact token fit`() {
+        val firstLorebookId = Uuid.random()
+        val secondLorebookId = Uuid.random()
+        val assistant = createAssistant(lorebookIds = setOf(firstLorebookId, secondLorebookId))
+
+        val result = transformMessages(
+            messages = listOf(
+                UIMessage.system("System prompt"),
+                UIMessage.user("hello"),
+            ),
+            assistant = assistant,
+            settings = Settings(
+                assistants = listOf(assistant),
+                lorebookGlobalSettings = LorebookGlobalSettings(
+                    budgetPercent = 0,
+                    budgetCap = 2,
+                ),
+            ),
+            modeInjections = emptyList(),
+            lorebooks = listOf(
+                createLorebook(
+                    id = firstLorebookId,
+                    entries = listOf(
+                        createRegexInjection(
+                            priority = 10,
+                            position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
+                            content = "alpha",
+                            keywords = emptyList(),
+                            constantActive = true,
+                        )
+                    )
+                ),
+                createLorebook(
+                    id = secondLorebookId,
+                    entries = listOf(
+                        createRegexInjection(
+                            priority = 9,
+                            position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
+                            content = "beta",
+                            keywords = emptyList(),
+                            constantActive = true,
+                        )
+                    )
+                ),
+            ),
+        )
+
+        val systemText = getMessageText(result.first())
+        assertTrue(systemText.contains("alpha"))
+        assertTrue(systemText.contains("beta"))
+    }
+
+    @Test
+    fun `lorebook local budget should allow exact token fit across candidates`() {
+        val lorebookId = Uuid.random()
+        val result = transformMessages(
+            messages = listOf(
+                UIMessage.system("System prompt"),
+                UIMessage.user("hello"),
+            ),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(
+                createLorebook(
+                    id = lorebookId,
+                    tokenBudget = 2,
+                    entries = listOf(
+                        createRegexInjection(
+                            priority = 10,
+                            position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
+                            content = "alpha",
+                            keywords = emptyList(),
+                            constantActive = true,
+                        ),
+                        createRegexInjection(
+                            priority = 9,
+                            position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
+                            content = "beta",
+                            keywords = emptyList(),
+                            constantActive = true,
+                        ),
+                    ),
+                )
+            ),
+        )
+
+        val systemText = getMessageText(result.first())
+        assertTrue(systemText.contains("alpha"))
+        assertTrue(systemText.contains("beta"))
     }
     // endregion
 }

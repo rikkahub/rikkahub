@@ -94,6 +94,7 @@ internal fun collectInjections(
     runtimeState: LorebookRuntimeState? = null,
 ): List<PromptInjection> {
     val injections = mutableListOf<PromptInjection>()
+    val characterData = assistant.stCharacterData
 
     // 1. 获取关联的 ModeInjection
     modeInjections
@@ -108,7 +109,12 @@ internal fun collectInjections(
             assistant = assistant,
             lorebooks = lorebooks,
             triggerContext = LorebookTriggerContext(
+                characterDescription = characterData?.description.orEmpty(),
+                characterPersonality = characterData?.personality.orEmpty(),
                 personaDescription = personaDescription,
+                scenario = characterData?.scenario.orEmpty(),
+                creatorNotes = characterData?.creatorNotes.orEmpty(),
+                characterDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),
                 generationType = generationType,
             ),
             settings = settings,

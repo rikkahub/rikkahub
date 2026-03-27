@@ -6,6 +6,7 @@ import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.findPromptOrder
+import me.rerere.rikkahub.utils.base64Encode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -446,6 +447,25 @@ class SillyTavernImportTest {
 
         assertEquals(1, application.assistant.regexes.size)
         assertEquals(0, application.globalRegexes.size)
+    }
+
+    @Test
+    fun `character card png metadata decoder should keep raw json`() {
+        val rawJson = """{"spec":"chara_card_v2","data":{"name":"Seraphina"}}"""
+
+        val decoded = decodeImportedCharacterCardJson(rawJson)
+
+        assertEquals(rawJson, decoded)
+    }
+
+    @Test
+    fun `character card png metadata decoder should decode legacy base64 payload`() {
+        val rawJson = """{"spec":"chara_card_v2","data":{"name":"Seraphina"}}"""
+        val encoded = rawJson.base64Encode()
+
+        val decoded = decodeImportedCharacterCardJson(encoded)
+
+        assertEquals(rawJson, decoded)
     }
 
     @Test

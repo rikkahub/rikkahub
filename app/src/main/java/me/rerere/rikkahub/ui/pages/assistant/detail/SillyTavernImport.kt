@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -43,6 +42,7 @@ import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.matchesGenerationType
 import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.utils.ImageUtils
+import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import kotlin.uuid.Uuid
 
@@ -107,8 +107,8 @@ internal suspend fun parseAssistantImportFromUri(
         when (mime) {
             "image/png" -> {
                 val result = ImageUtils.getTavernCharacterMeta(context, uri)
-                result.map { base64Data ->
-                    val json = String(Base64.decode(base64Data, Base64.DEFAULT))
+                result.map { rawCharacterMeta ->
+                    val json = decodeImportedCharacterCardJson(rawCharacterMeta)
                     val localAvatar = filesManager.createChatFilesByContents(listOf(uri)).first().toString()
                     json to localAvatar
                 }.getOrElse { throw it }
@@ -129,6 +129,16 @@ internal suspend fun parseAssistantImportFromUri(
         sourceName = sourceName,
         avatarUri = avatarUri,
     )
+}
+
+internal fun decodeImportedCharacterCardJson(rawCharacterMeta: String): String {
+    val trimmedMeta = rawCharacterMeta.trim()
+    if (trimmedMeta.isEmpty()) error("Empty character data")
+    return if (trimmedMeta.startsWith("{") || trimmedMeta.startsWith("[")) {
+        trimmedMeta
+    } else {
+        trimmedMeta.base64Decode()
+    }
 }
 
 internal fun parseAssistantImportFromJson(

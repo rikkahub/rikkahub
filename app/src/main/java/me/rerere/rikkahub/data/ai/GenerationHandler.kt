@@ -170,16 +170,6 @@ class GenerationHandler(
                     stMacroState = stMacroState,
                     lorebookRuntimeState = lorebookRuntimeState,
                 )
-                messages = messages.visualTransforms(
-                    transformers = outputTransformers,
-                    context = context,
-                    model = model,
-                    assistant = assistant,
-                    settings = settings,
-                    stGenerationType = stGenerationType,
-                    stMacroState = stMacroState,
-                    lorebookRuntimeState = lorebookRuntimeState,
-                )
                 messages = messages.onGenerationFinish(
                     transformers = outputTransformers,
                     context = context,

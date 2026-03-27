@@ -166,7 +166,7 @@ private fun selectTriggeredLorebookEntries(
         }
 
         val contentTokens = estimateLorebookTokenCount(candidate.entry.content)
-        if (!candidate.entry.ignoreBudget() && currentBudget + contentTokens >= budget) {
+        if (!candidate.entry.ignoreBudget() && currentBudget + contentTokens > budget) {
             overflowed = true
             continue
         }
@@ -552,7 +552,7 @@ private fun selectBudgetedCandidates(
         if (!candidate.entry.passesProbabilityCheck(forceSuccess = candidate.isSticky)) continue
 
         val contentTokens = estimateLorebookTokenCount(candidate.entry.content)
-        if (budget != null && budget > 0 && !candidate.entry.ignoreBudget() && currentBudget + contentTokens >= budget) {
+        if (budget != null && budget > 0 && !candidate.entry.ignoreBudget() && currentBudget + contentTokens > budget) {
             overflowed = true
             continue
         }
