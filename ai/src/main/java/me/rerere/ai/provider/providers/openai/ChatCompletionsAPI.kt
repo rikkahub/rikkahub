@@ -267,10 +267,10 @@ class ChatCompletionsAPI(
             if (params.presencePenalty != null) put("presence_penalty", params.presencePenalty)
             if (params.frequencyPenalty != null) put("frequency_penalty", params.frequencyPenalty)
             params.seed.normalizedSeedOrNull()?.let { put("seed", it) }
-            if (capabilities.supportsAdvancedSamplers) {
-                params.topK.normalizedTopKOrNull()?.let { put("top_k", it) }
-                params.topA.normalizedNonNegativeOrNull()?.let { put("top_a", it) }
-                params.minP.normalizedNonNegativeOrNull()?.let { put("min_p", it) }
+            if (capabilities.supportsTopK) params.topK.normalizedTopKOrNull()?.let { put("top_k", it) }
+            if (capabilities.supportsTopA) params.topA.normalizedNonNegativeOrNull()?.let { put("top_a", it) }
+            if (capabilities.supportsMinP) params.minP.normalizedNonNegativeOrNull()?.let { put("min_p", it) }
+            if (capabilities.supportsRepetitionPenalty) {
                 params.repetitionPenalty.normalizedNonNegativeOrNull()?.let { put("repetition_penalty", it) }
             }
             params.stopSequences.normalizedStopSequencesOrNull()?.let { stopSequences ->
@@ -708,13 +708,26 @@ class ChatCompletionsAPI(
 }
 
 internal data class ChatCompletionsProviderCapabilities(
-    val supportsAdvancedSamplers: Boolean = true,
+    val supportsTopK: Boolean = false,
+    val supportsTopA: Boolean = false,
+    val supportsMinP: Boolean = false,
+    val supportsRepetitionPenalty: Boolean = false,
 )
 
 internal fun resolveChatCompletionsProviderCapabilities(host: String): ChatCompletionsProviderCapabilities {
     return when (host) {
-        "api.openai.com" -> ChatCompletionsProviderCapabilities(
-            supportsAdvancedSamplers = false,
+        "openrouter.ai" -> ChatCompletionsProviderCapabilities(
+            supportsTopK = true,
+            supportsTopA = true,
+            supportsMinP = true,
+            supportsRepetitionPenalty = true,
+        )
+
+        "dashscope.aliyuncs.com",
+        "dashscope-intl.aliyuncs.com",
+        "dashscope-us.aliyuncs.com",
+        -> ChatCompletionsProviderCapabilities(
+            supportsTopK = true,
         )
 
         else -> ChatCompletionsProviderCapabilities()

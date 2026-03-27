@@ -462,6 +462,28 @@ class ChatCompletionsAPIMessageTest {
     }
 
     @Test
+    fun `chat completions should only include top_k for dashscope compatible mode`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "test-model",
+                    displayName = "test-model",
+                ),
+                minP = 0.1f,
+                topK = 64,
+                topA = 0.2f,
+                repetitionPenalty = 1.15f,
+            )
+        )
+
+        assertEquals("64", requestBody["top_k"]?.jsonPrimitive?.content)
+        assertFalse(requestBody.containsKey("min_p"))
+        assertFalse(requestBody.containsKey("top_a"))
+        assertFalse(requestBody.containsKey("repetition_penalty"))
+    }
+
+    @Test
     fun `chat completions should include stop sequences when configured`() {
         val requestBody = invokeBuildRequestBody(
             providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
