@@ -201,7 +201,7 @@ val dataSourceModule = module {
     }
 
     single {
-        ProviderManager(client = get())
+        ProviderManager(client = get(), context = get())
     }
 
     single {

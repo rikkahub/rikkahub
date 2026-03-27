@@ -1,5 +1,6 @@
 package me.rerere.ai.provider.providers
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -70,8 +71,8 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
 
-class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSetting.Google> {
-    private val keyRoulette = KeyRoulette.default()
+class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
+    private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
     }
@@ -97,7 +98,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .addHeader("Authorization", "Bearer $accessToken")
                 .build()
         } else {
-            val key = keyRoulette.next(providerSetting.apiKey)
+            val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
             request.newBuilder()
                 .addHeader("x-goog-api-key", key)
                 .build()
