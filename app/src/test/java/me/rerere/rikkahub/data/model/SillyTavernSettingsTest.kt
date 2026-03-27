@@ -2,8 +2,10 @@ package me.rerere.rikkahub.data.model
 
 import me.rerere.rikkahub.data.datastore.Settings
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Test
+import kotlin.uuid.Uuid
 
 class SillyTavernSettingsTest {
     @Test
@@ -105,5 +107,56 @@ class SillyTavernSettingsTest {
         val applied = settings.applyActiveStPresetSampling(assistant)
 
         assertSame(assistant, applied)
+    }
+
+    @Test
+    fun `selected st preset should resolve legacy template only settings into a stable preset`() {
+        val template = defaultSillyTavernPromptTemplate().copy(sourceName = "Legacy Template")
+        val legacyRegex = AssistantRegex(
+            id = Uuid.random(),
+            name = "Legacy Regex",
+            findRegex = "foo",
+            replaceString = "bar",
+        )
+        val settings = Settings(
+            stPresetTemplate = template,
+            regexes = listOf(legacyRegex),
+        )
+
+        val selectedPreset = settings.selectedStPreset()
+        val normalized = settings.normalizeStPresetState()
+
+        assertNotNull(selectedPreset)
+        assertEquals("Legacy Template", selectedPreset?.displayName)
+        assertEquals(listOf(legacyRegex), selectedPreset?.regexes)
+        assertEquals(1, normalized.stPresets.size)
+        assertEquals(normalized.selectedStPresetId, normalized.stPresets.single().id)
+        assertEquals(template, normalized.stPresetTemplate)
+        assertEquals(listOf(legacyRegex), normalized.regexes)
+    }
+
+    @Test
+    fun `normalize st preset state should migrate legacy regex cache into selected preset`() {
+        val preset = SillyTavernPreset(
+            template = defaultSillyTavernPromptTemplate().copy(sourceName = "Migrated"),
+            regexes = emptyList(),
+        )
+        val cachedRegex = AssistantRegex(
+            id = Uuid.random(),
+            name = "Cached Regex",
+            findRegex = "alpha",
+            replaceString = "beta",
+        )
+        val settings = Settings(
+            stPresets = listOf(preset),
+            selectedStPresetId = preset.id,
+            regexes = listOf(cachedRegex),
+        )
+
+        val normalized = settings.normalizeStPresetState()
+
+        assertEquals(listOf(cachedRegex), normalized.stPresets.single().regexes)
+        assertEquals(listOf(cachedRegex), normalized.regexes)
+        assertEquals(preset.template, normalized.stPresetTemplate)
     }
 }

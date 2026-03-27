@@ -21,6 +21,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.runtimeRegexes
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlin.uuid.Uuid
@@ -98,7 +99,7 @@ class AssistantVM(
     fun addAssistantWithLorebooks(
         assistant: Assistant,
         lorebooks: List<Lorebook>,
-        globalRegexes: List<AssistantRegex> = settings.value.regexes,
+        sharedRegexes: List<AssistantRegex> = settings.value.runtimeRegexes(),
     ) {
         viewModelScope.launch {
             val settings = settings.value
@@ -106,7 +107,7 @@ class AssistantVM(
                 settings.copy(
                     assistants = settings.assistants.plus(assistant),
                     lorebooks = settings.lorebooks + lorebooks,
-                    regexes = globalRegexes,
+                    regexes = sharedRegexes,
                 )
             )
         }

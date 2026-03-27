@@ -3,28 +3,84 @@ package me.rerere.rikkahub.data.model
 import me.rerere.rikkahub.data.datastore.Settings
 import kotlin.uuid.Uuid
 
-fun Settings.selectedStPreset(): SillyTavernPreset? {
-    return stPresets
-        .firstOrNull { it.id == selectedStPresetId }
-        ?: stPresets.firstOrNull()
-        ?: stPresetTemplate?.let { template ->
+data class ResolvedStPresetState(
+    val presets: List<SillyTavernPreset>,
+    val selectedPresetId: Uuid?,
+) {
+    val activePreset: SillyTavernPreset?
+        get() = presets.firstOrNull { it.id == selectedPresetId } ?: presets.firstOrNull()
+}
+
+private val LEGACY_ST_PRESET_ID: Uuid = Uuid.parse("2b9799e9-7ec5-4d9d-9c1b-5fd4f2c8138e")
+
+fun Settings.resolveStPresetState(): ResolvedStPresetState {
+    val distinctPresets = stPresets.distinctBy { it.id }
+    val migratedPresets = when {
+        distinctPresets.isNotEmpty() -> {
+            if (regexes.isNotEmpty() && distinctPresets.none { it.regexes.isNotEmpty() }) {
+                val fallbackPresetId = selectedStPresetId ?: distinctPresets.firstOrNull()?.id
+                distinctPresets.map { preset ->
+                    if (preset.id == fallbackPresetId) {
+                        preset.copy(regexes = regexes)
+                    } else {
+                        preset
+                    }
+                }
+            } else {
+                distinctPresets
+            }
+        }
+
+        stPresetTemplate != null -> listOf(
             SillyTavernPreset(
-                id = selectedStPresetId ?: Uuid.random(),
-                template = template,
+                id = selectedStPresetId ?: LEGACY_ST_PRESET_ID,
+                template = stPresetTemplate,
                 regexes = regexes,
             )
-        }
+        )
+
+        else -> emptyList()
+    }
+    val normalizedSelectedPresetId = migratedPresets
+        .firstOrNull { it.id == selectedStPresetId }
+        ?.id
+        ?: migratedPresets.firstOrNull()?.id
+
+    return ResolvedStPresetState(
+        presets = migratedPresets,
+        selectedPresetId = normalizedSelectedPresetId,
+    )
+}
+
+fun Settings.resolvedStPresets(): List<SillyTavernPreset> = resolveStPresetState().presets
+
+fun Settings.normalizeStPresetState(): Settings {
+    val resolvedState = resolveStPresetState()
+    val activePreset = resolvedState.activePreset
+    return copy(
+        stPresets = resolvedState.presets,
+        selectedStPresetId = resolvedState.selectedPresetId,
+        stPresetTemplate = activePreset?.template ?: stPresetTemplate,
+        regexes = activePreset?.regexes ?: regexes,
+    )
+}
+
+fun Settings.selectedStPreset(): SillyTavernPreset? {
+    return resolveStPresetState().activePreset
 }
 
 fun Settings.activeStPreset(): SillyTavernPreset? = selectedStPreset()
 
 fun Settings.activeStPresetTemplate(): SillyTavernPromptTemplate? {
-    return selectedStPreset()?.template ?: stPresetTemplate
+    return resolveStPresetState().activePreset?.template ?: stPresetTemplate
 }
 
 fun Settings.activeStPresetRegexes(): List<AssistantRegex> {
-    return selectedStPreset()?.regexes ?: regexes
+    return resolveStPresetState().activePreset?.regexes ?: regexes
 }
+
+// Shared runtime regexes should always resolve through the active ST preset state.
+fun Settings.runtimeRegexes(): List<AssistantRegex> = activeStPresetRegexes()
 
 fun Settings.applyActiveStPresetSampling(assistant: Assistant): Assistant {
     if (!stPresetEnabled) return assistant
@@ -48,7 +104,8 @@ fun Settings.applyActiveStPresetSampling(assistant: Assistant): Assistant {
 }
 
 fun Settings.ensureStPresetLibrary(): Settings {
-    if (stPresets.isNotEmpty()) return this
+    val resolvedState = resolveStPresetState()
+    if (resolvedState.presets.isNotEmpty()) return normalizeStPresetState()
     val template = stPresetTemplate ?: defaultSillyTavernPromptTemplate()
     val preset = SillyTavernPreset(template = template, regexes = regexes)
     return copy(
@@ -56,14 +113,15 @@ fun Settings.ensureStPresetLibrary(): Settings {
         selectedStPresetId = preset.id,
         stPresetTemplate = preset.template,
         regexes = preset.regexes,
-    )
+    ).normalizeStPresetState()
 }
 
 fun Settings.upsertStPreset(
     preset: SillyTavernPreset,
     select: Boolean = false,
 ): Settings {
-    val updated = stPresets.toMutableList()
+    val resolvedState = resolveStPresetState()
+    val updated = resolvedState.presets.toMutableList()
     val index = updated.indexOfFirst { it.id == preset.id }
     if (index >= 0) {
         updated[index] = preset
@@ -72,7 +130,7 @@ fun Settings.upsertStPreset(
     }
     val selectedId = when {
         select -> preset.id
-        selectedStPresetId in updated.map { it.id }.toSet() -> selectedStPresetId
+        resolvedState.selectedPresetId in updated.map { it.id }.toSet() -> resolvedState.selectedPresetId
         else -> updated.firstOrNull()?.id
     }
     return copy(
@@ -80,14 +138,15 @@ fun Settings.upsertStPreset(
         selectedStPresetId = selectedId,
         stPresetTemplate = updated.firstOrNull { it.id == selectedId }?.template ?: stPresetTemplate,
         regexes = updated.firstOrNull { it.id == selectedId }?.regexes ?: regexes,
-    )
+    ).normalizeStPresetState()
 }
 
 fun Settings.removeStPreset(presetId: Uuid): Settings {
-    val updated = stPresets.filterNot { it.id == presetId }
+    val resolvedState = resolveStPresetState()
+    val updated = resolvedState.presets.filterNot { it.id == presetId }
     val selectedId = when {
-        selectedStPresetId == presetId -> updated.firstOrNull()?.id
-        selectedStPresetId in updated.map { it.id }.toSet() -> selectedStPresetId
+        resolvedState.selectedPresetId == presetId -> updated.firstOrNull()?.id
+        resolvedState.selectedPresetId in updated.map { it.id }.toSet() -> resolvedState.selectedPresetId
         else -> updated.firstOrNull()?.id
     }
     return copy(
@@ -95,14 +154,14 @@ fun Settings.removeStPreset(presetId: Uuid): Settings {
         selectedStPresetId = selectedId,
         stPresetTemplate = updated.firstOrNull { it.id == selectedId }?.template,
         regexes = updated.firstOrNull { it.id == selectedId }?.regexes ?: emptyList(),
-    )
+    ).normalizeStPresetState()
 }
 
 fun Settings.selectStPreset(presetId: Uuid): Settings {
-    val activePreset = stPresets.firstOrNull { it.id == presetId } ?: return this
+    val activePreset = resolveStPresetState().presets.firstOrNull { it.id == presetId } ?: return normalizeStPresetState()
     return copy(
         selectedStPresetId = activePreset.id,
         stPresetTemplate = activePreset.template,
         regexes = activePreset.regexes,
-    )
+    ).normalizeStPresetState()
 }

@@ -6,6 +6,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.data.ai.transformers.stripInlineRegexBlocks
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
@@ -152,6 +153,8 @@ private fun parseInlinePromptRegexes(prompt: SillyTavernPromptItem): List<me.rer
             maxDepth = null,
             affectingScopeOverride = setOf(AssistantAffectScope.SYSTEM),
             stPlacementsOverride = emptySet(),
+            sourceKind = AssistantRegexSourceKind.ST_INLINE_PROMPT,
+            sourceRef = prompt.identifier,
         )
     }.toList()
 }

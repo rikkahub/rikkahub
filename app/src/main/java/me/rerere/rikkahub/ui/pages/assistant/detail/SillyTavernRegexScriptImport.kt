@@ -6,9 +6,15 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
+import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
+import me.rerere.rikkahub.data.model.dedupKey
 import kotlin.uuid.Uuid
 
-internal fun parseRegexScripts(element: JsonElement?, sourceName: String): List<AssistantRegex> {
+internal fun parseRegexScripts(
+    element: JsonElement?,
+    sourceName: String,
+    sourceKind: AssistantRegexSourceKind = AssistantRegexSourceKind.ST_SCRIPT,
+): List<AssistantRegex> {
     val scripts = element?.jsonArrayOrNull()
         ?.mapNotNull { runCatching { ImportJson.decodeFromJsonElement<StRegexScriptImport>(it) }.getOrNull() }
         ?: return emptyList()
@@ -27,25 +33,13 @@ internal fun parseRegexScripts(element: JsonElement?, sourceName: String): List<
             trimStrings = script.trimStrings,
             runOnEdit = script.runOnEdit,
             substituteRegex = script.substituteRegex,
+            sourceKind = sourceKind,
         )
     }
 }
 
 internal fun regexDedupKey(regex: AssistantRegex): String {
-    return listOf(
-        regex.name,
-        regex.findRegex,
-        regex.replaceString,
-        regex.affectingScope.sortedBy { scope -> scope.name }.joinToString(","),
-        regex.visualOnly.toString(),
-        regex.promptOnly.toString(),
-        regex.minDepth?.toString().orEmpty(),
-        regex.maxDepth?.toString().orEmpty(),
-        regex.trimStrings.joinToString("\u0000"),
-        regex.runOnEdit.toString(),
-        regex.substituteRegex.toString(),
-        regex.stPlacements.sorted().joinToString(","),
-    ).joinToString("|")
+    return regex.dedupKey()
 }
 
 internal fun mapRegexScript(
@@ -64,6 +58,8 @@ internal fun mapRegexScript(
     substituteRegex: Int = 0,
     affectingScopeOverride: Set<AssistantAffectScope>? = null,
     stPlacementsOverride: Set<Int>? = null,
+    sourceKind: AssistantRegexSourceKind = AssistantRegexSourceKind.ST_SCRIPT,
+    sourceRef: String = "",
 ): AssistantRegex? {
     val normalizedPattern = normalizeImportedRegexPattern(findRegex) ?: return null
     val normalizedPlacement = placement.ifEmpty { listOf(AssistantRegexPlacement.AI_OUTPUT) }
@@ -94,6 +90,8 @@ internal fun mapRegexScript(
         runOnEdit = runOnEdit,
         substituteRegex = substituteRegex,
         stPlacements = stPlacementsOverride ?: normalizedPlacement.toSet(),
+        sourceKind = sourceKind,
+        sourceRef = sourceRef,
     )
 }
 

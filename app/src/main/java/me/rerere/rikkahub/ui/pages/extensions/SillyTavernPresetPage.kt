@@ -62,6 +62,7 @@ import me.rerere.rikkahub.data.model.configuredValueCount
 import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.ensureStPresetLibrary
 import me.rerere.rikkahub.data.model.removeStPreset
+import me.rerere.rikkahub.data.model.resolvedStPresets
 import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.data.model.selectStPreset
 import me.rerere.rikkahub.data.model.selectedStPreset
@@ -119,7 +120,7 @@ private fun SillyTavernPresetPageContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
-    val presets = settings.stPresets
+    val presets = settings.resolvedStPresets()
     val selectedPreset = settings.selectedStPreset()
     var presetPendingDelete by remember { mutableStateOf<SillyTavernPreset?>(null) }
     var isImporting by remember { mutableStateOf(false) }
@@ -170,11 +171,7 @@ private fun SillyTavernPresetPageContent(
                 if (payload.kind != AssistantImportKind.PRESET) {
                     toaster.show(context.getString(R.string.prompt_page_st_preset_import_only_json))
                 } else {
-                    val baseSettings = if (settings.stPresetTemplate != null && settings.stPresets.isEmpty()) {
-                        settings.ensureStPresetLibrary()
-                    } else {
-                        settings
-                    }
+                    val baseSettings = settings.ensureStPresetLibrary()
                     onUpdate(
                         baseSettings
                             .upsertStPreset(payload.toSillyTavernPreset(), select = true)

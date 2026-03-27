@@ -153,7 +153,7 @@ private fun SillyTavernImporter(
                 Text(
                     when (payload.kind) {
                         AssistantImportKind.PRESET ->
-                            "检测到 ${payload.regexes.size} 条配套正则。预设 regex 会导入到全局，是否一并导入？"
+                            "检测到 ${payload.regexes.size} 条配套正则。预设 regex 会导入到当前 ST 预设，是否一并导入？"
                         AssistantImportKind.CHARACTER_CARD ->
                             "检测到 ${payload.regexes.size} 条配套正则。角色卡 regex 会导入到当前助手，是否一并导入？"
                     }

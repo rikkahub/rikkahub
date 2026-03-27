@@ -88,6 +88,7 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.effectiveUserAvatar
 import me.rerere.rikkahub.data.model.effectiveUserName
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.model.runtimeRegexes
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
@@ -362,6 +363,7 @@ private fun MessagePartsBlock(
     // 消息输出HapticFeedback
     val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
+    val runtimeRegexes = remember(settings) { settings.runtimeRegexes() }
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
             latestParts.forEach { part ->
@@ -446,7 +448,7 @@ private fun MessagePartsBlock(
                                     modifier = Modifier
                                 )
                             } else {
-                                val renderedText = remember(part.text, assistant, settings.regexes, messageDepthFromEnd) {
+                                val renderedText = remember(part.text, assistant, runtimeRegexes, messageDepthFromEnd) {
                                     part.text.replaceRegexes(
                                         assistant = assistant,
                                         settings = settings,
@@ -477,7 +479,7 @@ private fun MessagePartsBlock(
                                 }
                             }
                         } else {
-                            val renderedText = remember(part.text, assistant, settings.regexes, messageDepthFromEnd) {
+                            val renderedText = remember(part.text, assistant, runtimeRegexes, messageDepthFromEnd) {
                                 part.text.replaceRegexes(
                                     assistant = assistant,
                                     settings = settings,

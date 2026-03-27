@@ -53,6 +53,7 @@ import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.model.TextSelectionConfig
 import me.rerere.rikkahub.data.model.UserPersonaProfile
+import me.rerere.rikkahub.data.model.normalizeStPresetState
 import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.PresetThemes
@@ -432,43 +433,8 @@ class SettingsStore(
                         .distinctBy { it.id }
                 )
             }
-            val normalizedStPresets = when {
-                settings.stPresets.isNotEmpty() -> {
-                    val distinctPresets = settings.stPresets.distinctBy { it.id }
-                    if (settings.regexes.isNotEmpty() && distinctPresets.none { it.regexes.isNotEmpty() }) {
-                        val fallbackPresetId = settings.selectedStPresetId ?: distinctPresets.firstOrNull()?.id
-                        distinctPresets.map { preset ->
-                            if (preset.id == fallbackPresetId) {
-                                preset.copy(regexes = settings.regexes)
-                            } else {
-                                preset
-                            }
-                        }
-                    } else {
-                        distinctPresets
-                    }
-                }
-                settings.stPresetTemplate != null -> listOf(
-                    SillyTavernPreset(
-                        template = settings.stPresetTemplate,
-                        regexes = settings.regexes,
-                    )
-                )
-                else -> emptyList()
-            }
-            val selectedStPresetId = normalizedStPresets
-                .firstOrNull { it.id == settings.selectedStPresetId }
-                ?.id
-                ?: normalizedStPresets.firstOrNull()?.id
-            val activeStPresetTemplate = normalizedStPresets
-                .firstOrNull { it.id == selectedStPresetId }
-                ?.template
-                ?: settings.stPresetTemplate
-            val activeStPresetRegexes = normalizedStPresets
-                .firstOrNull { it.id == selectedStPresetId }
-                ?.regexes
-                ?: settings.regexes
-            settings.copy(
+            val normalizedStSettings = settings.normalizeStPresetState()
+            normalizedStSettings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
                         is ProviderSetting.OpenAI -> provider.copy(
@@ -512,10 +478,10 @@ class SettingsStore(
                     .map { it.normalizedForSystemPromptSupplement() }
                     .distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
-                regexes = activeStPresetRegexes.distinctBy { it.id },
-                stPresets = normalizedStPresets,
-                selectedStPresetId = selectedStPresetId,
-                stPresetTemplate = activeStPresetTemplate,
+                regexes = normalizedStSettings.regexes.distinctBy { it.id },
+                stPresets = normalizedStSettings.stPresets,
+                selectedStPresetId = normalizedStSettings.selectedStPresetId,
+                stPresetTemplate = normalizedStSettings.stPresetTemplate,
                 userPersonaProfiles = userPersonaProfiles,
                 selectedUserPersonaProfileId = selectedUserPersonaProfileId,
                 scheduledTasks = settings.scheduledTasks
@@ -551,49 +517,14 @@ class SettingsStore(
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
-        val normalizedStPresets = when {
-            settings.stPresets.isNotEmpty() -> {
-                val distinctPresets = settings.stPresets.distinctBy { it.id }
-                if (settings.regexes.isNotEmpty() && distinctPresets.none { it.regexes.isNotEmpty() }) {
-                    val fallbackPresetId = settings.selectedStPresetId ?: distinctPresets.firstOrNull()?.id
-                    distinctPresets.map { preset ->
-                        if (preset.id == fallbackPresetId) {
-                            preset.copy(regexes = settings.regexes)
-                        } else {
-                            preset
-                        }
-                    }
-                } else {
-                    distinctPresets
-                }
-            }
-            settings.stPresetTemplate != null -> listOf(
-                SillyTavernPreset(
-                    template = settings.stPresetTemplate,
-                    regexes = settings.regexes,
-                )
-            )
-            else -> emptyList()
-        }
-        val selectedStPresetId = normalizedStPresets
-            .firstOrNull { it.id == settings.selectedStPresetId }
-            ?.id
-            ?: normalizedStPresets.firstOrNull()?.id
-        val activeStPresetTemplate = normalizedStPresets
-            .firstOrNull { it.id == selectedStPresetId }
-            ?.template
-            ?: settings.stPresetTemplate
-        val activeStPresetRegexes = normalizedStPresets
-            .firstOrNull { it.id == selectedStPresetId }
-            ?.regexes
-            ?: settings.regexes
-        val normalizedSettings = settings.copy(
+        val normalizedStSettings = settings.normalizeStPresetState()
+        val normalizedSettings = normalizedStSettings.copy(
             modeInjections = settings.modeInjections.map { it.normalizedForSystemPromptSupplement() },
             lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized(),
-            stPresets = normalizedStPresets,
-            selectedStPresetId = selectedStPresetId,
-            stPresetTemplate = activeStPresetTemplate,
-            regexes = activeStPresetRegexes.distinctBy { it.id },
+            stPresets = normalizedStSettings.stPresets,
+            selectedStPresetId = normalizedStSettings.selectedStPresetId,
+            stPresetTemplate = normalizedStSettings.stPresetTemplate,
+            regexes = normalizedStSettings.regexes.distinctBy { it.id },
         )
         val previousSettings = settingsFlow.value
         if (!previousSettings.init) {
@@ -655,9 +586,7 @@ class SettingsStore(
             preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(normalizedSettings.webDavConfig)
             preferences[S3_CONFIG] = JsonInstant.encodeToString(normalizedSettings.s3Config)
             preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(normalizedSettings.ttsProviders)
-            normalizedSettings.selectedTTSProviderId?.let {
-                preferences[SELECTED_TTS_PROVIDER] = it.toString()
-            } ?: preferences.remove(SELECTED_TTS_PROVIDER)
+            preferences[SELECTED_TTS_PROVIDER] = normalizedSettings.selectedTTSProviderId.toString()
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(normalizedSettings.modeInjections)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(normalizedSettings.lorebooks)
             preferences[LOREBOOK_GLOBAL_SETTINGS] = JsonInstant.encodeToString(normalizedSettings.lorebookGlobalSettings)
@@ -967,9 +896,7 @@ fun Settings.getQuickMessagesOfAssistant(assistant: Assistant) =
     quickMessages.filter { it.id in assistant.quickMessageIds }
 
 fun Settings.getSelectedTTSProvider(): TTSProviderSetting? {
-    return selectedTTSProviderId?.let { id ->
-        ttsProviders.find { it.id == id }
-    } ?: ttsProviders.firstOrNull()
+    return ttsProviders.find { it.id == selectedTTSProviderId } ?: ttsProviders.firstOrNull()
 }
 
 fun Model.findProvider(providers: List<ProviderSetting>, checkOverwrite: Boolean = true): ProviderSetting? {

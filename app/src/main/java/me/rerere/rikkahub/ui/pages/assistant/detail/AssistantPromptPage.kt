@@ -86,6 +86,7 @@ import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
+import me.rerere.rikkahub.data.model.activeStPresetRegexes
 import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.selectedStPreset
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
@@ -93,6 +94,8 @@ import me.rerere.rikkahub.data.model.effectiveUserPersona
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.hasExplicitPromptOrder
 import me.rerere.rikkahub.data.model.resolvePromptOrder
+import me.rerere.rikkahub.data.model.runtimeRegexes
+import me.rerere.rikkahub.data.model.sourceLabel
 import me.rerere.rikkahub.data.model.upsertStPreset
 import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
 import me.rerere.rikkahub.data.model.toMessageNode
@@ -253,7 +256,7 @@ private fun AssistantPromptContent(
                     )
                     PromptFeatureGuideRow(
                         title = "后续编辑",
-                        body = "角色卡基础信息留在当前助手下维护；共享 ST 预设、全局 Regex 和通用 Lorebook 仍在扩展页集中管理。",
+                        body = "角色卡基础信息留在当前助手下维护；共享 ST 预设与通用 Lorebook 仍在扩展页集中管理，角色卡 regex 则继续归当前助手维护。",
                     )
                 }
                 AssistantImporter(
@@ -263,7 +266,7 @@ private fun AssistantPromptContent(
                             currentAssistant = assistant,
                             payload = payload,
                             existingLorebooks = settings.lorebooks,
-                            existingGlobalRegexes = settings.regexes,
+                            existingSharedRegexes = settings.runtimeRegexes(),
                             includeRegexes = includeRegexes,
                         )
                         val importedLorebooks = application.lorebooks.filter { imported ->
@@ -292,7 +295,7 @@ private fun AssistantPromptContent(
                                         existing
                                     }
                                 },
-                                regexes = application.globalRegexes,
+                                regexes = application.sharedRegexes,
                             ),
                             latestAssistant,
                             nextAssistant,
@@ -339,7 +342,7 @@ private fun AssistantPromptContent(
                             )
                         }
                         Text(
-                            text = "当前预设 Regex ${settings.regexes.size} 条，助手 Regex ${assistant.regexes.size} 条，关联世界书 ${linkedLorebooks.size} 本。",
+                            text = "当前预设 Regex ${settings.activeStPresetRegexes().size} 条，助手 Regex ${assistant.regexes.size} 条，关联世界书 ${linkedLorebooks.size} 本。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -757,14 +760,27 @@ private fun AssistantRegexCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = regex.name,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .widthIn(max = 200.dp)
-                )
+                        .widthIn(max = 200.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = regex.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    regex.sourceLabel()?.let { sourceLabel ->
+                        Text(
+                            text = sourceLabel,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
                 Switch(
                     checked = regex.enabled,
                     onCheckedChange = { enabled ->

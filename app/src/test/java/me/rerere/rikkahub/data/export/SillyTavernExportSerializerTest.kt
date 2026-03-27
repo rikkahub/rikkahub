@@ -8,6 +8,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
+import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
@@ -15,6 +16,8 @@ import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.SillyTavernPresetSampling
 import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
+import me.rerere.rikkahub.ui.pages.assistant.detail.parseAssistantImportFromJson
+import me.rerere.rikkahub.ui.pages.assistant.detail.toSillyTavernPreset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -96,6 +99,69 @@ class SillyTavernExportSerializerTest {
 
         assertEquals("true", regexJson?.get("markdownOnly")?.jsonPrimitive?.content)
         assertEquals("true", regexJson?.get("promptOnly")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `preset export should round trip inline prompt regexes back into prompt content`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Inline Prompt Preset",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "name": "Main Prompt",
+                      "role": "system",
+                      "content": "Main body<regex>\"foo\":\"baz\"</regex>"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100001,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "regex_scripts": [
+                      {
+                        "scriptName": "Preset Regex",
+                        "findRegex": "alpha",
+                        "replaceString": "beta",
+                        "placement": [2]
+                      }
+                    ]
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "inline-roundtrip",
+        )
+
+        val preset = payload.toSillyTavernPreset()
+        val exported = Json.parseToJsonElement(
+            SillyTavernPresetExportSerializer.exportToJson(preset)
+        ).jsonObject
+
+        val mainPromptContent = exported["prompts"]
+            ?.jsonArray
+            ?.first()
+            ?.jsonObject
+            ?.get("content")
+            ?.jsonPrimitive
+            ?.content
+            .orEmpty()
+        val regexScripts = exported["extensions"]
+            ?.jsonObject
+            ?.get("regex_scripts")
+            ?.jsonArray
+            .orEmpty()
+
+        assertTrue(payload.regexes.any { it.sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT })
+        assertTrue(mainPromptContent.contains("<regex>"))
+        assertTrue(mainPromptContent.contains("\"foo\":\"baz\""))
+        assertEquals(1, regexScripts.size)
+        assertEquals("Preset Regex", regexScripts.first().jsonObject["scriptName"]?.jsonPrimitive?.content)
     }
 
     @Test

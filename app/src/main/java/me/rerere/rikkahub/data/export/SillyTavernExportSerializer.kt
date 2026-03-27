@@ -22,6 +22,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
+import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
@@ -122,6 +123,42 @@ internal fun AssistantRegex.exportPlacements(): List<Int> {
         if (AssistantAffectScope.USER in affectingScope) add(1)
         if (AssistantAffectScope.ASSISTANT in affectingScope) add(2)
     }.ifEmpty { listOf(2) }
+}
+
+internal fun AssistantRegex.shouldExportAsInlinePrompt(): Boolean {
+    return sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT &&
+        sourceRef.isNotBlank() &&
+        promptOnly &&
+        stPlacements.isEmpty()
+}
+
+internal fun AssistantRegex.exportInlinePromptBlock(): String {
+    val payload = buildJsonObject {
+        put(findRegex, JsonPrimitive(replaceString))
+    }
+    val body = Json.encodeToString(JsonObject.serializer(), payload)
+        .removePrefix("{")
+        .removeSuffix("}")
+    return "<regex>$body</regex>"
+}
+
+internal fun appendInlinePromptRegexes(
+    content: String,
+    regexes: List<AssistantRegex>,
+): String {
+    if (regexes.isEmpty()) return content
+    val inlineBlocks = regexes.map(AssistantRegex::exportInlinePromptBlock)
+    val base = content.trimEnd()
+    return buildString {
+        append(base)
+        if (base.isNotEmpty()) {
+            append('\n')
+        }
+        inlineBlocks.forEachIndexed { index, block ->
+            if (index > 0) append('\n')
+            append(block)
+        }
+    }
 }
 
 internal fun Assistant.firstAssistantPresetMessage(): String {

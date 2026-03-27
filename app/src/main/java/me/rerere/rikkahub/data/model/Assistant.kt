@@ -163,6 +163,13 @@ enum class AssistantAffectScope {
 }
 
 @Serializable
+enum class AssistantRegexSourceKind {
+    MANUAL,
+    ST_SCRIPT,
+    ST_INLINE_PROMPT,
+}
+
+@Serializable
 data class AssistantRegex(
     val id: Uuid,
     val name: String = "",
@@ -178,7 +185,37 @@ data class AssistantRegex(
     val runOnEdit: Boolean = true,
     val substituteRegex: Int = AssistantRegexSubstituteStrategy.NONE,
     val stPlacements: Set<Int> = emptySet(),
+    val sourceKind: AssistantRegexSourceKind = AssistantRegexSourceKind.MANUAL,
+    val sourceRef: String = "",
 )
+
+fun AssistantRegex.dedupKey(): String {
+    return listOf(
+        name,
+        findRegex,
+        replaceString,
+        affectingScope.sortedBy { scope -> scope.name }.joinToString(","),
+        visualOnly.toString(),
+        promptOnly.toString(),
+        minDepth?.toString().orEmpty(),
+        maxDepth?.toString().orEmpty(),
+        trimStrings.joinToString("\u0000"),
+        runOnEdit.toString(),
+        substituteRegex.toString(),
+        stPlacements.sorted().joinToString(","),
+    ).joinToString("|")
+}
+
+fun AssistantRegex.sourceLabel(): String? {
+    return when (sourceKind) {
+        AssistantRegexSourceKind.MANUAL -> null
+        AssistantRegexSourceKind.ST_SCRIPT -> "SillyTavern Script"
+        AssistantRegexSourceKind.ST_INLINE_PROMPT -> {
+            val promptRef = sourceRef.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+            "SillyTavern Inline Prompt$promptRef"
+        }
+    }
+}
 
 enum class AssistantRegexApplyPhase {
     ACTUAL_MESSAGE, // 实际消息（会影响保存与后续上下文）
@@ -267,23 +304,8 @@ fun String.replaceRegexes(
 }
 
 fun Settings.effectiveRegexes(assistant: Assistant?): List<AssistantRegex> {
-    return (regexes + assistant?.regexes.orEmpty())
-        .distinctBy { regex ->
-            listOf(
-                regex.name,
-                regex.findRegex,
-                regex.replaceString,
-                regex.affectingScope.sortedBy { scope -> scope.name }.joinToString(","),
-                regex.visualOnly.toString(),
-                regex.promptOnly.toString(),
-                regex.minDepth?.toString().orEmpty(),
-                regex.maxDepth?.toString().orEmpty(),
-                regex.trimStrings.joinToString("\u0000"),
-                regex.runOnEdit.toString(),
-                regex.substituteRegex.toString(),
-                regex.stPlacements.sorted().joinToString(","),
-            ).joinToString("|")
-        }
+    return (runtimeRegexes() + assistant?.regexes.orEmpty())
+        .distinctBy { it.dedupKey() }
 }
 
 private fun AssistantRegex.matchesPlacement(

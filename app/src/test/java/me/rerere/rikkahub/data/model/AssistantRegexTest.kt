@@ -135,6 +135,51 @@ class AssistantRegexTest {
     }
 
     @Test
+    fun `effective regexes should resolve active st preset regexes instead of raw compatibility cache`() {
+        val presetRegex = AssistantRegex(
+            id = Uuid.random(),
+            enabled = true,
+            findRegex = "foo",
+            replaceString = "bar",
+            affectingScope = setOf(AssistantAffectScope.USER),
+        )
+        val staleCacheRegex = AssistantRegex(
+            id = Uuid.random(),
+            enabled = true,
+            findRegex = "foo",
+            replaceString = "stale",
+            affectingScope = setOf(AssistantAffectScope.USER),
+        )
+        val preset = SillyTavernPreset(regexes = listOf(presetRegex))
+        val settings = Settings(
+            stPresets = listOf(preset),
+            selectedStPresetId = preset.id,
+            regexes = listOf(staleCacheRegex),
+        )
+        val assistant = Assistant(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "bar",
+                    replaceString = "baz",
+                    affectingScope = setOf(AssistantAffectScope.USER),
+                )
+            )
+        )
+
+        assertEquals(
+            "baz",
+            "foo".replaceRegexes(
+                assistant = assistant,
+                settings = settings,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
+    }
+
+    @Test
     fun `st placement should filter imported regex scripts by target`() {
         val assistant = Assistant(
             regexes = listOf(

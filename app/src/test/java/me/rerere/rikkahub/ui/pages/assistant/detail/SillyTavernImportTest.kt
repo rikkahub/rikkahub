@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
+import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.findPromptOrder
@@ -86,6 +87,13 @@ class SillyTavernImportTest {
         assertEquals(true, payload.presetTemplate?.findPromptOrder("main")?.enabled)
         assertEquals(2, payload.regexes.size)
         assertFalse(payload.presetTemplate?.findPrompt("main")?.content?.contains("<regex>") == true)
+        assertEquals(
+            AssistantRegexSourceKind.ST_SCRIPT,
+            payload.regexes.firstOrNull { it.name == "Preset Regex" }?.sourceKind,
+        )
+        val inlineRegex = payload.regexes.firstOrNull { it.sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT }
+        assertNotNull(inlineRegex)
+        assertEquals("main", inlineRegex?.sourceRef)
         assertEquals(listOf("normal", "continue"), payload.presetTemplate?.findPrompt("main")?.injectionTriggers)
         assertEquals("Prefill", payload.presetTemplate?.assistantPrefill)
         assertEquals(true, payload.presetTemplate?.continuePrefill)
@@ -442,12 +450,12 @@ class SillyTavernImportTest {
             currentAssistant = currentAssistant,
             payload = payload,
             existingLorebooks = emptyList(),
-            existingGlobalRegexes = emptyList(),
+            existingSharedRegexes = emptyList(),
             includeRegexes = true,
         )
 
         assertEquals(1, application.assistant.regexes.size)
-        assertEquals(0, application.globalRegexes.size)
+        assertEquals(0, application.sharedRegexes.size)
     }
 
     @Test

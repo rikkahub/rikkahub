@@ -47,6 +47,11 @@ object SillyTavernPresetExportSerializer : ExportSerializer<SillyTavernPreset> {
 
 private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
     val template = data.template
+    val inlinePromptRegexesByIdentifier = data.regexes
+        .filter { it.shouldExportAsInlinePrompt() }
+        .groupBy { it.sourceRef }
+    val scriptRegexes = data.regexes
+        .filterNot { it.shouldExportAsInlinePrompt() }
     return buildJsonObject {
         put("name", template.sourceName.ifBlank { data.displayName })
         put("scenario_format", template.scenarioFormat)
@@ -95,7 +100,13 @@ private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
                     put("identifier", prompt.identifier)
                     put("name", prompt.name)
                     put("role", prompt.role.name.lowercase())
-                    put("content", prompt.content)
+                    put(
+                        "content",
+                        appendInlinePromptRegexes(
+                            content = prompt.content,
+                            regexes = inlinePromptRegexesByIdentifier[prompt.identifier].orEmpty(),
+                        )
+                    )
                     put("system_prompt", prompt.systemPrompt)
                     put("marker", prompt.marker)
                     put("enabled", prompt.enabled)
@@ -125,10 +136,10 @@ private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
                 }
             })
         }
-        if (data.regexes.isNotEmpty()) {
+        if (scriptRegexes.isNotEmpty()) {
             putJsonObject("extensions") {
                 putJsonArray("regex_scripts") {
-                    data.regexes.forEach { regex ->
+                    scriptRegexes.forEach { regex ->
                         add(buildRegexScript(regex))
                     }
                 }

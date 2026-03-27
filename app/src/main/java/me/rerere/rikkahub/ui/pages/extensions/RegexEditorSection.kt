@@ -45,6 +45,7 @@ import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.AssistantRegexSubstituteStrategy
+import me.rerere.rikkahub.data.model.sourceLabel
 import me.rerere.rikkahub.ui.components.ui.EditorGuideAction
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
@@ -230,6 +231,15 @@ private fun RegexEditorCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    regex.sourceLabel()?.let { sourceLabel ->
+                        Text(
+                            text = sourceLabel,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
                 Switch(
                     checked = regex.enabled,
