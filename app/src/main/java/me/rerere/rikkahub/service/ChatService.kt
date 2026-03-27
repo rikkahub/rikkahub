@@ -95,6 +95,7 @@ import me.rerere.rikkahub.data.model.ScheduledPromptTask
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
+import me.rerere.rikkahub.data.model.applyActiveStPresetSampling
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -562,10 +563,12 @@ class ChatService(
             enableWebSearch = task.overrideEnableWebSearch ?: settings.enableWebSearch,
             searchServiceSelected = effectiveSearchServiceIndex
         )
-        val effectiveAssistant = assistant.copy(
-            chatModelId = task.overrideModelId ?: assistant.chatModelId,
-            localTools = task.overrideLocalTools ?: assistant.localTools,
-            mcpServers = task.overrideMcpServers ?: assistant.mcpServers
+        val effectiveAssistant = effectiveSettings.applyActiveStPresetSampling(
+            assistant.copy(
+                chatModelId = task.overrideModelId ?: assistant.chatModelId,
+                localTools = task.overrideLocalTools ?: assistant.localTools,
+                mcpServers = task.overrideMcpServers ?: assistant.mcpServers
+            )
         )
         val model = effectiveAssistant.chatModelId?.let { effectiveSettings.findModelById(it) }
             ?: effectiveSettings.getCurrentChatModel()
@@ -823,7 +826,9 @@ class ChatService(
         setConversationStGenerationType(conversationId, stGenerationType)
         val settings = settingsStore.settingsFlow.first()
         val conversation = getConversationFlow(conversationId).value
-        val assistant = settings.getAssistantById(conversation.assistantId) ?: settings.getCurrentAssistant()
+        val assistant = settings.applyActiveStPresetSampling(
+            settings.getAssistantById(conversation.assistantId) ?: settings.getCurrentAssistant()
+        )
         val model = assistant.chatModelId?.let { settings.findModelById(it) } ?: settings.getCurrentChatModel() ?: return
         val mcpTools = mcpManager.getAvailableToolsForServers(assistant.mcpServers)
 

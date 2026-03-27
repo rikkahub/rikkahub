@@ -26,6 +26,27 @@ fun Settings.activeStPresetRegexes(): List<AssistantRegex> {
     return selectedStPreset()?.regexes ?: regexes
 }
 
+fun Settings.applyActiveStPresetSampling(assistant: Assistant): Assistant {
+    if (!stPresetEnabled) return assistant
+    val sampling = selectedStPreset()?.sampling ?: return assistant
+    if (!sampling.hasConfiguredValues()) return assistant
+    return assistant.copy(
+        temperature = sampling.temperature,
+        topP = sampling.topP,
+        maxTokens = sampling.maxTokens,
+        frequencyPenalty = sampling.frequencyPenalty,
+        presencePenalty = sampling.presencePenalty,
+        minP = sampling.minP,
+        topK = sampling.topK,
+        topA = sampling.topA,
+        repetitionPenalty = sampling.repetitionPenalty,
+        seed = sampling.seed,
+        stopSequences = sampling.stopSequences,
+        openAIReasoningEffort = sampling.openAIReasoningEffort,
+        openAIVerbosity = sampling.openAIVerbosity,
+    )
+}
+
 fun Settings.ensureStPresetLibrary(): Settings {
     if (stPresets.isNotEmpty()) return this
     val template = stPresetTemplate ?: defaultSillyTavernPromptTemplate()

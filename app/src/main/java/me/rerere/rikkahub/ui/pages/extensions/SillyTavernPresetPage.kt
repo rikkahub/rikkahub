@@ -54,6 +54,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.export.SillyTavernPresetExportSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.model.SillyTavernPreset
+import me.rerere.rikkahub.data.model.configuredValueCount
 import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.ensureStPresetLibrary
 import me.rerere.rikkahub.data.model.removeStPreset
@@ -275,6 +276,20 @@ private fun SillyTavernPresetPageContent(
                 )
             }
             item {
+                PresetSamplingEditorCard(
+                    sampling = preset.sampling,
+                    onUpdate = { updatedSampling ->
+                        onUpdate(
+                            settings.upsertStPreset(
+                                preset.copy(sampling = updatedSampling),
+                                select = true,
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            item {
                 RegexEditorSection(
                     regexes = preset.regexes,
                     onUpdate = { regexes ->
@@ -353,7 +368,13 @@ private fun PresetLibraryCard(
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(
-                    text = "Regex ${preset.regexes.size} 条",
+                    text = buildString {
+                        append("Regex ${preset.regexes.size} 条")
+                        val samplingCount = preset.sampling.configuredValueCount()
+                        if (samplingCount > 0) {
+                            append(" · 采样 $samplingCount 项")
+                        }
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

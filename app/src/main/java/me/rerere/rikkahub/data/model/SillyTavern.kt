@@ -33,6 +33,40 @@ data class SillyTavernPresetSampling(
     val openAIVerbosity: String = "",
 )
 
+fun SillyTavernPresetSampling.hasConfiguredValues(): Boolean {
+    return temperature != null ||
+        topP != null ||
+        maxTokens != null ||
+        frequencyPenalty != null ||
+        presencePenalty != null ||
+        minP != null ||
+        topK != null ||
+        topA != null ||
+        repetitionPenalty != null ||
+        seed != null ||
+        stopSequences.isNotEmpty() ||
+        openAIReasoningEffort.isNotBlank() ||
+        openAIVerbosity.isNotBlank()
+}
+
+fun SillyTavernPresetSampling.configuredValueCount(): Int {
+    return listOf(
+        temperature != null,
+        topP != null,
+        maxTokens != null,
+        frequencyPenalty != null,
+        presencePenalty != null,
+        minP != null,
+        topK != null,
+        topA != null,
+        repetitionPenalty != null,
+        seed != null,
+        stopSequences.isNotEmpty(),
+        openAIReasoningEffort.isNotBlank(),
+        openAIVerbosity.isNotBlank(),
+    ).count { it }
+}
+
 @Serializable
 data class SillyTavernPromptTemplate(
     val sourceName: String = "",
