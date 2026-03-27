@@ -89,8 +89,11 @@ import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.persona.UserPersonaPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
+import me.rerere.rikkahub.ui.pages.extensions.LorebookSettingsPage
+import me.rerere.rikkahub.ui.pages.extensions.ModeInjectionSettingsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
+import me.rerere.rikkahub.ui.pages.extensions.SillyTavernPresetPage
 import me.rerere.rikkahub.ui.pages.extensions.WorkdirBrowserPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
@@ -548,6 +551,18 @@ class RouteActivity : ComponentActivity() {
                                 PromptPage()
                             }
 
+                            entry<Screen.StPresets> {
+                                SillyTavernPresetPage()
+                            }
+
+                            entry<Screen.ModeInjections> {
+                                ModeInjectionSettingsPage()
+                            }
+
+                            entry<Screen.Lorebooks> {
+                                LorebookSettingsPage()
+                            }
+
                             entry<Screen.WorkdirBrowser> { key ->
                                 WorkdirBrowserPage(relativePath = key.relativePath)
                             }
@@ -742,6 +757,15 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Prompts : Screen
+
+    @Serializable
+    data object StPresets : Screen
+
+    @Serializable
+    data object ModeInjections : Screen
+
+    @Serializable
+    data object Lorebooks : Screen
 
     @Serializable
     data class WorkdirBrowser(val relativePath: String = "") : Screen

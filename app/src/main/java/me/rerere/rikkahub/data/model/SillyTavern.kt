@@ -3,6 +3,35 @@ package me.rerere.rikkahub.data.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
+import kotlin.uuid.Uuid
+
+@Serializable
+data class SillyTavernPreset(
+    val id: Uuid = Uuid.random(),
+    val template: SillyTavernPromptTemplate = defaultSillyTavernPromptTemplate(),
+    val regexes: List<AssistantRegex> = emptyList(),
+    val sampling: SillyTavernPresetSampling = SillyTavernPresetSampling(),
+) {
+    val displayName: String
+        get() = template.sourceName.ifBlank { "SillyTavern Preset" }
+}
+
+@Serializable
+data class SillyTavernPresetSampling(
+    val temperature: Float? = null,
+    val topP: Float? = null,
+    val maxTokens: Int? = null,
+    val frequencyPenalty: Float? = null,
+    val presencePenalty: Float? = null,
+    val minP: Float? = null,
+    val topK: Int? = null,
+    val topA: Float? = null,
+    val repetitionPenalty: Float? = null,
+    val seed: Long? = null,
+    val stopSequences: List<String> = emptyList(),
+    val openAIReasoningEffort: String = "",
+    val openAIVerbosity: String = "",
+)
 
 @Serializable
 data class SillyTavernPromptTemplate(
@@ -155,4 +184,71 @@ fun SillyTavernPromptItem.matchesGenerationType(generationType: String): Boolean
         }
         .distinct()
     return normalizedTriggers.isEmpty() || normalizedTriggers.contains(normalizedType)
+}
+
+fun defaultSillyTavernPromptTemplate(): SillyTavernPromptTemplate {
+    val prompts = listOf(
+        SillyTavernPromptItem(
+            identifier = "main",
+            name = "Main Prompt",
+            role = MessageRole.SYSTEM,
+            content = "Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}.",
+            systemPrompt = true,
+        ),
+        SillyTavernPromptItem(identifier = "worldInfoBefore", name = "World Info (before)", marker = true),
+        SillyTavernPromptItem(identifier = "worldInfoAfter", name = "World Info (after)", marker = true),
+        SillyTavernPromptItem(identifier = "charDescription", name = "Char Description", marker = true),
+        SillyTavernPromptItem(identifier = "charPersonality", name = "Char Personality", marker = true),
+        SillyTavernPromptItem(identifier = "scenario", name = "Scenario", marker = true),
+        SillyTavernPromptItem(identifier = "personaDescription", name = "Persona Description", marker = true),
+        SillyTavernPromptItem(identifier = "dialogueExamples", name = "Chat Examples", marker = true),
+        SillyTavernPromptItem(identifier = "chatHistory", name = "Chat History", marker = true),
+        SillyTavernPromptItem(
+            identifier = "jailbreak",
+            name = "Post-History Instructions",
+            role = MessageRole.SYSTEM,
+            content = "",
+            systemPrompt = true,
+        ),
+    )
+    return SillyTavernPromptTemplate(
+        sourceName = "SillyTavern Default",
+        scenarioFormat = "{{scenario}}",
+        personalityFormat = "{{personality}}",
+        wiFormat = "{0}",
+        mainPrompt = prompts.first().content,
+        newChatPrompt = "[Start a new Chat]",
+        newGroupChatPrompt = "[Start a new group chat. Group members: {{group}}]",
+        newExampleChatPrompt = "[Example Chat]",
+        continueNudgePrompt = "[Continue your last message without repeating its original content.]",
+        groupNudgePrompt = "[Write the next reply only as {{char}}.]",
+        impersonationPrompt = "[Write your next reply from the point of view of {{user}}, using the chat history so far as a guideline for the writing style of {{user}}. Don't write as {{char}} or system. Don't describe actions of {{char}}.]",
+        continuePostfix = " ",
+        prompts = prompts,
+        orderedPromptIds = listOf(
+            "main",
+            "worldInfoBefore",
+            "charDescription",
+            "charPersonality",
+            "scenario",
+            "personaDescription",
+            "worldInfoAfter",
+            "dialogueExamples",
+            "chatHistory",
+            "jailbreak",
+        ),
+    ).withPromptOrder(
+        listOf(
+            SillyTavernPromptOrderItem("main"),
+            SillyTavernPromptOrderItem("worldInfoBefore"),
+            SillyTavernPromptOrderItem("charDescription"),
+            SillyTavernPromptOrderItem("charPersonality"),
+            SillyTavernPromptOrderItem("scenario"),
+            SillyTavernPromptOrderItem("personaDescription"),
+            SillyTavernPromptOrderItem("worldInfoAfter"),
+            SillyTavernPromptOrderItem("dialogueExamples"),
+            SillyTavernPromptOrderItem("chatHistory"),
+            SillyTavernPromptOrderItem("jailbreak"),
+        )
+    )
 }

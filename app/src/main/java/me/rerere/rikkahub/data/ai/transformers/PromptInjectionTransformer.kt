@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookTriggerContext
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.activeStPresetTemplate
 import me.rerere.rikkahub.data.model.effectiveUserPersona
 import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 
@@ -31,7 +32,7 @@ object PromptInjectionTransformer : InputMessageTransformer {
             modeInjections = ctx.settings.modeInjections,
             lorebooks = ctx.settings.lorebooks,
             personaDescription = ctx.settings.effectiveUserPersona(ctx.assistant),
-            stPromptTemplateActive = ctx.settings.stPresetEnabled && ctx.settings.stPresetTemplate != null,
+            stPromptTemplateActive = ctx.settings.stPresetEnabled && ctx.settings.activeStPresetTemplate() != null,
             generationType = ctx.stGenerationType,
             runtimeState = ctx.lorebookRuntimeState,
         )

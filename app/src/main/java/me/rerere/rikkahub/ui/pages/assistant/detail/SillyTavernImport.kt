@@ -32,11 +32,14 @@ import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.SillyTavernCharacterData
+import me.rerere.rikkahub.data.model.SillyTavernPreset
+import me.rerere.rikkahub.data.model.SillyTavernPresetSampling
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StDepthPrompt
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
+import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.matchesGenerationType
 import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.utils.ImageUtils
@@ -67,6 +70,31 @@ data class AssistantImportApplication(
     val lorebooks: List<Lorebook>,
     val globalRegexes: List<AssistantRegex> = emptyList(),
 )
+
+internal fun AssistantImportPayload.toSillyTavernPreset(): SillyTavernPreset {
+    require(kind == AssistantImportKind.PRESET) {
+        "Only preset payloads can be converted into SillyTavern presets"
+    }
+    return SillyTavernPreset(
+        template = presetTemplate ?: defaultSillyTavernPromptTemplate(),
+        regexes = regexes,
+        sampling = SillyTavernPresetSampling(
+            temperature = assistant.temperature,
+            topP = assistant.topP,
+            maxTokens = assistant.maxTokens,
+            frequencyPenalty = assistant.frequencyPenalty,
+            presencePenalty = assistant.presencePenalty,
+            minP = assistant.minP,
+            topK = assistant.topK,
+            topA = assistant.topA,
+            repetitionPenalty = assistant.repetitionPenalty,
+            seed = assistant.seed,
+            stopSequences = assistant.stopSequences,
+            openAIReasoningEffort = assistant.openAIReasoningEffort,
+            openAIVerbosity = assistant.openAIVerbosity,
+        ),
+    )
+}
 
 internal suspend fun parseAssistantImportFromUri(
     context: Context,
@@ -404,73 +432,6 @@ private fun parseCharacterCardImport(
         presetTemplate = defaultSillyTavernPromptTemplate(),
         lorebooks = lorebooks,
         regexes = regexes,
-    )
-}
-
-internal fun defaultSillyTavernPromptTemplate(): SillyTavernPromptTemplate {
-    val prompts = listOf(
-        SillyTavernPromptItem(
-            identifier = "main",
-            name = "Main Prompt",
-            role = MessageRole.SYSTEM,
-            content = "Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}.",
-            systemPrompt = true,
-        ),
-        SillyTavernPromptItem(identifier = "worldInfoBefore", name = "World Info (before)", marker = true),
-        SillyTavernPromptItem(identifier = "worldInfoAfter", name = "World Info (after)", marker = true),
-        SillyTavernPromptItem(identifier = "charDescription", name = "Char Description", marker = true),
-        SillyTavernPromptItem(identifier = "charPersonality", name = "Char Personality", marker = true),
-        SillyTavernPromptItem(identifier = "scenario", name = "Scenario", marker = true),
-        SillyTavernPromptItem(identifier = "personaDescription", name = "Persona Description", marker = true),
-        SillyTavernPromptItem(identifier = "dialogueExamples", name = "Chat Examples", marker = true),
-        SillyTavernPromptItem(identifier = "chatHistory", name = "Chat History", marker = true),
-        SillyTavernPromptItem(
-            identifier = "jailbreak",
-            name = "Post-History Instructions",
-            role = MessageRole.SYSTEM,
-            content = "",
-            systemPrompt = true,
-        ),
-    )
-    return SillyTavernPromptTemplate(
-        sourceName = "SillyTavern Default",
-        scenarioFormat = "{{scenario}}",
-        personalityFormat = "{{personality}}",
-        wiFormat = "{0}",
-        mainPrompt = prompts.first().content,
-        newChatPrompt = "[Start a new Chat]",
-        newGroupChatPrompt = "[Start a new group chat. Group members: {{group}}]",
-        newExampleChatPrompt = "[Example Chat]",
-        continueNudgePrompt = "[Continue your last message without repeating its original content.]",
-        groupNudgePrompt = "[Write the next reply only as {{char}}.]",
-        impersonationPrompt = "[Write your next reply from the point of view of {{user}}, using the chat history so far as a guideline for the writing style of {{user}}. Don't write as {{char}} or system. Don't describe actions of {{char}}.]",
-        continuePostfix = " ",
-        prompts = prompts,
-        orderedPromptIds = listOf(
-            "main",
-            "worldInfoBefore",
-            "charDescription",
-            "charPersonality",
-            "scenario",
-            "personaDescription",
-            "worldInfoAfter",
-            "dialogueExamples",
-            "chatHistory",
-            "jailbreak",
-        ),
-    ).withPromptOrder(
-        listOf(
-            SillyTavernPromptOrderItem("main"),
-            SillyTavernPromptOrderItem("worldInfoBefore"),
-            SillyTavernPromptOrderItem("charDescription"),
-            SillyTavernPromptOrderItem("charPersonality"),
-            SillyTavernPromptOrderItem("scenario"),
-            SillyTavernPromptOrderItem("personaDescription"),
-            SillyTavernPromptOrderItem("worldInfoAfter"),
-            SillyTavernPromptOrderItem("dialogueExamples"),
-            SillyTavernPromptOrderItem("chatHistory"),
-            SillyTavernPromptOrderItem("jailbreak"),
-        )
     )
 }
 

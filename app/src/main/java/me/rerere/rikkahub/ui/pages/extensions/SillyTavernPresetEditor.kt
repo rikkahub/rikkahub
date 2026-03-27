@@ -66,6 +66,7 @@ import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
+import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.hasExplicitPromptOrder
 import me.rerere.rikkahub.data.model.resolvePromptOrder
@@ -75,7 +76,6 @@ import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.hooks.useEditState
-import me.rerere.rikkahub.ui.pages.assistant.detail.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.ui.theme.CustomColors
 import sh.calvin.reorderable.ReorderableColumn
 

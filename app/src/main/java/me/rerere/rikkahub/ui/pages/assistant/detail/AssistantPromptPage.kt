@@ -74,23 +74,31 @@ import me.rerere.rikkahub.data.ai.transformers.DefaultPlaceholderProvider
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.TransformerContext
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.export.SillyTavernCharacterCardExportData
+import me.rerere.rikkahub.data.export.SillyTavernCharacterCardSerializer
+import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
+import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
+import me.rerere.rikkahub.data.model.selectedStPreset
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import me.rerere.rikkahub.data.model.effectiveUserPersona
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.hasExplicitPromptOrder
 import me.rerere.rikkahub.data.model.resolvePromptOrder
+import me.rerere.rikkahub.data.model.upsertStPreset
 import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -179,6 +187,16 @@ private fun AssistantPromptContent(
     val latestOnUpdateWithLorebooks by rememberUpdatedState(onUpdateWithLorebooks)
     val selectedPersonaProfile = settings.selectedUserPersonaProfile()
     val effectiveUserPersona = settings.effectiveUserPersona(assistant)
+    val activePreset = settings.selectedStPreset()
+    val linkedLorebooks = settings.lorebooks.filter { assistant.lorebookIds.contains(it.id) }
+    var showCharacterExportDialog by remember { mutableStateOf(false) }
+    val characterCardExporter = rememberExporter(
+        data = SillyTavernCharacterCardExportData(
+            assistant = assistant,
+            lorebooks = linkedLorebooks,
+        ),
+        serializer = SillyTavernCharacterCardSerializer,
+    )
 
     Column(
         modifier = modifier
@@ -218,28 +236,29 @@ private fun AssistantPromptContent(
                             latestSettings.lorebooks.none { it.id == imported.id }
                         }
                         val nextAssistant = application.assistant
-                        val nextGlobalPreset = if (latestSettings.stPresetTemplate == null) {
-                            payload.presetTemplate
+                        val seededSettings = if (latestSettings.selectedStPreset() == null) {
+                            latestSettings
+                                .upsertStPreset(
+                                    preset = SillyTavernPreset(
+                                        template = payload.presetTemplate ?: defaultSillyTavernPromptTemplate(),
+                                    ),
+                                    select = true,
+                                )
+                                .copy(stPresetEnabled = true)
                         } else {
-                            latestSettings.stPresetTemplate
+                            latestSettings
                         }
                         latestOnUpdateSettings(
-                            latestSettings.copy(
-                                lorebooks = latestSettings.lorebooks + importedLorebooks,
-                                assistants = latestSettings.assistants.map { existing ->
+                            seededSettings.copy(
+                                lorebooks = seededSettings.lorebooks + importedLorebooks,
+                                assistants = seededSettings.assistants.map { existing ->
                                     if (existing.id == nextAssistant.id) {
                                         nextAssistant
                                     } else {
                                         existing
                                     }
                                 },
-                                stPresetEnabled = if (latestSettings.stPresetTemplate == null && nextGlobalPreset != null) {
-                                    true
-                                } else {
-                                    latestSettings.stPresetEnabled
-                                },
                                 regexes = application.globalRegexes,
-                                stPresetTemplate = nextGlobalPreset,
                             ),
                             latestAssistant,
                             nextAssistant,
@@ -247,7 +266,14 @@ private fun AssistantPromptContent(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (settings.stPresetTemplate != null || assistant.stCharacterData != null) {
+                if (
+                    activePreset != null ||
+                    assistant.stCharacterData != null ||
+                    assistant.name.isNotBlank() ||
+                    assistant.systemPrompt.isNotBlank() ||
+                    linkedLorebooks.isNotEmpty() ||
+                    assistant.regexes.isNotEmpty()
+                ) {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -255,9 +281,9 @@ private fun AssistantPromptContent(
                             text = "当前运行时映射",
                             style = MaterialTheme.typography.labelLarge
                         )
-                        settings.stPresetTemplate?.let { template ->
+                        activePreset?.let { preset ->
                             Text(
-                                text = "全局预设: ${template.sourceName.ifBlank { "SillyTavern" }}${if (settings.stPresetEnabled) "" else "（已关闭）"}",
+                                text = "活动预设: ${preset.template.sourceName.ifBlank { "SillyTavern" }}${if (settings.stPresetEnabled) "" else "（提示词模板已关闭）"}",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -279,7 +305,7 @@ private fun AssistantPromptContent(
                             )
                         }
                         Text(
-                            text = "全局 Regex ${settings.regexes.size} 条，助手 Regex ${assistant.regexes.size} 条，关联世界书 ${assistant.lorebookIds.size} 本。",
+                            text = "当前预设 Regex ${settings.regexes.size} 条，助手 Regex ${assistant.regexes.size} 条，关联世界书 ${linkedLorebooks.size} 本。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -299,6 +325,11 @@ private fun AssistantPromptContent(
                                 ) {
                                     Text("清除角色卡信息")
                                 }
+                            }
+                            TextButton(
+                                onClick = { showCharacterExportDialog = true }
+                            ) {
+                                Text("导出角色卡")
                             }
                         }
                     }
@@ -647,6 +678,14 @@ private fun AssistantPromptContent(
             description = "仅对当前助手生效。适合角色卡自带的格式化、美化和卡片专属规则。",
         )
     }
+
+    if (showCharacterExportDialog) {
+        ExportDialog(
+            exporter = characterCardExporter,
+            title = "导出 ST 角色卡",
+            onDismiss = { showCharacterExportDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -948,4 +987,5 @@ private fun AssistantRegexCard(
             }
         }
     }
+
 }

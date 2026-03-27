@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.extensions
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Book01
+import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.hugeicons.stroke.FileDownload
@@ -9,6 +10,7 @@ import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Share03
+import me.rerere.hugeicons.stroke.Link01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.MagicWand01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -49,6 +51,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
@@ -72,6 +76,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -82,10 +87,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.export.LorebookSerializer
 import me.rerere.rikkahub.data.export.ModeInjectionSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookGlobalSettings
@@ -94,12 +101,14 @@ import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
 import me.rerere.rikkahub.data.model.normalizeForModeInjection
 import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
@@ -114,9 +123,7 @@ private val modeInjectionPositions = listOf(
 
 @Composable
 fun PromptPage(vm: PromptVM = koinViewModel()) {
-    val settings by vm.settings.collectAsStateWithLifecycle()
-    val pagerState = rememberPagerState { 3 }
-    val scope = rememberCoroutineScope()
+    val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -128,73 +135,105 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 colors = CustomColors.topBarColors,
             )
         },
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = pagerState.currentPage == 0,
-                    label = { Text(stringResource(R.string.prompt_page_message_template_tab)) },
-                    icon = { Icon(HugeIcons.MagicWand01, null) },
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(0) }
-                    }
-                )
-                NavigationBarItem(
-                    selected = pagerState.currentPage == 1,
-                    label = { Text(stringResource(R.string.prompt_page_mode_injection_tab)) },
-                    icon = { Icon(HugeIcons.Tools, null) },
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(1) }
-                    }
-                )
-                NavigationBarItem(
-                    selected = pagerState.currentPage == 2,
-                    label = { Text(stringResource(R.string.prompt_page_lorebook_tab)) },
-                    icon = { Icon(HugeIcons.Book01, null) },
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(2) }
-                    }
-                )
-            }
-        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        HorizontalPager(
-            state = pagerState,
+        LazyColumn(
             modifier = Modifier
                 .padding(innerPadding)
-                .fillMaxSize()
-        ) { page ->
-            when (page) {
-                0 -> {
-                    SillyTavernPresetTab(
-                        settings = settings,
-                        onUpdate = { updatedSettings ->
-                            vm.updateSettings(updatedSettings)
-                        },
+                .fillMaxSize(),
+            contentPadding = PaddingValues(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("提示词管理") },
+                ) {
+                    item(
+                        onClick = { navController.navigate(Screen.StPresets) },
+                        leadingContent = { Icon(HugeIcons.MagicWand01, null) },
+                        headlineContent = { Text("SillyTavern 预设") },
+                        supportingContent = { Text("管理多个 ST 预设、切换当前预设，并导出为 ST JSON。") },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.ModeInjections) },
+                        leadingContent = { Icon(HugeIcons.Tools, null) },
+                        headlineContent = { Text("模式注入") },
+                        supportingContent = { Text("单独维护模式注入规则，不再和世界书、预设堆在一个页签里。") },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.Lorebooks) },
+                        leadingContent = { Icon(HugeIcons.Book01, null) },
+                        headlineContent = { Text("世界书") },
+                        supportingContent = { Text("管理世界书条目、全局启用状态，以及绑定到哪些助手。") },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }
-
-                1 -> ModeInjectionTab(
-                    modeInjections = settings.modeInjections,
-                    onUpdate = { vm.updateSettings(settings.copy(modeInjections = it)) }
-                )
-
-                2 -> LorebookTab(
-                    lorebooks = settings.lorebooks,
-                    globalSettings = settings.lorebookGlobalSettings,
-                    onUpdateLorebooks = { vm.updateSettings(settings.copy(lorebooks = it)) },
-                    onUpdateGlobalSettings = {
-                        vm.updateSettings(settings.copy(lorebookGlobalSettings = it))
-                    },
-                )
             }
         }
     }
 }
 
 @Composable
-private fun ModeInjectionTab(
+fun ModeInjectionsPage(vm: PromptVM = koinViewModel()) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    Scaffold(
+        topBar = {
+            LargeFlexibleTopAppBar(
+                navigationIcon = { BackButton() },
+                title = { Text("模式注入") },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
+            )
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
+    ) { innerPadding ->
+        ModeInjectionTab(
+            modifier = Modifier.padding(innerPadding),
+            modeInjections = settings.modeInjections,
+            onUpdate = { vm.updateSettings(settings.copy(modeInjections = it)) },
+        )
+    }
+}
+
+@Composable
+fun LorebooksPage(vm: PromptVM = koinViewModel()) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    Scaffold(
+        topBar = {
+            LargeFlexibleTopAppBar(
+                navigationIcon = { BackButton() },
+                title = { Text("世界书") },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
+            )
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
+    ) { innerPadding ->
+        LorebookTab(
+            modifier = Modifier.padding(innerPadding),
+            lorebooks = settings.lorebooks,
+            globalSettings = settings.lorebookGlobalSettings,
+            assistants = settings.assistants,
+            onUpdateLorebooks = { vm.updateSettings(settings.copy(lorebooks = it)) },
+            onUpdateGlobalSettings = { vm.updateSettings(settings.copy(lorebookGlobalSettings = it)) },
+            onUpdateAssistants = { vm.updateSettings(settings.copy(assistants = it)) },
+        )
+    }
+}
+
+@Composable
+fun ModeInjectionTab(
+    modifier: Modifier = Modifier,
     modeInjections: List<PromptInjection.ModeInjection>,
     onUpdate: (List<PromptInjection.ModeInjection>) -> Unit
 ) {
@@ -227,7 +266,7 @@ private fun ModeInjectionTab(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -668,11 +707,14 @@ private fun getLorebookInjectionPlacementLabel(placement: LorebookInjectionPlace
 // ==================== Lorebook Tab ====================
 
 @Composable
-private fun LorebookTab(
+fun LorebookTab(
+    modifier: Modifier = Modifier,
     lorebooks: List<Lorebook>,
     globalSettings: LorebookGlobalSettings,
+    assistants: List<Assistant> = emptyList(),
     onUpdateLorebooks: (List<Lorebook>) -> Unit,
     onUpdateGlobalSettings: (LorebookGlobalSettings) -> Unit,
+    onUpdateAssistants: (List<Assistant>) -> Unit = {},
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
     val lazyListState = rememberLazyListState()
@@ -703,7 +745,7 @@ private fun LorebookTab(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -751,6 +793,7 @@ private fun LorebookTab(
                     ) { isDragging ->
                         LorebookCard(
                             book = book,
+                            assistants = assistants,
                             modifier = Modifier
                                 .longPressDraggableHandle()
                                 .graphicsLayer {
@@ -760,6 +803,31 @@ private fun LorebookTab(
                                     }
                                 },
                             onEdit = { editState.open(book) },
+                            onToggleEnabled = { enabled ->
+                                onUpdateLorebooks(
+                                    lorebooks.map { candidate ->
+                                        if (candidate.id == book.id) {
+                                            candidate.copy(enabled = enabled)
+                                        } else {
+                                            candidate
+                                        }
+                                    }
+                                )
+                            },
+                            onUpdateAssistantBindings = { assistantIds ->
+                                onUpdateAssistants(
+                                    assistants.map { assistant ->
+                                        val enabledForAssistant = assistant.id in assistantIds
+                                        assistant.copy(
+                                            lorebookIds = if (enabledForAssistant) {
+                                                assistant.lorebookIds + book.id
+                                            } else {
+                                                assistant.lorebookIds - book.id
+                                            }
+                                        )
+                                    }
+                                )
+                            },
                             onDelete = { onUpdateLorebooks(lorebooks - book) }
                         )
                     }
@@ -984,14 +1052,24 @@ private fun getWorldInfoCharacterStrategyLabel(strategy: WorldInfoCharacterStrat
 @Composable
 private fun LorebookCard(
     book: Lorebook,
+    assistants: List<Assistant>,
     modifier: Modifier = Modifier,
     onEdit: () -> Unit,
+    onToggleEnabled: (Boolean) -> Unit,
+    onUpdateAssistantBindings: (Set<kotlin.uuid.Uuid>) -> Unit,
     onDelete: () -> Unit
 ) {
     val swipeState = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
     var showExportDialog by remember { mutableStateOf(false) }
+    var showBindingsSheet by remember { mutableStateOf(false) }
     val exporter = rememberExporter(book, LorebookSerializer)
+    val boundAssistantIds = remember(book.id, assistants) {
+        assistants
+            .filter { assistant -> book.id in assistant.lorebookIds }
+            .map { assistant -> assistant.id }
+            .toSet()
+    }
 
     SwipeToDismissBox(
         state = swipeState,
@@ -1067,6 +1145,9 @@ private fun LorebookCard(
                                 Text(stringResource(R.string.prompt_page_disabled))
                             }
                         }
+                        Tag(type = TagType.DEFAULT) {
+                            Text("助手 ${boundAssistantIds.size}")
+                        }
                         if (book.recursiveScanning) {
                             Tag(type = TagType.SUCCESS) {
                                 Text("递归扫描")
@@ -1078,6 +1159,13 @@ private fun LorebookCard(
                             }
                         }
                     }
+                }
+                Switch(
+                    checked = book.enabled,
+                    onCheckedChange = onToggleEnabled,
+                )
+                IconButton(onClick = { showBindingsSheet = true }) {
+                    Icon(HugeIcons.Link01, "绑定助手")
                 }
                 IconButton(onClick = { showExportDialog = true }) {
                     Icon(HugeIcons.Share03, stringResource(R.string.export_title))
@@ -1094,6 +1182,99 @@ private fun LorebookCard(
             exporter = exporter,
             onDismiss = { showExportDialog = false }
         )
+    }
+
+    if (showBindingsSheet) {
+        LorebookBindingSheet(
+            book = book,
+            assistants = assistants,
+            boundAssistantIds = boundAssistantIds,
+            onDismiss = { showBindingsSheet = false },
+            onUpdate = onUpdateAssistantBindings,
+        )
+    }
+}
+
+@Composable
+private fun LorebookBindingSheet(
+    book: Lorebook,
+    assistants: List<Assistant>,
+    boundAssistantIds: Set<kotlin.uuid.Uuid>,
+    onDismiss: () -> Unit,
+    onUpdate: (Set<kotlin.uuid.Uuid>) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        sheetGesturesEnabled = false,
+        dragHandle = {
+            IconButton(onClick = {
+                scope.launch {
+                    sheetState.hide()
+                    onDismiss()
+                }
+            }) {
+                Icon(HugeIcons.ArrowDown01, null)
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.8f)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "管理世界书绑定",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Text(
+                text = book.name.ifBlank { "未命名世界书" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (assistants.isEmpty()) {
+                Text(
+                    text = "暂无助手可绑定。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(assistants, key = { it.id }) { assistant ->
+                        ListItem(
+                            headlineContent = {
+                                Text(assistant.name.ifBlank { "未命名助手" })
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = assistant.id in boundAssistantIds,
+                                    onCheckedChange = { checked ->
+                                        val updatedIds = if (checked) {
+                                            boundAssistantIds + assistant.id
+                                        } else {
+                                            boundAssistantIds - assistant.id
+                                        }
+                                        onUpdate(updatedIds)
+                                    }
+                                )
+                            },
+                            colors = ListItemDefaults.colors(
+                                containerColor = Color.Transparent,
+                            )
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

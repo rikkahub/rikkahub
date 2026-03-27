@@ -48,6 +48,7 @@ import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.ScheduledPromptTask
+import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.model.TextSelectionConfig
@@ -170,6 +171,8 @@ class SettingsStore(
         val REGEXES = stringPreferencesKey("regexes")
         val ST_PRESET_ENABLED = booleanPreferencesKey("st_preset_enabled")
         val ST_PRESET_TEMPLATE = stringPreferencesKey("st_preset_template")
+        val ST_PRESETS = stringPreferencesKey("st_presets")
+        val SELECTED_ST_PRESET = stringPreferencesKey("selected_st_preset")
         val USER_PERSONA_PROFILES = stringPreferencesKey("user_persona_profiles")
         val SELECTED_USER_PERSONA_PROFILE = stringPreferencesKey("selected_user_persona_profile")
 
@@ -296,6 +299,10 @@ class SettingsStore(
                 stPresetTemplate = preferences[ST_PRESET_TEMPLATE]?.let {
                     JsonInstant.decodeFromString(it)
                 },
+                stPresets = preferences[ST_PRESETS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                selectedStPresetId = preferences[SELECTED_ST_PRESET]?.let { Uuid.parse(it) },
                 userPersonaProfiles = preferences[USER_PERSONA_PROFILES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -425,6 +432,42 @@ class SettingsStore(
                         .distinctBy { it.id }
                 )
             }
+            val normalizedStPresets = when {
+                settings.stPresets.isNotEmpty() -> {
+                    val distinctPresets = settings.stPresets.distinctBy { it.id }
+                    if (settings.regexes.isNotEmpty() && distinctPresets.none { it.regexes.isNotEmpty() }) {
+                        val fallbackPresetId = settings.selectedStPresetId ?: distinctPresets.firstOrNull()?.id
+                        distinctPresets.map { preset ->
+                            if (preset.id == fallbackPresetId) {
+                                preset.copy(regexes = settings.regexes)
+                            } else {
+                                preset
+                            }
+                        }
+                    } else {
+                        distinctPresets
+                    }
+                }
+                settings.stPresetTemplate != null -> listOf(
+                    SillyTavernPreset(
+                        template = settings.stPresetTemplate,
+                        regexes = settings.regexes,
+                    )
+                )
+                else -> emptyList()
+            }
+            val selectedStPresetId = normalizedStPresets
+                .firstOrNull { it.id == settings.selectedStPresetId }
+                ?.id
+                ?: normalizedStPresets.firstOrNull()?.id
+            val activeStPresetTemplate = normalizedStPresets
+                .firstOrNull { it.id == selectedStPresetId }
+                ?.template
+                ?: settings.stPresetTemplate
+            val activeStPresetRegexes = normalizedStPresets
+                .firstOrNull { it.id == selectedStPresetId }
+                ?.regexes
+                ?: settings.regexes
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
@@ -469,7 +512,10 @@ class SettingsStore(
                     .map { it.normalizedForSystemPromptSupplement() }
                     .distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
-                regexes = settings.regexes.distinctBy { it.id },
+                regexes = activeStPresetRegexes.distinctBy { it.id },
+                stPresets = normalizedStPresets,
+                selectedStPresetId = selectedStPresetId,
+                stPresetTemplate = activeStPresetTemplate,
                 userPersonaProfiles = userPersonaProfiles,
                 selectedUserPersonaProfileId = selectedUserPersonaProfileId,
                 scheduledTasks = settings.scheduledTasks
@@ -505,9 +551,49 @@ class SettingsStore(
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
+        val normalizedStPresets = when {
+            settings.stPresets.isNotEmpty() -> {
+                val distinctPresets = settings.stPresets.distinctBy { it.id }
+                if (settings.regexes.isNotEmpty() && distinctPresets.none { it.regexes.isNotEmpty() }) {
+                    val fallbackPresetId = settings.selectedStPresetId ?: distinctPresets.firstOrNull()?.id
+                    distinctPresets.map { preset ->
+                        if (preset.id == fallbackPresetId) {
+                            preset.copy(regexes = settings.regexes)
+                        } else {
+                            preset
+                        }
+                    }
+                } else {
+                    distinctPresets
+                }
+            }
+            settings.stPresetTemplate != null -> listOf(
+                SillyTavernPreset(
+                    template = settings.stPresetTemplate,
+                    regexes = settings.regexes,
+                )
+            )
+            else -> emptyList()
+        }
+        val selectedStPresetId = normalizedStPresets
+            .firstOrNull { it.id == settings.selectedStPresetId }
+            ?.id
+            ?: normalizedStPresets.firstOrNull()?.id
+        val activeStPresetTemplate = normalizedStPresets
+            .firstOrNull { it.id == selectedStPresetId }
+            ?.template
+            ?: settings.stPresetTemplate
+        val activeStPresetRegexes = normalizedStPresets
+            .firstOrNull { it.id == selectedStPresetId }
+            ?.regexes
+            ?: settings.regexes
         val normalizedSettings = settings.copy(
             modeInjections = settings.modeInjections.map { it.normalizedForSystemPromptSupplement() },
-            lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized()
+            lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized(),
+            stPresets = normalizedStPresets,
+            selectedStPresetId = selectedStPresetId,
+            stPresetTemplate = activeStPresetTemplate,
+            regexes = activeStPresetRegexes.distinctBy { it.id },
         )
         val previousSettings = settingsFlow.value
         if (!previousSettings.init) {
@@ -581,6 +667,10 @@ class SettingsStore(
             normalizedSettings.stPresetTemplate?.let {
                 preferences[ST_PRESET_TEMPLATE] = JsonInstant.encodeToString(it)
             } ?: preferences.remove(ST_PRESET_TEMPLATE)
+            preferences[ST_PRESETS] = JsonInstant.encodeToString(normalizedSettings.stPresets)
+            normalizedSettings.selectedStPresetId?.let {
+                preferences[SELECTED_ST_PRESET] = it.toString()
+            } ?: preferences.remove(SELECTED_ST_PRESET)
             preferences[USER_PERSONA_PROFILES] = JsonInstant.encodeToString(normalizedSettings.userPersonaProfiles)
             normalizedSettings.selectedUserPersonaProfileId?.let {
                 preferences[SELECTED_USER_PERSONA_PROFILE] = it.toString()
@@ -731,6 +821,8 @@ data class Settings(
     val regexes: List<AssistantRegex> = emptyList(),
     val stPresetEnabled: Boolean = false,
     val stPresetTemplate: SillyTavernPromptTemplate? = null,
+    val stPresets: List<SillyTavernPreset> = emptyList(),
+    val selectedStPresetId: Uuid? = null,
     val userPersonaProfiles: List<UserPersonaProfile> = emptyList(),
     val selectedUserPersonaProfileId: Uuid? = null,
     val webServerEnabled: Boolean = false,

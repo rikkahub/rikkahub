@@ -18,7 +18,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.rikkahub.R
-import me.rerere.hugeicons.stroke.Book03
+import me.rerere.hugeicons.stroke.Book01
+import me.rerere.hugeicons.stroke.MagicWand01
+import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -62,10 +64,22 @@ fun ExtensionsPage() {
                         supportingContent = { Text(stringResource(R.string.extensions_page_quick_messages_desc)) },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.Prompts) },
-                        leadingContent = { Icon(HugeIcons.Book03, null) },
-                        headlineContent = { Text(stringResource(R.string.extensions_page_prompts)) },
-                        supportingContent = { Text(stringResource(R.string.extensions_page_prompts_desc)) },
+                        onClick = { navController.navigate(Screen.StPresets) },
+                        leadingContent = { Icon(HugeIcons.MagicWand01, null) },
+                        headlineContent = { Text("SillyTavern 预设") },
+                        supportingContent = { Text("管理多个 ST 预设、切换当前预设和导出。") },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.ModeInjections) },
+                        leadingContent = { Icon(HugeIcons.Tools, null) },
+                        headlineContent = { Text("模式注入") },
+                        supportingContent = { Text("单独管理模式注入规则。") },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.Lorebooks) },
+                        leadingContent = { Icon(HugeIcons.Book01, null) },
+                        headlineContent = { Text("世界书") },
+                        supportingContent = { Text("管理世界书、全局开关和助手绑定。") },
                     )
                 }
             }

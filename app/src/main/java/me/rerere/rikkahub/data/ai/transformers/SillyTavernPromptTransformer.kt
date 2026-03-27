@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
+import me.rerere.rikkahub.data.model.activeStPresetTemplate
 import me.rerere.rikkahub.data.model.effectiveUserPersona
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.matchesGenerationType
@@ -25,7 +26,7 @@ object SillyTavernPromptTransformer : InputMessageTransformer {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        val template = ctx.settings.stPresetTemplate
+        val template = ctx.settings.activeStPresetTemplate()
             ?.takeIf { ctx.settings.stPresetEnabled }
             ?: return messages
         return transformSillyTavernPrompt(

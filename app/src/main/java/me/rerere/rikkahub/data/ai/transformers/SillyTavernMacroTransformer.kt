@@ -5,6 +5,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
+import me.rerere.rikkahub.data.model.activeStPresetTemplate
 import me.rerere.rikkahub.data.model.effectiveUserName
 import me.rerere.rikkahub.data.model.effectiveUserPersona
 import java.time.Duration
@@ -33,7 +34,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        val template = ctx.settings.stPresetTemplate
+        val template = ctx.settings.activeStPresetTemplate()
             ?.takeIf { ctx.settings.stPresetEnabled }
         val characterData = ctx.assistant.stCharacterData
         if (template == null && characterData == null) return messages
