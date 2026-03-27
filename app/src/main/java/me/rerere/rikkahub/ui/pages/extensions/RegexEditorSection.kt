@@ -48,6 +48,8 @@ import me.rerere.rikkahub.data.model.AssistantRegexSubstituteStrategy
 import me.rerere.rikkahub.ui.components.ui.EditorGuideAction
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
+import me.rerere.rikkahub.ui.components.ui.Tag
+import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.theme.CustomColors
 
 private val regexPlacementOptions = listOf(
@@ -95,6 +97,42 @@ fun RegexEditorSection(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.padding(horizontal = 8.dp)
         ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CustomColors.listItemCardColors,
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Tag(type = TagType.INFO) {
+                            Text("共 ${regexes.size} 条")
+                        }
+                        Tag(type = TagType.SUCCESS) {
+                            Text("${regexes.count { it.enabled }} 条已启用")
+                        }
+                        Tag(type = TagType.WARNING) {
+                            Text("按顺序执行")
+                        }
+                    }
+                    RegexFeatureGuideRow(
+                        title = "匹配与替换",
+                        body = "Find Regex + Replace String 用来真正改写文本；如果只是想隐藏展示内容，也可以只把它作用在 UI。"
+                    )
+                    RegexFeatureGuideRow(
+                        title = "生效位置",
+                        body = "可挂到用户输入、AI 输出、Slash Command、世界书或推理内容。来自 ST 的规则建议优先设置 ST placement 来保持原始触发时机。"
+                    )
+                    RegexFeatureGuideRow(
+                        title = "替换策略与范围",
+                        body = "RAW / ESCAPED 会先展开 {{char}}、{{user}} 等宏；Affect Scope、深度限制和 Run on edit 决定它影响真实提示词、仅影响显示，还是连历史消息一起处理。"
+                    )
+                }
+            }
             regexes.fastForEachIndexed { index, regex ->
                 RegexEditorCard(
                     regex = regex,
@@ -117,6 +155,26 @@ fun RegexEditorSection(
                 Text(stringResource(R.string.add))
             }
         }
+    }
+}
+
+@Composable
+private fun RegexFeatureGuideRow(
+    title: String,
+    body: String,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

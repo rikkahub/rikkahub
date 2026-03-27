@@ -161,6 +161,35 @@ fun SillyTavernPresetEditorCard(
                         Text(stringResource(R.string.prompt_page_st_preset_editor_drag_hint))
                     }
                 }
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "使用说明",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        StFeatureGuideRow(
+                            title = "模板和格式",
+                            body = "决定 Scenario / Personality / World Info 在最终提示词里怎么包裹。导入 ST 预设后，优先在这里确认格式外壳是否符合你的聊天风格。"
+                        )
+                        StFeatureGuideRow(
+                            title = "运行时选项",
+                            body = "控制新聊天、继续生成、群聊提醒、预填文本和名字行为。它们主要影响 ST 风格运行时，而不是单纯的系统提示词。"
+                        )
+                        StFeatureGuideRow(
+                            title = "提示词顺序和定义",
+                            body = "这里对应 ST 的 prompts + prompt_order。你可以决定哪些模块启用、以什么顺序注入，以及 normal / continue / impersonate 等场景分别使用什么内容。"
+                        )
+                    }
+                }
             }
 
             StEditorSectionCard(
@@ -619,6 +648,26 @@ private fun StBooleanSettingRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@Composable
+private fun StFeatureGuideRow(
+    title: String,
+    body: String,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium
+        )
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

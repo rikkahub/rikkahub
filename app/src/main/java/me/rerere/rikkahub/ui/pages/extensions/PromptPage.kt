@@ -784,6 +784,12 @@ fun LorebookTab(
             state = lazyListState
         ) {
             item {
+                LorebookOverviewCard(
+                    lorebooks = lorebooks,
+                    assistants = assistants,
+                )
+            }
+            item {
                 LorebookGlobalSettingsCard(
                     settings = globalSettings,
                     onEdit = onUpdateGlobalSettings,
@@ -897,6 +903,77 @@ fun LorebookTab(
                 onEdit = { editState.currentState = it }
             )
         }
+    }
+}
+
+@Composable
+private fun LorebookOverviewCard(
+    lorebooks: List<Lorebook>,
+    assistants: List<Assistant>,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "使用说明",
+                style = MaterialTheme.typography.titleMedium
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Tag(type = TagType.INFO) {
+                    Text("${lorebooks.size} 本")
+                }
+                Tag(type = TagType.SUCCESS) {
+                    Text("${assistants.count { it.lorebookIds.isNotEmpty() }} 个助手已绑定")
+                }
+                Tag(type = TagType.WARNING) {
+                    Text("按关键词自动触发")
+                }
+            }
+            LorebookGuideRow(
+                title = "全局设置",
+                body = "控制默认扫描深度、预算、递归和匹配策略，决定整个 lorebook 系统在聊天时如何搜索可触发条目。"
+            )
+            LorebookGuideRow(
+                title = "书本管理",
+                body = "每本书都可以单独启用、导出、删除，并通过链接按钮绑定到指定助手；没绑定的助手不会使用这本书。"
+            )
+            LorebookGuideRow(
+                title = "条目编辑",
+                body = "条目负责定义关键词、注入位置和高级 ST 兼容字段。建议先把基础触发跑通，再逐步加概率、分组、sticky 或 recursion。"
+            )
+        }
+    }
+}
+
+@Composable
+private fun LorebookGuideRow(
+    title: String,
+    body: String,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

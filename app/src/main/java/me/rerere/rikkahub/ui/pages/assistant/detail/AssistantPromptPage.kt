@@ -226,11 +226,36 @@ private fun AssistantPromptContent(
                     text = "SillyTavern 角色卡导入",
                     style = MaterialTheme.typography.titleMedium
                 )
-                Text(
-                    text = "可导入角色卡 PNG/JSON，以及角色卡内嵌世界书。角色卡配套 lorebook/regex 会合并到当前助手；若全局还没有 ST 预设，则自动补一份默认模板。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Tag(type = TagType.INFO) {
+                        Text("PNG / JSON")
+                    }
+                    Tag(type = TagType.SUCCESS) {
+                        Text("角色卡 + 世界书")
+                    }
+                    Tag(type = TagType.WARNING) {
+                        Text("可合并 Regex / 预设")
+                    }
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    PromptFeatureGuideRow(
+                        title = "导入内容",
+                        body = "支持 Tavern 角色卡 PNG / JSON，也会读取卡片里内嵌的世界书条目。",
+                    )
+                    PromptFeatureGuideRow(
+                        title = "自动合并",
+                        body = "导入得到的 lorebook 和 regex 会并入当前助手环境；如果全局还没有 ST 预设，会自动补一份默认模板用于兼容运行时。",
+                    )
+                    PromptFeatureGuideRow(
+                        title = "后续编辑",
+                        body = "角色卡基础信息留在当前助手下维护；共享 ST 预设、全局 Regex 和通用 Lorebook 仍在扩展页集中管理。",
+                    )
+                }
                 AssistantImporter(
                     allowedKinds = setOf(AssistantImportKind.CHARACTER_CARD),
                     onImport = { payload, includeRegexes ->
@@ -1010,4 +1035,24 @@ private fun AssistantRegexCard(
         }
     }
 
+}
+
+@Composable
+private fun PromptFeatureGuideRow(
+    title: String,
+    body: String,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
