@@ -32,6 +32,9 @@ class ExporterState<T>(
     val value: String
         get() = serializer.exportToJson(data)
 
+    val mimeType: String
+        get() = serializer.getMimeType(data)
+
     val fileName: String
         get() = serializer.getExportFileName(data)
 
@@ -45,7 +48,7 @@ class ExporterState<T>(
                 val cacheDir = File(context.cacheDir, "export")
                 cacheDir.mkdirs()
                 val file = File(cacheDir, fileName)
-                file.writeText(value)
+                file.writeBytes(serializer.exportToBytes(context, data))
                 file
             }
             val uri = FileProvider.getUriForFile(
@@ -54,7 +57,7 @@ class ExporterState<T>(
                 file
             )
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/json"
+                type = mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -65,7 +68,7 @@ class ExporterState<T>(
     internal fun writeToUri(uri: Uri) {
         scope.launch(Dispatchers.IO) {
             context.contentResolver.openOutputStream(uri)?.use { output ->
-                output.write(value.toByteArray())
+                output.write(serializer.exportToBytes(context, data))
             }
         }
     }
@@ -82,7 +85,7 @@ fun <T> rememberExporter(
     var pendingState by remember { mutableStateOf<ExporterState<T>?>(null) }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
+        contract = ActivityResultContracts.CreateDocument("*/*")
     ) { uri ->
         uri?.let { pendingState?.writeToUri(it) }
     }

@@ -13,6 +13,8 @@ import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import kotlin.text.Charsets.ISO_8859_1
+import java.io.ByteArrayOutputStream
+import java.util.zip.CRC32
 
 /**
  * 图片处理工具类
@@ -238,6 +240,56 @@ object ImageUtils {
         extractTavernCharacterMetaFromPngBytes(pngBytes)
     }
 
+    internal fun embedTavernCharacterMetaIntoPngBytes(
+        pngBytes: ByteArray,
+        jsonData: String,
+        keyword: String = "ccv3",
+    ): ByteArray {
+        require(keyword.isNotBlank()) { "PNG text keyword must not be blank" }
+        require(pngBytes.size >= PNG_SIGNATURE.size) { "Invalid PNG data" }
+        require(pngBytes.copyOfRange(0, PNG_SIGNATURE.size).contentEquals(PNG_SIGNATURE)) {
+            "No PNG signature found, please check if the image is a PNG"
+        }
+
+        val output = ByteArrayOutputStream(pngBytes.size + jsonData.length + 128)
+        output.write(PNG_SIGNATURE)
+
+        val normalizedKeyword = keyword.trim()
+        var offset = PNG_SIGNATURE.size
+        var inserted = false
+
+        while (offset + 12 <= pngBytes.size) {
+            val length = readPngInt(pngBytes, offset)
+            val chunkStart = offset
+            val chunkTypeStart = offset + 4
+            val dataStart = offset + 8
+            val dataEnd = dataStart + length
+            val chunkEnd = dataEnd + 4
+            require(length >= 0 && chunkEnd <= pngBytes.size) { "Invalid PNG chunk length" }
+
+            val chunkType = pngBytes.decodeToString(chunkTypeStart, chunkTypeStart + 4)
+            val shouldSkip = chunkType == "tEXt" && parsePngTextChunk(
+                pngBytes.copyOfRange(dataStart, dataEnd)
+            )?.first?.trim()?.lowercase() in TAVERN_CHARACTER_META_KEYS
+
+            if (!shouldSkip) {
+                if (chunkType == "IEND" && !inserted) {
+                    output.write(buildPngTextChunk(normalizedKeyword, jsonData))
+                    inserted = true
+                }
+                output.write(pngBytes, chunkStart, chunkEnd - chunkStart)
+            }
+
+            offset = chunkEnd
+            if (chunkType == "IEND") {
+                break
+            }
+        }
+
+        require(inserted) { "Invalid PNG data: IEND chunk not found" }
+        return output.toByteArray()
+    }
+
     internal fun extractTavernCharacterMetaFromPngBytes(bytes: ByteArray): String {
         require(bytes.size >= PNG_SIGNATURE.size) { "Invalid PNG data" }
         require(bytes.copyOfRange(0, PNG_SIGNATURE.size).contentEquals(PNG_SIGNATURE)) {
@@ -286,6 +338,35 @@ object ImageUtils {
             (bytes[offset + 3].toInt() and 0xFF)
     }
 
+    private fun buildPngTextChunk(keyword: String, text: String): ByteArray {
+        val keywordBytes = keyword.toByteArray(Charsets.US_ASCII)
+        val textBytes = text.toByteArray(ISO_8859_1)
+        val dataBytes = ByteArray(keywordBytes.size + 1 + textBytes.size).also { buffer ->
+            keywordBytes.copyInto(buffer, destinationOffset = 0)
+            buffer[keywordBytes.size] = 0
+            textBytes.copyInto(buffer, destinationOffset = keywordBytes.size + 1)
+        }
+        val typeBytes = "tEXt".toByteArray(Charsets.US_ASCII)
+        val crc = CRC32().apply {
+            update(typeBytes)
+            update(dataBytes)
+        }.value.toInt()
+
+        return ByteArrayOutputStream(dataBytes.size + 12).apply {
+            writePngInt(dataBytes.size)
+            write(typeBytes)
+            write(dataBytes)
+            writePngInt(crc)
+        }.toByteArray()
+    }
+
+    private fun ByteArrayOutputStream.writePngInt(value: Int) {
+        write((value ushr 24) and 0xFF)
+        write((value ushr 16) and 0xFF)
+        write((value ushr 8) and 0xFF)
+        write(value and 0xFF)
+    }
+
     private fun parsePngTextChunk(bytes: ByteArray): Pair<String, String>? {
         val separatorIndex = bytes.indexOf(0)
         if (separatorIndex <= 0) return null
@@ -324,4 +405,5 @@ object ImageUtils {
     )
 
     private val LEGACY_CHARA_REGEX = Regex("""\[chara:\s*(.+?)]""", setOf(RegexOption.IGNORE_CASE))
+    private val TAVERN_CHARACTER_META_KEYS = setOf("ccv3", "chara")
 }

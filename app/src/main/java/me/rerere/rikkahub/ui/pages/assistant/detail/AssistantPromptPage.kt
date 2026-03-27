@@ -75,6 +75,7 @@ import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.TransformerContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.export.SillyTavernCharacterCardExportData
+import me.rerere.rikkahub.data.export.SillyTavernCharacterCardPngSerializer
 import me.rerere.rikkahub.data.export.SillyTavernCharacterCardSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.model.Assistant
@@ -190,12 +191,20 @@ private fun AssistantPromptContent(
     val activePreset = settings.selectedStPreset()
     val linkedLorebooks = settings.lorebooks.filter { assistant.lorebookIds.contains(it.id) }
     var showCharacterExportDialog by remember { mutableStateOf(false) }
-    val characterCardExporter = rememberExporter(
-        data = SillyTavernCharacterCardExportData(
+    var showCharacterPngExportDialog by remember { mutableStateOf(false) }
+    val characterCardExportData = remember(assistant, linkedLorebooks) {
+        SillyTavernCharacterCardExportData(
             assistant = assistant,
             lorebooks = linkedLorebooks,
-        ),
+        )
+    }
+    val characterCardExporter = rememberExporter(
+        data = characterCardExportData,
         serializer = SillyTavernCharacterCardSerializer,
+    )
+    val characterCardPngExporter = rememberExporter(
+        data = characterCardExportData,
+        serializer = SillyTavernCharacterCardPngSerializer,
     )
 
     Column(
@@ -329,7 +338,12 @@ private fun AssistantPromptContent(
                             TextButton(
                                 onClick = { showCharacterExportDialog = true }
                             ) {
-                                Text("导出角色卡")
+                                Text("导出角色卡 JSON")
+                            }
+                            TextButton(
+                                onClick = { showCharacterPngExportDialog = true }
+                            ) {
+                                Text("导出角色卡 PNG")
                             }
                         }
                     }
@@ -684,6 +698,14 @@ private fun AssistantPromptContent(
             exporter = characterCardExporter,
             title = "导出 ST 角色卡",
             onDismiss = { showCharacterExportDialog = false }
+        )
+    }
+
+    if (showCharacterPngExportDialog) {
+        ExportDialog(
+            exporter = characterCardPngExporter,
+            title = "导出 ST PNG 角色卡",
+            onDismiss = { showCharacterPngExportDialog = false }
         )
     }
 }

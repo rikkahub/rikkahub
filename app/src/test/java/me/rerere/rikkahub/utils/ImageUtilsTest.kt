@@ -3,6 +3,7 @@ package me.rerere.rikkahub.utils
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.ByteArrayOutputStream
+import java.util.Base64
 import kotlin.text.Charsets.ISO_8859_1
 
 class ImageUtilsTest {
@@ -27,6 +28,19 @@ class ImageUtilsTest {
         val result = ImageUtils.extractTavernCharacterMetaFromPngBytes(pngBytes)
 
         assertEquals("legacy-card", result)
+    }
+
+    @Test
+    fun `should embed and extract tavern character metadata from png`() {
+        val sourcePng = Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO8B9pQAAAAASUVORK5CYII="
+        )
+        val json = """{"spec":"chara_card_v2","data":{"name":"Test"}}"""
+
+        val embedded = ImageUtils.embedTavernCharacterMetaIntoPngBytes(sourcePng, json)
+        val extracted = ImageUtils.extractTavernCharacterMetaFromPngBytes(embedded)
+
+        assertEquals(json, extracted)
     }
 
     private fun buildPngWithTextChunks(vararg chunks: Pair<String, String>): ByteArray {

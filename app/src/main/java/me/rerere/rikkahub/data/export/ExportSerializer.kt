@@ -35,12 +35,18 @@ interface ExportSerializer<T> {
     fun export(data: T): ExportData
     fun import(context: Context, uri: Uri): Result<T>
 
+    fun getMimeType(data: T): String = "application/json"
+
     // 获取导出文件名
     fun getExportFileName(data: T): String = "${type}.json"
 
     // 便捷方法：直接导出为 JSON 字符串
     fun exportToJson(data: T, json: Json = DefaultJson): String {
         return json.encodeToString(ExportData.serializer(), export(data))
+    }
+
+    fun exportToBytes(context: Context, data: T): ByteArray {
+        return exportToJson(data).encodeToByteArray()
     }
 
     // 读取 URI 内容的便捷方法

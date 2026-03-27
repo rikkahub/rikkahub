@@ -1,7 +1,16 @@
 package me.rerere.rikkahub.data.export
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.Shader
 import android.net.Uri
+import androidx.core.net.toUri
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -16,6 +25,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
+import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
@@ -25,7 +35,9 @@ import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImportKind
 import me.rerere.rikkahub.ui.pages.assistant.detail.parseAssistantImportFromJson
 import me.rerere.rikkahub.ui.pages.assistant.detail.toSillyTavernPreset
+import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.JsonInstantPretty
+import java.io.ByteArrayOutputStream
 
 object SillyTavernPresetExportSerializer : ExportSerializer<SillyTavernPreset> {
     override val type: String = "st_preset"
@@ -323,6 +335,33 @@ object SillyTavernCharacterCardSerializer : ExportSerializer<SillyTavernCharacte
     }
 }
 
+object SillyTavernCharacterCardPngSerializer : ExportSerializer<SillyTavernCharacterCardExportData> {
+    override val type: String = "st_character_card_png"
+
+    override fun export(data: SillyTavernCharacterCardExportData): ExportData {
+        return ExportData(type = type, data = JsonPrimitive(getExportFileName(data)))
+    }
+
+    override fun getMimeType(data: SillyTavernCharacterCardExportData): String = "image/png"
+
+    override fun getExportFileName(data: SillyTavernCharacterCardExportData): String {
+        val name = data.assistant.stCharacterData?.name
+            ?.takeIf { it.isNotBlank() }
+            ?: data.assistant.name.ifBlank { "character-card" }
+        return "$name.png"
+    }
+
+    override fun exportToBytes(context: Context, data: SillyTavernCharacterCardExportData): ByteArray {
+        val json = SillyTavernCharacterCardSerializer.exportToJson(data)
+        val basePng = loadBaseCardPngBytes(context, data.assistant)
+        return ImageUtils.embedTavernCharacterMetaIntoPngBytes(basePng, json)
+    }
+
+    override fun import(context: Context, uri: Uri): Result<SillyTavernCharacterCardExportData> {
+        return Result.failure(UnsupportedOperationException("Character card PNG serializer does not support import"))
+    }
+}
+
 private val RESERVED_LOREBOOK_EXTENSION_KEYS = setOf(
     "position",
     "depth",
@@ -419,4 +458,68 @@ private fun Assistant.firstAssistantPresetMessage(): String {
         ?.filterIsInstance<UIMessagePart.Text>()
         ?.joinToString("") { it.text }
         .orEmpty()
+}
+
+private fun loadBaseCardPngBytes(context: Context, assistant: Assistant): ByteArray {
+    val avatarUri = (assistant.avatar as? Avatar.Image)?.url?.takeIf { it.isNotBlank() }?.toUri()
+    val bitmap = avatarUri?.let { uri ->
+        runCatching {
+            context.contentResolver.openInputStream(uri)?.use(BitmapFactory::decodeStream)
+        }.getOrNull()
+    } ?: createFallbackCardBitmap(assistant)
+
+    return ByteArrayOutputStream().use { output ->
+        check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "Failed to encode PNG" }
+        bitmap.recycle()
+        output.toByteArray()
+    }
+}
+
+private fun createFallbackCardBitmap(assistant: Assistant): Bitmap {
+    val width = 512
+    val height = 768
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+
+    val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        shader = LinearGradient(
+            0f,
+            0f,
+            width.toFloat(),
+            height.toFloat(),
+            Color.parseColor("#1B2838"),
+            Color.parseColor("#314E68"),
+            Shader.TileMode.CLAMP,
+        )
+    }
+    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
+
+    val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#D9A441")
+        alpha = 110
+    }
+    canvas.drawCircle(width * 0.78f, height * 0.22f, width * 0.22f, accentPaint)
+
+    val label = when (val avatar = assistant.avatar) {
+        is Avatar.Emoji -> avatar.content.takeIf { it.isNotBlank() }
+        else -> null
+    } ?: assistant.stCharacterData?.name
+        ?.takeIf { it.isNotBlank() }
+        ?: assistant.name
+            .takeIf { it.isNotBlank() }
+        ?: "ST"
+
+    val text = label.trim().ifEmpty { "ST" }.take(20)
+    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.CENTER
+        textSize = if (text.length <= 2) 180f else 72f
+        isFakeBoldText = true
+    }
+    val textBounds = Rect()
+    textPaint.getTextBounds(text, 0, text.length, textBounds)
+    val baseline = height / 2f - textBounds.exactCenterY()
+    canvas.drawText(text, width / 2f, baseline, textPaint)
+
+    return bitmap
 }
