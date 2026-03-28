@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -103,15 +104,24 @@ fun AssistantExtensionsPage(id: String) {
                                 onAction = { navController.navigate(Screen.QuickMessages) },
                             )
                         } else {
-                            QuickMessagesContent(
-                                quickMessages = settings.quickMessages,
-                                selectedIds = assistant.quickMessageIds,
-                                onToggle = { quickMessageId, checked ->
-                                    val newIds = if (checked) assistant.quickMessageIds + quickMessageId
-                                    else assistant.quickMessageIds - quickMessageId
-                                    vm.update(assistant.copy(quickMessageIds = newIds))
-                                },
-                            )
+                            Column {
+                                QuickMessagesContent(
+                                    modifier = Modifier.weight(1f),
+                                    quickMessages = settings.quickMessages,
+                                    selectedIds = assistant.quickMessageIds,
+                                    onToggle = { quickMessageId, checked ->
+                                        val newIds = if (checked) assistant.quickMessageIds + quickMessageId
+                                        else assistant.quickMessageIds - quickMessageId
+                                        vm.update(assistant.copy(quickMessageIds = newIds))
+                                    },
+                                )
+                                TextButton(
+                                    onClick = { navController.navigate(Screen.QuickMessages) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(stringResource(R.string.assistant_extensions_page_goto_extensions))
+                                }
+                            }
                         }
                     }
 
@@ -123,15 +133,24 @@ fun AssistantExtensionsPage(id: String) {
                                 onAction = { navController.navigate(Screen.Prompts) },
                             )
                         } else {
-                            ModeInjectionsContent(
-                                modeInjections = settings.modeInjections,
-                                selectedIds = assistant.modeInjectionIds,
-                                onToggle = { injId, checked ->
-                                    val newIds = if (checked) assistant.modeInjectionIds + injId
-                                    else assistant.modeInjectionIds - injId
-                                    vm.update(assistant.copy(modeInjectionIds = newIds))
-                                },
-                            )
+                            Column {
+                                ModeInjectionsContent(
+                                    modifier = Modifier.weight(1f),
+                                    modeInjections = settings.modeInjections,
+                                    selectedIds = assistant.modeInjectionIds,
+                                    onToggle = { injId, checked ->
+                                        val newIds = if (checked) assistant.modeInjectionIds + injId
+                                        else assistant.modeInjectionIds - injId
+                                        vm.update(assistant.copy(modeInjectionIds = newIds))
+                                    },
+                                )
+                                TextButton(
+                                    onClick = { navController.navigate(Screen.Prompts) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(stringResource(R.string.assistant_extensions_page_goto_prompts))
+                                }
+                            }
                         }
                     }
 
@@ -143,15 +162,24 @@ fun AssistantExtensionsPage(id: String) {
                                 onAction = { navController.navigate(Screen.Prompts) },
                             )
                         } else {
-                            LorebooksContent(
-                                lorebooks = settings.lorebooks,
-                                selectedIds = assistant.lorebookIds,
-                                onToggle = { injId, checked ->
-                                    val newIds = if (checked) assistant.lorebookIds + injId
-                                    else assistant.lorebookIds - injId
-                                    vm.update(assistant.copy(lorebookIds = newIds))
-                                },
-                            )
+                            Column {
+                                LorebooksContent(
+                                    modifier = Modifier.weight(1f),
+                                    lorebooks = settings.lorebooks,
+                                    selectedIds = assistant.lorebookIds,
+                                    onToggle = { injId, checked ->
+                                        val newIds = if (checked) assistant.lorebookIds + injId
+                                        else assistant.lorebookIds - injId
+                                        vm.update(assistant.copy(lorebookIds = newIds))
+                                    },
+                                )
+                                TextButton(
+                                    onClick = { navController.navigate(Screen.Prompts) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(stringResource(R.string.assistant_extensions_page_goto_prompts))
+                                }
+                            }
                         }
                     }
 
@@ -163,15 +191,24 @@ fun AssistantExtensionsPage(id: String) {
                                 onAction = { navController.navigate(Screen.Skills) },
                             )
                         } else {
-                            SkillsContent(
-                                skills = skills,
-                                enabledSkills = assistant.enabledSkills,
-                                onToggle = { name, checked ->
-                                    val newSkills = if (checked) assistant.enabledSkills + name
-                                    else assistant.enabledSkills - name
-                                    vm.update(assistant.copy(enabledSkills = newSkills))
-                                },
-                            )
+                            Column {
+                                SkillsContent(
+                                    modifier = Modifier.weight(1f),
+                                    skills = skills,
+                                    enabledSkills = assistant.enabledSkills,
+                                    onToggle = { name, checked ->
+                                        val newSkills = if (checked) assistant.enabledSkills + name
+                                        else assistant.enabledSkills - name
+                                        vm.update(assistant.copy(enabledSkills = newSkills))
+                                    },
+                                )
+                                TextButton(
+                                    onClick = { navController.navigate(Screen.Skills) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(stringResource(R.string.assistant_extensions_page_goto_extensions))
+                                }
+                            }
                         }
                     }
                 }

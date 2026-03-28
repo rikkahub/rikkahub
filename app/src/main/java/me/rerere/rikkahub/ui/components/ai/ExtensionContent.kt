@@ -33,9 +33,10 @@ fun ModeInjectionsContent(
     modeInjections: List<PromptInjection.ModeInjection>,
     selectedIds: Set<kotlin.uuid.Uuid>,
     onToggle: (kotlin.uuid.Uuid, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(modeInjections) { injection ->
@@ -60,9 +61,10 @@ fun LorebooksContent(
     lorebooks: List<Lorebook>,
     selectedIds: Set<kotlin.uuid.Uuid>,
     onToggle: (kotlin.uuid.Uuid, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(lorebooks) { lorebook ->
@@ -96,9 +98,10 @@ fun SkillsContent(
     skills: List<SkillMetadata>,
     enabledSkills: Set<String>,
     onToggle: (String, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(skills, key = { it.name }) { skill ->
@@ -130,9 +133,10 @@ fun QuickMessagesContent(
     quickMessages: List<QuickMessage>,
     selectedIds: Set<kotlin.uuid.Uuid>,
     onToggle: (kotlin.uuid.Uuid, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(quickMessages, key = { it.id }) { quickMessage ->
