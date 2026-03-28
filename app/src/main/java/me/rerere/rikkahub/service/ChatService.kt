@@ -734,7 +734,7 @@ class ChatService(
                     messageNodes = conversation.messageNodes.subList(0, nodeIndex + 1)
                 )
                 saveConversation(conversationId, truncatedConversation)
-                resetConversationStMacroState(conversationId)
+                // Continue should inherit ST runtime state from the reply being extended.
                 handleMessageComplete(
                     conversationId = conversationId,
                     stGenerationType = "continue",

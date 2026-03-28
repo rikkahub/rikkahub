@@ -679,8 +679,8 @@ fun PromptInjection.RegexInjection.matchesTriggerKeywords(
     globalSettings: LorebookGlobalSettings? = null,
 ): Boolean {
     if (!enabled) return false
-    if (constantActive) return true
     if (!matchesGenerationType(triggerContext.generationType)) return false
+    if (constantActive) return true
     if (keywords.isEmpty()) return false
     val caseSensitive = effectiveCaseSensitive(globalSettings)
     val matchWholeWords = effectiveMatchWholeWords(globalSettings)

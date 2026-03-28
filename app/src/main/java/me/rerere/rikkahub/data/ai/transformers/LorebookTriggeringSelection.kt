@@ -97,19 +97,10 @@ internal fun selectTriggeredLorebookEntries(
 
     val selected = mutableListOf<PromptInjection.RegexInjection>()
     var currentBudget = 0
-    var overflowed = false
-    var remainingIgnoreBudget = orderedEntries.count { it.entry.ignoreBudget() }
 
     for (candidate in orderedEntries) {
-        remainingIgnoreBudget -= if (candidate.entry.ignoreBudget()) 1 else 0
-        if (overflowed && !candidate.entry.ignoreBudget()) {
-            if (remainingIgnoreBudget > 0) continue
-            break
-        }
-
         val contentTokens = estimateLorebookTokenCount(candidate.entry.content)
         if (!candidate.entry.ignoreBudget() && currentBudget + contentTokens > budget) {
-            overflowed = true
             continue
         }
 
@@ -226,20 +217,12 @@ internal fun selectBudgetedCandidates(
     )
     val selected = mutableListOf<PromptInjection.RegexInjection>()
     var currentBudget = activatedEntries.sumOf { estimateLorebookTokenCount(it.content) }
-    var overflowed = false
-    var remainingIgnoreBudget = orderedCandidates.count { it.entry.ignoreBudget() }
 
     for (candidate in orderedCandidates) {
-        remainingIgnoreBudget -= if (candidate.entry.ignoreBudget()) 1 else 0
-        if (overflowed && !candidate.entry.ignoreBudget()) {
-            if (remainingIgnoreBudget > 0) continue
-            break
-        }
         if (!candidate.entry.passesProbabilityCheck(forceSuccess = candidate.isSticky)) continue
 
         val contentTokens = estimateLorebookTokenCount(candidate.entry.content)
         if (budget != null && budget > 0 && !candidate.entry.ignoreBudget() && currentBudget + contentTokens > budget) {
-            overflowed = true
             continue
         }
 
