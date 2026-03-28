@@ -143,8 +143,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val chatListState = rememberLazyListState()
-    LaunchedEffect(vm) {
-        if (nodeId == null && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
+    LaunchedEffect(vm, conversation.messageNodes.size) {
+        if (nodeId == null && !vm.chatListInitialized && conversation.messageNodes.isNotEmpty()) {
             chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
             vm.chatListInitialized = true
         }
