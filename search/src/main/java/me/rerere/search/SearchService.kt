@@ -170,7 +170,7 @@ sealed class SearchServiceOptions {
     @SerialName("exa")
     data class ExaOptions(
         override val id: Uuid = Uuid.random(),
-        val apiKey: String = ""
+        val apiKey: String = "",
     ) : SearchServiceOptions()
 
     @Serializable
