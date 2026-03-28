@@ -980,5 +980,8 @@
   <string name="skill_detail_page_file_name">Имя файла</string>
   <string name="skill_detail_page_file_name_invalid">Неверное имя файла</string>
   <string name="skill_detail_page_create">Создать</string>
+  <string name="setting_display_page_volume_key_scroll_title">Прокрутка страниц клавишами громкости</string>
+  <string name="setting_display_page_volume_key_scroll_desc">Прокрутка страниц клавишами громкости, идеально для экранов электронных чернил</string>
+  <string name="setting_display_page_volume_key_scroll_ratio">Величина прокрутки</string>
 </resources>
 

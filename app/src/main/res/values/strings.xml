@@ -992,5 +992,8 @@
   <string name="skill_detail_page_file_name">File Name</string>
   <string name="skill_detail_page_file_name_invalid">Invalid file name</string>
   <string name="skill_detail_page_create">Create</string>
+  <string name="setting_display_page_volume_key_scroll_title">Volume Key Page Scroll</string>
+  <string name="setting_display_page_volume_key_scroll_desc">Scroll pages with volume keys, ideal for e-ink screens</string>
+  <string name="setting_display_page_volume_key_scroll_ratio">Scroll Amount</string>
 </resources>
 

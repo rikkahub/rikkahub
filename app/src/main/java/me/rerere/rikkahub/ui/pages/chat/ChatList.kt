@@ -67,7 +67,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
 import androidx.compose.ui.res.stringResource
@@ -204,6 +207,25 @@ private fun ChatListNormal(
     var isRecentScroll by remember { mutableStateOf(false) }
     val conversationUpdated by rememberUpdatedState(conversation)
     val density = LocalDensity.current
+    val activity = LocalContext.current as? me.rerere.rikkahub.RouteActivity
+
+    DisposableEffect(Unit) {
+        val listener: (Boolean) -> Boolean = { isVolumeUp ->
+            if (settings.displaySetting.enableVolumeKeyScroll) {
+                val bottomPaddingPx = with(density) {
+                    (32.dp + innerPadding.calculateBottomPadding()).toPx()
+                }
+                val scrollAmount = (state.layoutInfo.viewportSize.height - bottomPaddingPx) *
+                    settings.displaySetting.volumeKeyScrollRatio
+                scope.launch { state.scrollBy(if (isVolumeUp) -scrollAmount else scrollAmount) }
+                true
+            } else false
+        }
+        activity?.volumeKeyListeners?.add(listener)
+        onDispose {
+            activity?.volumeKeyListeners?.remove(listener)
+        }
+    }
 
     fun List<LazyListItemInfo>.isAtBottom(): Boolean {
         val lastItem = lastOrNull() ?: return false

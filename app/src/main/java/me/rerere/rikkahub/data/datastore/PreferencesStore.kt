@@ -551,6 +551,8 @@ data class DisplaySetting(
     val enableLatexRendering: Boolean = true,
     val enableBlurEffect: Boolean = false,
     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
+    val enableVolumeKeyScroll: Boolean = false,
+    val volumeKeyScrollRatio: Float = 1.0f,
 )
 
 @Serializable

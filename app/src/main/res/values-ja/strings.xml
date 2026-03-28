@@ -987,5 +987,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="skill_detail_page_file_name">ファイル名</string>
   <string name="skill_detail_page_file_name_invalid">無効なファイル名</string>
   <string name="skill_detail_page_create">作成</string>
+  <string name="setting_display_page_volume_key_scroll_title">音量キーでページスクロール</string>
+  <string name="setting_display_page_volume_key_scroll_desc">音量キーでページをスクロール、電子ペーパー画面に最適</string>
+  <string name="setting_display_page_volume_key_scroll_ratio">スクロロール量</string>
 </resources>
 

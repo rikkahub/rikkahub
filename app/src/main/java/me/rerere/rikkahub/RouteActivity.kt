@@ -3,6 +3,7 @@ package me.rerere.rikkahub
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -124,6 +125,21 @@ class RouteActivity : ComponentActivity() {
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
     private var navStack: MutableList<NavKey>? = null
+
+    // Volume key listener registry — last registered handler wins
+    internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val isVolumeUp = when (event.keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> true
+                KeyEvent.KEYCODE_VOLUME_DOWN -> false
+                else -> return super.dispatchKeyEvent(event)
+            }
+            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

@@ -581,6 +581,41 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 )
                             },
                         )
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_title)) },
+                            supportingContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = displaySetting.enableVolumeKeyScroll,
+                                    onCheckedChange = {
+                                        updateDisplaySetting(displaySetting.copy(enableVolumeKeyScroll = it))
+                                    }
+                                )
+                            },
+                        )
+                        if (displaySetting.enableVolumeKeyScroll) {
+                            item(
+                                headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_ratio)) },
+                                supportingContent = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Slider(
+                                            value = displaySetting.volumeKeyScrollRatio,
+                                            onValueChange = {
+                                                updateDisplaySetting(displaySetting.copy(volumeKeyScrollRatio = it))
+                                            },
+                                            valueRange = 0.25f..1.0f,
+                                            steps = 2,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(text = "${(displaySetting.volumeKeyScrollRatio * 100).toInt()}%")
+                                    }
+                                }
+                            )
+                        }
                     }
 
                     if (displaySetting.pasteLongTextAsFile) {

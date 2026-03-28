@@ -985,5 +985,8 @@
   <string name="skill_detail_page_file_name">檔案名稱</string>
   <string name="skill_detail_page_file_name_invalid">檔案名稱無效</string>
   <string name="skill_detail_page_create">建立</string>
+  <string name="setting_display_page_volume_key_scroll_title">音量鍵翻頁</string>
+  <string name="setting_display_page_volume_key_scroll_desc">使用音量鍵捲動頁面，適合電子墨水螢幕</string>
+  <string name="setting_display_page_volume_key_scroll_ratio">捲動幅度</string>
 </resources>
 
