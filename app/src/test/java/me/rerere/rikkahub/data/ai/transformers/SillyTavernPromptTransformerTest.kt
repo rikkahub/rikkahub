@@ -143,6 +143,33 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
+    fun `prompt entries with literal regex tags should remain in rendered prompt`() {
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(
+                    identifier = "main",
+                    role = MessageRole.SYSTEM,
+                    content = "<regex order=3>\"/Human: /gs\":\"User: \"</regex>",
+                ),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("main", "chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = Assistant(),
+            lorebooks = emptyList(),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("<regex order=3>\"/Human: /gs\":\"User: \"</regex>", "Hello"),
+            result.map { it.toText() }
+        )
+    }
+
+    @Test
     fun `chat history should include new chat prompt and character depth prompt`() {
         val template = SillyTavernPromptTemplate(
             newChatPrompt = "[Start]",

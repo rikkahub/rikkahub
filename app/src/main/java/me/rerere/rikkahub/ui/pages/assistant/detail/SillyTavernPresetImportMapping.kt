@@ -42,13 +42,20 @@ internal fun buildPresetPromptOrder(preset: StPresetImport): List<SillyTavernPro
         }
 }
 
-internal fun buildPresetPromptItems(preset: StPresetImport): List<SillyTavernPromptItem> {
+internal fun buildPresetPromptItems(
+    preset: StPresetImport,
+    importInlinePromptRegexes: Boolean,
+): List<SillyTavernPromptItem> {
     return preset.prompts.map { prompt ->
         SillyTavernPromptItem(
             identifier = prompt.identifier,
             name = prompt.name.orEmpty(),
             role = prompt.role.toMessageRole(),
-            content = stripInlineRegexBlocks(prompt.content.orEmpty()),
+            content = if (importInlinePromptRegexes) {
+                stripInlineRegexBlocks(prompt.content.orEmpty())
+            } else {
+                prompt.content.orEmpty()
+            },
             systemPrompt = prompt.systemPrompt ?: true,
             marker = prompt.marker ?: false,
             enabled = prompt.enabled ?: true,
@@ -101,6 +108,7 @@ internal fun buildPresetRegexes(
     promptItems: List<SillyTavernPromptItem>,
     promptOrder: List<SillyTavernPromptOrderItem>,
 ): List<me.rerere.rikkahub.data.model.AssistantRegex> {
+    val shouldImportInlinePromptRegexes = json.hasRikkaHubInlinePromptRegexMarker()
     return buildList {
         addAll(parseRegexScripts(json["extensions"]?.jsonObject?.get("regex_scripts"), sourceName = preset.name))
         addAll(parseRegexScripts(
@@ -113,18 +121,20 @@ internal fun buildPresetRegexes(
             sourceName = "${preset.name} (SPreset)",
         ))
         val promptOrderMap = promptOrder.associateBy { it.identifier }
-        promptItems
-            .filter { prompt ->
-                val orderItem = promptOrderMap[prompt.identifier] ?: return@filter false
-                orderItem.enabled && prompt.matchesGenerationType("normal")
-            }
-            .forEach { prompt ->
-                val rawContent = preset.prompts
-                    .firstOrNull { it.identifier == prompt.identifier }
-                    ?.content
-                    .orEmpty()
-                addAll(parseInlinePromptRegexes(prompt.copy(content = rawContent)))
-            }
+        if (shouldImportInlinePromptRegexes) {
+            promptItems
+                .filter { prompt ->
+                    val orderItem = promptOrderMap[prompt.identifier] ?: return@filter false
+                    orderItem.enabled && prompt.matchesGenerationType("normal")
+                }
+                .forEach { prompt ->
+                    val rawContent = preset.prompts
+                        .firstOrNull { it.identifier == prompt.identifier }
+                        ?.content
+                        .orEmpty()
+                    addAll(parseInlinePromptRegexes(prompt.copy(content = rawContent)))
+                }
+        }
     }.distinctBy(::regexDedupKey)
 }
 

@@ -10,8 +10,12 @@ internal fun parsePresetImport(
 ): AssistantImportPayload {
     val preset = ImportJson.decodeFromJsonElement<StPresetImport>(json)
     val stopSequences = resolvePresetStopSequences(json, preset)
+    val importInlinePromptRegexes = json.hasRikkaHubInlinePromptRegexMarker()
     val promptOrder = buildPresetPromptOrder(preset)
-    val promptItems = buildPresetPromptItems(preset)
+    val promptItems = buildPresetPromptItems(
+        preset = preset,
+        importInlinePromptRegexes = importInlinePromptRegexes,
+    )
     val template = buildPresetTemplate(
         preset = preset,
         sourceName = sourceName,

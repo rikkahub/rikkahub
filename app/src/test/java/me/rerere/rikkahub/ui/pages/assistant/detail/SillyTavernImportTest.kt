@@ -10,7 +10,6 @@ import me.rerere.rikkahub.data.model.findPromptOrder
 import me.rerere.rikkahub.data.model.stExtension
 import me.rerere.rikkahub.utils.base64Encode
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -85,15 +84,16 @@ class SillyTavernImportTest {
         assertEquals(AssistantImportKind.PRESET, payload.kind)
         assertEquals(listOf("main", "chatHistory"), payload.presetTemplate?.orderedPromptIds)
         assertEquals(true, payload.presetTemplate?.findPromptOrder("main")?.enabled)
-        assertEquals(2, payload.regexes.size)
-        assertFalse(payload.presetTemplate?.findPrompt("main")?.content?.contains("<regex>") == true)
+        assertEquals(1, payload.regexes.size)
+        assertEquals(
+            "Main body <regex>\"foo\":\"baz\"</regex>",
+            payload.presetTemplate?.findPrompt("main")?.content,
+        )
         assertEquals(
             AssistantRegexSourceKind.ST_SCRIPT,
             payload.regexes.firstOrNull { it.name == "Preset Regex" }?.sourceKind,
         )
-        val inlineRegex = payload.regexes.firstOrNull { it.sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT }
-        assertNotNull(inlineRegex)
-        assertEquals("main", inlineRegex?.sourceRef)
+        assertNull(payload.regexes.firstOrNull { it.sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT })
         assertEquals(listOf("normal", "continue"), payload.presetTemplate?.findPrompt("main")?.injectionTriggers)
         assertEquals("Prefill", payload.presetTemplate?.assistantPrefill)
         assertEquals(true, payload.presetTemplate?.continuePrefill)

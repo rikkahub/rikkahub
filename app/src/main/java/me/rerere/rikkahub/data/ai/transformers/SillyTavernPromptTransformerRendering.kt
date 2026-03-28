@@ -258,7 +258,7 @@ private fun resolvePromptText(
             key = "scenario",
         )
 
-        else -> stripInlineRegexBlocks(prompt.content)
+        else -> prompt.content
     }.trim()
 
     return text.takeIf { it.isNotBlank() }

@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImportKind
+import me.rerere.rikkahub.ui.pages.assistant.detail.RIKKAHUB_INLINE_PROMPT_REGEXES_KEY
 import me.rerere.rikkahub.ui.pages.assistant.detail.parseAssistantImportFromJson
 import me.rerere.rikkahub.ui.pages.assistant.detail.toSillyTavernPreset
 import me.rerere.rikkahub.utils.JsonInstantPretty
@@ -136,12 +137,17 @@ private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
                 }
             })
         }
-        if (scriptRegexes.isNotEmpty()) {
+        if (scriptRegexes.isNotEmpty() || inlinePromptRegexesByIdentifier.isNotEmpty()) {
             putJsonObject("extensions") {
-                putJsonArray("regex_scripts") {
-                    scriptRegexes.forEach { regex ->
-                        add(buildRegexScript(regex))
+                if (scriptRegexes.isNotEmpty()) {
+                    putJsonArray("regex_scripts") {
+                        scriptRegexes.forEach { regex ->
+                            add(buildRegexScript(regex))
+                        }
                     }
+                }
+                if (inlinePromptRegexesByIdentifier.isNotEmpty()) {
+                    put(RIKKAHUB_INLINE_PROMPT_REGEXES_KEY, true)
                 }
             }
         }

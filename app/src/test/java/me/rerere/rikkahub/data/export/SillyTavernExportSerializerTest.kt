@@ -15,10 +15,13 @@ import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.SillyTavernPresetSampling
+import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
+import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.ui.pages.assistant.detail.parseAssistantImportFromJson
 import me.rerere.rikkahub.ui.pages.assistant.detail.toSillyTavernPreset
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -102,7 +105,7 @@ class SillyTavernExportSerializerTest {
     }
 
     @Test
-    fun `preset export should round trip inline prompt regexes back into prompt content`() {
+    fun `preset export should preserve literal regex tags from normal preset imports`() {
         val payload = parseAssistantImportFromJson(
             jsonString = """
                 {
@@ -157,11 +160,70 @@ class SillyTavernExportSerializerTest {
             ?.jsonArray
             .orEmpty()
 
-        assertTrue(payload.regexes.any { it.sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT })
+        assertFalse(payload.regexes.any { it.sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT })
         assertTrue(mainPromptContent.contains("<regex>"))
         assertTrue(mainPromptContent.contains("\"foo\":\"baz\""))
         assertEquals(1, regexScripts.size)
         assertEquals("Preset Regex", regexScripts.first().jsonObject["scriptName"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `preset export should mark and reimport rikkahub inline prompt regexes`() {
+        val preset = SillyTavernPreset(
+            template = defaultSillyTavernPromptTemplate().copy(
+                sourceName = "Inline Regex Export",
+                prompts = listOf(
+                    SillyTavernPromptItem(
+                        identifier = "main",
+                        name = "Main Prompt",
+                        role = MessageRole.SYSTEM,
+                        content = "Main body",
+                    )
+                ),
+                orderedPromptIds = listOf("main"),
+            ),
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    name = "Inline Prompt Regex",
+                    findRegex = "foo",
+                    replaceString = "baz",
+                    affectingScope = setOf(AssistantAffectScope.SYSTEM),
+                    promptOnly = true,
+                    sourceKind = AssistantRegexSourceKind.ST_INLINE_PROMPT,
+                    sourceRef = "main",
+                )
+            ),
+        )
+
+        val exportedJson = SillyTavernPresetExportSerializer.exportToJson(preset)
+        val exported = Json.parseToJsonElement(exportedJson).jsonObject
+        val mainPromptContent = exported["prompts"]
+            ?.jsonArray
+            ?.first()
+            ?.jsonObject
+            ?.get("content")
+            ?.jsonPrimitive
+            ?.content
+            .orEmpty()
+
+        assertEquals(
+            "true",
+            exported["extensions"]
+                ?.jsonObject
+                ?.get("rikkahub_inline_prompt_regexes")
+                ?.jsonPrimitive
+                ?.content,
+        )
+        assertTrue(mainPromptContent.contains("<regex>"))
+
+        val payload = parseAssistantImportFromJson(
+            jsonString = exportedJson,
+            sourceName = "inline-export",
+        )
+
+        assertTrue(payload.regexes.any { it.sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT })
+        assertEquals("Main body", payload.presetTemplate?.findPrompt("main")?.content)
     }
 
     @Test
