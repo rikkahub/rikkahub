@@ -17,11 +17,13 @@
   <string name="assistant_detail_request_desc">設定自訂請求標頭與主體參數</string>
   <string name="assistant_extensions_page_empty_lorebooks">尚無可用的 lorebook，請在 Prompts 中建立</string>
   <string name="assistant_extensions_page_empty_mode_injections">尚無可用的模式注入，請在 Prompts 中建立一個</string>
+  <string name="assistant_extensions_page_empty_quick_messages">目前沒有可用的快速訊息，請在擴充功能中建立</string>
   <string name="assistant_extensions_page_empty_skills">沒有可用的技能，請在 Extensions 中安裝一個</string>
   <string name="assistant_extensions_page_goto_extensions">前往擴充功能</string>
   <string name="assistant_extensions_page_goto_prompts">前往提示</string>
   <string name="assistant_extensions_page_tab_lorebooks">Lorebooks</string>
   <string name="assistant_extensions_page_tab_mode_injections">模式注入</string>
+  <string name="assistant_extensions_page_tab_quick_messages">快速訊息</string>
   <string name="assistant_extensions_page_tab_skills">技能</string>
   <string name="assistant_extensions_page_title">擴充功能</string>
   <string name="assistant_importer_import_failed">匯入失敗</string>
@@ -334,12 +336,15 @@
   <string name="export_to_file_desc">另存為 JSON 檔案</string>
   <string name="extension_content_unnamed">未命名</string>
   <string name="extension_content_unnamed_lorebook">未命名設定集</string>
+  <string name="extension_selector_go_to_extensions">管理擴充功能</string>
   <string name="extension_selector_go_to_skills">前往管理技能</string>
   <string name="extension_selector_lorebooks_empty">沒有可用的 lorebooks</string>
   <string name="extension_selector_mode_injections_empty">無可用的模式注入</string>
+  <string name="extension_selector_quick_messages_empty">目前沒有可用的快速訊息</string>
   <string name="extension_selector_skills_empty">無可用技能</string>
   <string name="extension_selector_tab_lorebooks">Lorebooks</string>
   <string name="extension_selector_tab_mode_injections">模式注入</string>
+  <string name="extension_selector_tab_quick_messages">快速訊息</string>
   <string name="extension_selector_tab_skills">技能</string>
   <string name="extensions_page_agent_skills">代理人技能</string>
   <string name="extensions_page_agent_skills_desc">管理 AI 按需載入的技能套件</string>
@@ -939,6 +944,7 @@
   <string name="theme_name_ocean">海灣藍</string>
   <string name="theme_name_sakura">櫻花粉</string>
   <string name="theme_name_spring">原野綠</string>
+  <string name="title_activity_safe_mode">安全模式</string>
   <string name="tools_warning">當前模型未開啟工具調用，請在設定內啟用模型的工具能力，再使用搜尋/MCP等功能</string>
   <string name="translate">翻譯</string>
   <string name="translating">翻譯中...</string>

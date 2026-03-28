@@ -17,11 +17,13 @@
   <string name="assistant_detail_request_desc">Настройте пользовательские заголовки и параметры тела запроса</string>
   <string name="assistant_extensions_page_empty_lorebooks">Нет доступных lorebooks, создайте один в Prompts</string>
   <string name="assistant_extensions_page_empty_mode_injections">Нет доступных внедрений режима, создайте их в Prompts</string>
+  <string name="assistant_extensions_page_empty_quick_messages">Нет доступных быстрых сообщений, создайте одно в Расширениях</string>
   <string name="assistant_extensions_page_empty_skills">Навыки отсутствуют, установите один в Extensions</string>
   <string name="assistant_extensions_page_goto_extensions">Перейти к расширениям</string>
   <string name="assistant_extensions_page_goto_prompts">Перейти к подсказкам</string>
   <string name="assistant_extensions_page_tab_lorebooks">Лорбуки</string>
   <string name="assistant_extensions_page_tab_mode_injections">Внедрения режима</string>
+  <string name="assistant_extensions_page_tab_quick_messages">Быстрые сообщения</string>
   <string name="assistant_extensions_page_tab_skills">Навыки</string>
   <string name="assistant_extensions_page_title">Расширения</string>
   <string name="assistant_importer_import_failed">Импорт не удался</string>
@@ -77,6 +79,8 @@
   <string name="assistant_page_invalid_json">Недопустимый JSON: %s</string>
   <string name="assistant_page_local_tools_ask_user_desc">Позволить ИИ задавать вопросы для уточнения</string>
   <string name="assistant_page_local_tools_ask_user_title">Спросить пользователя</string>
+  <string name="assistant_page_local_tools_clipboard_desc">Читать или записывать обычный текст из буфера обмена устройства</string>
+  <string name="assistant_page_local_tools_clipboard_title">Буфер обмена</string>
   <string name="assistant_page_local_tools_javascript_engine_desc">Выполнение кода JavaScript с помощью движка QuickJS для вычислений и сценариев</string>
   <string name="assistant_page_local_tools_javascript_engine_title">Движок JavaScript</string>
   <string name="assistant_page_local_tools_time_info_desc">Получить текущую дату, день недели, время и часовой пояс с устройства</string>
@@ -228,6 +232,8 @@
   <string name="chat_message_tool_call_label">Вызван инструмент %1$s</string>
   <string name="chat_message_tool_call_result">Результат вызова</string>
   <string name="chat_message_tool_call_title">Вызов инструмента</string>
+  <string name="chat_message_tool_clipboard_read">Читать буфер обмена</string>
+  <string name="chat_message_tool_clipboard_write">Записать в буфер обмена</string>
   <string name="chat_message_tool_create_memory">Создана заметка</string>
   <string name="chat_message_tool_delete_memory">Удалённая память</string>
   <string name="chat_message_tool_denied">Отклонено</string>
@@ -235,6 +241,7 @@
   <string name="chat_message_tool_deny_dialog_hint">Причина (необязательно)</string>
   <string name="chat_message_tool_deny_dialog_title">Отклонить выполнение инструмента</string>
   <string name="chat_message_tool_edit_memory">Обновлена память</string>
+  <string name="chat_message_tool_get_time">Получить информацию о времени</string>
   <string name="chat_message_tool_scrape_prefix">Собрать данные с сайта: %1$s</string>
   <string name="chat_message_tool_scrape_web">Собрать данные со страницы</string>
   <string name="chat_message_tool_search_prefix">Поиск: %1$s</string>
@@ -242,6 +249,7 @@
   <string name="chat_message_tool_search_web">Поиск в интернете: %1$s</string>
   <string name="chat_message_tool_submit">Отправить</string>
   <string name="chat_page_cancel">Отмена</string>
+  <string name="chat_page_clear_all_errors">Очистить всё</string>
   <string name="chat_page_compress_additional_prompt">Дополнительные инструкции (по желанию)</string>
   <string name="chat_page_compress_additional_prompt_hint">Укажите, что сохранить или на чём сосредоточиться</string>
   <string name="chat_page_compress_context">Сжать историю</string>
@@ -253,6 +261,7 @@
   <string name="chat_page_compress_warning">⚠️ Сжатие контекста приведёт к сбросу всех сообщений в текущем диалоге</string>
   <string name="chat_page_compressing">Сжатие...</string>
   <string name="chat_page_delete">Удалить</string>
+  <string name="chat_page_dismiss_error">Скрыть ошибку</string>
   <string name="chat_page_edit_nickname">Изменить ник</string>
   <string name="chat_page_edit_title">Изменить название</string>
   <string name="chat_page_edit_title_warning">Сначала начните чат, прежде чем редактировать название</string>
@@ -327,12 +336,15 @@
   <string name="export_to_file_desc">Сохранить как файл JSON</string>
   <string name="extension_content_unnamed">Без имени</string>
   <string name="extension_content_unnamed_lorebook">Безымянная книга знаний</string>
+  <string name="extension_selector_go_to_extensions">Управление расширениями</string>
   <string name="extension_selector_go_to_skills">Перейти к управлению навыками</string>
   <string name="extension_selector_lorebooks_empty">Нет доступных lorebooks</string>
   <string name="extension_selector_mode_injections_empty">Нет доступных внедрений режима</string>
+  <string name="extension_selector_quick_messages_empty">Быстрые сообщения отсутствуют</string>
   <string name="extension_selector_skills_empty">Навыки отсутствуют</string>
   <string name="extension_selector_tab_lorebooks">Лорбуки</string>
   <string name="extension_selector_tab_mode_injections">Внедрения режимов</string>
+  <string name="extension_selector_tab_quick_messages">Быстрые сообщения</string>
   <string name="extension_selector_tab_skills">Навыки</string>
   <string name="extensions_page_agent_skills">Навыки агента</string>
   <string name="extensions_page_agent_skills_desc">Управление пакетами навыков для загрузки ИИ по требованию</string>
@@ -934,6 +946,7 @@
   <string name="theme_name_ocean">Океанический синий</string>
   <string name="theme_name_sakura">Сакура Розовый</string>
   <string name="theme_name_spring">Луговой зелёный</string>
+  <string name="title_activity_safe_mode">Безопасный режим</string>
   <string name="tools_warning">Текущая модель не поддерживает вызов инструментов. Чтобы использовать функции поиска/MCP, включите возможности инструментов модели в настройках.</string>
   <string name="translate">Перевести</string>
   <string name="translating">Перевод...</string>

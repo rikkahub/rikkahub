@@ -17,11 +17,13 @@
   <string name="assistant_detail_request_desc">カスタムリクエストヘッダーとボディパラメータを設定</string>
   <string name="assistant_extensions_page_empty_lorebooks">利用可能なロアブックがありません。プロンプトで作成してください</string>
   <string name="assistant_extensions_page_empty_mode_injections">利用可能なモードインジェクションがありません。プロンプトで作成してください</string>
+  <string name="assistant_extensions_page_empty_quick_messages">クイックメッセージがありません。拡張機能から作成してください</string>
   <string name="assistant_extensions_page_empty_skills">利用可能なスキルがありません。Extensionsでインストールしてください</string>
   <string name="assistant_extensions_page_goto_extensions">拡張機能へ移動</string>
   <string name="assistant_extensions_page_goto_prompts">プロンプトへ移動</string>
   <string name="assistant_extensions_page_tab_lorebooks">Lorebooks</string>
   <string name="assistant_extensions_page_tab_mode_injections">モードインジェクション</string>
+  <string name="assistant_extensions_page_tab_quick_messages">クイックメッセージ</string>
   <string name="assistant_extensions_page_tab_skills">スキル</string>
   <string name="assistant_extensions_page_title">拡張機能</string>
   <string name="assistant_importer_import_failed">インポートに失敗しました</string>
@@ -334,12 +336,15 @@
   <string name="export_to_file_desc">JSONファイルとして保存</string>
   <string name="extension_content_unnamed">名前なし</string>
   <string name="extension_content_unnamed_lorebook">名前なしのルアーブック</string>
+  <string name="extension_selector_go_to_extensions">拡張機能を管理</string>
   <string name="extension_selector_go_to_skills">スキルを管理する</string>
   <string name="extension_selector_lorebooks_empty">利用可能なロアブックがありません</string>
   <string name="extension_selector_mode_injections_empty">利用可能なモードインジェクションがありません</string>
+  <string name="extension_selector_quick_messages_empty">クイックメッセージがありません</string>
   <string name="extension_selector_skills_empty">利用可能なスキルがありません</string>
   <string name="extension_selector_tab_lorebooks">ロアブックス</string>
   <string name="extension_selector_tab_mode_injections">モードインジェクション</string>
+  <string name="extension_selector_tab_quick_messages">クイックメッセージ</string>
   <string name="extension_selector_tab_skills">スキル</string>
   <string name="extensions_page_agent_skills">エージェントスキル</string>
   <string name="extensions_page_agent_skills_desc">AIがオンデマンドで読み込むスキルパッケージを管理</string>
@@ -941,6 +946,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="theme_name_ocean">オーシャンブルー</string>
   <string name="theme_name_sakura">サクラピンク</string>
   <string name="theme_name_spring">メドウグリーン</string>
+  <string name="title_activity_safe_mode">セーフモード</string>
   <string name="tools_warning">現在のモデルではツール呼び出しが有効になっていません。設定でモデルのツール機能を有効にしてから、検索/MCPなどの機能を使用してください。</string>
   <string name="translate">翻訳</string>
   <string name="translating">翻訳中...</string>
