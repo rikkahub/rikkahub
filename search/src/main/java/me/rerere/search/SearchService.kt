@@ -1,5 +1,6 @@
 package me.rerere.search
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.SerialName
@@ -7,6 +8,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.InputSchema
+import me.rerere.ai.util.KeyRoulette
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -69,8 +71,12 @@ interface SearchService<T : SearchServiceOptions> {
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
 
-        fun init(client: OkHttpClient) {
+        @Volatile
+        internal var keyRoulette: KeyRoulette = KeyRoulette.default()
+
+        fun init(client: OkHttpClient, context: Context? = null) {
             httpClient = client
+            keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
         }
 
         internal val json by lazy {
