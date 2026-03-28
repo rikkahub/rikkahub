@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.ai.transformers.LorebookRuntimeState
+import me.rerere.rikkahub.data.ai.transformers.StRuntimeSnapshot
 import me.rerere.rikkahub.data.ai.transformers.StMacroState
 import me.rerere.rikkahub.data.model.Conversation
 import java.util.concurrent.ConcurrentHashMap
@@ -103,6 +104,27 @@ class ConversationSession(
 
     fun resetLorebookRuntimeState() {
         lorebookRuntimeState.clear()
+    }
+
+    fun snapshotStRuntimeState(): StRuntimeSnapshot {
+        return StRuntimeSnapshot(
+            generationType = stGenerationType,
+            localVariables = stMacroLocalVariables.toMap(),
+            lorebookRuntimeState = lorebookRuntimeState.snapshotForPersistence(),
+        )
+    }
+
+    fun restoreStRuntimeState(snapshot: StRuntimeSnapshot?) {
+        stMacroLocalVariables.clear()
+        lorebookRuntimeState.clear()
+        stGenerationType = snapshot?.generationType
+            ?.trim()
+            ?.lowercase()
+            .orEmpty()
+            .ifBlank { "normal" }
+
+        snapshot?.localVariables?.let { stMacroLocalVariables.putAll(it) }
+        snapshot?.lorebookRuntimeState?.let { lorebookRuntimeState.restoreFromSnapshot(it) }
     }
 
     private fun scheduleIdleCheck() {

@@ -235,6 +235,43 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
+    fun `author note lorebook entries should use their configured inject depth`() {
+        val lorebook = Lorebook(
+            id = Uuid.random(),
+            entries = listOf(
+                PromptInjection.RegexInjection(
+                    id = Uuid.random(),
+                    constantActive = true,
+                    position = InjectionPosition.AUTHOR_NOTE_TOP,
+                    injectDepth = 1,
+                    content = "Author Note",
+                ),
+            )
+        )
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(SillyTavernPromptItem(identifier = "chatHistory", marker = true)),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+        val assistant = Assistant(lorebookIds = setOf(lorebook.id))
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+                UIMessage.user("U2"),
+            ),
+            assistant = assistant,
+            lorebooks = listOf(lorebook),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("U1", "A1", "Author Note", "U2"),
+            result.map { it.toText() }
+        )
+    }
+
+    @Test
     fun `leading system prompt sections should collapse into one message`() {
         val template = SillyTavernPromptTemplate(
             prompts = listOf(

@@ -80,8 +80,14 @@ internal fun buildAuthorNoteAbsoluteMessage(
     val content = buildAuthorNoteContent(topEntries, bottomEntries)
     if (content.isBlank()) return null
 
+    val authorNoteDepth = (topEntries + bottomEntries)
+        .map { it.injectDepth }
+        .maxOrNull()
+        ?.coerceAtLeast(0)
+        ?: DEFAULT_ST_AUTHOR_NOTE_DEPTH
+
     return StAbsoluteMessage(
-        depth = DEFAULT_ST_AUTHOR_NOTE_DEPTH,
+        depth = authorNoteDepth,
         order = Int.MAX_VALUE,
         role = MessageRole.SYSTEM,
         content = content,

@@ -47,6 +47,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
+import me.rerere.ai.ui.limitContext
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
@@ -82,6 +83,10 @@ import me.rerere.rikkahub.data.ai.transformers.SillyTavernMacroTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.readStRuntimeSnapshot
+import me.rerere.rikkahub.data.ai.transformers.transforms
+import me.rerere.rikkahub.data.ai.transformers.withStRuntimeSnapshot
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -265,6 +270,154 @@ class ChatService(
 
     private fun getConversationStGenerationType(conversationId: Uuid): String {
         return sessions[conversationId]?.stGenerationType ?: "normal"
+    }
+
+    private fun resolveConversationStGenerationType(
+        conversationId: Uuid,
+        conversation: Conversation,
+    ): String {
+        val persisted = conversation.currentMessages
+            .asReversed()
+            .firstOrNull { it.role == MessageRole.ASSISTANT }
+            ?.readStRuntimeSnapshot()
+            ?.generationType
+            .orEmpty()
+            .trim()
+            .lowercase()
+        if (persisted.isNotBlank()) {
+            return persisted
+        }
+        return getConversationStGenerationType(conversationId)
+    }
+
+    private suspend fun restoreConversationStRuntimeState(
+        conversationId: Uuid,
+        visibleMessages: List<UIMessage>,
+        assistant: Assistant,
+        settings: Settings,
+        model: me.rerere.ai.provider.Model,
+    ) {
+        val session = getOrCreateSession(conversationId)
+        session.restoreStRuntimeState(null)
+
+        val latestSnapshotIndex = visibleMessages.indexOfLast { message ->
+            message.role == MessageRole.ASSISTANT && message.readStRuntimeSnapshot() != null
+        }
+        val replayStartIndex = if (latestSnapshotIndex >= 0) {
+            session.restoreStRuntimeState(visibleMessages[latestSnapshotIndex].readStRuntimeSnapshot())
+            latestSnapshotIndex + 1
+        } else {
+            0
+        }
+
+        replayConversationStRuntimeState(
+            conversationId = conversationId,
+            visibleMessages = visibleMessages,
+            assistant = assistant,
+            settings = settings,
+            model = model,
+            startIndex = replayStartIndex,
+        )
+    }
+
+    private suspend fun replayConversationStRuntimeState(
+        conversationId: Uuid,
+        visibleMessages: List<UIMessage>,
+        assistant: Assistant,
+        settings: Settings,
+        model: me.rerere.ai.provider.Model,
+        startIndex: Int,
+    ) {
+        if (startIndex >= visibleMessages.size) return
+
+        val session = getOrCreateSession(conversationId)
+        visibleMessages.forEachIndexed { index, message ->
+            if (index < startIndex || message.role != MessageRole.ASSISTANT) {
+                return@forEachIndexed
+            }
+
+            buildReplayGenerationMessages(
+                assistant = assistant,
+                visibleMessages = visibleMessages.take(index),
+            ).transforms(
+                transformers = buildList {
+                    add(TimeReminderTransformer)
+                    add(SillyTavernPromptTransformer)
+                    add(PromptInjectionTransformer)
+                    add(SillyTavernMacroTransformer)
+                    add(PlaceholderTransformer)
+                    add(templateTransformer)
+                    add(RegexPromptOnlyTransformer)
+                },
+                context = context,
+                model = model,
+                assistant = assistant,
+                settings = settings,
+                stGenerationType = "normal",
+                stMacroState = getConversationStMacroState(conversationId),
+                lorebookRuntimeState = session.getLorebookRuntimeState(),
+            )
+        }
+    }
+
+    private fun buildReplayGenerationMessages(
+        assistant: Assistant,
+        visibleMessages: List<UIMessage>,
+    ): List<UIMessage> {
+        return buildList {
+            assistant.systemPrompt
+                .takeIf { it.isNotBlank() }
+                ?.let { add(UIMessage.system(it)) }
+            addAll(visibleMessages.limitContext(assistant.contextMessageSize))
+        }
+    }
+
+    private fun selectMessagesForGeneration(
+        messages: List<UIMessage>,
+        messageRange: ClosedRange<Int>?,
+    ): List<UIMessage> {
+        if (messageRange == null) return messages
+
+        val start = messageRange.start.coerceIn(0, messages.size)
+        val endExclusive = (messageRange.endInclusive + 1).coerceIn(start, messages.size)
+        return messages.subList(start, endExclusive)
+    }
+
+    private fun selectMessagesForStateRestore(
+        messages: List<UIMessage>,
+        messageRange: ClosedRange<Int>?,
+    ): List<UIMessage> {
+        if (messageRange == null) return messages
+
+        val endExclusive = (messageRange.endInclusive + 1).coerceIn(0, messages.size)
+        return messages.take(endExclusive)
+    }
+
+    private fun persistAssistantRuntimeSnapshot(
+        conversation: Conversation,
+        messageId: Uuid?,
+        session: ConversationSession,
+    ): Conversation {
+        if (messageId == null) return conversation
+
+        val snapshot = session.snapshotStRuntimeState()
+        val updatedNodes = conversation.messageNodes.map { node ->
+            val messageIndex = node.messages.indexOfFirst { it.id == messageId }
+            if (messageIndex == -1) {
+                node
+            } else {
+                node.copy(
+                    messages = node.messages.mapIndexed { index, message ->
+                        if (index == messageIndex) {
+                            message.withStRuntimeSnapshot(snapshot)
+                        } else {
+                            message
+                        }
+                    }
+                )
+            }
+        }
+        return conversation.copy(messageNodes = updatedNodes)
     }
 
     // ---- 引用管理 ----
@@ -802,7 +955,7 @@ class ChatService(
                 if (!hasPendingTools) {
                     handleMessageComplete(
                         conversationId = conversationId,
-                        stGenerationType = getConversationStGenerationType(conversationId),
+                        stGenerationType = resolveConversationStGenerationType(conversationId, updatedConversation),
                     )
                 }
 
@@ -839,6 +992,7 @@ class ChatService(
             model.displayName
         }
         val ptySessionsOpenedThisRun = linkedSetOf<String>()
+        var latestGeneratedAssistantId: Uuid? = null
         runCatching {
             // reset suggestions
             updateConversation(conversationId, conversation.copy(chatSuggestions = emptyList()))
@@ -856,17 +1010,29 @@ class ChatService(
             // check invalid messages
             checkInvalidMessages(conversationId)
 
+            val effectiveConversation = getConversationFlow(conversationId).value
+            val messagesForGeneration = selectMessagesForGeneration(
+                messages = effectiveConversation.currentMessages,
+                messageRange = messageRange,
+            )
+            val messagesForStateRestore = selectMessagesForStateRestore(
+                messages = effectiveConversation.currentMessages,
+                messageRange = messageRange,
+            )
+            restoreConversationStRuntimeState(
+                conversationId = conversationId,
+                visibleMessages = messagesForStateRestore,
+                assistant = assistant,
+                settings = settings,
+                model = model,
+            )
+            setConversationStGenerationType(conversationId, stGenerationType)
+
             // start generating
             generationHandler.generateText(
                 settings = settings,
                 model = model,
-                messages = conversation.currentMessages.let {
-                    if (messageRange != null) {
-                        it.subList(messageRange.start, messageRange.endInclusive + 1)
-                    } else {
-                        it
-                    }
-                },
+                messages = messagesForGeneration,
                 assistant = assistant,
                 memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
@@ -939,6 +1105,10 @@ class ChatService(
                 when (chunk) {
                     is GenerationChunk.Messages -> {
                         ptySessionsOpenedThisRun += extractPtySessionIds(chunk.messages)
+                        latestGeneratedAssistantId = chunk.messages
+                            .lastOrNull { it.role == MessageRole.ASSISTANT }
+                            ?.id
+                            ?: latestGeneratedAssistantId
                         val previousPendingToolId =
                             findPendingApprovalTool(getConversationFlow(conversationId).value.currentMessages)?.toolCallId
                         val updatedConversation = getConversationFlow(conversationId).value
@@ -967,7 +1137,11 @@ class ChatService(
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
         }.onSuccess {
-            val finalConversation = getConversationFlow(conversationId).value
+            val finalConversation = persistAssistantRuntimeSnapshot(
+                conversation = getConversationFlow(conversationId).value,
+                messageId = latestGeneratedAssistantId,
+                session = session,
+            )
             saveConversation(conversationId, finalConversation)
 
             launchWithConversationReference(conversationId) {

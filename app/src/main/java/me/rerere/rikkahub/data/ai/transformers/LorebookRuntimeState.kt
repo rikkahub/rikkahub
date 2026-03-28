@@ -99,6 +99,19 @@ class LorebookRuntimeState {
         cooldownEffects.clear()
     }
 
+    internal fun snapshotForPersistence(): LorebookRuntimeStateSnapshot {
+        return LorebookRuntimeStateSnapshot(
+            stickyEffects = stickyEffects.mapValues { (_, effect) -> effect.toSnapshot() },
+            cooldownEffects = cooldownEffects.mapValues { (_, effect) -> effect.toSnapshot() },
+        )
+    }
+
+    internal fun restoreFromSnapshot(snapshot: LorebookRuntimeStateSnapshot) {
+        clear()
+        stickyEffects.putAll(snapshot.stickyEffects.mapValues { (_, effect) -> effect.toRuntimeEffect() })
+        cooldownEffects.putAll(snapshot.cooldownEffects.mapValues { (_, effect) -> effect.toRuntimeEffect() })
+    }
+
     private inline fun collectActiveEffects(
         store: MutableMap<Uuid, TimedLorebookEffect>,
         entryMap: Map<Uuid, PromptInjection.RegexInjection>,
@@ -143,6 +156,22 @@ class LorebookRuntimeState {
             ),
         )
     }
+}
+
+private fun TimedLorebookEffect.toSnapshot(): TimedLorebookEffectSnapshot {
+    return TimedLorebookEffectSnapshot(
+        startMessageCount = startMessageCount,
+        endMessageCount = endMessageCount,
+        protected = protected,
+    )
+}
+
+private fun TimedLorebookEffectSnapshot.toRuntimeEffect(): TimedLorebookEffect {
+    return TimedLorebookEffect(
+        startMessageCount = startMessageCount,
+        endMessageCount = endMessageCount,
+        protected = protected,
+    )
 }
 
 private fun PromptInjection.RegexInjection.timedEffectValue(key: String): Int? {
