@@ -30,6 +30,9 @@ data class Assistant(
     val quickMessageIds: Set<Uuid> = emptySet(),
     val regexes: List<AssistantRegex> = emptyList(),
     val thinkingBudget: Int? = 1024,
+    // Cache of the user's preset thinking budget when the current model cannot support it.
+    // This allows automatic downgrade/restore on model switches without losing the user's preference.
+    val thinkingBudgetCache: Int? = null,
     val maxTokens: Int? = null,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBodies: List<CustomBody> = emptyList(),

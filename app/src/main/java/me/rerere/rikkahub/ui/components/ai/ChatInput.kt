@@ -466,7 +466,12 @@ fun ChatInput(
                                     reasoningTokens = assistant.thinkingBudget ?: 0,
                                     model = model,
                                     onUpdateReasoningTokens = {
-                                        onUpdateAssistant(assistant.copy(thinkingBudget = it))
+                                        onUpdateAssistant(
+                                            assistant.copy(
+                                                thinkingBudget = it,
+                                                thinkingBudgetCache = null,
+                                            )
+                                        )
                                     },
                                     onlyIcon = true,
                                 )

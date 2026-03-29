@@ -21,6 +21,10 @@ class GptReasoningTest {
         )
         assertEquals(
             listOf(ReasoningLevel.MINIMAL, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH),
+            getSupportedGptReasoningLevels("gpt-5-preview")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.MINIMAL, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH),
             getSupportedGptReasoningLevels("gpt-5-mini")
         )
         assertEquals(
@@ -28,8 +32,28 @@ class GptReasoningTest {
             getSupportedGptReasoningLevels("gpt-5.1-codex-max")
         )
         assertEquals(
-            listOf(ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH),
+            getSupportedGptReasoningLevels("gpt-5.1-preview")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            getSupportedGptReasoningLevels("gpt-5.2-preview")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            getSupportedGptReasoningLevels("gpt-5.2-mini")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            getSupportedGptReasoningLevels("gpt-5.3")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
             getSupportedGptReasoningLevels("gpt-5.3-codex")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            getSupportedGptReasoningLevels("gpt-5.4-codex")
         )
         assertEquals(
             listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
@@ -47,6 +71,10 @@ class GptReasoningTest {
             listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
             getSupportedGptReasoningLevels("gpt-5.4-mini-2026-03-05")
         )
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            getSupportedGptReasoningLevels("gpt-5.9")
+        )
     }
 
     @Test
@@ -59,11 +87,10 @@ class GptReasoningTest {
     }
 
     @Test
-    fun `should reject chat aliases and unknown gpt suffixes`() {
+    fun `should reject chat aliases`() {
         assertNull(getSupportedGptReasoningLevels("gpt-5-chat-latest"))
         assertNull(getSupportedGptReasoningLevels("gpt-5.2-chat-latest"))
         assertNull(getSupportedGptReasoningLevels("gpt-5.3-chat-latest"))
-        assertNull(getSupportedGptReasoningLevels("gpt-5.4-foo"))
     }
 
     @Test

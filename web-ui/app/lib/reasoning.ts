@@ -133,6 +133,10 @@ export function getSupportedGptReasoningLevels(model: ProviderModel | null): Rea
 
 function getGptReasoningBucket(modelId: string): GptReasoningBucket | null {
   const normalizedModelId = normalizeModelId(modelId);
+  // Exclude chat aliases like `gpt-5-chat-latest` / `gpt-5.4-chat-latest`.
+  if (normalizedModelId.includes("-chat")) {
+    return null;
+  }
   const match = normalizedModelId.match(GPT_5_REGEX);
   if (!match) {
     return null;
@@ -153,7 +157,7 @@ function getGptReasoningBucket(modelId: string): GptReasoningBucket | null {
     case 4:
       return matchGpt54Bucket(suffix);
     default:
-      return null;
+      return minorVersion != null && minorVersion >= 3 ? matchGpt54Bucket(suffix) : null;
   }
 }
 
@@ -182,7 +186,7 @@ function matchGpt5Bucket(suffix: string): GptReasoningBucket | null {
   if (matchesAliasOrSnapshot(suffix, "nano")) return "GPT_5";
   if (matchesAliasOrSnapshot(suffix, "pro")) return "GPT_5_PRO";
   if (matchesAliasOrSnapshot(suffix, "codex")) return "GPT_5_CODEX";
-  return null;
+  return "GPT_5";
 }
 
 function matchGpt51Bucket(suffix: string): GptReasoningBucket | null {
@@ -190,31 +194,37 @@ function matchGpt51Bucket(suffix: string): GptReasoningBucket | null {
   if (matchesAliasOrSnapshot(suffix, "codex-max")) return "GPT_5_1_CODEX_MAX";
   if (matchesAliasOrSnapshot(suffix, "codex")) return "GPT_5_1_CODEX";
   if (matchesAliasOrSnapshot(suffix, "codex-mini")) return "GPT_5_1_CODEX";
-  return null;
+  return "GPT_5_1";
 }
 
 function matchGpt52Bucket(suffix: string): GptReasoningBucket | null {
   if (matchesBaseOrSnapshot(suffix)) return "GPT_5_2_PLUS_BASE";
-  if (matchesAliasOrSnapshot(suffix, "pro")) return "GPT_5_2_PLUS_PRO";
-  if (matchesAliasOrSnapshot(suffix, "codex")) return "GPT_5_2_PLUS_CODEX";
-  return null;
-}
-
-function matchGpt53Bucket(suffix: string): GptReasoningBucket | null {
-  if (matchesAliasOrSnapshot(suffix, "codex")) return "GPT_5_2_PLUS_CODEX";
-  return null;
-}
-
-function matchGpt54Bucket(suffix: string): GptReasoningBucket | null {
-  if (matchesBaseOrSnapshot(suffix)) return "GPT_5_2_PLUS_BASE";
   if (matchesAliasOrSnapshot(suffix, "mini")) return "GPT_5_2_PLUS_BASE";
   if (matchesAliasOrSnapshot(suffix, "nano")) return "GPT_5_2_PLUS_BASE";
   if (matchesAliasOrSnapshot(suffix, "pro")) return "GPT_5_2_PLUS_PRO";
-  return null;
+  if (matchesAliasOrSnapshot(suffix, "codex")) return "GPT_5_2_PLUS_CODEX";
+  return "GPT_5_2_PLUS_BASE";
+}
+
+function matchGpt53Bucket(suffix: string): GptReasoningBucket | null {
+  // CherryStudio-style fallback: `gpt-5.3+` uses the `gpt-5.2+` base matrix,
+  // and `gpt-5.3+` codex variants are treated as base (i.e. includes OFF/none).
+  if (matchesAliasOrSnapshot(suffix, "pro")) return "GPT_5_2_PLUS_PRO";
+  return "GPT_5_2_PLUS_BASE";
+}
+
+function matchGpt54Bucket(suffix: string): GptReasoningBucket | null {
+  if (matchesAliasOrSnapshot(suffix, "pro")) return "GPT_5_2_PLUS_PRO";
+  return "GPT_5_2_PLUS_BASE";
 }
 
 function matchesBaseOrSnapshot(suffix: string): boolean {
-  return suffix.length === 0 || SNAPSHOT_SUFFIX_REGEX.test(suffix);
+  return (
+    suffix.length === 0 ||
+    suffix === "preview" ||
+    SNAPSHOT_SUFFIX_REGEX.test(suffix) ||
+    matchesAliasOrSnapshot(suffix, "preview")
+  );
 }
 
 function matchesAliasOrSnapshot(suffix: string, alias: string): boolean {
@@ -222,9 +232,6 @@ function matchesAliasOrSnapshot(suffix: string, alias: string): boolean {
     return true;
   }
 
-  if (!suffix.startsWith(`${alias}-`)) {
-    return false;
-  }
-
-  return SNAPSHOT_SUFFIX_REGEX.test(suffix.slice(alias.length + 1));
+  // Intentionally relaxed to be forward-compatible with future model variants.
+  return suffix.startsWith(`${alias}-`);
 }

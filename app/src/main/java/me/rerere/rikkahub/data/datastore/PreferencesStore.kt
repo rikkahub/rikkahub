@@ -18,7 +18,10 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.core.normalizeStoredThinkingBudget
+import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.isGptReasoningModel
+import me.rerere.ai.core.resolveCompatibilityReasoningLevel
+import me.rerere.ai.core.resolveGptReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
@@ -410,7 +413,10 @@ class SettingsStore(
             settings.copy(
                 assistants = settings.assistants.map { assistant ->
                     if (assistant.id == assistantId) {
-                        assistant.copy(thinkingBudget = thinkingBudget)
+                        assistant.copy(
+                            thinkingBudget = thinkingBudget,
+                            thinkingBudgetCache = null,
+                        )
                     } else {
                         assistant
                     }
@@ -612,14 +618,55 @@ fun Settings.getAssistantById(id: Uuid): Assistant? {
 }
 
 internal fun Settings.normalizeAssistantThinkingBudgets(): Settings {
+    val presetBudgets = ReasoningLevel.entries.map { it.budgetTokens }.toSet()
+
+    fun isPresetBudget(budget: Int?): Boolean {
+        return budget != null && budget in presetBudgets
+    }
+
+    fun resolvePresetBudget(modelId: String?, budget: Int): Int {
+        if (modelId == null) return budget
+
+        return if (isGptReasoningModel(modelId)) {
+            resolveGptReasoningLevel(modelId, budget)?.budgetTokens ?: budget
+        } else {
+            resolveCompatibilityReasoningLevel(budget).budgetTokens
+        }
+    }
+
     val normalizedAssistants = assistants.map { assistant ->
         val effectiveModel = findModelById(assistant.chatModelId ?: chatModelId)
-        val normalizedThinkingBudget = normalizeStoredThinkingBudget(effectiveModel?.modelId, assistant.thinkingBudget)
-        if (normalizedThinkingBudget == assistant.thinkingBudget) {
-            assistant
-        } else {
-            assistant.copy(thinkingBudget = normalizedThinkingBudget)
+        val effectiveModelId = effectiveModel?.modelId
+        val budget = assistant.thinkingBudget
+        val cachedBudget = assistant.thinkingBudgetCache?.takeIf { isPresetBudget(it) }
+
+        // Custom budgets are treated as strong user intent and should not participate in cache restore.
+        if (!isPresetBudget(budget)) {
+            return@map assistant.takeIf { assistant.thinkingBudgetCache == null }
+                ?: assistant.copy(thinkingBudgetCache = null)
         }
+
+        val presetBudget = budget ?: return@map assistant
+
+        // Restore cached preset if it's directly supported by the current model.
+        if (cachedBudget != null && resolvePresetBudget(effectiveModelId, cachedBudget) == cachedBudget) {
+            return@map assistant.copy(
+                thinkingBudget = cachedBudget,
+                thinkingBudgetCache = null,
+            )
+        }
+
+        // If the current preset would be clamped/mapped, downgrade but keep the original preset in cache.
+        val resolvedPresetBudget = resolvePresetBudget(effectiveModelId, presetBudget)
+        if (resolvedPresetBudget != presetBudget) {
+            return@map assistant.copy(
+                thinkingBudget = resolvedPresetBudget,
+                thinkingBudgetCache = cachedBudget ?: presetBudget,
+            )
+        }
+
+        assistant.takeIf { assistant.thinkingBudgetCache == cachedBudget }
+            ?: assistant.copy(thinkingBudgetCache = cachedBudget)
     }
 
     return if (normalizedAssistants == assistants) {

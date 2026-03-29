@@ -64,6 +64,7 @@ export interface AssistantProfile {
   id: string;
   chatModelId?: string | null;
   thinkingBudget?: number | null;
+  thinkingBudgetCache?: number | null;
   mcpServers?: string[];
   modeInjectionIds?: string[];
   lorebookIds?: string[];

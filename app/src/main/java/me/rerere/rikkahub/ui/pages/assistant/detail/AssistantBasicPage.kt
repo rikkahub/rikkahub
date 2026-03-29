@@ -414,7 +414,8 @@ internal fun AssistantBasicContent(
                     onUpdateReasoningTokens = { tokens ->
                         onUpdate(
                             assistant.copy(
-                                thinkingBudget = tokens
+                                thinkingBudget = tokens,
+                                thinkingBudgetCache = null,
                             )
                         )
                     }

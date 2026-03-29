@@ -40,8 +40,8 @@ class ShareSheetTest {
         assertEquals("Test OpenAI", decodedOpenAI.name)
         assertEquals("sk-test-key", decodedOpenAI.apiKey)
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
-        assertEquals(1, decodedOpenAI.models.size)
-        assertEquals("gpt-4", decodedOpenAI.models[0].displayName)
+        // Models are intentionally stripped when encoding for share to keep payload small.
+        assertEquals(0, decodedOpenAI.models.size)
     }
 
     @Test
