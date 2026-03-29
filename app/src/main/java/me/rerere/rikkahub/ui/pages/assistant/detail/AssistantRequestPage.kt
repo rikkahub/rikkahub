@@ -392,9 +392,89 @@ private fun MergeEditorConfigSection(
     onUpdate: (Assistant) -> Unit,
 ) {
     val config = assistant.readMergeEditorConfig()
+    val latestAssistant by rememberUpdatedState(assistant)
+    val latestConfig by rememberUpdatedState(config)
+    val latestOnUpdate by rememberUpdatedState(onUpdate)
+
+    val initialStoredDataText = remember(config.storedData) {
+        config.storedData.toPrettyCompatJson()
+    }
+    val storedDataState = rememberTextFieldState(initialText = initialStoredDataText)
+    var lastExternalStoredData by remember { mutableStateOf(initialStoredDataText) }
+    var lastDispatchedStoredData by remember { mutableStateOf(initialStoredDataText) }
+    var storedDataError by remember { mutableStateOf<String?>(null) }
+    val storedDataText = storedDataState.text.toString()
 
     fun updateConfig(transform: (MergeEditorConfig) -> MergeEditorConfig) {
         onUpdate(assistant.withMergeEditorConfig(transform(config)))
+    }
+
+    LaunchedEffect(config.storedData) {
+        val externalText = config.storedData.toPrettyCompatJson()
+        val currentText = storedDataState.text.toString()
+        val shouldSyncText =
+            currentText == lastExternalStoredData ||
+                externalText != lastDispatchedStoredData ||
+                currentText == externalText
+        lastExternalStoredData = externalText
+
+        if (shouldSyncText && currentText != externalText) {
+            storedDataState.edit {
+                replace(0, length, externalText)
+            }
+        }
+        if (shouldSyncText) {
+            lastDispatchedStoredData = externalText
+            storedDataError = null
+        }
+    }
+    LaunchedEffect(storedDataText) {
+        if (
+            storedDataText == lastDispatchedStoredData ||
+            storedDataText == latestConfig.storedData.toPrettyCompatJson()
+        ) {
+            storedDataError = null
+            return@LaunchedEffect
+        }
+        delay(400)
+        val latestText = storedDataState.text.toString()
+        if (latestText != storedDataText || latestText == lastDispatchedStoredData) {
+            return@LaunchedEffect
+        }
+        val parsed = runCatching { latestText.parseCompatSettingsJson() }
+            .getOrElse { error ->
+                storedDataError = error.message ?: "Invalid JSON"
+                return@LaunchedEffect
+            }
+        storedDataError = null
+        lastDispatchedStoredData = latestText
+        latestOnUpdate(
+            latestAssistant.withMergeEditorConfig(
+                latestConfig.copy(storedData = parsed)
+            )
+        )
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            val currentText = storedDataState.text.toString()
+            if (
+                currentText == lastDispatchedStoredData ||
+                currentText == latestConfig.storedData.toPrettyCompatJson()
+            ) {
+                return@onDispose
+            }
+            val parsed = runCatching { currentText.parseCompatSettingsJson() }.getOrElse {
+                storedDataError = it.message ?: "Invalid JSON"
+                return@onDispose
+            }
+            storedDataError = null
+            lastDispatchedStoredData = currentText
+            latestOnUpdate(
+                latestAssistant.withMergeEditorConfig(
+                    latestConfig.copy(storedData = parsed)
+                )
+            )
+        }
     }
 
     Column(
@@ -525,6 +605,47 @@ private fun MergeEditorConfigSection(
             },
             style = MaterialTheme.typography.bodySmall,
         )
+
+        TextArea(
+            state = storedDataState,
+            label = "stored_data JSON",
+            placeholder = "{}",
+            minLines = 4,
+            maxLines = 10,
+            supportedFileTypes = arrayOf(
+                "application/json",
+                "text/*",
+            ),
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            storedDataError?.takeIf { it.isNotBlank() }?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            TextButton(
+                onClick = {
+                    val empty = buildJsonObject { }
+                    val emptyText = empty.toPrettyCompatJson()
+                    storedDataError = null
+                    lastDispatchedStoredData = emptyText
+                    lastExternalStoredData = emptyText
+                    storedDataState.edit {
+                        replace(0, length, emptyText)
+                    }
+                    updateConfig { it.copy(storedData = empty) }
+                }
+            ) {
+                Text("Clear Stored Data")
+            }
+        }
     }
 }
 
