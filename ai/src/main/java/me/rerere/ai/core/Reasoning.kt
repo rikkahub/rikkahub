@@ -16,14 +16,25 @@ enum class ReasoningLevel(
         get() = this != OFF
 
     companion object {
-        val defaultPresets = listOf(OFF, AUTO, LOW, MEDIUM, HIGH)
+        val compatibilityPresets = listOf(OFF, AUTO, LOW, MEDIUM, HIGH)
 
         fun fromBudgetTokens(budgetTokens: Int?): ReasoningLevel {
             if (budgetTokens == null) return AUTO
 
             entries.firstOrNull { it.budgetTokens == budgetTokens }?.let { return it }
 
-            return defaultPresets.minByOrNull { kotlin.math.abs(it.budgetTokens - budgetTokens) } ?: AUTO
+            return compatibilityPresets.minByOrNull { kotlin.math.abs(it.budgetTokens - budgetTokens) } ?: AUTO
+        }
+
+        fun fromCompatibilityBudgetTokens(budgetTokens: Int?): ReasoningLevel {
+            if (budgetTokens == null) return AUTO
+
+            if (budgetTokens == MINIMAL.budgetTokens) return LOW
+            if (budgetTokens == XHIGH.budgetTokens) return HIGH
+
+            compatibilityPresets.firstOrNull { it.budgetTokens == budgetTokens }?.let { return it }
+
+            return compatibilityPresets.minByOrNull { kotlin.math.abs(it.budgetTokens - budgetTokens) } ?: AUTO
         }
     }
 }

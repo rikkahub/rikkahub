@@ -1,6 +1,7 @@
 package me.rerere.ai.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class GptReasoningTest {
@@ -38,6 +39,14 @@ class GptReasoningTest {
             listOf(ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
             getSupportedGptReasoningLevels("gpt-5.4-pro")
         )
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            getSupportedGptReasoningLevels("gpt-5.4-2026-03-05")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            getSupportedGptReasoningLevels("gpt-5.4-mini-2026-03-05")
+        )
     }
 
     @Test
@@ -47,5 +56,31 @@ class GptReasoningTest {
         assertEquals(ReasoningLevel.MEDIUM, resolveGptReasoningLevel("gpt-5.1-codex", 1024))
         assertEquals(ReasoningLevel.HIGH, resolveGptReasoningLevel("gpt-5", 64_000))
         assertEquals(ReasoningLevel.MEDIUM, resolveGptReasoningLevel("gpt-5.4-pro", 0))
+    }
+
+    @Test
+    fun `should reject chat aliases and unknown gpt suffixes`() {
+        assertNull(getSupportedGptReasoningLevels("gpt-5-chat-latest"))
+        assertNull(getSupportedGptReasoningLevels("gpt-5.2-chat-latest"))
+        assertNull(getSupportedGptReasoningLevels("gpt-5.3-chat-latest"))
+        assertNull(getSupportedGptReasoningLevels("gpt-5.4-foo"))
+    }
+
+    @Test
+    fun `should resolve compatibility reasoning levels without gpt only presets`() {
+        assertEquals(ReasoningLevel.AUTO, resolveCompatibilityReasoningLevel(null))
+        assertEquals(ReasoningLevel.LOW, resolveCompatibilityReasoningLevel(1))
+        assertEquals(ReasoningLevel.HIGH, resolveCompatibilityReasoningLevel(64_000))
+        assertEquals(ReasoningLevel.LOW, resolveCompatibilityReasoningLevel(5_000))
+    }
+
+    @Test
+    fun `should only normalize stored gpt only budgets for non gpt models`() {
+        assertEquals(1024, normalizeStoredThinkingBudget("o3", 1))
+        assertEquals(32_000, normalizeStoredThinkingBudget("o4-mini", 64_000))
+        assertEquals(5_000, normalizeStoredThinkingBudget("o3", 5_000))
+        assertEquals(1, normalizeStoredThinkingBudget("gpt-5", 1))
+        assertEquals(64_000, normalizeStoredThinkingBudget("gpt-5.4-mini", 64_000))
+        assertEquals(64_000, normalizeStoredThinkingBudget(null, 64_000))
     }
 }

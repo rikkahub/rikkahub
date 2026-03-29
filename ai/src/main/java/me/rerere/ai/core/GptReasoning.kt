@@ -31,6 +31,7 @@ private val reasoningPriorityByLevel = reasoningPriority
     .associate { (index, level) -> level to index }
 
 private val gpt5Regex = Regex("^gpt-5(?:\\.(\\d+))?(?:-([a-z0-9.-]+))?$")
+private val snapshotSuffixRegex = Regex("^\\d{4}-\\d{2}-\\d{2}$")
 
 fun getSupportedGptReasoningLevels(modelId: String): List<ReasoningLevel>? {
     return getGptReasoningBucket(modelId)?.supportedLevels
@@ -52,6 +53,20 @@ fun getGptReasoningEffort(modelId: String, thinkingBudget: Int?): String? {
     return resolvedLevel.takeUnless { it == ReasoningLevel.AUTO }?.effort
 }
 
+fun resolveCompatibilityReasoningLevel(thinkingBudget: Int?): ReasoningLevel {
+    return ReasoningLevel.fromCompatibilityBudgetTokens(thinkingBudget)
+}
+
+fun normalizeStoredThinkingBudget(modelId: String?, thinkingBudget: Int?): Int? {
+    if (thinkingBudget == null || modelId == null || isGptReasoningModel(modelId)) return thinkingBudget
+
+    return when (thinkingBudget) {
+        ReasoningLevel.MINIMAL.budgetTokens -> ReasoningLevel.LOW.budgetTokens
+        ReasoningLevel.XHIGH.budgetTokens -> ReasoningLevel.HIGH.budgetTokens
+        else -> thinkingBudget
+    }
+}
+
 fun Model.supportsReasoningConfiguration(): Boolean {
     return abilities.contains(ModelAbility.REASONING) || isGptReasoningModel(modelId)
 }
@@ -62,31 +77,14 @@ private fun getGptReasoningBucket(modelId: String): GptReasoningBucket? {
     val minorVersion = match.groupValues[1].takeIf { it.isNotEmpty() }?.toIntOrNull()
     val suffix = match.groupValues[2]
 
-    if (minorVersion == null) {
-        return when {
-            suffix.startsWith("codex") -> GptReasoningBucket.GPT_5_CODEX
-            suffix.startsWith("pro") -> GptReasoningBucket.GPT_5_PRO
-            else -> GptReasoningBucket.GPT_5
-        }
+    return when (minorVersion) {
+        null -> matchGpt5Bucket(suffix)
+        1 -> matchGpt51Bucket(suffix)
+        2 -> matchGpt52Bucket(suffix)
+        3 -> matchGpt53Bucket(suffix)
+        4 -> matchGpt54Bucket(suffix)
+        else -> null
     }
-
-    if (minorVersion == 1) {
-        return when {
-            suffix.startsWith("codex-max") -> GptReasoningBucket.GPT_5_1_CODEX_MAX
-            suffix.startsWith("codex") -> GptReasoningBucket.GPT_5_1_CODEX
-            else -> GptReasoningBucket.GPT_5_1
-        }
-    }
-
-    if (minorVersion >= 2) {
-        return when {
-            suffix.startsWith("pro") -> GptReasoningBucket.GPT_5_2_PLUS_PRO
-            suffix.contains("codex") -> GptReasoningBucket.GPT_5_2_PLUS_CODEX
-            else -> GptReasoningBucket.GPT_5_2_PLUS_BASE
-        }
-    }
-
-    return null
 }
 
 private fun normalizeModelId(modelId: String): String {
@@ -108,4 +106,62 @@ private fun clampReasoningLevel(
 
 private fun priorityOf(level: ReasoningLevel): Int {
     return reasoningPriorityByLevel[level] ?: Int.MAX_VALUE
+}
+
+private fun matchGpt5Bucket(suffix: String): GptReasoningBucket? {
+    return when {
+        matchesBaseOrSnapshot(suffix) -> GptReasoningBucket.GPT_5
+        matchesAliasOrSnapshot(suffix, "mini") -> GptReasoningBucket.GPT_5
+        matchesAliasOrSnapshot(suffix, "nano") -> GptReasoningBucket.GPT_5
+        matchesAliasOrSnapshot(suffix, "pro") -> GptReasoningBucket.GPT_5_PRO
+        matchesAliasOrSnapshot(suffix, "codex") -> GptReasoningBucket.GPT_5_CODEX
+        else -> null
+    }
+}
+
+private fun matchGpt51Bucket(suffix: String): GptReasoningBucket? {
+    return when {
+        matchesBaseOrSnapshot(suffix) -> GptReasoningBucket.GPT_5_1
+        matchesAliasOrSnapshot(suffix, "codex-max") -> GptReasoningBucket.GPT_5_1_CODEX_MAX
+        matchesAliasOrSnapshot(suffix, "codex") -> GptReasoningBucket.GPT_5_1_CODEX
+        matchesAliasOrSnapshot(suffix, "codex-mini") -> GptReasoningBucket.GPT_5_1_CODEX
+        else -> null
+    }
+}
+
+private fun matchGpt52Bucket(suffix: String): GptReasoningBucket? {
+    return when {
+        matchesBaseOrSnapshot(suffix) -> GptReasoningBucket.GPT_5_2_PLUS_BASE
+        matchesAliasOrSnapshot(suffix, "pro") -> GptReasoningBucket.GPT_5_2_PLUS_PRO
+        matchesAliasOrSnapshot(suffix, "codex") -> GptReasoningBucket.GPT_5_2_PLUS_CODEX
+        else -> null
+    }
+}
+
+private fun matchGpt53Bucket(suffix: String): GptReasoningBucket? {
+    return when {
+        matchesAliasOrSnapshot(suffix, "codex") -> GptReasoningBucket.GPT_5_2_PLUS_CODEX
+        else -> null
+    }
+}
+
+private fun matchGpt54Bucket(suffix: String): GptReasoningBucket? {
+    return when {
+        matchesBaseOrSnapshot(suffix) -> GptReasoningBucket.GPT_5_2_PLUS_BASE
+        matchesAliasOrSnapshot(suffix, "mini") -> GptReasoningBucket.GPT_5_2_PLUS_BASE
+        matchesAliasOrSnapshot(suffix, "nano") -> GptReasoningBucket.GPT_5_2_PLUS_BASE
+        matchesAliasOrSnapshot(suffix, "pro") -> GptReasoningBucket.GPT_5_2_PLUS_PRO
+        else -> null
+    }
+}
+
+private fun matchesBaseOrSnapshot(suffix: String): Boolean {
+    return suffix.isEmpty() || snapshotSuffixRegex.matches(suffix)
+}
+
+private fun matchesAliasOrSnapshot(suffix: String, alias: String): Boolean {
+    if (suffix == alias) return true
+    if (!suffix.startsWith("$alias-")) return false
+
+    return snapshotSuffixRegex.matches(suffix.removePrefix("$alias-"))
 }

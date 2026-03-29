@@ -16,6 +16,7 @@ const DEFAULT_REASONING_PRESETS: ReasoningLevel[] = ["OFF", "AUTO", "LOW", "MEDI
 const COMPATIBILITY_PRESETS: ReasoningLevel[] = ["AUTO", "OFF", "LOW", "MEDIUM", "HIGH"];
 const REASONING_PRIORITY: ReasoningLevel[] = ["OFF", "MINIMAL", "LOW", "MEDIUM", "HIGH", "XHIGH"];
 const GPT_5_REGEX = /^gpt-5(?:\.(\d+))?(?:-([a-z0-9.-]+))?$/;
+const SNAPSHOT_SUFFIX_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 type GptReasoningBucket =
   | "GPT_5"
@@ -53,7 +54,7 @@ export function getReasoningPresets(model: ProviderModel | null): ReasoningLevel
   return gptLevels ? ["AUTO", ...gptLevels] : DEFAULT_REASONING_PRESETS;
 }
 
-export function getReasoningLevel(budget: number | null | undefined): ReasoningLevel {
+function getExactReasoningLevel(budget: number | null | undefined): ReasoningLevel {
   if (budget == null) {
     return "AUTO";
   }
@@ -79,14 +80,42 @@ export function getReasoningLevel(budget: number | null | undefined): ReasoningL
   return closest;
 }
 
+export function getCompatibilityReasoningLevel(budget: number | null | undefined): ReasoningLevel {
+  if (budget == null) {
+    return "AUTO";
+  }
+
+  const exactLevel = COMPATIBILITY_PRESETS.find((preset) => PRESET_BUDGETS[preset] === budget);
+  if (exactLevel) {
+    return exactLevel;
+  }
+
+  let closest = COMPATIBILITY_PRESETS[0];
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (const preset of COMPATIBILITY_PRESETS) {
+    const distance = Math.abs(budget - PRESET_BUDGETS[preset]);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closest = preset;
+    }
+  }
+
+  return closest;
+}
+
 export function resolveReasoningLevel(
   model: ProviderModel | null,
   budget: number | null | undefined,
 ): ReasoningLevel {
-  const requestedLevel = getReasoningLevel(budget);
   const gptLevels = getSupportedGptReasoningLevels(model);
 
-  if (!gptLevels || requestedLevel === "AUTO") {
+  if (!gptLevels) {
+    return getCompatibilityReasoningLevel(budget);
+  }
+
+  const requestedLevel = getExactReasoningLevel(budget);
+  if (requestedLevel === "AUTO") {
     return requestedLevel;
   }
 
@@ -112,35 +141,20 @@ function getGptReasoningBucket(modelId: string): GptReasoningBucket | null {
   const minorVersion = match[1] ? Number.parseInt(match[1], 10) : null;
   const suffix = match[2] ?? "";
 
-  if (minorVersion == null && suffix.startsWith("codex")) {
-    return "GPT_5_CODEX";
+  switch (minorVersion) {
+    case null:
+      return matchGpt5Bucket(suffix);
+    case 1:
+      return matchGpt51Bucket(suffix);
+    case 2:
+      return matchGpt52Bucket(suffix);
+    case 3:
+      return matchGpt53Bucket(suffix);
+    case 4:
+      return matchGpt54Bucket(suffix);
+    default:
+      return null;
   }
-  if (minorVersion == null && suffix.startsWith("pro")) {
-    return "GPT_5_PRO";
-  }
-  if (minorVersion == null) {
-    return "GPT_5";
-  }
-  if (minorVersion === 1 && suffix.startsWith("codex-max")) {
-    return "GPT_5_1_CODEX_MAX";
-  }
-  if (minorVersion === 1 && suffix.startsWith("codex")) {
-    return "GPT_5_1_CODEX";
-  }
-  if (minorVersion === 1) {
-    return "GPT_5_1";
-  }
-  if (minorVersion != null && minorVersion >= 2 && suffix.startsWith("pro")) {
-    return "GPT_5_2_PLUS_PRO";
-  }
-  if (minorVersion != null && minorVersion >= 2 && suffix.includes("codex")) {
-    return "GPT_5_2_PLUS_CODEX";
-  }
-  if (minorVersion != null && minorVersion >= 2) {
-    return "GPT_5_2_PLUS_BASE";
-  }
-
-  return null;
 }
 
 function normalizeModelId(modelId: string): string {
@@ -160,4 +174,57 @@ function clampReasoningLevel(
     sortedSupportedLevels.find((level) => REASONING_PRIORITY.indexOf(level) >= requestedPriority) ??
     sortedSupportedLevels[sortedSupportedLevels.length - 1]
   );
+}
+
+function matchGpt5Bucket(suffix: string): GptReasoningBucket | null {
+  if (matchesBaseOrSnapshot(suffix)) return "GPT_5";
+  if (matchesAliasOrSnapshot(suffix, "mini")) return "GPT_5";
+  if (matchesAliasOrSnapshot(suffix, "nano")) return "GPT_5";
+  if (matchesAliasOrSnapshot(suffix, "pro")) return "GPT_5_PRO";
+  if (matchesAliasOrSnapshot(suffix, "codex")) return "GPT_5_CODEX";
+  return null;
+}
+
+function matchGpt51Bucket(suffix: string): GptReasoningBucket | null {
+  if (matchesBaseOrSnapshot(suffix)) return "GPT_5_1";
+  if (matchesAliasOrSnapshot(suffix, "codex-max")) return "GPT_5_1_CODEX_MAX";
+  if (matchesAliasOrSnapshot(suffix, "codex")) return "GPT_5_1_CODEX";
+  if (matchesAliasOrSnapshot(suffix, "codex-mini")) return "GPT_5_1_CODEX";
+  return null;
+}
+
+function matchGpt52Bucket(suffix: string): GptReasoningBucket | null {
+  if (matchesBaseOrSnapshot(suffix)) return "GPT_5_2_PLUS_BASE";
+  if (matchesAliasOrSnapshot(suffix, "pro")) return "GPT_5_2_PLUS_PRO";
+  if (matchesAliasOrSnapshot(suffix, "codex")) return "GPT_5_2_PLUS_CODEX";
+  return null;
+}
+
+function matchGpt53Bucket(suffix: string): GptReasoningBucket | null {
+  if (matchesAliasOrSnapshot(suffix, "codex")) return "GPT_5_2_PLUS_CODEX";
+  return null;
+}
+
+function matchGpt54Bucket(suffix: string): GptReasoningBucket | null {
+  if (matchesBaseOrSnapshot(suffix)) return "GPT_5_2_PLUS_BASE";
+  if (matchesAliasOrSnapshot(suffix, "mini")) return "GPT_5_2_PLUS_BASE";
+  if (matchesAliasOrSnapshot(suffix, "nano")) return "GPT_5_2_PLUS_BASE";
+  if (matchesAliasOrSnapshot(suffix, "pro")) return "GPT_5_2_PLUS_PRO";
+  return null;
+}
+
+function matchesBaseOrSnapshot(suffix: string): boolean {
+  return suffix.length === 0 || SNAPSHOT_SUFFIX_REGEX.test(suffix);
+}
+
+function matchesAliasOrSnapshot(suffix: string, alias: string): boolean {
+  if (suffix === alias) {
+    return true;
+  }
+
+  if (!suffix.startsWith(`${alias}-`)) {
+    return false;
+  }
+
+  return SNAPSHOT_SUFFIX_REGEX.test(suffix.slice(alias.length + 1));
 }

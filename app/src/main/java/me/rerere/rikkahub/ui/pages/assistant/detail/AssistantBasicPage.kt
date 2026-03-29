@@ -59,6 +59,7 @@ fun AssistantBasicPage(id: String) {
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val providers by vm.providers.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val tags by vm.tags.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -82,6 +83,7 @@ fun AssistantBasicPage(id: String) {
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
             providers = providers,
+            defaultChatModelId = settings.chatModelId,
             tags = tags,
             onUpdate = { vm.update(it) },
             vm = vm
@@ -94,11 +96,12 @@ internal fun AssistantBasicContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
     providers: List<me.rerere.ai.provider.ProviderSetting>,
+    defaultChatModelId: kotlin.uuid.Uuid,
     tags: List<DataTag>,
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
-    val currentModel = assistant.chatModelId?.let { providers.findModelById(it) }
+    val currentModel = providers.findModelById(assistant.chatModelId ?: defaultChatModelId)
     Column(
         modifier = modifier
             .fillMaxSize()

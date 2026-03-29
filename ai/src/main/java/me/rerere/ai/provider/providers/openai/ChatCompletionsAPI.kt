@@ -27,6 +27,7 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.getGptReasoningEffort
 import me.rerere.ai.core.isGptReasoningModel
+import me.rerere.ai.core.resolveCompatibilityReasoningLevel
 import me.rerere.ai.core.supportsReasoningConfiguration
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -293,7 +294,7 @@ class ChatCompletionsAPI(
                         put("reasoning_effort", gptReasoningEffort)
                     }
                 } else {
-                    val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)
+                    val level = resolveCompatibilityReasoningLevel(params.thinkingBudget)
                     when (host) {
                         "openrouter.ai" -> {
                             // https://openrouter.ai/docs/use-cases/reasoning-tokens

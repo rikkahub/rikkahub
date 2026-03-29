@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.normalizeStoredThinkingBudget
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
@@ -325,57 +326,58 @@ class SettingsStore(
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
-        settingsFlow.value = settings
+        val normalizedSettings = settings.normalizeAssistantThinkingBudgets()
+        settingsFlow.value = normalizedSettings
         dataStore.edit { preferences ->
-            preferences[DYNAMIC_COLOR] = settings.dynamicColor
-            preferences[THEME_ID] = settings.themeId
-            preferences[DEVELOPER_MODE] = settings.developerMode
-            preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
+            preferences[DYNAMIC_COLOR] = normalizedSettings.dynamicColor
+            preferences[THEME_ID] = normalizedSettings.themeId
+            preferences[DEVELOPER_MODE] = normalizedSettings.developerMode
+            preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(normalizedSettings.displaySetting)
 
-            preferences[ENABLE_WEB_SEARCH] = settings.enableWebSearch
-            preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
-            preferences[SELECT_MODEL] = settings.chatModelId.toString()
-            preferences[TITLE_MODEL] = settings.titleModelId.toString()
-            preferences[TRANSLATE_MODEL] = settings.translateModeId.toString()
-            preferences[SUGGESTION_MODEL] = settings.suggestionModelId.toString()
-            preferences[IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
-            preferences[TITLE_PROMPT] = settings.titlePrompt
-            preferences[TRANSLATION_PROMPT] = settings.translatePrompt
-            preferences[TRANSLATE_THINKING_BUDGET] = settings.translateThinkingBudget
-            preferences[SUGGESTION_PROMPT] = settings.suggestionPrompt
-            preferences[OCR_MODEL] = settings.ocrModelId.toString()
-            preferences[OCR_PROMPT] = settings.ocrPrompt
-            preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
-            preferences[COMPRESS_PROMPT] = settings.compressPrompt
+            preferences[ENABLE_WEB_SEARCH] = normalizedSettings.enableWebSearch
+            preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(normalizedSettings.favoriteModels)
+            preferences[SELECT_MODEL] = normalizedSettings.chatModelId.toString()
+            preferences[TITLE_MODEL] = normalizedSettings.titleModelId.toString()
+            preferences[TRANSLATE_MODEL] = normalizedSettings.translateModeId.toString()
+            preferences[SUGGESTION_MODEL] = normalizedSettings.suggestionModelId.toString()
+            preferences[IMAGE_GENERATION_MODEL] = normalizedSettings.imageGenerationModelId.toString()
+            preferences[TITLE_PROMPT] = normalizedSettings.titlePrompt
+            preferences[TRANSLATION_PROMPT] = normalizedSettings.translatePrompt
+            preferences[TRANSLATE_THINKING_BUDGET] = normalizedSettings.translateThinkingBudget
+            preferences[SUGGESTION_PROMPT] = normalizedSettings.suggestionPrompt
+            preferences[OCR_MODEL] = normalizedSettings.ocrModelId.toString()
+            preferences[OCR_PROMPT] = normalizedSettings.ocrPrompt
+            preferences[COMPRESS_MODEL] = normalizedSettings.compressModelId.toString()
+            preferences[COMPRESS_PROMPT] = normalizedSettings.compressPrompt
 
-            preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
+            preferences[PROVIDERS] = JsonInstant.encodeToString(normalizedSettings.providers)
 
-            preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
-            preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
-            preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
+            preferences[ASSISTANTS] = JsonInstant.encodeToString(normalizedSettings.assistants)
+            preferences[SELECT_ASSISTANT] = normalizedSettings.assistantId.toString()
+            preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(normalizedSettings.assistantTags)
 
-            preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
-            preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
-            preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
+            preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(normalizedSettings.searchServices)
+            preferences[SEARCH_COMMON] = JsonInstant.encodeToString(normalizedSettings.searchCommonOptions)
+            preferences[SEARCH_SELECTED] = normalizedSettings.searchServiceSelected.coerceIn(0, normalizedSettings.searchServices.size - 1)
 
-            preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
-            preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
-            preferences[S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
-            preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
-            settings.selectedTTSProviderId?.let {
+            preferences[MCP_SERVERS] = JsonInstant.encodeToString(normalizedSettings.mcpServers)
+            preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(normalizedSettings.webDavConfig)
+            preferences[S3_CONFIG] = JsonInstant.encodeToString(normalizedSettings.s3Config)
+            preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(normalizedSettings.ttsProviders)
+            normalizedSettings.selectedTTSProviderId?.let {
                 preferences[SELECTED_TTS_PROVIDER] = it.toString()
             } ?: preferences.remove(SELECTED_TTS_PROVIDER)
-            preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
-            preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
-            preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
-            preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
-            preferences[WEB_SERVER_PORT] = settings.webServerPort
-            preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
-            preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
-            preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
-            preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
-            preferences[LAUNCH_COUNT] = settings.launchCount
-            preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+            preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(normalizedSettings.modeInjections)
+            preferences[LOREBOOKS] = JsonInstant.encodeToString(normalizedSettings.lorebooks)
+            preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(normalizedSettings.quickMessages)
+            preferences[WEB_SERVER_ENABLED] = normalizedSettings.webServerEnabled
+            preferences[WEB_SERVER_PORT] = normalizedSettings.webServerPort
+            preferences[WEB_SERVER_JWT_ENABLED] = normalizedSettings.webServerJwtEnabled
+            preferences[WEB_SERVER_ACCESS_PASSWORD] = normalizedSettings.webServerAccessPassword
+            preferences[WEB_SERVER_LOCALHOST_ONLY] = normalizedSettings.webServerLocalhostOnly
+            preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(normalizedSettings.backupReminderConfig)
+            preferences[LAUNCH_COUNT] = normalizedSettings.launchCount
+            preferences[SPONSOR_ALERT_DISMISSED_AT] = normalizedSettings.sponsorAlertDismissedAt
         }
     }
 
@@ -607,6 +609,24 @@ fun Settings.getCurrentAssistant(): Assistant {
 
 fun Settings.getAssistantById(id: Uuid): Assistant? {
     return this.assistants.find { it.id == id }
+}
+
+internal fun Settings.normalizeAssistantThinkingBudgets(): Settings {
+    val normalizedAssistants = assistants.map { assistant ->
+        val effectiveModel = findModelById(assistant.chatModelId ?: chatModelId)
+        val normalizedThinkingBudget = normalizeStoredThinkingBudget(effectiveModel?.modelId, assistant.thinkingBudget)
+        if (normalizedThinkingBudget == assistant.thinkingBudget) {
+            assistant
+        } else {
+            assistant.copy(thinkingBudget = normalizedThinkingBudget)
+        }
+    }
+
+    return if (normalizedAssistants == assistants) {
+        this
+    } else {
+        copy(assistants = normalizedAssistants)
+    }
 }
 
 fun Settings.getQuickMessagesOfAssistant(assistant: Assistant) =

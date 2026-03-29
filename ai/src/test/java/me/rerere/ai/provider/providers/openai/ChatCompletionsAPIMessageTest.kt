@@ -16,6 +16,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -368,6 +369,43 @@ class ChatCompletionsAPIMessageTest {
             "Non GPT request should not include reasoning_effort",
             !requestBody.containsKey("reasoning_effort")
         )
+    }
+
+    @Test
+    fun `non gpt openai branch should downgrade gpt only budgets to legacy effort`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+
+        val minimalBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "o3", thinkingBudget = 1)
+        )
+        assertEquals("low", minimalBody["reasoning_effort"]?.jsonPrimitive?.content)
+
+        val xhighBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "o3", thinkingBudget = 64_000)
+        )
+        assertEquals("high", xhighBody["reasoning_effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `chat alias without reasoning ability should not gain gpt reasoning params`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(
+                modelId = "gpt-5.3-chat-latest",
+                abilities = emptyList(),
+                thinkingBudget = 1024
+            )
+        )
+
+        assertFalse(requestBody.containsKey("reasoning_effort"))
+        assertFalse(requestBody.containsKey("reasoning"))
     }
 
     @Test

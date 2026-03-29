@@ -358,6 +358,25 @@ class ResponseAPIMessageTest {
     }
 
     @Test
+    fun `non gpt response api should downgrade gpt only budgets to legacy effort`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+
+        val minimalBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "o3", thinkingBudget = 1)
+        )
+        assertEquals("low", minimalBody["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.content)
+
+        val xhighBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "o3", thinkingBudget = 64_000)
+        )
+        assertEquals("high", xhighBody["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `gpt 5 4 response api should encode minimal and xhigh effort`() {
         val providerSetting = ProviderSetting.OpenAI(
             baseUrl = "https://api.openai.com/v1"
@@ -405,6 +424,23 @@ class ResponseAPIMessageTest {
         val reasoning = requestBody["reasoning"]?.jsonObject
         assertTrue("reasoning should exist", reasoning != null)
         assertFalse("auto should not include reasoning.effort", reasoning!!.containsKey("effort"))
+    }
+
+    @Test
+    fun `chat alias without reasoning ability should not gain gpt reasoning params`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(
+                modelId = "gpt-5.3-chat-latest",
+                abilities = emptyList(),
+                thinkingBudget = 1024
+            )
+        )
+
+        assertFalse(requestBody.containsKey("reasoning"))
     }
 
     // ==================== Helper Functions ====================

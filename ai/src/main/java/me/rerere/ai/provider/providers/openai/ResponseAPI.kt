@@ -24,6 +24,7 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.getGptReasoningEffort
 import me.rerere.ai.core.isGptReasoningModel
+import me.rerere.ai.core.resolveCompatibilityReasoningLevel
 import me.rerere.ai.core.supportsReasoningConfiguration
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
@@ -216,7 +217,7 @@ class ResponseAPI(
                 val gptReasoningEffort =
                     if (isGpt) getGptReasoningEffort(modelId, params.thinkingBudget) else null
                 val level =
-                    if (!isGpt) ReasoningLevel.fromBudgetTokens(params.thinkingBudget) else ReasoningLevel.AUTO
+                    if (!isGpt) resolveCompatibilityReasoningLevel(params.thinkingBudget) else ReasoningLevel.AUTO
                 put("reasoning", buildJsonObject {
                     if (capabilities.supportsReasoningSummary) {
                         put("summary", "auto")

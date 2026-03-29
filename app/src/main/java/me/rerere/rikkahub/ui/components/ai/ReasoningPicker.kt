@@ -33,6 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.getSupportedGptReasoningLevels
+import me.rerere.ai.core.resolveCompatibilityReasoningLevel
 import me.rerere.ai.core.resolveGptReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.hugeicons.HugeIcons
@@ -99,7 +100,7 @@ fun ReasoningPicker(
     val levels = remember(model?.modelId) {
         model?.let { currentModel ->
             getSupportedGptReasoningLevels(currentModel.modelId)?.let { listOf(ReasoningLevel.AUTO) + it }
-        } ?: ReasoningLevel.defaultPresets
+        } ?: ReasoningLevel.compatibilityPresets
     }
     ModalBottomSheet(
         onDismissRequest = {
@@ -173,7 +174,7 @@ private fun ReasoningLevelIcon(level: ReasoningLevel) {
 
 private fun resolveReasoningLevel(model: Model?, reasoningTokens: Int): ReasoningLevel {
     return model?.let { resolveGptReasoningLevel(it.modelId, reasoningTokens) }
-        ?: ReasoningLevel.fromBudgetTokens(reasoningTokens)
+        ?: resolveCompatibilityReasoningLevel(reasoningTokens)
 }
 
 private fun reasoningTitle(level: ReasoningLevel): Int {
