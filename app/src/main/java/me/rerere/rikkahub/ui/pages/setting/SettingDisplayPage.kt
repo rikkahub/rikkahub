@@ -581,6 +581,29 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 )
                             },
                         )
+                        if (displaySetting.pasteLongTextAsFile) {
+                            item(
+                                headlineContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_threshold_title)) },
+                                supportingContent = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Slider(
+                                            value = displaySetting.pasteLongTextThreshold.toFloat(),
+                                            onValueChange = {
+                                                updateDisplaySetting(displaySetting.copy(pasteLongTextThreshold = it.toInt()))
+                                            },
+                                            valueRange = 100f..10000f,
+                                            steps = 98,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(text = "${displaySetting.pasteLongTextThreshold}")
+                                    }
+                                },
+                            )
+                        }
                         item(
                             headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_title)) },
                             supportingContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_desc)) },
@@ -615,41 +638,6 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                     }
                                 }
                             )
-                        }
-                    }
-
-                    if (displaySetting.pasteLongTextAsFile) {
-                        Column(
-                            modifier = Modifier
-                                .padding(horizontal = 8.dp)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(MaterialTheme.colorScheme.surfaceBright)
-                        ) {
-                            ListItem(
-                                headlineContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_threshold_title)) },
-                                colors = CustomColors.listItemColors,
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Slider(
-                                    value = displaySetting.pasteLongTextThreshold.toFloat(),
-                                    onValueChange = {
-                                        updateDisplaySetting(displaySetting.copy(pasteLongTextThreshold = it.toInt()))
-                                    },
-                                    valueRange = 100f..10000f,
-                                    steps = 98,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = "${displaySetting.pasteLongTextThreshold}",
-                                )
-                            }
                         }
                     }
                 }
