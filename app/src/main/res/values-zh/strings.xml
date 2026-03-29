@@ -519,10 +519,14 @@
   <string name="reasoning_heavy_desc">模型将使用大量推理来回答问题。</string>
   <string name="reasoning_light">轻度推理</string>
   <string name="reasoning_light_desc">模型将使用少量推理来回答问题。</string>
+  <string name="reasoning_minimal">最小推理</string>
+  <string name="reasoning_minimal_desc">模型将使用尽可能少的推理来回答问题。</string>
   <string name="reasoning_medium">中度推理</string>
   <string name="reasoning_medium_desc">模型将使用更多推理来回答问题。</string>
   <string name="reasoning_off">关闭</string>
   <string name="reasoning_off_desc">关闭推理功能，模型将直接回答问题。</string>
+  <string name="reasoning_xhigh">超高推理</string>
+  <string name="reasoning_xhigh_desc">模型将使用超高强度的推理来回答问题。</string>
   <string name="regenerate">重新生成</string>
   <string name="regenerate_confirm_message">确定要重新生成此消息吗？</string>
   <string name="render_with_webview">网页视图渲染</string>

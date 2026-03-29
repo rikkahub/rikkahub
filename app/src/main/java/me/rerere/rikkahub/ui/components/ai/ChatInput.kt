@@ -101,8 +101,8 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import me.rerere.ai.core.supportsReasoningConfiguration
 import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessagePart
@@ -461,9 +461,10 @@ fun ChatInput(
 
                             // Reasoning
                             val model = settings.getCurrentChatModel()
-                            if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
+                            if (model?.supportsReasoningConfiguration() == true) {
                                 ReasoningButton(
                                     reasoningTokens = assistant.thinkingBudget ?: 0,
+                                    model = model,
                                     onUpdateReasoningTokens = {
                                         onUpdateAssistant(assistant.copy(thinkingBudget = it))
                                     },

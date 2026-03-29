@@ -50,12 +50,16 @@ class ResponseAPIMessageTest {
         return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
     }
 
-    private fun createReasoningParams(thinkingBudget: Int? = null): TextGenerationParams {
+    private fun createReasoningParams(
+        modelId: String = "test-model",
+        abilities: List<ModelAbility> = listOf(ModelAbility.REASONING),
+        thinkingBudget: Int? = null
+    ): TextGenerationParams {
         return TextGenerationParams(
             model = Model(
-                modelId = "test-model",
-                displayName = "test-model",
-                abilities = listOf(ModelAbility.REASONING)
+                modelId = modelId,
+                displayName = modelId,
+                abilities = abilities
             ),
             thinkingBudget = thinkingBudget
         )
@@ -351,6 +355,56 @@ class ResponseAPIMessageTest {
         val reasoning = requestBody["reasoning"]?.jsonObject
         assertTrue("reasoning should exist", reasoning != null)
         assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `gpt 5 4 response api should encode minimal and xhigh effort`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+
+        val minimalBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "gpt-5", thinkingBudget = 1)
+        )
+        val minimalReasoning = minimalBody["reasoning"]?.jsonObject
+        assertEquals("minimal", minimalReasoning?.get("effort")?.jsonPrimitive?.content)
+
+        val xhighBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "gpt-5.4-mini", thinkingBudget = 64_000)
+        )
+        val xhighReasoning = xhighBody["reasoning"]?.jsonObject
+        assertEquals("xhigh", xhighReasoning?.get("effort")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `gpt 5 4 pro response api should clamp unsupported effort to medium`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "gpt-5.4-pro", thinkingBudget = 0)
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertEquals("medium", reasoning?.get("effort")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `gpt response api should omit effort when reasoning is auto`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "gpt-5.4", thinkingBudget = -1)
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertTrue("reasoning should exist", reasoning != null)
+        assertFalse("auto should not include reasoning.effort", reasoning!!.containsKey("effort"))
     }
 
     // ==================== Helper Functions ====================

@@ -8,9 +8,15 @@ import { useCurrentAssistant } from "~/hooks/use-current-assistant";
 import { useCurrentModel } from "~/hooks/use-current-model";
 import { usePickerPopover } from "~/hooks/use-picker-popover";
 import { extractErrorMessage } from "~/lib/error";
+import {
+  getReasoningPresets,
+  PRESET_BUDGETS,
+  resolveReasoningLevel,
+  supportsReasoningSelection,
+  type ReasoningLevel,
+} from "~/lib/reasoning";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
-import type { ProviderModel } from "~/types";
 import { Button } from "~/components/ui/button";
 import {
   Popover,
@@ -24,16 +30,6 @@ import { Input } from "~/components/ui/input";
 
 import { PickerErrorAlert } from "./picker-error-alert";
 
-const PRESET_BUDGETS = {
-  OFF: 0,
-  AUTO: -1,
-  LOW: 1024,
-  MEDIUM: 16_000,
-  HIGH: 32_000,
-} as const;
-
-type ReasoningLevel = keyof typeof PRESET_BUDGETS;
-
 interface ReasoningPreset {
   key: ReasoningLevel;
   label: string;
@@ -41,41 +37,9 @@ interface ReasoningPreset {
   budget: number;
 }
 
-const REASONING_PRESET_BUDGETS: Array<Pick<ReasoningPreset, "key" | "budget">> = [
-  { key: "OFF", budget: PRESET_BUDGETS.OFF },
-  { key: "AUTO", budget: PRESET_BUDGETS.AUTO },
-  { key: "LOW", budget: PRESET_BUDGETS.LOW },
-  { key: "MEDIUM", budget: PRESET_BUDGETS.MEDIUM },
-  { key: "HIGH", budget: PRESET_BUDGETS.HIGH },
-];
-
 export interface ReasoningPickerButtonProps {
   disabled?: boolean;
   className?: string;
-}
-
-function isReasoningModel(model: ProviderModel | null): boolean {
-  if (!model) {
-    return false;
-  }
-
-  return (model.abilities ?? []).includes("REASONING");
-}
-
-function getReasoningLevel(budget: number | null | undefined): ReasoningLevel {
-  const value = budget ?? PRESET_BUDGETS.AUTO;
-  let closest = REASONING_PRESET_BUDGETS[0];
-  let minDistance = Number.POSITIVE_INFINITY;
-
-  for (const preset of REASONING_PRESET_BUDGETS) {
-    const distance = Math.abs(value - preset.budget);
-    if (distance < minDistance) {
-      minDistance = distance;
-      closest = preset;
-    }
-  }
-
-  return closest.key;
 }
 
 export function ReasoningPickerButton({ disabled = false, className }: ReasoningPickerButtonProps) {
@@ -87,46 +51,21 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   const [customExpanded, setCustomExpanded] = React.useState(false);
 
   const canUse = Boolean(settings && currentAssistant && !disabled);
-  const canReasoning = isReasoningModel(currentModel);
+  const canReasoning = supportsReasoningSelection(currentModel);
   const { open, error, setError, popoverProps } = usePickerPopover(canUse);
   const reasoningPresets = React.useMemo<ReasoningPreset[]>(
-    () => [
-      {
-        key: "OFF",
-        label: t("reasoning.presets.off.label"),
-        description: t("reasoning.presets.off.description"),
-        budget: PRESET_BUDGETS.OFF,
-      },
-      {
-        key: "AUTO",
-        label: t("reasoning.presets.auto.label"),
-        description: t("reasoning.presets.auto.description"),
-        budget: PRESET_BUDGETS.AUTO,
-      },
-      {
-        key: "LOW",
-        label: t("reasoning.presets.low.label"),
-        description: t("reasoning.presets.low.description"),
-        budget: PRESET_BUDGETS.LOW,
-      },
-      {
-        key: "MEDIUM",
-        label: t("reasoning.presets.medium.label"),
-        description: t("reasoning.presets.medium.description"),
-        budget: PRESET_BUDGETS.MEDIUM,
-      },
-      {
-        key: "HIGH",
-        label: t("reasoning.presets.high.label"),
-        description: t("reasoning.presets.high.description"),
-        budget: PRESET_BUDGETS.HIGH,
-      },
-    ],
-    [t],
+    () =>
+      getReasoningPresets(currentModel).map((key) => ({
+        key,
+        label: t(`reasoning.presets.${key.toLowerCase()}.label`),
+        description: t(`reasoning.presets.${key.toLowerCase()}.description`),
+        budget: PRESET_BUDGETS[key],
+      })),
+    [currentModel, t],
   );
 
   const currentBudget = currentAssistant?.thinkingBudget ?? PRESET_BUDGETS.AUTO;
-  const currentLevel = getReasoningLevel(currentBudget);
+  const currentLevel = resolveReasoningLevel(currentModel, currentBudget);
   const currentPreset =
     reasoningPresets.find((preset) => preset.key === currentLevel) ?? reasoningPresets[0];
 

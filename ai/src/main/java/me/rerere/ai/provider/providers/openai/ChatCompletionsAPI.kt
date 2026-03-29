@@ -25,6 +25,9 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.getGptReasoningEffort
+import me.rerere.ai.core.isGptReasoningModel
+import me.rerere.ai.core.supportsReasoningConfiguration
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -281,90 +284,97 @@ class ChatCompletionsAPI(
                 }
             }
 
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
+            if (params.model.supportsReasoningConfiguration()) {
                 val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)
-                when (host) {
-                    "openrouter.ai" -> {
-                        // https://openrouter.ai/docs/use-cases/reasoning-tokens
-                        put("reasoning", buildJsonObject {
-                            if (level != ReasoningLevel.AUTO) put("max_tokens", params.thinkingBudget ?: 0)
-                            if (!level.isEnabled) {
-                                put("enabled", false)
-                            }
-                        })
+                val gptReasoningEffort = getGptReasoningEffort(params.model.modelId, params.thinkingBudget)
+                if (isGptReasoningModel(params.model.modelId)) {
+                    if (gptReasoningEffort != null) {
+                        put("reasoning_effort", gptReasoningEffort)
                     }
-
-                    "dashscope.aliyuncs.com" -> {
-                        // 阿里云百炼
-                        // https://bailian.console.aliyun.com/console?tab=doc#/doc/?type=model&url=https%3A%2F%2Fhelp.aliyun.com%2Fdocument_detail%2F2870973.html&renderType=iframe
-                        put("enable_thinking", level.isEnabled)
-                        if (level != ReasoningLevel.AUTO) put("thinking_budget", params.thinkingBudget ?: 0)
-                    }
-
-                    "ark.cn-beijing.volces.com" -> {
-                        // 豆包 (火山)
-                        put("thinking", buildJsonObject {
-                            put("type", if (!level.isEnabled) "disabled" else "enabled")
-                        })
-                    }
-
-                    "api.mistral.ai" -> {
-                        // Mistral 不支持
-                    }
-
-                    "chat.intern-ai.org.cn" -> {
-                        // 书生
-                        // https://internlm.intern-ai.org.cn/api/document?lang=zh
-                        put("thinking_mode", level.isEnabled)
-                    }
-
-                    "api.siliconflow.cn" -> {
-                        // https://docs.siliconflow.cn/cn/userguide/capabilities/reasoning#3-1-api-%E5%8F%82%E6%95%B0
-                        val modelId = params.model.modelId
-                        val siliconflowThinkingModels = setOf(
-                            "Pro/moonshotai/Kimi-K2.5",
-                            "Pro/zai-org/GLM-5",
-                            "Pro/zai-org/GLM-4.7",
-                            "deepseek-ai/DeepSeek-V3.2",
-                            "Pro/deepseek-ai/DeepSeek-V3.2",
-                            "Qwen/Qwen3.5-397B-A17B",
-                            "Qwen/Qwen3.5-122B-A10B",
-                            "Qwen/Qwen3.5-35B-A3B",
-                            "Qwen/Qwen3.5-27B",
-                            "Qwen/Qwen3.5-9B",
-                            "Qwen/Qwen3.5-4B",
-                            "zai-org/GLM-4.6",
-                            "Qwen/Qwen3-8B",
-                            "Qwen/Qwen3-14B",
-                            "Qwen/Qwen3-32B",
-                            "Qwen/Qwen3-30B-A3B",
-                            "tencent/Hunyuan-A13B-Instruct",
-                            "zai-org/GLM-4.5V",
-                            "deepseek-ai/DeepSeek-V3.1-Terminus",
-                            "Pro/deepseek-ai/DeepSeek-V3.1-Terminus",
-                        )
-                        if (modelId in siliconflowThinkingModels) {
-                            put("enable_thinking", level.isEnabled)
+                } else {
+                    when (host) {
+                        "openrouter.ai" -> {
+                            // https://openrouter.ai/docs/use-cases/reasoning-tokens
+                            put("reasoning", buildJsonObject {
+                                if (level != ReasoningLevel.AUTO) put("max_tokens", params.thinkingBudget ?: 0)
+                                if (!level.isEnabled) {
+                                    put("enabled", false)
+                                }
+                            })
                         }
-                    }
 
-                    "open.bigmodel.cn" -> {
-                        put("thinking", buildJsonObject {
-                            put("type", if (!level.isEnabled) "disabled" else "enabled")
-                        })
-                    }
+                        "dashscope.aliyuncs.com" -> {
+                            // 阿里云百炼
+                            // https://bailian.console.aliyun.com/console?tab=doc#/doc/?type=model&url=https%3A%2F%2Fhelp.aliyun.com%2Fdocument_detail%2F2870973.html&renderType=iframe
+                            put("enable_thinking", level.isEnabled)
+                            if (level != ReasoningLevel.AUTO) put("thinking_budget", params.thinkingBudget ?: 0)
+                        }
 
-                    "api.moonshot.cn" -> {
-                        put("thinking", buildJsonObject {
-                            put("type", if (!level.isEnabled) "disabled" else "enabled")
-                        })
-                    }
+                        "ark.cn-beijing.volces.com" -> {
+                            // 豆包 (火山)
+                            put("thinking", buildJsonObject {
+                                put("type", if (!level.isEnabled) "disabled" else "enabled")
+                            })
+                        }
 
-                    else -> {
-                        // OpenAI 官方
-                        // 文档中，completions API 只支持 "low", "medium", "high"
-                        if (level != ReasoningLevel.AUTO) {
-                            put("reasoning_effort", if (level.effort == "none") "low" else level.effort)
+                        "api.mistral.ai" -> {
+                            // Mistral 不支持
+                        }
+
+                        "chat.intern-ai.org.cn" -> {
+                            // 书生
+                            // https://internlm.intern-ai.org.cn/api/document?lang=zh
+                            put("thinking_mode", level.isEnabled)
+                        }
+
+                        "api.siliconflow.cn" -> {
+                            // https://docs.siliconflow.cn/cn/userguide/capabilities/reasoning#3-1-api-%E5%8F%82%E6%95%B0
+                            val modelId = params.model.modelId
+                            val siliconflowThinkingModels = setOf(
+                                "Pro/moonshotai/Kimi-K2.5",
+                                "Pro/zai-org/GLM-5",
+                                "Pro/zai-org/GLM-4.7",
+                                "deepseek-ai/DeepSeek-V3.2",
+                                "Pro/deepseek-ai/DeepSeek-V3.2",
+                                "Qwen/Qwen3.5-397B-A17B",
+                                "Qwen/Qwen3.5-122B-A10B",
+                                "Qwen/Qwen3.5-35B-A3B",
+                                "Qwen/Qwen3.5-27B",
+                                "Qwen/Qwen3.5-9B",
+                                "Qwen/Qwen3.5-4B",
+                                "zai-org/GLM-4.6",
+                                "Qwen/Qwen3-8B",
+                                "Qwen/Qwen3-14B",
+                                "Qwen/Qwen3-32B",
+                                "Qwen/Qwen3-30B-A3B",
+                                "tencent/Hunyuan-A13B-Instruct",
+                                "zai-org/GLM-4.5V",
+                                "deepseek-ai/DeepSeek-V3.1-Terminus",
+                                "Pro/deepseek-ai/DeepSeek-V3.1-Terminus",
+                            )
+                            if (modelId in siliconflowThinkingModels) {
+                                put("enable_thinking", level.isEnabled)
+                            }
+                        }
+
+                        "open.bigmodel.cn" -> {
+                            put("thinking", buildJsonObject {
+                                put("type", if (!level.isEnabled) "disabled" else "enabled")
+                            })
+                        }
+
+                        "api.moonshot.cn" -> {
+                            put("thinking", buildJsonObject {
+                                put("type", if (!level.isEnabled) "disabled" else "enabled")
+                            })
+                        }
+
+                        else -> {
+                            // OpenAI 官方
+                            // 兼容当前非 GPT 推理模型的 low / medium / high 行为
+                            if (level != ReasoningLevel.AUTO) {
+                                put("reasoning_effort", if (level.effort == "none") "low" else level.effort)
+                            }
                         }
                     }
                 }

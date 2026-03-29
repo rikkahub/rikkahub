@@ -1,11 +1,16 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
@@ -37,6 +42,37 @@ class ChatCompletionsAPIMessageTest {
         )
         method.isAccessible = true
         return method.invoke(api, messages) as JsonArray
+    }
+
+    private fun invokeBuildRequestBody(
+        providerSetting: ProviderSetting.OpenAI,
+        params: TextGenerationParams,
+        stream: Boolean = false
+    ): JsonObject {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "buildChatCompletionRequest",
+            List::class.java,
+            TextGenerationParams::class.java,
+            ProviderSetting.OpenAI::class.java,
+            Boolean::class.javaPrimitiveType
+        )
+        method.isAccessible = true
+        return method.invoke(api, listOf(UIMessage.user("hello")), params, providerSetting, stream) as JsonObject
+    }
+
+    private fun createReasoningParams(
+        modelId: String = "test-model",
+        abilities: List<ModelAbility> = listOf(ModelAbility.REASONING),
+        thinkingBudget: Int? = null
+    ): TextGenerationParams {
+        return TextGenerationParams(
+            model = Model(
+                modelId = modelId,
+                displayName = modelId,
+                abilities = abilities
+            ),
+            thinkingBudget = thinkingBudget
+        )
     }
 
     @Test
@@ -299,6 +335,39 @@ class ChatCompletionsAPIMessageTest {
                     "tool", nextMsg["role"]?.jsonPrimitive?.content)
             }
         }
+    }
+
+    @Test
+    fun `gpt chat completions should use reasoning effort instead of dashscope thinking budget`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "gpt-5.4", thinkingBudget = 64_000)
+        )
+
+        assertEquals("xhigh", requestBody["reasoning_effort"]?.jsonPrimitive?.content)
+        assertTrue("GPT request should not include thinking_budget", !requestBody.containsKey("thinking_budget"))
+        assertTrue("GPT request should not include enable_thinking", !requestBody.containsKey("enable_thinking"))
+    }
+
+    @Test
+    fun `non gpt dashscope should keep thinking budget branch`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(modelId = "qwen-plus-thinking", thinkingBudget = 1024)
+        )
+
+        assertEquals(1024, requestBody["thinking_budget"]?.jsonPrimitive?.content?.toInt())
+        assertEquals("true", requestBody["enable_thinking"]?.jsonPrimitive?.content)
+        assertTrue(
+            "Non GPT request should not include reasoning_effort",
+            !requestBody.containsKey("reasoning_effort")
+        )
     }
 
     @Test

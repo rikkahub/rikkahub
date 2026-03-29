@@ -22,6 +22,9 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.getGptReasoningEffort
+import me.rerere.ai.core.isGptReasoningModel
+import me.rerere.ai.core.supportsReasoningConfiguration
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -207,13 +210,18 @@ class ResponseAPI(
             put("input", buildMessages(messages))
 
             // reasoning
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
-                val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget ?: 0)
+            if (params.model.supportsReasoningConfiguration()) {
+                val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)
+                val gptReasoningEffort = getGptReasoningEffort(params.model.modelId, params.thinkingBudget)
                 put("reasoning", buildJsonObject {
                     if (capabilities.supportsReasoningSummary) {
                         put("summary", "auto")
                     }
-                    if (level != ReasoningLevel.AUTO) {
+                    if (isGptReasoningModel(params.model.modelId)) {
+                        if (gptReasoningEffort != null) {
+                            put("effort", gptReasoningEffort)
+                        }
+                    } else if (level != ReasoningLevel.AUTO) {
                         put("effort", level.effort)
                     }
                 })
@@ -693,4 +701,3 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
         else -> ResponseProviderCapabilities()
     }
 }
-

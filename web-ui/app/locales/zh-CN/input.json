@@ -30,7 +30,7 @@
     "custom_budget_placeholder": "输入预算 token 数",
     "invalid_integer": "请输入有效的整数",
     "apply": "应用",
-    "examples": "示例：0（关闭）、-1（自动）、1024、16000、32000",
+    "examples": "示例：0（关闭）、-1（自动）、1（最小推理）、1024、16000、32000、64000（超高推理）",
     "presets": {
       "off": {
         "label": "关闭",
@@ -39,6 +39,10 @@
       "auto": {
         "label": "自动",
         "description": "让模型自动决定推理级别。"
+      },
+      "minimal": {
+        "label": "最小推理",
+        "description": "模型将使用尽可能少的推理来回答问题。"
       },
       "low": {
         "label": "轻度推理",
@@ -51,6 +55,10 @@
       "high": {
         "label": "重度推理",
         "description": "模型将使用大量推理来回答问题。"
+      },
+      "xhigh": {
+        "label": "超高推理",
+        "description": "模型将使用超高强度的推理来回答问题。"
       }
     }
   },

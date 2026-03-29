@@ -30,7 +30,7 @@
     "custom_budget_placeholder": "Enter token budget",
     "invalid_integer": "Please enter a valid integer",
     "apply": "Apply",
-    "examples": "Examples: 0 (off), -1 (auto), 1024, 16000, 32000",
+    "examples": "Examples: 0 (off), -1 (auto), 1 (minimal), 1024, 16000, 32000, 64000 (extra high)",
     "presets": {
       "off": {
         "label": "Off",
@@ -39,6 +39,10 @@
       "auto": {
         "label": "Auto",
         "description": "Let the model decide the reasoning level automatically."
+      },
+      "minimal": {
+        "label": "Minimal",
+        "description": "Use the smallest amount of reasoning needed to answer."
       },
       "low": {
         "label": "Light",
@@ -51,6 +55,10 @@
       "high": {
         "label": "Heavy",
         "description": "Use extensive reasoning to answer."
+      },
+      "xhigh": {
+        "label": "Extra High",
+        "description": "Use an extra high amount of reasoning to answer."
       }
     }
   },

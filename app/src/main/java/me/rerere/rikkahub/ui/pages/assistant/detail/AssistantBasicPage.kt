@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
@@ -97,6 +98,7 @@ internal fun AssistantBasicContent(
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    val currentModel = assistant.chatModelId?.let { providers.findModelById(it) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -405,6 +407,7 @@ internal fun AssistantBasicContent(
             ) {
                 ReasoningButton(
                     reasoningTokens = assistant.thinkingBudget ?: 0,
+                    model = currentModel,
                     onUpdateReasoningTokens = { tokens ->
                         onUpdate(
                             assistant.copy(
