@@ -6,6 +6,7 @@ import com.google.firebase.crashlytics.crashlytics
 import com.google.firebase.remoteconfig.remoteConfig
 import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
+import me.rerere.rikkahub.data.ai.transformers.SillyTavernCompatScriptTransformer
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -63,6 +64,14 @@ val appModule = module {
     }
 
     single {
+        SillyTavernCompatScriptTransformer(
+            json = get(),
+            settingsStore = get(),
+            termuxCommandManager = get(),
+        )
+    }
+
+    single {
         SkillsRepository(
             context = get(),
             appScope = get(),
@@ -114,6 +123,7 @@ val appModule = module {
             templateTransformer = get(),
             providerManager = get(),
             localTools = get(),
+            stCompatScriptTransformer = get(),
             termuxCommandManager = get(),
             termuxPtySessionManager = get(),
             mcpManager = get(),

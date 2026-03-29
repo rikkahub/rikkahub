@@ -2,6 +2,8 @@ package me.rerere.rikkahub.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
@@ -51,6 +53,9 @@ data class Assistant(
     val mcpServers: Set<Uuid> = emptySet(),
     val localTools: List<LocalToolOption> = listOf(LocalToolOption.TimeInfo),
     val localToolPrompts: Map<String, String> = emptyMap(),
+    val stCompatScriptEnabled: Boolean = false,
+    val stCompatScriptSource: String = "",
+    val stCompatExtensionSettings: JsonObject = buildJsonObject { },
     val skillsEnabled: Boolean = false,
     val selectedSkills: Set<String> = emptySet(),
     val termuxNeedsApproval: Boolean = true,

@@ -77,6 +77,7 @@ import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexPromptOnlyTransformer
+import me.rerere.rikkahub.data.ai.transformers.SillyTavernCompatScriptTransformer
 import me.rerere.rikkahub.data.ai.transformers.StMacroState
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernMacroTransformer
@@ -165,6 +166,7 @@ class ChatService(
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
+    private val stCompatScriptTransformer: SillyTavernCompatScriptTransformer,
     private val termuxCommandManager: TermuxCommandManager,
     private val termuxPtySessionManager: TermuxPtySessionManager,
     val mcpManager: McpManager,
@@ -760,6 +762,7 @@ class ChatService(
                 addAll(inputTransformers)
                 add(templateTransformer)
                 add(RegexPromptOnlyTransformer)
+                add(stCompatScriptTransformer)
             },
             outputTransformers = outputTransformers,
             tools = buildList {
@@ -1046,6 +1049,7 @@ class ChatService(
                     addAll(inputTransformers)
                     add(templateTransformer)
                     add(RegexPromptOnlyTransformer)
+                    add(stCompatScriptTransformer)
                 },
                 outputTransformers = outputTransformers,
                 tools = buildList {
