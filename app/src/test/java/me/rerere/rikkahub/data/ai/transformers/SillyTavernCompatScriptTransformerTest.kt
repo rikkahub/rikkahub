@@ -157,6 +157,30 @@ class SillyTavernCompatScriptTransformerTest {
     }
 
     @Test
+    fun `buildCompatContextChat should expose ST style chat context`() {
+        val chat = buildCompatContextChat(
+            messages = listOf(
+                StCompatMessage(role = "system", content = "sys"),
+                StCompatMessage(role = "user", content = "hello"),
+                StCompatMessage(role = "assistant", content = "world"),
+                StCompatMessage(role = "tool", content = "{\"ok\":true}"),
+            ),
+            userName = "Alice",
+            charName = "Rikka",
+        )
+
+        assertEquals(
+            listOf(
+                StCompatChatMessage(name = "System", isUser = false, isSystem = true, mes = "sys"),
+                StCompatChatMessage(name = "Alice", isUser = true, isSystem = false, mes = "hello"),
+                StCompatChatMessage(name = "Rikka", isUser = false, isSystem = false, mes = "world"),
+                StCompatChatMessage(name = "Tool", isUser = false, isSystem = false, mes = "{\"ok\":true}"),
+            ),
+            chat,
+        )
+    }
+
+    @Test
     fun `toCompatApi should expose ST style main api for chat completion providers`() {
         assertEquals(
             StCompatApiContext(
