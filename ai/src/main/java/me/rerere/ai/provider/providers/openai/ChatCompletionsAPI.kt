@@ -94,10 +94,10 @@ class ChatCompletionsAPI(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
         }
 
-        val bodyStr = response.body?.string() ?: ""
+        val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
         // 从 JsonObject 中提取必要的信息
@@ -285,13 +285,15 @@ class ChatCompletionsAPI(
             }
 
             if (params.model.supportsReasoningConfiguration()) {
-                val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)
-                val gptReasoningEffort = getGptReasoningEffort(params.model.modelId, params.thinkingBudget)
-                if (isGptReasoningModel(params.model.modelId)) {
+                val modelId = params.model.modelId
+                val isGpt = isGptReasoningModel(modelId)
+                if (isGpt) {
+                    val gptReasoningEffort = getGptReasoningEffort(modelId, params.thinkingBudget)
                     if (gptReasoningEffort != null) {
                         put("reasoning_effort", gptReasoningEffort)
                     }
                 } else {
+                    val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)
                     when (host) {
                         "openrouter.ai" -> {
                             // https://openrouter.ai/docs/use-cases/reasoning-tokens

@@ -118,7 +118,7 @@ function getGptReasoningBucket(modelId: string): GptReasoningBucket | null {
   if (minorVersion == null && suffix.startsWith("pro")) {
     return "GPT_5_PRO";
   }
-  if (minorVersion == null && suffix.length === 0) {
+  if (minorVersion == null) {
     return "GPT_5";
   }
   if (minorVersion === 1 && suffix.startsWith("codex-max")) {

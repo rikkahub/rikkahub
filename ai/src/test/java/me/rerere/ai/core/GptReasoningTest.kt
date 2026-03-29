@@ -19,6 +19,10 @@ class GptReasoningTest {
             getSupportedGptReasoningLevels("gpt-5")
         )
         assertEquals(
+            listOf(ReasoningLevel.MINIMAL, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH),
+            getSupportedGptReasoningLevels("gpt-5-mini")
+        )
+        assertEquals(
             listOf(ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
             getSupportedGptReasoningLevels("gpt-5.1-codex-max")
         )

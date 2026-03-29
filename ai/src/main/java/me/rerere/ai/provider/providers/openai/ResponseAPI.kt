@@ -92,7 +92,7 @@ class ResponseAPI(
             throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
         }
 
-        val bodyStr = response.body?.string() ?: ""
+        val bodyStr = response.body.string()
         Log.i(TAG, "generateText: $bodyStr")
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val output = parseResponseOutput(bodyJson)
@@ -211,13 +211,17 @@ class ResponseAPI(
 
             // reasoning
             if (params.model.supportsReasoningConfiguration()) {
-                val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)
-                val gptReasoningEffort = getGptReasoningEffort(params.model.modelId, params.thinkingBudget)
+                val modelId = params.model.modelId
+                val isGpt = isGptReasoningModel(modelId)
+                val gptReasoningEffort =
+                    if (isGpt) getGptReasoningEffort(modelId, params.thinkingBudget) else null
+                val level =
+                    if (!isGpt) ReasoningLevel.fromBudgetTokens(params.thinkingBudget) else ReasoningLevel.AUTO
                 put("reasoning", buildJsonObject {
                     if (capabilities.supportsReasoningSummary) {
                         put("summary", "auto")
                     }
-                    if (isGptReasoningModel(params.model.modelId)) {
+                    if (isGpt) {
                         if (gptReasoningEffort != null) {
                             put("effort", gptReasoningEffort)
                         }

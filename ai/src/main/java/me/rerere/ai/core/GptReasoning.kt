@@ -26,6 +26,10 @@ private val reasoningPriority = listOf(
     ReasoningLevel.XHIGH,
 )
 
+private val reasoningPriorityByLevel = reasoningPriority
+    .withIndex()
+    .associate { (index, level) -> level to index }
+
 private val gpt5Regex = Regex("^gpt-5(?:\\.(\\d+))?(?:-([a-z0-9.-]+))?$")
 
 fun getSupportedGptReasoningLevels(modelId: String): List<ReasoningLevel>? {
@@ -58,18 +62,31 @@ private fun getGptReasoningBucket(modelId: String): GptReasoningBucket? {
     val minorVersion = match.groupValues[1].takeIf { it.isNotEmpty() }?.toIntOrNull()
     val suffix = match.groupValues[2]
 
-    return when {
-        minorVersion == null && suffix.startsWith("codex") -> GptReasoningBucket.GPT_5_CODEX
-        minorVersion == null && suffix.startsWith("pro") -> GptReasoningBucket.GPT_5_PRO
-        minorVersion == null && suffix.isEmpty() -> GptReasoningBucket.GPT_5
-        minorVersion == 1 && suffix.startsWith("codex-max") -> GptReasoningBucket.GPT_5_1_CODEX_MAX
-        minorVersion == 1 && suffix.startsWith("codex") -> GptReasoningBucket.GPT_5_1_CODEX
-        minorVersion == 1 -> GptReasoningBucket.GPT_5_1
-        minorVersion != null && minorVersion >= 2 && suffix.startsWith("pro") -> GptReasoningBucket.GPT_5_2_PLUS_PRO
-        minorVersion != null && minorVersion >= 2 && suffix.contains("codex") -> GptReasoningBucket.GPT_5_2_PLUS_CODEX
-        minorVersion != null && minorVersion >= 2 -> GptReasoningBucket.GPT_5_2_PLUS_BASE
-        else -> null
+    if (minorVersion == null) {
+        return when {
+            suffix.startsWith("codex") -> GptReasoningBucket.GPT_5_CODEX
+            suffix.startsWith("pro") -> GptReasoningBucket.GPT_5_PRO
+            else -> GptReasoningBucket.GPT_5
+        }
     }
+
+    if (minorVersion == 1) {
+        return when {
+            suffix.startsWith("codex-max") -> GptReasoningBucket.GPT_5_1_CODEX_MAX
+            suffix.startsWith("codex") -> GptReasoningBucket.GPT_5_1_CODEX
+            else -> GptReasoningBucket.GPT_5_1
+        }
+    }
+
+    if (minorVersion >= 2) {
+        return when {
+            suffix.startsWith("pro") -> GptReasoningBucket.GPT_5_2_PLUS_PRO
+            suffix.contains("codex") -> GptReasoningBucket.GPT_5_2_PLUS_CODEX
+            else -> GptReasoningBucket.GPT_5_2_PLUS_BASE
+        }
+    }
+
+    return null
 }
 
 private fun normalizeModelId(modelId: String): String {
@@ -84,8 +101,11 @@ private fun clampReasoningLevel(
     requestedLevel: ReasoningLevel,
     supportedLevels: List<ReasoningLevel>
 ): ReasoningLevel {
-    val requestedPriority = reasoningPriority.indexOf(requestedLevel)
-    val supportedByPriority = supportedLevels.sortedBy { reasoningPriority.indexOf(it) }
-    return supportedByPriority.firstOrNull { reasoningPriority.indexOf(it) >= requestedPriority }
-        ?: supportedByPriority.last()
+    val requestedPriority = priorityOf(requestedLevel)
+    val supportedByPriority = supportedLevels.sortedBy { priorityOf(it) }
+    return supportedByPriority.firstOrNull { priorityOf(it) >= requestedPriority } ?: supportedByPriority.last()
+}
+
+private fun priorityOf(level: ReasoningLevel): Int {
+    return reasoningPriorityByLevel[level] ?: Int.MAX_VALUE
 }
