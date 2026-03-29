@@ -22,6 +22,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -55,6 +56,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -68,6 +70,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
 import androidx.compose.ui.res.stringResource
@@ -221,6 +224,7 @@ private fun ChatListNormal(
     val scope = rememberCoroutineScope()
     var isRecentScroll by remember { mutableStateOf(false) }
     val density = LocalDensity.current
+    val activity = LocalContext.current as? me.rerere.rikkahub.RouteActivity
     val enableGlassBlur = settings.displaySetting.enableBlurEffect
     val assistant = remember(settings.assistants, conversation.assistantId) {
         settings.getAssistantById(conversation.assistantId)
@@ -241,6 +245,34 @@ private fun ChatListNormal(
             val lastPos = lastItem.offset + lastItem.size
             val inputPos = state.layoutInfo.viewportEndOffset - inputBarHeight.roundToInt()
             lastPos <= inputPos - 8
+        }
+    }
+    DisposableEffect(
+        activity,
+        state,
+        density,
+        innerPadding,
+        settings.displaySetting.enableVolumeKeyScroll,
+        settings.displaySetting.volumeKeyScrollRatio,
+    ) {
+        val listener: (Boolean) -> Boolean = { isVolumeUp ->
+            if (settings.displaySetting.enableVolumeKeyScroll) {
+                val bottomPaddingPx = with(density) {
+                    (32.dp + innerPadding.calculateBottomPadding()).toPx()
+                }
+                val scrollAmount = (state.layoutInfo.viewportSize.height - bottomPaddingPx) *
+                    settings.displaySetting.volumeKeyScrollRatio
+                scope.launch {
+                    state.scrollBy(if (isVolumeUp) -scrollAmount else scrollAmount)
+                }
+                true
+            } else {
+                false
+            }
+        }
+        activity?.volumeKeyListeners?.add(listener)
+        onDispose {
+            activity?.volumeKeyListeners?.remove(listener)
         }
     }
 

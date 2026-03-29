@@ -12,6 +12,11 @@ private data class ListInfo(
     val number: Int
 )
 
+private data class ParagraphProperties(
+    val listInfo: ListInfo?,
+    val headingLevel: Int
+)
+
 object DocxParser {
     fun parse(file: File): String {
         return try {
@@ -76,8 +81,9 @@ object DocxParser {
                     when (parser.name) {
                         "r" -> extractRunText(parser, paragraphContent)
                         "pPr" -> {
-                            listInfo = extractListInfo(parser)
-                            headingLevel = extractHeadingLevel(parser)
+                            val props = extractParagraphProperties(parser)
+                            listInfo = props.listInfo
+                            headingLevel = props.headingLevel
                         }
                     }
                 }
@@ -294,20 +300,35 @@ object DocxParser {
         return result.toString().trim()
     }
 
-    private fun extractListInfo(parser: XmlPullParser): ListInfo? {
+    private fun extractParagraphProperties(parser: XmlPullParser): ParagraphProperties {
         val pPrStartDepth = parser.depth
-        var level = 0
+        var listLevel = 0
         var isNumbered = false
+        var headingLevel = 0
 
         while (parser.next() != XmlPullParser.END_DOCUMENT) {
             when (parser.eventType) {
                 XmlPullParser.START_TAG -> {
                     when (parser.name) {
+                        "pStyle" -> {
+                            val styleVal = parser.getAttributeValue(null, "val")
+                            if (styleVal?.startsWith("Heading") == true || styleVal?.startsWith("heading") == true) {
+                                headingLevel = styleVal.lastOrNull()?.digitToIntOrNull() ?: 1
+                            }
+                        }
                         "numPr" -> {
-                            // Found numbering properties
-                            val numInfo = extractNumberingInfo(parser)
-                            level = numInfo.first
-                            isNumbered = numInfo.second
+                            val numPrStartDepth = parser.depth
+                            while (parser.next() != XmlPullParser.END_DOCUMENT) {
+                                when (parser.eventType) {
+                                    XmlPullParser.START_TAG -> when (parser.name) {
+                                        "ilvl" -> listLevel = parser.getAttributeValue(null, "val")?.toIntOrNull() ?: 0
+                                        "numId" -> isNumbered = parser.getAttributeValue(null, "val") != null
+                                    }
+                                    XmlPullParser.END_TAG -> {
+                                        if (parser.name == "numPr" && parser.depth == numPrStartDepth) break
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -319,60 +340,10 @@ object DocxParser {
             }
         }
 
-        return if (level > 0 || isNumbered) {
-            ListInfo(level = level, isNumbered = isNumbered, number = 1) // 简化处理
+        val listInfo = if (listLevel > 0 || isNumbered) {
+            ListInfo(level = listLevel, isNumbered = isNumbered, number = 1)
         } else null
-    }
 
-    private fun extractNumberingInfo(parser: XmlPullParser): Pair<Int, Boolean> {
-        val numPrStartDepth = parser.depth
-        var level = 0
-        var hasNumId = false
-
-        while (parser.next() != XmlPullParser.END_DOCUMENT) {
-            when (parser.eventType) {
-                XmlPullParser.START_TAG -> {
-                    when (parser.name) {
-                        "ilvl" -> {
-                            level = parser.getAttributeValue(null, "val")?.toIntOrNull() ?: 0
-                        }
-                        "numId" -> {
-                            hasNumId = parser.getAttributeValue(null, "val") != null
-                        }
-                    }
-                }
-                XmlPullParser.END_TAG -> {
-                    if (parser.name == "numPr" && parser.depth == numPrStartDepth) {
-                        break
-                    }
-                }
-            }
-        }
-
-        return Pair(level, hasNumId)
-    }
-
-    private fun extractHeadingLevel(parser: XmlPullParser): Int {
-        val pPrStartDepth = parser.depth
-
-        while (parser.next() != XmlPullParser.END_DOCUMENT) {
-            when (parser.eventType) {
-                XmlPullParser.START_TAG -> {
-                    if (parser.name == "pStyle") {
-                        val styleVal = parser.getAttributeValue(null, "val")
-                        if (styleVal?.startsWith("Heading") == true || styleVal?.startsWith("heading") == true) {
-                            return styleVal.lastOrNull()?.digitToIntOrNull() ?: 1
-                        }
-                    }
-                }
-                XmlPullParser.END_TAG -> {
-                    if (parser.name == "pPr" && parser.depth == pPrStartDepth) {
-                        break
-                    }
-                }
-            }
-        }
-
-        return 0
+        return ParagraphProperties(listInfo = listInfo, headingLevel = headingLevel)
     }
 }

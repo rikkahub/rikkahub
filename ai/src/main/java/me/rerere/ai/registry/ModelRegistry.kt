@@ -311,6 +311,11 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GLM_5_1 = defineModel {
+        tokens("glm", "5", "1")
+        toolReasoningAbility()
+    }
+
     private val MINIMAX_M2 = defineModel {
         tokens("minimax", "m", "2")
         toolReasoningAbility()
@@ -389,6 +394,7 @@ object ModelRegistry {
         GLM_4_6,
         GLM_4_7,
         GLM_5,
+        GLM_5_1,
         MINIMAX_M2,
         MINIMAX_M2_5,
         MINIMAX_M2_7,

@@ -777,6 +777,9 @@
   <string name="setting_display_page_paste_long_text_as_file_title">긴 텍스트를 파일로 붙여넣기</string>
   <string name="setting_display_page_paste_long_text_as_file_desc">복사한 텍스트가 임계값을 초과하면 자동으로 파일 첨부로 저장</string>
   <string name="setting_display_page_paste_long_text_threshold_title">텍스트 길이 임계값</string>
+  <string name="setting_display_page_volume_key_scroll_title">볼륨 키 페이지 스크롤</string>
+  <string name="setting_display_page_volume_key_scroll_desc">볼륨 키로 페이지를 스크롤합니다. 전자 잉크 화면에 적합합니다.</string>
+  <string name="setting_display_page_volume_key_scroll_ratio">스크롤 양</string>
   <string name="chat_message_tool_approve">승인</string>
   <string name="chat_message_tool_deny">거부</string>
   <string name="chat_message_tool_denied">거부됨</string>
@@ -1932,4 +1935,3 @@ vale, elira
 
 &gt; 이전에 프리셋을 많이 가져왔다면 먼저 라이브러리 드로어를 사용하세요. 메인 페이지에서 모든 것을 관리하려고 하지 마세요.</string>
 </resources>
-

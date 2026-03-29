@@ -88,40 +88,6 @@ val DEFAULT_PROVIDERS = listOf(
                 text = "支持gpt, claude, gemini等200+模型"
             )
         },
-        models = listOf(
-            Model(
-                id = Uuid.parse("ea7b9574-e590-42ac-a9ac-01e3aa213f4f"),
-                modelId = "gpt-5",
-                displayName = "GPT 5",
-                inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = listOf(ModelAbility.TOOL, ModelAbility.REASONING),
-            ),
-            Model(
-                id = Uuid.parse("5c33502d-2307-40bd-83fc-133f504bb0c9"),
-                modelId = "claude-sonnet-4-5-20250929",
-                displayName = "Claude Sonnet 4.5",
-                inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = listOf(ModelAbility.TOOL, ModelAbility.REASONING),
-            ),
-            Model(
-                id = Uuid.parse("64081a31-4331-4ead-91bc-96e05497431a"),
-                modelId = "DeepSeek-V3.2-Exp",
-                displayName = "DeepSeek V3.2 Exp",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = listOf(ModelAbility.TOOL),
-            ),
-            Model(
-                id = Uuid.parse("71d7f143-4ce1-49b5-b70d-7a6620a4e716"),
-                modelId = "qwen3-max",
-                displayName = "Qwen3 Max",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = listOf(ModelAbility.TOOL),
-            ),
-        )
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("56a94d29-c88b-41c5-8e09-38a7612d6cf8"),
@@ -137,24 +103,6 @@ val DEFAULT_PROVIDERS = listOf(
                 """.trimIndent()
             )
         },
-        models = listOf(
-            Model(
-                id = Uuid.parse("dd82297e-4237-4d3c-85b3-58d5c7084fc2"),
-                modelId = "Qwen/Qwen3-8B",
-                displayName = "Qwen3-8B",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = listOf(ModelAbility.TOOL, ModelAbility.REASONING),
-            ),
-            Model(
-                id = Uuid.parse("e4b836cd-6cbe-4350-b9e5-8c3b2d448b00"),
-                modelId = "THUDM/GLM-4.1V-9B-Thinking",
-                displayName = "GLM-4.1V-9B",
-                inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = listOf(),
-            ),
-        ),
         balanceOption = BalanceOption(
             enabled = true,
             apiPath = "/user/info",
@@ -258,26 +206,6 @@ val DEFAULT_PROVIDERS = listOf(
         apiKey = "",
         enabled = false,
         builtIn = true
-    ),
-    ProviderSetting.OpenAI(
-        id = Uuid.parse("89e67540-32fe-4c62-9970-2e9aed9bd59d"),
-        name = "JuheNext",
-        baseUrl = "https://api.juheai.top/v1",
-        apiKey = "",
-        enabled = false,
-        builtIn = true,
-        description = {
-            Text(
-                text = buildAnnotatedString {
-                    append("一站式API中转平台, 官网：")
-                    withLink(LinkAnnotation.Url("https://api.juheai.top/register?aff=qG7E")) {
-                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
-                            append("https://api.juheai.top")
-                        }
-                    }
-                }
-            )
-        }
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("da93779f-3956-48cc-82ef-67bb482eaaf7"),

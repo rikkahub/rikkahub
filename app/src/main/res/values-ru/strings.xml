@@ -775,6 +775,9 @@
   <string name="setting_display_page_paste_long_text_as_file_title">Вставлять длинный текст как файл</string>
   <string name="setting_display_page_paste_long_text_as_file_desc">При вставке текста, превышающего порог, автоматически сохранять его как файл-вложение</string>
   <string name="setting_display_page_paste_long_text_threshold_title">Порог длины текста</string>
+  <string name="setting_display_page_volume_key_scroll_title">Прокрутка страниц клавишами громкости</string>
+  <string name="setting_display_page_volume_key_scroll_desc">Прокрутка страниц клавишами громкости, идеально для экранов электронных чернил</string>
+  <string name="setting_display_page_volume_key_scroll_ratio">Величина прокрутки</string>
   <string name="chat_message_tool_approve">Одобрить</string>
   <string name="chat_message_tool_deny">Отклонить</string>
   <string name="chat_message_tool_denied">Отклонено</string>
@@ -1932,4 +1935,3 @@ vale, elira
 
 &gt; Если вы ранее импортировали много пресетов, сначала используйте панель библиотеки. Не пытайтесь управлять всем с главной страницы.</string>
 </resources>
-

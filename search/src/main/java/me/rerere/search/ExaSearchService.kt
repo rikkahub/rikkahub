@@ -11,6 +11,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -18,6 +20,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
 import me.rerere.search.SearchService.Companion.json
+import me.rerere.search.SearchService.Companion.keyRoulette
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -44,6 +47,15 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                     put("type", "string")
                     put("description", "search keyword")
                 })
+                put("type", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Search type: fast (quick results), auto (default, balanced), deep (synthesized answer with citations)")
+                    put("enum", buildJsonArray {
+                        add("fast")
+                        add("auto")
+                        add("deep")
+                    })
+                })
             },
             required = listOf("query")
         )
@@ -60,15 +72,17 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
             val body = buildJsonObject {
                 put("query", JsonPrimitive(query))
                 put("numResults", JsonPrimitive(commonOptions.resultSize))
+                put("type", JsonPrimitive(params["type"]?.jsonPrimitive?.content ?: "auto"))
                 put("contents", buildJsonObject {
                     put("text", JsonPrimitive(true))
                 })
             }
+            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
             val request = Request.Builder()
                 .url("https://api.exa.ai/search")
                 .post(json.encodeToString(body).toRequestBody("application/json".toMediaType()))
-                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .addHeader("Authorization", "Bearer $apiKey")
                 .build()
 
             val response = httpClient.newCall(request).execute()
@@ -84,6 +98,7 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
 
                 return@withContext Result.success(
                     SearchResult(
+                        answer = response.output?.content,
                         items = response.results.map {
                             SearchResultItem(
                                 title = it.title,
@@ -117,6 +132,34 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         val resolvedSearchType: String? = null,
         @SerialName("results")
         val results: List<ExaResult>,
+        @SerialName("output")
+        val output: ExaOutput? = null,
+    )
+
+    @Serializable
+    data class ExaOutput(
+        @SerialName("content")
+        val content: String? = null,
+        @SerialName("grounding")
+        val grounding: List<ExaGrounding> = emptyList(),
+    )
+
+    @Serializable
+    data class ExaGrounding(
+        @SerialName("field")
+        val field: String? = null,
+        @SerialName("citations")
+        val citations: List<ExaCitation> = emptyList(),
+        @SerialName("confidence")
+        val confidence: String? = null,
+    )
+
+    @Serializable
+    data class ExaCitation(
+        @SerialName("url")
+        val url: String,
+        @SerialName("title")
+        val title: String,
     )
 
     @Serializable

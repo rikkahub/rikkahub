@@ -777,6 +777,9 @@
   <string name="setting_display_page_paste_long_text_as_file_title">長いテキストをファイルとして貼り付け</string>
   <string name="setting_display_page_paste_long_text_as_file_desc">テキストを貼り付けた際にしきい値を超える場合、自動的にファイル添付として保存します</string>
   <string name="setting_display_page_paste_long_text_threshold_title">文字数しきい値</string>
+  <string name="setting_display_page_volume_key_scroll_title">音量キーでページスクロール</string>
+  <string name="setting_display_page_volume_key_scroll_desc">音量キーでページをスクロール、電子ペーパー画面に最適</string>
+  <string name="setting_display_page_volume_key_scroll_ratio">スクロール量</string>
   <string name="chat_message_tool_approve">承認</string>
   <string name="chat_message_tool_deny">拒否</string>
   <string name="chat_message_tool_denied">拒否されました</string>
@@ -1932,4 +1935,3 @@ Any secondary keyword
 
 &gt; 以前に多くのプリセットをインポートしている場合は、まずライブラリドロワーを使ってください。メインページですべてを管理しようとしないでください。</string>
 </resources>
-

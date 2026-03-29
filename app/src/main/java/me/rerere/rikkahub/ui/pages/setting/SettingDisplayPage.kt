@@ -731,6 +731,18 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 )
                             },
                         )
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_title)) },
+                            supportingContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = displaySetting.enableVolumeKeyScroll,
+                                    onCheckedChange = {
+                                        updateDisplaySetting(displaySetting.copy(enableVolumeKeyScroll = it))
+                                    }
+                                )
+                            },
+                        )
                     }
 
                     if (displaySetting.pasteLongTextAsFile) {
@@ -778,6 +790,38 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 Text(
                                     text = "${pasteThresholdSliderState.value.toInt()}",
                                 )
+                            }
+                        }
+                    }
+                    if (displaySetting.enableVolumeKeyScroll) {
+                        Column(
+                            modifier = Modifier
+                                .padding(horizontal = 8.dp)
+                                .fillMaxWidth()
+                                .clip(settingsPanelShape)
+                                .background(MaterialTheme.colorScheme.surfaceBright)
+                        ) {
+                            ListItem(
+                                headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_ratio)) },
+                                colors = CustomColors.listItemColors,
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Slider(
+                                    value = displaySetting.volumeKeyScrollRatio,
+                                    onValueChange = {
+                                        updateDisplaySetting(displaySetting.copy(volumeKeyScrollRatio = it))
+                                    },
+                                    valueRange = 0.25f..1.0f,
+                                    steps = 2,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(text = "${(displaySetting.volumeKeyScrollRatio * 100).toInt()}%")
                             }
                         }
                     }

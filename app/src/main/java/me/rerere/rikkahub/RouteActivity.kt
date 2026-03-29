@@ -3,6 +3,7 @@ package me.rerere.rikkahub
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -142,6 +143,20 @@ class RouteActivity : ComponentActivity() {
     private val chatService by inject<ChatService>()
     private var navStack: MutableList<NavKey>? = null
 
+    internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val isVolumeUp = when (event.keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> true
+                KeyEvent.KEYCODE_VOLUME_DOWN -> false
+                else -> return super.dispatchKeyEvent(event)
+            }
+            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         disableNavigationBarContrast()
@@ -186,6 +201,7 @@ class RouteActivity : ComponentActivity() {
                 action = intent?.action
                 putExtra(Intent.EXTRA_TEXT, intent?.getStringExtra(Intent.EXTRA_TEXT))
                 putExtra(Intent.EXTRA_STREAM, intent?.getStringExtra(Intent.EXTRA_STREAM))
+                putExtra(Intent.EXTRA_PROCESS_TEXT, intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT))
             }
         }
 
@@ -195,6 +211,11 @@ class RouteActivity : ComponentActivity() {
                     val text = shareIntent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
                     val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
                     backStack.add(Screen.ShareHandler(text, imageUri))
+                }
+
+                Intent.ACTION_PROCESS_TEXT -> {
+                    val text = shareIntent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString() ?: ""
+                    backStack.add(Screen.ShareHandler(text, null))
                 }
             }
         }
