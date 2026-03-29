@@ -269,10 +269,13 @@ internal fun projectCompatMessages(messages: List<UIMessage>): List<StCompatMess
     if (messages.any(::hasUnsupportedCompatParts)) {
         return null
     }
+    if (messages.any { !it.hasProjectableCompatText() }) {
+        return null
+    }
     return messages.map { message ->
         StCompatMessage(
             role = message.role.toCompatRole(),
-            content = message.toText(),
+            content = message.toCompatText(),
         )
     }
 }
@@ -292,10 +295,19 @@ private fun hasUnsupportedCompatParts(message: UIMessage): Boolean {
     return message.parts.any { part ->
         when (part) {
             is UIMessagePart.Text -> false
+            is UIMessagePart.Document -> false
             is UIMessagePart.Reasoning -> false
             else -> true
         }
     }
+}
+
+private fun UIMessage.hasProjectableCompatText(): Boolean {
+    return parts.any { it is UIMessagePart.Text }
+}
+
+private fun UIMessage.toCompatText(): String {
+    return copy(parts = parts.filterIsInstance<UIMessagePart.Text>()).toText()
 }
 
 internal fun MessageRole.toCompatRole(): String {

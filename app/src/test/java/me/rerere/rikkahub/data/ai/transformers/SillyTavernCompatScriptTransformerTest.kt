@@ -48,6 +48,80 @@ class SillyTavernCompatScriptTransformerTest {
     }
 
     @Test
+    fun `projectCompatMessages should allow document messages once text has been injected`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.USER,
+                parts = listOf(
+                    UIMessagePart.Text("## user sent a file: notes.js\n```js\nconsole.log(1)\n```"),
+                    UIMessagePart.Document(
+                        url = "file:///tmp/notes.js",
+                        fileName = "notes.js",
+                        mime = "application/javascript",
+                    )
+                )
+            )
+        )
+
+        val projected = projectCompatMessages(messages)
+
+        assertEquals(
+            listOf(
+                StCompatMessage(
+                    role = "user",
+                    content = "## user sent a file: notes.js\n```js\nconsole.log(1)\n```",
+                )
+            ),
+            projected,
+        )
+    }
+
+    @Test
+    fun `projectCompatMessages should skip document only messages`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.USER,
+                parts = listOf(
+                    UIMessagePart.Document(
+                        url = "file:///tmp/notes.js",
+                        fileName = "notes.js",
+                        mime = "application/javascript",
+                    )
+                )
+            )
+        )
+
+        val projected = projectCompatMessages(messages)
+
+        assertNull(projected)
+    }
+
+    @Test
+    fun `projectCompatMessages should ignore reasoning parts when flattening text`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning("thinking"),
+                    UIMessagePart.Text("final answer"),
+                )
+            )
+        )
+
+        val projected = projectCompatMessages(messages)
+
+        assertEquals(
+            listOf(
+                StCompatMessage(
+                    role = "assistant",
+                    content = "final answer",
+                )
+            ),
+            projected,
+        )
+    }
+
+    @Test
     fun `projectCompatMessages should skip tool messages`() {
         val messages = listOf(
             UIMessage(
