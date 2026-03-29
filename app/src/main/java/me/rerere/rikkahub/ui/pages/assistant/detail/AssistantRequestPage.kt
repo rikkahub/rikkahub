@@ -1,25 +1,30 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -30,6 +35,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -46,7 +53,41 @@ import org.koin.core.parameter.parametersOf
 private val CompatSettingsJson = Json {
     prettyPrint = true
     prettyPrintIndent = "  "
+    ignoreUnknownKeys = true
 }
+
+private const val MergeEditorExtensionName = "SillyTavernExtension-mergeEditor"
+
+@Serializable
+private data class MergeEditorCaptureRule(
+    val enabled: Boolean = true,
+    val regex: String = "",
+    val tag: String = "",
+    val updateMode: String = "accumulate",
+    val range: String = "",
+)
+
+@Serializable
+private data class MergeEditorConfig(
+    val user: String = "Human",
+    val assistant: String = "Assistant",
+    @SerialName("example_user")
+    val exampleUser: String = "H",
+    @SerialName("example_assistant")
+    val exampleAssistant: String = "A",
+    val system: String = "SYSTEM",
+    val separator: String = "",
+    @SerialName("separator_system")
+    val separatorSystem: String = "",
+    @SerialName("prefill_user")
+    val prefillUser: String = "Continue the conversation.",
+    @SerialName("capture_enabled")
+    val captureEnabled: Boolean = true,
+    @SerialName("capture_rules")
+    val captureRules: List<MergeEditorCaptureRule> = emptyList(),
+    @SerialName("stored_data")
+    val storedData: JsonObject = buildJsonObject { },
+)
 
 @Composable
 fun AssistantRequestPage(id: String) {
@@ -288,7 +329,7 @@ private fun CompatScriptCard(
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = "Run a SillyTavern-style CHAT_COMPLETION_SETTINGS_READY script in Termux Node before OpenAI / Gemini / Claude text requests. This MVP is generation-only and does not recreate the original ST settings popup UI.",
+                text = "Run a SillyTavern-style CHAT_COMPLETION_SETTINGS_READY script in Termux Node before OpenAI-compatible requests. This path is generation-only and does not recreate the original ST popup host.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Text(
@@ -301,6 +342,13 @@ private fun CompatScriptCard(
                     onUpdate(assistant.copy(stCompatScriptEnabled = enabled))
                 }
             )
+
+            if (assistant.shouldShowMergeEditorConfig()) {
+                MergeEditorConfigSection(
+                    assistant = assistant,
+                    onUpdate = onUpdate,
+                )
+            }
 
             TextArea(
                 state = scriptState,
@@ -338,6 +386,249 @@ private fun CompatScriptCard(
     }
 }
 
+@Composable
+private fun MergeEditorConfigSection(
+    assistant: Assistant,
+    onUpdate: (Assistant) -> Unit,
+) {
+    val config = assistant.readMergeEditorConfig()
+
+    fun updateConfig(transform: (MergeEditorConfig) -> MergeEditorConfig) {
+        onUpdate(assistant.withMergeEditorConfig(transform(config)))
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        HorizontalDivider()
+        Text(
+            text = "mergeEditor Config",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            text = "Structured editor for extensionSettings.$MergeEditorExtensionName. This covers the main merge labels and capture rules used by your target script.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        MergeEditorTextField(
+            label = "User Label",
+            value = config.user,
+            onValueChange = { value -> updateConfig { it.copy(user = value) } }
+        )
+        MergeEditorTextField(
+            label = "Assistant Label",
+            value = config.assistant,
+            onValueChange = { value -> updateConfig { it.copy(assistant = value) } }
+        )
+        MergeEditorTextField(
+            label = "Example User Label",
+            value = config.exampleUser,
+            onValueChange = { value -> updateConfig { it.copy(exampleUser = value) } }
+        )
+        MergeEditorTextField(
+            label = "Example Assistant Label",
+            value = config.exampleAssistant,
+            onValueChange = { value -> updateConfig { it.copy(exampleAssistant = value) } }
+        )
+        MergeEditorTextField(
+            label = "System Label",
+            value = config.system,
+            onValueChange = { value -> updateConfig { it.copy(system = value) } }
+        )
+        MergeEditorTextField(
+            label = "Separator",
+            value = config.separator,
+            onValueChange = { value -> updateConfig { it.copy(separator = value) } }
+        )
+        MergeEditorTextField(
+            label = "System Separator",
+            value = config.separatorSystem,
+            onValueChange = { value -> updateConfig { it.copy(separatorSystem = value) } }
+        )
+        MergeEditorTextField(
+            label = "Prefill User",
+            value = config.prefillUser,
+            onValueChange = { value -> updateConfig { it.copy(prefillUser = value) } }
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Capture Enabled",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = "Controls whether matched text is written into stored_data.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = config.captureEnabled,
+                onCheckedChange = { enabled ->
+                    updateConfig { it.copy(captureEnabled = enabled) }
+                }
+            )
+        }
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Capture Rules",
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Text(
+                text = "Range syntax matches the original script: `+1`, `-1`, `+1~+3`, `+1,+3~+5,-2`.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            config.captureRules.forEachIndexed { index, rule ->
+                MergeEditorRuleCard(
+                    rule = rule,
+                    index = index,
+                    onUpdateRule = { updatedRule ->
+                        updateConfig {
+                            it.copy(
+                                captureRules = it.captureRules.updated(index, updatedRule)
+                            )
+                        }
+                    },
+                    onDelete = {
+                        updateConfig {
+                            it.copy(
+                                captureRules = it.captureRules.removeIndex(index)
+                            )
+                        }
+                    }
+                )
+            }
+            Button(
+                onClick = {
+                    updateConfig {
+                        it.copy(captureRules = it.captureRules + MergeEditorCaptureRule())
+                    }
+                }
+            ) {
+                Text("Add Capture Rule")
+            }
+        }
+
+        Text(
+            text = if (config.storedData.isEmpty()) {
+                "stored_data summary: no captured values yet"
+            } else {
+                "stored_data summary: " + config.storedData.keys.sorted().joinToString(", ")
+            },
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun MergeEditorRuleCard(
+    rule: MergeEditorCaptureRule,
+    index: Int,
+    onUpdateRule: (MergeEditorCaptureRule) -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(
+        colors = CustomColors.cardColorsOnSurfaceContainer
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Rule ${index + 1}",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Enabled",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                    Switch(
+                        checked = rule.enabled,
+                        onCheckedChange = { enabled ->
+                            onUpdateRule(rule.copy(enabled = enabled))
+                        }
+                    )
+                }
+            }
+
+            MergeEditorTextField(
+                label = "Regex",
+                value = rule.regex,
+                onValueChange = { value -> onUpdateRule(rule.copy(regex = value)) },
+                placeholder = "/pattern/flags",
+            )
+            MergeEditorTextField(
+                label = "Tag",
+                value = rule.tag,
+                onValueChange = { value -> onUpdateRule(rule.copy(tag = value)) },
+                placeholder = "<tag>",
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = rule.range,
+                    onValueChange = { value -> onUpdateRule(rule.copy(range = value)) },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Range") },
+                    placeholder = { Text("+1,+3~+5,-2") },
+                )
+                OutlinedTextField(
+                    value = rule.updateMode,
+                    onValueChange = { value ->
+                        onUpdateRule(rule.copy(updateMode = value.ifBlank { "accumulate" }))
+                    },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Mode") },
+                    placeholder = { Text("accumulate / replace") },
+                )
+            }
+
+            TextButton(onClick = onDelete) {
+                Text("Delete Rule")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MergeEditorTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String = "",
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        placeholder = if (placeholder.isNotBlank()) {
+            { Text(placeholder) }
+        } else {
+            null
+        }
+    )
+}
+
 private fun JsonObject.toPrettyCompatJson(): String {
     return CompatSettingsJson.encodeToString(this)
 }
@@ -345,4 +636,41 @@ private fun JsonObject.toPrettyCompatJson(): String {
 private fun String.parseCompatSettingsJson(): JsonObject {
     if (isBlank()) return buildJsonObject { }
     return CompatSettingsJson.parseToJsonElement(this).jsonObject
+}
+
+private fun Assistant.shouldShowMergeEditorConfig(): Boolean {
+    return stCompatScriptSource.contains(MergeEditorExtensionName) ||
+        stCompatExtensionSettings.containsKey(MergeEditorExtensionName)
+}
+
+private fun Assistant.readMergeEditorConfig(): MergeEditorConfig {
+    val raw = runCatching { stCompatExtensionSettings[MergeEditorExtensionName]?.jsonObject }.getOrNull()
+        ?: return MergeEditorConfig()
+    return runCatching {
+        CompatSettingsJson.decodeFromJsonElement(MergeEditorConfig.serializer(), raw)
+    }.getOrElse {
+        MergeEditorConfig()
+    }
+}
+
+private fun Assistant.withMergeEditorConfig(config: MergeEditorConfig): Assistant {
+    val updated = stCompatExtensionSettings.toMutableMap().apply {
+        put(
+            MergeEditorExtensionName,
+            CompatSettingsJson.encodeToJsonElement(MergeEditorConfig.serializer(), config)
+        )
+    }
+    return copy(stCompatExtensionSettings = JsonObject(updated))
+}
+
+private fun <T> List<T>.updated(index: Int, value: T): List<T> {
+    return mapIndexed { currentIndex, item ->
+        if (currentIndex == index) value else item
+    }
+}
+
+private fun <T> List<T>.removeIndex(index: Int): List<T> {
+    return filterIndexed { currentIndex, _ ->
+        currentIndex != index
+    }
 }
