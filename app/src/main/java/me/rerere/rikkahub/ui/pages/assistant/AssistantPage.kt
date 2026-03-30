@@ -340,9 +340,9 @@ private fun AssistantEmptyState(
             )
             Text(
                 text = if (isFiltering) {
-                    "没有匹配的助手，试试清空搜索词或标签筛选。"
+                    stringResource(R.string.assistant_page_empty_filtered_desc)
                 } else {
-                    "还没有助手，点击右上角新增，或从现有配置复制一份开始。"
+                    stringResource(R.string.assistant_page_empty_desc)
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -352,7 +352,7 @@ private fun AssistantEmptyState(
                     onClick = onClearFilters,
                     modifier = Modifier.align(Alignment.End),
                 ) {
-                    Text("清空筛选")
+                    Text(stringResource(R.string.assistant_page_clear_filters))
                 }
             }
         }

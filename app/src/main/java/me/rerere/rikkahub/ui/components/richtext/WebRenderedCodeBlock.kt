@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -57,6 +58,7 @@ import androidx.compose.ui.window.DialogWindowProvider
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowExpandDiagonal01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebContent
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.WebViewState
@@ -287,7 +289,7 @@ private fun ExpandedRenderedCodeBlockDialog(
                         onClick = ::requestDismiss,
                         modifier = Modifier.size(38.dp),
                     ) {
-                        Icon(HugeIcons.Cancel01, contentDescription = "Close preview")
+                        Icon(HugeIcons.Cancel01, contentDescription = stringResource(R.string.close))
                     }
                 }
             }
@@ -429,7 +431,7 @@ internal fun WebRenderedCodeBlock(
                         },
                         modifier = Modifier.size(36.dp),
                     ) {
-                        Icon(HugeIcons.ArrowExpandDiagonal01, contentDescription = "Expand preview")
+                        Icon(HugeIcons.ArrowExpandDiagonal01, contentDescription = stringResource(R.string.code_block_expand))
                     }
                 }
             }

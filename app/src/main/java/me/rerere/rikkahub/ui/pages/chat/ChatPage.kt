@@ -132,6 +132,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
             parametersOf(id.toString())
         }
     )
+    val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
     val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
@@ -298,6 +299,7 @@ private fun ChatPageContent(
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val selectModelFirstText = stringResource(R.string.chat_page_select_model_first)
     var previewMode by rememberSaveable { mutableStateOf(false) }
     var topBarVisible by rememberSaveable { mutableStateOf(true) }
     val enableGlassBlur = setting.displaySetting.enableBlurEffect
@@ -391,7 +393,10 @@ private fun ChatPageContent(
                             }
 
                             if (currentChatModel == null && termuxDirect?.isDirect != true) {
-                                toaster.show("请先选择模型", type = ToastType.Error)
+                                toaster.show(
+                                    selectModelFirstText,
+                                    type = ToastType.Error,
+                                )
                                 return@ChatInput
                             }
                             if (inputState.isEditing()) {
@@ -599,7 +604,7 @@ private fun TopBar(
                         scope.launch { drawerState.open() }
                     }
                 ) {
-                    Icon(HugeIcons.Menu03, "Messages")
+                    Icon(HugeIcons.Menu03, stringResource(R.string.chat_page_messages))
                 }
             }
         },
@@ -629,7 +634,7 @@ private fun TopBar(
                     onNewChat()
                 }
             ) {
-                Icon(HugeIcons.MessageAdd01, "New Message")
+                Icon(HugeIcons.MessageAdd01, stringResource(R.string.chat_page_new_chat))
             }
 
             var showOverflowMenu by rememberSaveable { mutableStateOf(false) }

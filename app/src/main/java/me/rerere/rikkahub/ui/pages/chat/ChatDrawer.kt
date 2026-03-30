@@ -172,7 +172,7 @@ fun ChatDrawerContent(
                             )
                             if (selectedPersonaProfile != null) {
                                 Text(
-                                    text = "当前",
+                                    text = stringResource(R.string.chat_drawer_persona_current),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
@@ -181,9 +181,9 @@ fun ChatDrawerContent(
                         Text(
                             text = effectiveUserPersona.ifBlank {
                                 if (settings.userPersonaProfiles.isEmpty()) {
-                                    "点击创建并管理人设"
+                                    stringResource(R.string.chat_drawer_persona_hint_create)
                                 } else {
-                                    "点击切换和编辑当前人设"
+                                    stringResource(R.string.chat_drawer_persona_hint_manage)
                                 }
                             },
                             style = MaterialTheme.typography.labelMedium,
@@ -193,9 +193,9 @@ fun ChatDrawerContent(
                         )
                         Text(
                             text = if (settings.userPersonaProfiles.isEmpty()) {
-                                "当前未创建 Persona"
+                                stringResource(R.string.chat_drawer_persona_none)
                             } else {
-                                "已创建 ${settings.userPersonaProfiles.size} 个 Persona"
+                                stringResource(R.string.chat_drawer_persona_count, settings.userPersonaProfiles.size)
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
@@ -297,7 +297,7 @@ fun ChatDrawerContent(
                     DrawerAction(
                         contentDescription = stringResource(R.string.menu),
                         icon = {
-                            Icon(HugeIcons.Sparkles, "Menu")
+                            Icon(HugeIcons.Sparkles, stringResource(R.string.menu))
                         },
                         label = {
                             Text(stringResource(R.string.menu))
@@ -343,12 +343,12 @@ fun ChatDrawerContent(
                 )
 
                 DrawerAction(
-                    contentDescription = "统计数据",
+                    contentDescription = stringResource(R.string.stats_page_title),
                     icon = {
-                        Icon(HugeIcons.ChartColumn, "统计数据")
+                        Icon(HugeIcons.ChartColumn, stringResource(R.string.stats_page_title))
                     },
                     label = {
-                        Text("统计数据")
+                        Text(stringResource(R.string.stats_page_title))
                     },
                     onClick = {
                         navController.navigate(Screen.Stats)

@@ -19,7 +19,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -58,6 +60,15 @@ private fun SillyTavernImporter(
     val toaster = LocalToaster.current
     var isLoading by remember { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<AssistantImportPayload?>(null) }
+    val importFailedText = stringResource(R.string.assistant_importer_import_failed)
+    val characterOnlyText = stringResource(R.string.assistant_importer_character_only)
+    val importingText = stringResource(R.string.assistant_importer_importing)
+    val importPngText = stringResource(R.string.assistant_importer_import_tavern_png)
+    val importJsonOrPresetText = stringResource(R.string.assistant_importer_import_tavern_json_or_preset)
+    val importCharacterJsonText = stringResource(R.string.assistant_importer_import_tavern_character_json)
+    val missingDataFieldText = stringResource(R.string.assistant_importer_missing_data_field)
+    val missingNameFieldText = stringResource(R.string.assistant_importer_missing_name_field)
+    val readJsonFailedText = stringResource(R.string.assistant_importer_read_json_failed)
 
     suspend fun importPayload(payload: AssistantImportPayload, includeRegexes: Boolean) {
         onImport(payload.materializeImportedAvatar(filesManager), includeRegexes)
@@ -65,7 +76,26 @@ private fun SillyTavernImporter(
 
     fun showImportFailure(exception: Throwable) {
         exception.printStackTrace()
-        toaster.show(exception.message ?: "Import failed")
+        val message = when (val rawMessage = exception.message) {
+            "Missing card data", "Empty character data" -> missingDataFieldText
+            "Missing card name" -> missingNameFieldText
+            "Failed to read import file" -> readJsonFailedText
+            "Unsupported SillyTavern import format" -> context.getString(
+                R.string.assistant_importer_unsupported_spec,
+                "SillyTavern import format"
+            )
+            else -> {
+                if (rawMessage?.startsWith("Unsupported file type: ") == true) {
+                    context.getString(
+                        R.string.assistant_importer_unsupported_file_type,
+                        rawMessage.removePrefix("Unsupported file type: ")
+                    )
+                } else {
+                    rawMessage ?: importFailedText
+                }
+            }
+        }
+        toaster.show(message)
     }
 
     val jsonPickerLauncher = rememberLauncherForActivityResult(
@@ -82,7 +112,7 @@ private fun SillyTavernImporter(
                 )
             }.onSuccess { payload ->
                 if (payload.kind !in allowedKinds) {
-                    toaster.show("这里只允许导入角色卡")
+                    toaster.show(characterOnlyText)
                 } else if (payload.regexes.isNotEmpty()) {
                     pendingImport = payload
                 } else {
@@ -111,7 +141,7 @@ private fun SillyTavernImporter(
                 )
             }.onSuccess { payload ->
                 if (payload.kind !in allowedKinds) {
-                    toaster.show("这里只允许导入角色卡")
+                    toaster.show(characterOnlyText)
                 } else if (payload.regexes.isNotEmpty()) {
                     pendingImport = payload
                 } else {
@@ -134,7 +164,7 @@ private fun SillyTavernImporter(
             enabled = !isLoading,
         ) {
             AutoAIIcon(name = "tavern", modifier = Modifier.padding(end = 8.dp))
-            Text(if (isLoading) "Importing..." else "Import Tavern PNG")
+            Text(if (isLoading) importingText else importPngText)
         }
 
         OutlinedButton(
@@ -144,11 +174,11 @@ private fun SillyTavernImporter(
             AutoAIIcon(name = "tavern", modifier = Modifier.padding(end = 8.dp))
             Text(
                 if (isLoading) {
-                    "Importing..."
+                    importingText
                 } else if (AssistantImportKind.PRESET in allowedKinds) {
-                    "Import Tavern JSON / Preset"
+                    importJsonOrPresetText
                 } else {
-                    "Import Tavern Character JSON"
+                    importCharacterJsonText
                 }
             )
         }
@@ -158,15 +188,19 @@ private fun SillyTavernImporter(
         AlertDialog(
             onDismissRequest = { pendingImport = null },
             title = {
-                Text("导入配套正则")
+                Text(stringResource(R.string.assistant_importer_import_regex_title))
             },
             text = {
                 Text(
                     when (payload.kind) {
-                        AssistantImportKind.PRESET ->
-                            "检测到 ${payload.regexes.size} 条配套正则。预设 regex 会导入到当前 ST 预设，是否一并导入？"
-                        AssistantImportKind.CHARACTER_CARD ->
-                            "检测到 ${payload.regexes.size} 条配套正则。角色卡 regex 会导入到当前助手，是否一并导入？"
+                        AssistantImportKind.PRESET -> stringResource(
+                            R.string.assistant_importer_import_regex_preset_message,
+                            payload.regexes.size
+                        )
+                        AssistantImportKind.CHARACTER_CARD -> stringResource(
+                            R.string.assistant_importer_import_regex_character_message,
+                            payload.regexes.size
+                        )
                     }
                 )
             },
@@ -183,7 +217,7 @@ private fun SillyTavernImporter(
                         }
                     }
                 ) {
-                    Text("导入全部")
+                    Text(stringResource(R.string.assistant_importer_import_all))
                 }
             },
             dismissButton = {
@@ -200,10 +234,10 @@ private fun SillyTavernImporter(
                             }
                         }
                     ) {
-                        Text("跳过正则")
+                        Text(stringResource(R.string.assistant_importer_skip_regex))
                     }
                     TextButton(onClick = { pendingImport = null }) {
-                        Text("取消")
+                        Text(stringResource(R.string.cancel))
                     }
                 }
             }
