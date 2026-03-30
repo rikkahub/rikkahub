@@ -4,6 +4,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
+import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.findPromptOrder
@@ -285,6 +286,30 @@ class SillyTavernImportTest {
         assertEquals(MessageRole.ASSISTANT, entry.role)
         assertEquals(true, entry.matchPersonaDescription)
         assertEquals(2, entry.injectDepth)
+    }
+
+    @Test
+    fun `character card import should defer avatar copy until explicitly materialized`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "spec": "chara_card_v2",
+                  "data": {
+                    "name": "Seraphina"
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "character",
+            avatarImportSourceUri = "content://imports/seraphina.png",
+        )
+
+        assertEquals(Avatar.Dummy, payload.assistant.avatar)
+        assertEquals("content://imports/seraphina.png", payload.avatarImportSourceUri)
+
+        val materialized = payload.withMaterializedImportedAvatar("file:///tmp/seraphina.png")
+
+        assertEquals(Avatar.Image("file:///tmp/seraphina.png"), materialized.assistant.avatar)
+        assertNull(materialized.avatarImportSourceUri)
     }
 
     @Test

@@ -59,6 +59,15 @@ private fun SillyTavernImporter(
     var isLoading by remember { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<AssistantImportPayload?>(null) }
 
+    suspend fun importPayload(payload: AssistantImportPayload, includeRegexes: Boolean) {
+        onImport(payload.materializeImportedAvatar(filesManager), includeRegexes)
+    }
+
+    fun showImportFailure(exception: Throwable) {
+        exception.printStackTrace()
+        toaster.show(exception.message ?: "Import failed")
+    }
+
     val jsonPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -77,11 +86,12 @@ private fun SillyTavernImporter(
                 } else if (payload.regexes.isNotEmpty()) {
                     pendingImport = payload
                 } else {
-                    onImport(payload, false)
+                    runCatching {
+                        importPayload(payload, false)
+                    }.onFailure(::showImportFailure)
                 }
             }.onFailure { exception ->
-                exception.printStackTrace()
-                toaster.show(exception.message ?: "Import failed")
+                showImportFailure(exception)
             }
             isLoading = false
         }
@@ -105,11 +115,12 @@ private fun SillyTavernImporter(
                 } else if (payload.regexes.isNotEmpty()) {
                     pendingImport = payload
                 } else {
-                    onImport(payload, false)
+                    runCatching {
+                        importPayload(payload, false)
+                    }.onFailure(::showImportFailure)
                 }
             }.onFailure { exception ->
-                exception.printStackTrace()
-                toaster.show(exception.message ?: "Import failed")
+                showImportFailure(exception)
             }
             isLoading = false
         }
@@ -162,8 +173,14 @@ private fun SillyTavernImporter(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onImport(payload, true)
                         pendingImport = null
+                        isLoading = true
+                        scope.launch {
+                            runCatching {
+                                importPayload(payload, true)
+                            }.onFailure(::showImportFailure)
+                            isLoading = false
+                        }
                     }
                 ) {
                     Text("导入全部")
@@ -173,8 +190,14 @@ private fun SillyTavernImporter(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(
                         onClick = {
-                            onImport(payload, false)
                             pendingImport = null
+                            isLoading = true
+                            scope.launch {
+                                runCatching {
+                                    importPayload(payload, false)
+                                }.onFailure(::showImportFailure)
+                                isLoading = false
+                            }
                         }
                     ) {
                         Text("跳过正则")

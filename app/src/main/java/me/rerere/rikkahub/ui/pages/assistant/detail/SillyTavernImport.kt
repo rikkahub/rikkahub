@@ -35,6 +35,7 @@ data class AssistantImportPayload(
     val presetTemplate: me.rerere.rikkahub.data.model.SillyTavernPromptTemplate? = null,
     val lorebooks: List<Lorebook> = emptyList(),
     val regexes: List<AssistantRegex> = emptyList(),
+    val avatarImportSourceUri: String? = null,
 )
 
 data class AssistantImportApplication(
@@ -75,14 +76,13 @@ internal suspend fun parseAssistantImportFromUri(
 ): AssistantImportPayload {
     val sourceName = getDisplayName(context, uri)?.substringBeforeLast('.')?.ifBlank { "Imported" } ?: "Imported"
     val mime = withContext(Dispatchers.IO) { filesManager.getFileMimeType(uri) }
-    val (jsonString, avatarUri) = withContext(Dispatchers.IO) {
+    val (jsonString, avatarImportSourceUri) = withContext(Dispatchers.IO) {
         when (mime) {
             "image/png" -> {
                 val result = ImageUtils.getTavernCharacterMeta(context, uri)
                 result.map { rawCharacterMeta ->
                     val json = decodeImportedCharacterCardJson(rawCharacterMeta)
-                    val localAvatar = filesManager.createChatFilesByContents(listOf(uri)).first().toString()
-                    json to localAvatar
+                    json to uri.toString()
                 }.getOrElse { throw it }
             }
 
@@ -99,7 +99,7 @@ internal suspend fun parseAssistantImportFromUri(
     return parseAssistantImportFromJson(
         jsonString = jsonString,
         sourceName = sourceName,
-        avatarUri = avatarUri,
+        avatarImportSourceUri = avatarImportSourceUri,
     )
 }
 
@@ -116,14 +116,33 @@ internal fun decodeImportedCharacterCardJson(rawCharacterMeta: String): String {
 internal fun parseAssistantImportFromJson(
     jsonString: String,
     sourceName: String,
-    avatarUri: String? = null,
+    avatarImportSourceUri: String? = null,
 ): AssistantImportPayload {
     val json = ImportJson.parseToJsonElement(jsonString).jsonObject
     return when {
-        json["spec"] != null -> parseCharacterCardImport(json, sourceName, avatarUri)
+        json["spec"] != null -> parseCharacterCardImport(json, sourceName, avatarImportSourceUri)
         json["prompts"] != null && json["prompt_order"] != null -> parsePresetImport(json, sourceName)
         else -> error("Unsupported SillyTavern import format")
     }
+}
+
+internal suspend fun AssistantImportPayload.materializeImportedAvatar(
+    filesManager: FilesManager,
+): AssistantImportPayload {
+    val sourceUri = avatarImportSourceUri ?: return this
+    val localAvatarUri = withContext(Dispatchers.IO) {
+        filesManager.createChatFilesByContents(listOf(Uri.parse(sourceUri))).firstOrNull()?.toString()
+    } ?: error("Failed to import avatar")
+    return withMaterializedImportedAvatar(localAvatarUri)
+}
+
+internal fun AssistantImportPayload.withMaterializedImportedAvatar(
+    localAvatarUri: String,
+): AssistantImportPayload {
+    return copy(
+        assistant = assistant.copy(avatar = Avatar.Image(localAvatarUri)),
+        avatarImportSourceUri = null,
+    )
 }
 
 internal fun applyImportedAssistantForCreate(

@@ -375,40 +375,6 @@ class SettingsStore(
                 ttsProviders = ttsProviders,
                 scheduledTasks = scheduledTasks,
             )
-            assistants = normalizedSettings.assistants.toMutableList()
-            var userPersonaProfiles = it.userPersonaProfiles
-            var selectedUserPersonaProfileId = it.selectedUserPersonaProfileId
-            if (userPersonaProfiles.isEmpty()) {
-                val selectedAssistantPersona = assistants
-                    .find { assistant -> assistant.id == normalizedSettings.assistantId }
-                    ?.userPersona
-                    .orEmpty()
-                    .trim()
-                val migratedPersona = selectedAssistantPersona.takeIf { it.isNotBlank() }
-                    ?: assistants
-                        .asSequence()
-                        .map { assistant -> assistant.userPersona.trim() }
-                        .firstOrNull { it.isNotBlank() }
-                val legacyUserName = it.displaySetting.userNickname.trim()
-                val legacyUserAvatar = it.displaySetting.userAvatar
-                val shouldCreateProfile = migratedPersona != null ||
-                    legacyUserName.isNotBlank() ||
-                    legacyUserAvatar !is Avatar.Dummy
-                if (shouldCreateProfile) {
-                    val migratedProfile = UserPersonaProfile(
-                        name = legacyUserName.ifBlank { "默认 Persona" },
-                        avatar = legacyUserAvatar,
-                        content = migratedPersona.orEmpty(),
-                    )
-                    userPersonaProfiles = listOf(migratedProfile)
-                    selectedUserPersonaProfileId = migratedProfile.id
-                }
-            }
-            normalizedSettings = normalizedSettings.copy(
-                assistants = assistants,
-                userPersonaProfiles = userPersonaProfiles,
-                selectedUserPersonaProfileId = selectedUserPersonaProfileId,
-            )
             normalizedSettings
         }
         .map { settings ->

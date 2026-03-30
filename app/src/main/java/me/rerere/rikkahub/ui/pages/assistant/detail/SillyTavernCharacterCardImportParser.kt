@@ -26,7 +26,7 @@ import kotlin.uuid.Uuid
 internal fun parseCharacterCardImport(
     json: JsonObject,
     sourceName: String,
-    avatarUri: String?,
+    avatarImportSourceUri: String?,
 ): AssistantImportPayload {
     val data = json["data"]?.jsonObject ?: error("Missing card data")
     val name = data["name"]?.jsonPrimitiveOrNull?.contentOrNull ?: error("Missing card name")
@@ -45,7 +45,7 @@ internal fun parseCharacterCardImport(
         sourceName = sourceName,
         assistant = Assistant(
             name = name,
-            avatar = avatarUri?.let { Avatar.Image(it) } ?: Avatar.Dummy,
+            avatar = Avatar.Dummy,
             presetMessages = firstMessage.takeIf { it.isNotBlank() }?.let { listOf(UIMessage.assistant(it)) } ?: emptyList(),
             stCharacterData = characterData,
             lorebookIds = lorebooks.map { it.id }.toSet(),
@@ -53,6 +53,7 @@ internal fun parseCharacterCardImport(
         presetTemplate = defaultSillyTavernPromptTemplate(),
         lorebooks = lorebooks,
         regexes = regexes,
+        avatarImportSourceUri = avatarImportSourceUri,
     )
 }
 

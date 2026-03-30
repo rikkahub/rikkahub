@@ -80,6 +80,7 @@ import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
@@ -89,6 +90,7 @@ import me.rerere.rikkahub.data.model.effectiveUserAvatar
 import me.rerere.rikkahub.data.model.effectiveUserName
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.runtimeRegexes
+import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
@@ -110,6 +112,9 @@ import java.util.Locale
 internal fun UIMessage.shouldShowPrimaryActions(loading: Boolean): Boolean {
     return !loading && !parts.isEmptyUIMessage()
 }
+
+internal fun userRegexRenderCacheKey(settings: Settings) =
+    settings.selectedUserPersonaProfile() to settings.displaySetting.userNickname.trim()
 
 @Composable
 fun ChatMessage(
@@ -364,6 +369,7 @@ private fun MessagePartsBlock(
     val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
     val runtimeRegexes = remember(settings) { settings.runtimeRegexes() }
+    val regexRenderCacheKey = userRegexRenderCacheKey(settings)
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
             latestParts.forEach { part ->
@@ -448,7 +454,13 @@ private fun MessagePartsBlock(
                                     modifier = Modifier
                                 )
                             } else {
-                                val renderedText = remember(part.text, assistant, runtimeRegexes, messageDepthFromEnd) {
+                                val renderedText = remember(
+                                    part.text,
+                                    assistant,
+                                    runtimeRegexes,
+                                    messageDepthFromEnd,
+                                    regexRenderCacheKey,
+                                ) {
                                     part.text.replaceRegexes(
                                         assistant = assistant,
                                         settings = settings,
@@ -479,7 +491,13 @@ private fun MessagePartsBlock(
                                 }
                             }
                         } else {
-                            val renderedText = remember(part.text, assistant, runtimeRegexes, messageDepthFromEnd) {
+                            val renderedText = remember(
+                                part.text,
+                                assistant,
+                                runtimeRegexes,
+                                messageDepthFromEnd,
+                                regexRenderCacheKey,
+                            ) {
                                 part.text.replaceRegexes(
                                     assistant = assistant,
                                     settings = settings,
