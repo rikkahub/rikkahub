@@ -3,7 +3,6 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
@@ -73,30 +72,8 @@ internal fun updateActiveLorebookOutlets(
 
 internal fun collectLeadingSystemMessages(
     messages: List<UIMessage>,
-    assistant: Assistant,
-    template: SillyTavernPromptTemplate,
 ): List<UIMessage> {
-    val leadingSystemMessages = messages.takeWhile { it.role == MessageRole.SYSTEM }
-    if (leadingSystemMessages.isEmpty()) return emptyList()
-    if (template.useSystemPrompt) return leadingSystemMessages
-
-    val assistantSystemPrompt = assistant.systemPrompt
-    val firstSystemMessage = leadingSystemMessages.first().toText()
-    val strippedText = if (
-        assistantSystemPrompt.isNotBlank() &&
-        firstSystemMessage.startsWith(assistantSystemPrompt)
-    ) {
-        firstSystemMessage
-            .removePrefix(assistantSystemPrompt)
-            .trimStart('\r', '\n')
-    } else {
-        firstSystemMessage
-    }.trim()
-
-    return strippedText
-        .takeIf { it.isNotBlank() }
-        ?.let { listOf(UIMessage.system(it)) }
-        ?: emptyList()
+    return messages.takeWhile { it.role == MessageRole.SYSTEM }
 }
 
 private fun buildContinueRuntimeBehavior(

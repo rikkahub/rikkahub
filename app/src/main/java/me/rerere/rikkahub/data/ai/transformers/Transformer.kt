@@ -1,10 +1,12 @@
 package me.rerere.rikkahub.data.ai.transformers
 
 import android.content.Context
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.activeStPresetTemplate
 
 class TransformerContext(
     val context: Context,
@@ -77,8 +79,22 @@ suspend fun List<UIMessage>.transforms(
         stMacroState = stMacroState,
         lorebookRuntimeState = lorebookRuntimeState,
     )
-    return transformers.fold(this) { acc, transformer ->
+    val transformedMessages = transformers.fold(this) { acc, transformer ->
         transformer.transform(ctx, acc)
+    }
+    val activeTemplate = settings.activeStPresetTemplate()
+        ?.takeIf { settings.stPresetEnabled }
+        ?: return transformedMessages
+    if (activeTemplate.useSystemPrompt) {
+        return transformedMessages
+    }
+
+    return transformedMessages.map { message ->
+        if (message.role == MessageRole.SYSTEM) {
+            message.copy(role = MessageRole.USER)
+        } else {
+            message
+        }
     }
 }
 

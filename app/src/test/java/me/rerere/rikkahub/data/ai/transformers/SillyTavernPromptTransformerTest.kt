@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.data.ai.transformers
 
+import android.content.ContextWrapper
+import kotlinx.coroutines.runBlocking
+import me.rerere.ai.provider.Model
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.Settings
@@ -306,7 +309,7 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
-    fun `useSystemPrompt false should exclude assistant system prompt but keep remaining prelude`() {
+    fun `useSystemPrompt false should keep all leading system content before prompt text`() {
         val template = SillyTavernPromptTemplate(
             useSystemPrompt = false,
             prompts = listOf(
@@ -318,7 +321,8 @@ class SillyTavernPromptTransformerTest {
 
         val result = transformSillyTavernPrompt(
             messages = listOf(
-                UIMessage.system("Assistant System\nRuntime Tool Prompt"),
+                UIMessage.system("Assistant System"),
+                UIMessage.system("Runtime Tool Prompt"),
                 UIMessage.user("Hello"),
             ),
             assistant = Assistant(
@@ -332,8 +336,49 @@ class SillyTavernPromptTransformerTest {
             listOf(MessageRole.SYSTEM, MessageRole.USER),
             result.map { it.role }
         )
-        assertFalse(result.first().toText().contains("Assistant System"))
-        assertEquals("Runtime Tool Prompt\nST Main", result.first().toText())
+        assertEquals(
+            "Assistant System\nRuntime Tool Prompt\nST Main",
+            result.first().toText()
+        )
+    }
+
+    @Test
+    fun `transforms should demote system messages added after ST transformer when useSystemPrompt is off`() = runBlocking {
+        val template = SillyTavernPromptTemplate(
+            useSystemPrompt = false,
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+        val lateSystemTransformer = object : InputMessageTransformer {
+            override suspend fun transform(
+                ctx: TransformerContext,
+                messages: List<UIMessage>,
+            ): List<UIMessage> {
+                return messages + UIMessage.system("Late System")
+            }
+        }
+
+        val result = listOf(UIMessage.user("Hello")).transforms(
+            transformers = listOf(SillyTavernPromptTransformer, lateSystemTransformer),
+            context = ContextWrapper(null),
+            model = Model(),
+            assistant = Assistant(),
+            settings = Settings(
+                stPresetEnabled = true,
+                stPresetTemplate = template,
+            ),
+        )
+
+        assertEquals(
+            listOf(MessageRole.USER, MessageRole.USER),
+            result.map { it.role }
+        )
+        assertEquals(
+            listOf("Hello", "Late System"),
+            result.map { it.toText() }
+        )
     }
 
     @Test

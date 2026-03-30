@@ -51,8 +51,6 @@ internal fun transformSillyTavernPrompt(
     val rawLeadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
     val leadingSystemMessages = collectLeadingSystemMessages(
         messages = messages,
-        assistant = assistant,
-        template = template,
     )
     val chatHistoryMessages = applyNamesBehaviorToChatHistory(
         messages.drop(rawLeadingSystemCount),
@@ -178,7 +176,6 @@ internal fun transformSillyTavernPrompt(
             result = result,
         )
     }
-    result += runtimeBehavior.controlMessages
 
     return collapseLeadingSystemMessages(
         buildList {
@@ -186,6 +183,7 @@ internal fun transformSillyTavernPrompt(
                 add(UIMessage.system(leadingSystemSections.joinToString("\n")))
             }
             addAll(result)
+            addAll(runtimeBehavior.controlMessages)
         }
     )
 }
