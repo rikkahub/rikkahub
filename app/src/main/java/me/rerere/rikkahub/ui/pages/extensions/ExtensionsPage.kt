@@ -66,20 +66,20 @@ fun ExtensionsPage() {
                     item(
                         onClick = { navController.navigate(Screen.StPresets) },
                         leadingContent = { Icon(HugeIcons.MagicWand01, null) },
-                        headlineContent = { Text("SillyTavern 预设") },
-                        supportingContent = { Text("管理多个 ST 预设、切换当前预设和导出。") },
+                        headlineContent = { Text(stringResource(R.string.prompt_page_overview_st_preset_title)) },
+                        supportingContent = { Text(stringResource(R.string.prompt_page_overview_st_preset_desc)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.ModeInjections) },
                         leadingContent = { Icon(HugeIcons.Tools, null) },
-                        headlineContent = { Text("模式注入") },
-                        supportingContent = { Text("单独管理模式注入规则。") },
+                        headlineContent = { Text(stringResource(R.string.prompt_page_overview_mode_injection_title)) },
+                        supportingContent = { Text(stringResource(R.string.prompt_page_overview_mode_injection_desc)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Lorebooks) },
                         leadingContent = { Icon(HugeIcons.Book01, null) },
-                        headlineContent = { Text("世界书") },
-                        supportingContent = { Text("管理世界书、全局开关和助手绑定。") },
+                        headlineContent = { Text(stringResource(R.string.prompt_page_overview_lorebook_title)) },
+                        supportingContent = { Text(stringResource(R.string.prompt_page_overview_lorebook_desc)) },
                     )
                 }
             }

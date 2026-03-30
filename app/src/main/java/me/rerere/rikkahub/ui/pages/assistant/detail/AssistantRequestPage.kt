@@ -178,6 +178,7 @@ private fun CompatScriptCard(
 ) {
     val latestAssistant by rememberUpdatedState(assistant)
     val latestOnUpdate by rememberUpdatedState(onUpdate)
+    val invalidJsonText = stringResource(R.string.invalid_json)
 
     val scriptState = rememberTextFieldState(initialText = assistant.stCompatScriptSource)
     var lastExternalScript by remember { mutableStateOf(assistant.stCompatScriptSource) }
@@ -283,7 +284,7 @@ private fun CompatScriptCard(
         }
         val parsed = runCatching { latestText.parseCompatSettingsJson() }
             .getOrElse { error ->
-                settingsError = error.message ?: "Invalid JSON"
+                settingsError = error.message ?: invalidJsonText
                 return@LaunchedEffect
             }
         settingsError = null
@@ -304,7 +305,7 @@ private fun CompatScriptCard(
                 return@onDispose
             }
             val parsed = runCatching { currentText.parseCompatSettingsJson() }.getOrElse {
-                settingsError = it.message ?: "Invalid JSON"
+                settingsError = it.message ?: invalidJsonText
                 return@onDispose
             }
             settingsError = null
@@ -325,15 +326,15 @@ private fun CompatScriptCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "SillyTavern JS Compatibility",
+                text = stringResource(R.string.assistant_request_page_st_compat_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = "Run a SillyTavern-style CHAT_COMPLETION_SETTINGS_READY script in Termux Node before OpenAI-compatible requests. This path is generation-only and does not recreate the original ST popup host.",
+                text = stringResource(R.string.assistant_request_page_st_compat_desc),
                 style = MaterialTheme.typography.bodySmall,
             )
             Text(
-                text = "Requires Termux with nodejs installed: `pkg install nodejs`.",
+                text = stringResource(R.string.assistant_request_page_st_compat_requirement),
                 style = MaterialTheme.typography.bodySmall,
             )
             Switch(
@@ -352,8 +353,8 @@ private fun CompatScriptCard(
 
             TextArea(
                 state = scriptState,
-                label = "Compatibility Script",
-                placeholder = "Paste or import a SillyTavern compatibility script",
+                label = stringResource(R.string.assistant_request_page_compatibility_script),
+                placeholder = stringResource(R.string.assistant_request_page_compatibility_script_placeholder),
                 minLines = 8,
                 maxLines = 18,
                 supportedFileTypes = arrayOf(
@@ -365,7 +366,7 @@ private fun CompatScriptCard(
 
             TextArea(
                 state = settingsState,
-                label = "extensionSettings JSON",
+                label = stringResource(R.string.assistant_request_page_extension_settings_json),
                 placeholder = "{}",
                 minLines = 6,
                 maxLines = 14,
@@ -395,6 +396,7 @@ private fun MergeEditorConfigSection(
     val latestAssistant by rememberUpdatedState(assistant)
     val latestConfig by rememberUpdatedState(config)
     val latestOnUpdate by rememberUpdatedState(onUpdate)
+    val invalidJsonText = stringResource(R.string.invalid_json)
 
     val initialStoredDataText = remember(config.storedData) {
         config.storedData.toPrettyCompatJson()
@@ -443,7 +445,7 @@ private fun MergeEditorConfigSection(
         }
         val parsed = runCatching { latestText.parseCompatSettingsJson() }
             .getOrElse { error ->
-                storedDataError = error.message ?: "Invalid JSON"
+                storedDataError = error.message ?: invalidJsonText
                 return@LaunchedEffect
             }
         storedDataError = null
@@ -464,7 +466,7 @@ private fun MergeEditorConfigSection(
                 return@onDispose
             }
             val parsed = runCatching { currentText.parseCompatSettingsJson() }.getOrElse {
-                storedDataError = it.message ?: "Invalid JSON"
+                storedDataError = it.message ?: invalidJsonText
                 return@onDispose
             }
             storedDataError = null
@@ -482,51 +484,51 @@ private fun MergeEditorConfigSection(
     ) {
         HorizontalDivider()
         Text(
-            text = "mergeEditor Config",
+            text = stringResource(R.string.assistant_request_page_merge_editor_title),
             style = MaterialTheme.typography.titleSmall,
         )
         Text(
-            text = "Structured editor for extensionSettings.$MergeEditorExtensionName. This covers the main merge labels and capture rules used by your target script.",
+            text = stringResource(R.string.assistant_request_page_merge_editor_desc, MergeEditorExtensionName),
             style = MaterialTheme.typography.bodySmall,
         )
 
         MergeEditorTextField(
-            label = "User Label",
+            label = stringResource(R.string.assistant_request_page_user_label),
             value = config.user,
             onValueChange = { value -> updateConfig { it.copy(user = value) } }
         )
         MergeEditorTextField(
-            label = "Assistant Label",
+            label = stringResource(R.string.assistant_request_page_assistant_label),
             value = config.assistant,
             onValueChange = { value -> updateConfig { it.copy(assistant = value) } }
         )
         MergeEditorTextField(
-            label = "Example User Label",
+            label = stringResource(R.string.assistant_request_page_example_user_label),
             value = config.exampleUser,
             onValueChange = { value -> updateConfig { it.copy(exampleUser = value) } }
         )
         MergeEditorTextField(
-            label = "Example Assistant Label",
+            label = stringResource(R.string.assistant_request_page_example_assistant_label),
             value = config.exampleAssistant,
             onValueChange = { value -> updateConfig { it.copy(exampleAssistant = value) } }
         )
         MergeEditorTextField(
-            label = "System Label",
+            label = stringResource(R.string.assistant_request_page_system_label),
             value = config.system,
             onValueChange = { value -> updateConfig { it.copy(system = value) } }
         )
         MergeEditorTextField(
-            label = "Separator",
+            label = stringResource(R.string.assistant_request_page_separator),
             value = config.separator,
             onValueChange = { value -> updateConfig { it.copy(separator = value) } }
         )
         MergeEditorTextField(
-            label = "System Separator",
+            label = stringResource(R.string.assistant_request_page_system_separator),
             value = config.separatorSystem,
             onValueChange = { value -> updateConfig { it.copy(separatorSystem = value) } }
         )
         MergeEditorTextField(
-            label = "Prefill User",
+            label = stringResource(R.string.assistant_request_page_prefill_user),
             value = config.prefillUser,
             onValueChange = { value -> updateConfig { it.copy(prefillUser = value) } }
         )
@@ -539,11 +541,11 @@ private fun MergeEditorConfigSection(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "Capture Enabled",
+                    text = stringResource(R.string.assistant_request_page_capture_enabled),
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Text(
-                    text = "Controls whether matched text is written into stored_data.",
+                    text = stringResource(R.string.assistant_request_page_capture_enabled_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -559,11 +561,11 @@ private fun MergeEditorConfigSection(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Capture Rules",
+                text = stringResource(R.string.assistant_request_page_capture_rules),
                 style = MaterialTheme.typography.labelLarge,
             )
             Text(
-                text = "Range syntax matches the original script: `+1`, `-1`, `+1~+3`, `+1,+3~+5,-2`.",
+                text = stringResource(R.string.assistant_request_page_capture_rules_desc),
                 style = MaterialTheme.typography.bodySmall,
             )
             config.captureRules.forEachIndexed { index, rule ->
@@ -593,22 +595,25 @@ private fun MergeEditorConfigSection(
                     }
                 }
             ) {
-                Text("Add Capture Rule")
+                Text(stringResource(R.string.assistant_request_page_add_capture_rule))
             }
         }
 
         Text(
             text = if (config.storedData.isEmpty()) {
-                "stored_data summary: no captured values yet"
+                stringResource(R.string.assistant_request_page_stored_data_summary_empty)
             } else {
-                "stored_data summary: " + config.storedData.keys.sorted().joinToString(", ")
+                stringResource(
+                    R.string.assistant_request_page_stored_data_summary,
+                    config.storedData.keys.sorted().joinToString(", ")
+                )
             },
             style = MaterialTheme.typography.bodySmall,
         )
 
         TextArea(
             state = storedDataState,
-            label = "stored_data JSON",
+            label = stringResource(R.string.assistant_request_page_stored_data_json),
             placeholder = "{}",
             minLines = 4,
             maxLines = 10,
@@ -643,7 +648,7 @@ private fun MergeEditorConfigSection(
                     updateConfig { it.copy(storedData = empty) }
                 }
             ) {
-                Text("Clear Stored Data")
+                Text(stringResource(R.string.assistant_request_page_clear_stored_data))
             }
         }
     }
@@ -668,14 +673,14 @@ private fun MergeEditorRuleCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "Rule ${index + 1}",
+                    text = stringResource(R.string.assistant_request_page_rule_title, index + 1),
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Enabled",
+                        text = stringResource(R.string.assistant_request_page_enabled),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 12.dp)
                     )
@@ -689,13 +694,13 @@ private fun MergeEditorRuleCard(
             }
 
             MergeEditorTextField(
-                label = "Regex",
+                label = stringResource(R.string.assistant_request_page_regex),
                 value = rule.regex,
                 onValueChange = { value -> onUpdateRule(rule.copy(regex = value)) },
                 placeholder = "/pattern/flags",
             )
             MergeEditorTextField(
-                label = "Tag",
+                label = stringResource(R.string.assistant_request_page_tag),
                 value = rule.tag,
                 onValueChange = { value -> onUpdateRule(rule.copy(tag = value)) },
                 placeholder = "<tag>",
@@ -709,22 +714,22 @@ private fun MergeEditorRuleCard(
                     value = rule.range,
                     onValueChange = { value -> onUpdateRule(rule.copy(range = value)) },
                     modifier = Modifier.weight(1f),
-                    label = { Text("Range") },
+                    label = { Text(stringResource(R.string.assistant_request_page_range)) },
                     placeholder = { Text("+1,+3~+5,-2") },
                 )
                 OutlinedTextField(
                     value = rule.updateMode,
                     onValueChange = { value ->
-                        onUpdateRule(rule.copy(updateMode = value.ifBlank { "accumulate" }))
+                            onUpdateRule(rule.copy(updateMode = value.ifBlank { "accumulate" }))
                     },
                     modifier = Modifier.weight(1f),
-                    label = { Text("Mode") },
+                    label = { Text(stringResource(R.string.assistant_request_page_mode)) },
                     placeholder = { Text("accumulate / replace") },
                 )
             }
 
             TextButton(onClick = onDelete) {
-                Text("Delete Rule")
+                Text(stringResource(R.string.assistant_request_page_delete_rule))
             }
         }
     }

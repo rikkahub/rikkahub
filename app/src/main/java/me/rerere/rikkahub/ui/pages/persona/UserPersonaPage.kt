@@ -69,6 +69,8 @@ fun UserPersonaPage(vm: SettingVM = koinViewModel()) {
     val filesManager: FilesManager = koinInject()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val selectedProfile = settings.selectedUserPersonaProfile()
+    val defaultPersonaName = stringResource(R.string.persona_page_default_name)
+    val personaNamePattern = stringResource(R.string.persona_page_name_pattern)
 
     var editorDraft by remember { mutableStateOf<UserPersonaDraft?>(null) }
     var pendingDeleteProfileId by remember { mutableStateOf<Uuid?>(null) }
@@ -83,9 +85,9 @@ fun UserPersonaPage(vm: SettingVM = koinViewModel()) {
                 Avatar.Dummy
             },
             name = if (shouldPrefillFromCurrent) {
-                settings.effectiveUserName().ifBlank { "默认 Persona" }
+                settings.effectiveUserName().ifBlank { defaultPersonaName }
             } else {
-                nextPersonaProfileName(settings.userPersonaProfiles)
+                nextPersonaProfileName(settings.userPersonaProfiles, defaultPersonaName, personaNamePattern)
             },
             avatar = if (shouldPrefillFromCurrent) {
                 settings.effectiveUserAvatar()
@@ -175,7 +177,7 @@ fun UserPersonaPage(vm: SettingVM = koinViewModel()) {
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
-                    Text("Persona")
+                    Text(stringResource(R.string.user_persona_page_title))
                 },
                 navigationIcon = {
                     BackButton()
@@ -204,7 +206,7 @@ fun UserPersonaPage(vm: SettingVM = koinViewModel()) {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "当前 Persona",
+                            text = stringResource(R.string.user_persona_page_current_persona),
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Row(
@@ -230,9 +232,9 @@ fun UserPersonaPage(vm: SettingVM = koinViewModel()) {
                                 Text(
                                     text = selectedProfile?.content?.trim().orEmpty().ifBlank {
                                         if (settings.userPersonaProfiles.isEmpty()) {
-                                            "当前还没有 Persona。创建后会统一驱动用户头像、显示名称、`personaDescription` 和 `{{persona}}`。"
+                                            stringResource(R.string.user_persona_page_current_empty_description)
                                         } else {
-                                            "当前 Persona 暂未填写描述。"
+                                            stringResource(R.string.user_persona_page_current_missing_description)
                                         }
                                     },
                                     style = MaterialTheme.typography.bodyMedium,
@@ -250,7 +252,7 @@ fun UserPersonaPage(vm: SettingVM = koinViewModel()) {
                                 contentDescription = null,
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("新增 Persona")
+                            Text(stringResource(R.string.persona_page_add))
                         }
                     }
                 }
@@ -266,11 +268,11 @@ fun UserPersonaPage(vm: SettingVM = koinViewModel()) {
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = "还没有可切换的人设",
+                                text = stringResource(R.string.user_persona_page_empty_profiles_title),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                text = "从这里开始管理你的用户形象。每个 Persona 都有独立的头像、显示名称和 Persona Description。",
+                                text = stringResource(R.string.user_persona_page_empty_profiles_desc),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -326,23 +328,28 @@ fun UserPersonaPage(vm: SettingVM = koinViewModel()) {
             AlertDialog(
                 onDismissRequest = { pendingDeleteProfileId = null },
                 title = {
-                    Text("删除 Persona")
+                    Text(stringResource(R.string.user_persona_page_delete_title))
                 },
                 text = {
-                    Text("确认删除 `${profile.name.ifBlank { "未命名 Persona" }}` 吗？")
+                    Text(
+                        stringResource(
+                            R.string.user_persona_page_delete_message,
+                            profile.name.ifBlank { stringResource(R.string.user_persona_page_unnamed) }
+                        )
+                    )
                 },
                 confirmButton = {
                     TextButton(
                         onClick = { deleteProfile(profileId) }
                     ) {
-                        Text("删除")
+                        Text(stringResource(R.string.delete))
                     }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = { pendingDeleteProfileId = null }
                     ) {
-                        Text("取消")
+                        Text(stringResource(R.string.cancel))
                     }
                 }
             )
@@ -395,21 +402,21 @@ private fun PersonaListCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = profile.name.ifBlank { "未命名 Persona" },
+                        text = profile.name.ifBlank { stringResource(R.string.user_persona_page_unnamed) },
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (selected) {
                         Text(
-                            text = "当前使用中",
+                            text = stringResource(R.string.user_persona_page_active_badge),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
                 Text(
-                    text = profile.content.trim().ifBlank { "未填写 Persona Description" },
+                    text = profile.content.trim().ifBlank { stringResource(R.string.persona_page_description_empty) },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -421,7 +428,7 @@ private fun PersonaListCard(
             ) {
                 Icon(
                     imageVector = HugeIcons.PencilEdit01,
-                    contentDescription = "Edit Persona",
+                    contentDescription = stringResource(R.string.persona_page_edit_content_description),
                 )
             }
         }
@@ -457,19 +464,23 @@ private fun UserPersonaEditorSheet(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = if (draft.id == null) "新建 Persona" else "编辑 Persona",
+                    text = if (draft.id == null) {
+                        stringResource(R.string.user_persona_page_create_title)
+                    } else {
+                        stringResource(R.string.persona_page_edit_title)
+                    },
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(
                     onClick = onDismiss
                 ) {
-                    Text("取消")
+                    Text(stringResource(R.string.cancel))
                 }
                 Button(
                     onClick = { onSave(draft) }
                 ) {
-                    Text("保存")
+                    Text(stringResource(R.string.save))
                 }
             }
 
@@ -494,12 +505,12 @@ private fun UserPersonaEditorSheet(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Text(
-                                text = "这张头像和显示名称会直接反映到聊天里的用户侧显示。",
+                                text = stringResource(R.string.persona_page_editor_identity_desc),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = "Persona Description 会参与 `personaDescription`、`{{persona}}` 和相关 lorebook 匹配。",
+                                text = stringResource(R.string.persona_page_editor_description_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -512,7 +523,7 @@ private fun UserPersonaEditorSheet(
                             onDraftChange(draft.copy(name = value))
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("显示名称") },
+                        label = { Text(stringResource(R.string.persona_page_display_name)) },
                         singleLine = true,
                     )
                 }
@@ -526,7 +537,7 @@ private fun UserPersonaEditorSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                label = { Text("Persona Description") },
+                label = { Text(stringResource(R.string.persona_page_description)) },
                 minLines = 12,
             )
 
@@ -545,7 +556,7 @@ private fun UserPersonaEditorSheet(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "删除 Persona",
+                            text = stringResource(R.string.user_persona_page_delete_title),
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
@@ -568,13 +579,15 @@ private fun disposeAvatarIfNeeded(
 
 private fun nextPersonaProfileName(
     profiles: List<UserPersonaProfile>,
+    defaultName: String,
+    namePattern: String,
 ): String {
-    if (profiles.isEmpty()) return "默认 Persona"
+    if (profiles.isEmpty()) return defaultName
 
     val existingNames = profiles.map { it.name.trim() }.toSet()
     var index = 2
     while (true) {
-        val candidate = "Persona $index"
+        val candidate = namePattern.format(index)
         if (candidate !in existingNames) {
             return candidate
         }

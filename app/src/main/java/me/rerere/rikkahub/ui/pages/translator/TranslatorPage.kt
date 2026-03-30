@@ -73,11 +73,12 @@ fun TranslatorPage(vm: TranslatorVM = koinViewModel()) {
     val clipboard = LocalClipboard.current
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
+    val genericError = stringResource(R.string.error_generic)
 
     // 处理错误
     LaunchedEffect(Unit) {
         vm.errorFlow.collect { error ->
-            toaster.show(error.message ?: "错误", type = ToastType.Error)
+            toaster.show(error.message ?: genericError, type = ToastType.Error)
         }
     }
 
@@ -153,7 +154,7 @@ fun TranslatorPage(vm: TranslatorVM = koinViewModel()) {
                     }
                 ) {
                     Icon(HugeIcons.Clipboard, null)
-                    Text("粘贴文本", modifier = Modifier.padding(start = 4.dp))
+                    Text(stringResource(R.string.translator_page_paste_text), modifier = Modifier.padding(start = 4.dp))
                 }
             }
 
@@ -198,7 +199,7 @@ fun TranslatorPage(vm: TranslatorVM = koinViewModel()) {
                     }
                 ) {
                     Icon(HugeIcons.Clipboard, null)
-                    Text("复制翻译结果", modifier = Modifier.padding(start = 4.dp))
+                    Text(stringResource(R.string.translator_page_copy_result), modifier = Modifier.padding(start = 4.dp))
                 }
             }
         }

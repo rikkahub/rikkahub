@@ -53,12 +53,12 @@ fun SettingDonatePage() {
                 item(
                     headlineContent = {
                         Text(
-                            text = "Sponsorship is temporarily unavailable.",
+                            text = stringResource(R.string.donate_page_unavailable_title),
                             style = MaterialTheme.typography.titleMedium
                         )
                     },
                     supportingContent = {
-                        Text("This page has been disabled for now.")
+                        Text(stringResource(R.string.donate_page_unavailable_desc))
                     }
                 )
             }
