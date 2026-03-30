@@ -1,14 +1,6 @@
 package me.rerere.rikkahub.ui.pages.chat
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Tick01
-import me.rerere.hugeicons.stroke.ArrowDown01
-import me.rerere.hugeicons.stroke.ArrowUp01
-import me.rerere.hugeicons.stroke.ArrowDownDouble
-import me.rerere.hugeicons.stroke.ArrowUpDouble
-import me.rerere.hugeicons.stroke.CursorPointer01
-import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Cancel01
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -70,7 +62,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
 import androidx.compose.ui.res.stringResource
@@ -89,6 +80,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowDownDouble
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.ArrowUpDouble
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.CursorPointer01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
 import me.rerere.rikkahub.data.datastore.Settings
@@ -224,7 +224,7 @@ private fun ChatListNormal(
     val scope = rememberCoroutineScope()
     var isRecentScroll by remember { mutableStateOf(false) }
     val density = LocalDensity.current
-    val activity = LocalContext.current as? me.rerere.rikkahub.RouteActivity
+    val activity = LocalActivity.current as? me.rerere.rikkahub.RouteActivity
     val enableGlassBlur = settings.displaySetting.enableBlurEffect
     val assistant = remember(settings.assistants, conversation.assistantId) {
         settings.getAssistantById(conversation.assistantId)

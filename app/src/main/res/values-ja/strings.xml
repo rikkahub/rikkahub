@@ -2059,5 +2059,33 @@ Any secondary keyword
   <string name="assistant_page_skills_workdir_root">workdir</string>
   <string name="assistant_page_skills_workdir_folder">フォルダー</string>
   <string name="assistant_page_skills_workdir_unknown_time">不明</string>
+  <string name="prompt_page_position_author_note_top">作者メモ（上）</string>
+  <string name="prompt_page_position_author_note_bottom">作者メモ（下）</string>
+  <string name="prompt_page_position_system_depth">System D</string>
+  <string name="prompt_page_position_user_depth">User D</string>
+  <string name="prompt_page_position_assistant_depth">Assistant D</string>
+  <string name="prompt_page_position_example_messages_top">例示メッセージ（上）</string>
+  <string name="prompt_page_position_example_messages_bottom">例示メッセージ（下）</string>
+  <string name="prompt_page_position_outlet">Outlet</string>
+  <string name="prompt_page_lorebook_global_title">グローバルWorldbook設定</string>
+  <string name="prompt_page_lorebook_global_desc">このアプリ内のすべてのLorebookで使用される、デフォルトのSillyTavernスタイルのスキャン動作。</string>
+  <string name="prompt_page_lorebook_global_scan_depth">デフォルトのスキャン深度</string>
+  <string name="prompt_page_lorebook_global_min_activations">最小有効化数</string>
+  <string name="prompt_page_lorebook_global_min_activations_depth_max">最小有効化の最大深度</string>
+  <string name="prompt_page_lorebook_global_budget_percent">予算割合</string>
+  <string name="prompt_page_lorebook_global_budget_cap">予算上限</string>
+  <string name="prompt_page_lorebook_global_max_recursion_steps">最大再帰ステップ数</string>
+  <string name="prompt_page_lorebook_global_character_strategy">キャラクター戦略</string>
+  <string name="prompt_page_lorebook_global_character_strategy_evenly">均等</string>
+  <string name="prompt_page_lorebook_global_character_strategy_character_first">キャラクター優先</string>
+  <string name="prompt_page_lorebook_global_character_strategy_global_first">グローバル優先</string>
+  <string name="prompt_page_lorebook_global_include_names">話者名を含める</string>
+  <string name="prompt_page_lorebook_global_include_names_desc">スキャンしたチャット行の先頭にユーザー名とキャラクター名を付けます。</string>
+  <string name="prompt_page_lorebook_global_recursive">再帰スキャン</string>
+  <string name="prompt_page_lorebook_global_recursive_desc">トリガーされた項目が後続のパスでさらに多くの項目を有効化できるようにします。</string>
+  <string name="prompt_page_lorebook_global_case_sensitive">グローバルで大文字と小文字を区別</string>
+  <string name="prompt_page_lorebook_global_match_whole_words">グローバルで完全一致のみ</string>
+  <string name="prompt_page_lorebook_global_group_scoring">グローバル グループスコアリング</string>
+  <string name="prompt_page_lorebook_global_overflow_alert">オーバーフロー警告</string>
 </resources>
 

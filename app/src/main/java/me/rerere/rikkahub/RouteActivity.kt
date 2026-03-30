@@ -145,16 +145,14 @@ class RouteActivity : ComponentActivity() {
 
     internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            val isVolumeUp = when (event.keyCode) {
-                KeyEvent.KEYCODE_VOLUME_UP -> true
-                KeyEvent.KEYCODE_VOLUME_DOWN -> false
-                else -> return super.dispatchKeyEvent(event)
-            }
-            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val isVolumeUp = when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> true
+            KeyEvent.KEYCODE_VOLUME_DOWN -> false
+            else -> return super.onKeyDown(keyCode, event)
         }
-        return super.dispatchKeyEvent(event)
+        if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

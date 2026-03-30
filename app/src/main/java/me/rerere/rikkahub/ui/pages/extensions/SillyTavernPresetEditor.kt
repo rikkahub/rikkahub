@@ -43,8 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,7 +96,7 @@ fun SillyTavernPresetEditorCard(
     title: String? = null,
     description: String? = null,
 ) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     var formatExpanded by rememberSaveable { mutableStateOf(false) }
     var runtimeExpanded by rememberSaveable { mutableStateOf(false) }
     var promptExpanded by rememberSaveable { mutableStateOf(true) }
@@ -529,7 +529,7 @@ fun SillyTavernPresetEditorCard(
                             appendStPromptDefinition(
                                 template = current,
                                 prompt = buildCustomStPrompt(current) { index ->
-                                    context.getString(
+                                    resources.getString(
                                         R.string.prompt_page_st_preset_editor_custom_prompt_name,
                                         index,
                                     )

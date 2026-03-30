@@ -2058,5 +2058,34 @@ vale, elira
   <string name="assistant_page_skills_workdir_root">workdir</string>
   <string name="assistant_page_skills_workdir_folder">Папка</string>
   <string name="assistant_page_skills_workdir_unknown_time">Неизвестно</string>
+  <string name="prompt_page_position_author_note_top">Примечание автора (сверху)</string>
+  <string name="prompt_page_position_author_note_bottom">Примечание автора (снизу)</string>
+  <string name="prompt_page_position_system_depth">System D</string>
+  <string name="prompt_page_position_user_depth">User D</string>
+  <string name="prompt_page_position_assistant_depth">Assistant D</string>
+  <string name="prompt_page_position_example_messages_top">Примеры сообщений (сверху)</string>
+  <string name="prompt_page_position_example_messages_bottom">Примеры сообщений (снизу)</string>
+  <string name="prompt_page_position_outlet">Вывод</string>
+  <string name="prompt_page_lorebook_global_title">Глобальные настройки Worldbook</string>
+  <string name="prompt_page_lorebook_global_desc">Поведение сканирования в стиле SillyTavern по умолчанию, используемое всеми lorebooks в этом приложении.</string>
+  <string name="prompt_page_lorebook_global_scan_depth">Глубина сканирования по умолчанию</string>
+  <string name="prompt_page_lorebook_global_min_activations">Минимум активаций</string>
+  <string name="prompt_page_lorebook_global_min_activations_depth_max">Макс. глубина мин. активаций</string>
+  <string name="prompt_page_lorebook_global_budget_percent">Процент бюджета</string>
+  <string name="prompt_page_lorebook_global_budget_cap">Лимит бюджета</string>
+  <string name="prompt_page_lorebook_global_max_recursion_steps">Макс. шагов рекурсии</string>
+  <string name="prompt_page_lorebook_global_character_strategy">Стратегия персонажа</string>
+  <string name="prompt_page_lorebook_global_character_strategy_evenly">Равномерно</string>
+  <string name="prompt_page_lorebook_global_character_strategy_character_first">Сначала персонаж</string>
+  <string name="prompt_page_lorebook_global_character_strategy_global_first">Сначала глобальное</string>
+  <string name="prompt_page_lorebook_global_include_names">Включать имена говорящих</string>
+  <string name="prompt_page_lorebook_global_include_names_desc">Добавлять имена пользователя и персонажа в начало просканированных строк чата.</string>
+  <string name="prompt_page_lorebook_global_recursive">Рекурсивное сканирование</string>
+  <string name="prompt_page_lorebook_global_recursive_desc">Разрешить активированным записям вызывать активацию других записей на следующих проходах.</string>
+  <string name="prompt_page_lorebook_global_case_sensitive">Глобальный учёт регистра</string>
+  <string name="prompt_page_lorebook_global_match_whole_words">Глобальное совпадение целых слов</string>
+  <string name="prompt_page_lorebook_global_group_scoring">Глобальная групповая оценка</string>
+  <string name="prompt_page_lorebook_global_overflow_alert">Предупреждение о переполнении</string>
+  <string name="user_persona_page_delete_action">Удалить персону</string>
 </resources>
 

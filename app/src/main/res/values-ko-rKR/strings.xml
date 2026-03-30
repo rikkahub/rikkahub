@@ -2059,5 +2059,33 @@ vale, elira
   <string name="assistant_page_skills_workdir_root">workdir</string>
   <string name="assistant_page_skills_workdir_folder">폴더</string>
   <string name="assistant_page_skills_workdir_unknown_time">알 수 없음</string>
+  <string name="prompt_page_position_author_note_top">작성자 노트(상단)</string>
+  <string name="prompt_page_position_author_note_bottom">작성자 노트(하단)</string>
+  <string name="prompt_page_position_system_depth">System D</string>
+  <string name="prompt_page_position_user_depth">User D</string>
+  <string name="prompt_page_position_assistant_depth">Assistant D</string>
+  <string name="prompt_page_position_example_messages_top">예시 메시지(상단)</string>
+  <string name="prompt_page_position_example_messages_bottom">예시 메시지(하단)</string>
+  <string name="prompt_page_position_outlet">아웃렛</string>
+  <string name="prompt_page_lorebook_global_title">전역 Worldbook 설정</string>
+  <string name="prompt_page_lorebook_global_desc">이 앱의 모든 로어북에 사용되는 기본 SillyTavern 스타일 스캔 동작입니다.</string>
+  <string name="prompt_page_lorebook_global_scan_depth">기본 스캔 깊이</string>
+  <string name="prompt_page_lorebook_global_min_activations">최소 활성화 수</string>
+  <string name="prompt_page_lorebook_global_min_activations_depth_max">최소 활성화 깊이 최대값</string>
+  <string name="prompt_page_lorebook_global_budget_percent">예산 비율</string>
+  <string name="prompt_page_lorebook_global_budget_cap">예산 상한</string>
+  <string name="prompt_page_lorebook_global_max_recursion_steps">최대 재귀 단계 수</string>
+  <string name="prompt_page_lorebook_global_character_strategy">캐릭터 전략</string>
+  <string name="prompt_page_lorebook_global_character_strategy_evenly">균등</string>
+  <string name="prompt_page_lorebook_global_character_strategy_character_first">캐릭터 우선</string>
+  <string name="prompt_page_lorebook_global_character_strategy_global_first">전역 우선</string>
+  <string name="prompt_page_lorebook_global_include_names">발화자 이름 포함</string>
+  <string name="prompt_page_lorebook_global_include_names_desc">스캔한 채팅 줄 앞에 사용자 및 캐릭터 이름을 붙입니다.</string>
+  <string name="prompt_page_lorebook_global_recursive">재귀 스캔</string>
+  <string name="prompt_page_lorebook_global_recursive_desc">트리거된 항목이 이후 패스에서 더 많은 항목을 활성화할 수 있도록 합니다.</string>
+  <string name="prompt_page_lorebook_global_case_sensitive">전역 대소문자 구분</string>
+  <string name="prompt_page_lorebook_global_match_whole_words">전역 단어 단위 일치</string>
+  <string name="prompt_page_lorebook_global_group_scoring">전역 그룹 점수</string>
+  <string name="prompt_page_lorebook_global_overflow_alert">오버플로 경고</string>
 </resources>
 

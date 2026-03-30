@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -91,10 +92,11 @@ fun ChatDrawerContent(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val resources = LocalResources.current
     val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
     val selectedPersonaProfile = settings.selectedUserPersonaProfile()
-    val effectiveUserName = settings.effectiveUserName().ifBlank { context.getString(R.string.user_default_name) }
+    val effectiveUserName = settings.effectiveUserName().ifBlank { resources.getString(R.string.user_default_name) }
     val effectiveUserPersona = settings.effectiveUserPersona()
 
     val conversations = vm.conversations.collectAsLazyPagingItems()

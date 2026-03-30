@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.R
@@ -55,6 +56,7 @@ private fun SillyTavernImporter(
     onImport: (AssistantImportPayload, Boolean) -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val filesManager: FilesManager = koinInject()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -80,13 +82,13 @@ private fun SillyTavernImporter(
             "Missing card data", "Empty character data" -> missingDataFieldText
             "Missing card name" -> missingNameFieldText
             "Failed to read import file" -> readJsonFailedText
-            "Unsupported SillyTavern import format" -> context.getString(
+            "Unsupported SillyTavern import format" -> resources.getString(
                 R.string.assistant_importer_unsupported_spec,
                 "SillyTavern import format"
             )
             else -> {
                 if (rawMessage?.startsWith("Unsupported file type: ") == true) {
-                    context.getString(
+                    resources.getString(
                         R.string.assistant_importer_unsupported_file_type,
                         rawMessage.removePrefix("Unsupported file type: ")
                     )

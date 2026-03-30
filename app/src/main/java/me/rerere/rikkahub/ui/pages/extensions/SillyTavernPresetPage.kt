@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -118,6 +119,7 @@ private fun SillyTavernPresetPageContent(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val presets = settings.resolvedStPresets()
@@ -158,18 +160,18 @@ private fun SillyTavernPresetPageContent(
                     context.contentResolver.openInputStream(uri)
                         ?.bufferedReader()
                         ?.use { it.readText() }
-                        ?: error(context.getString(R.string.prompt_page_st_preset_import_read_failed))
+                        ?: error(resources.getString(R.string.prompt_page_st_preset_import_read_failed))
                 }
                 parseAssistantImportFromJson(
                     jsonString = jsonString,
                     sourceName = fileName
                         ?.substringBeforeLast('.')
-                        ?.ifBlank { context.getString(R.string.prompt_page_st_preset_imported_name) }
-                        ?: context.getString(R.string.prompt_page_st_preset_imported_name),
+                        ?.ifBlank { resources.getString(R.string.prompt_page_st_preset_imported_name) }
+                        ?: resources.getString(R.string.prompt_page_st_preset_imported_name),
                 )
             }.onSuccess { payload ->
                 if (payload.kind != AssistantImportKind.PRESET) {
-                    toaster.show(context.getString(R.string.prompt_page_st_preset_import_only_json))
+                    toaster.show(resources.getString(R.string.prompt_page_st_preset_import_only_json))
                 } else {
                     val baseSettings = settings.ensureStPresetLibrary()
                     onUpdate(
@@ -177,11 +179,11 @@ private fun SillyTavernPresetPageContent(
                             .upsertStPreset(payload.toSillyTavernPreset(), select = true)
                             .copy(stPresetEnabled = true)
                     )
-                    toaster.show(context.getString(R.string.prompt_page_st_preset_import_success))
+                    toaster.show(resources.getString(R.string.prompt_page_st_preset_import_success))
                 }
             }.onFailure { exception ->
                 exception.printStackTrace()
-                toaster.show(exception.message ?: context.getString(R.string.assistant_importer_import_failed))
+                toaster.show(exception.message ?: resources.getString(R.string.assistant_importer_import_failed))
             }
             isImporting = false
         }
@@ -241,7 +243,7 @@ private fun SillyTavernPresetPageContent(
                         OutlinedButton(
                             onClick = {
                                 val template = defaultSillyTavernPromptTemplate().copy(
-                                    sourceName = context.getString(
+                                    sourceName = resources.getString(
                                         R.string.prompt_page_st_preset_generated_name,
                                         presets.size + 1,
                                     ),
