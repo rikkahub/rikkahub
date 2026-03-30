@@ -52,7 +52,6 @@ data class Assistant(
     val customBodies: List<CustomBody> = emptyList(),
     val mcpServers: Set<Uuid> = emptySet(),
     val localTools: List<LocalToolOption> = listOf(LocalToolOption.TimeInfo),
-    val localToolPrompts: Map<String, String> = emptyMap(),
     val stCompatScriptEnabled: Boolean = false,
     val stCompatScriptSource: String = "",
     val stCompatExtensionSettings: JsonObject = buildJsonObject { },

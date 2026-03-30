@@ -772,7 +772,6 @@ class ChatService(
                 addAll(
                     localTools.getTools(
                         options = effectiveAssistant.localTools,
-                        assistant = effectiveAssistant,
                         overrideTermuxNeedsApproval = task.overrideTermuxNeedsApproval
                     )
                 )
@@ -1056,7 +1055,7 @@ class ChatService(
                     if (settings.enableWebSearch) {
                         addAll(createSearchTools(settings))
                     }
-                    addAll(localTools.getTools(assistant.localTools, assistant))
+                    addAll(localTools.getTools(assistant.localTools))
                     mcpTools.forEach { tool ->
                         add(
                             Tool(
