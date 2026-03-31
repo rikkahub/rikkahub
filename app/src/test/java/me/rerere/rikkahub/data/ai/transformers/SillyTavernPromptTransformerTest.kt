@@ -85,9 +85,14 @@ class SillyTavernPromptTransformerTest {
 
         assertEquals(
             listOf(
-                "Base System\nMain Prompt\n<wi>Lore Before</wi>\nCharacter Description\n<wi>Lore After</wi>\nCard Jailbreak",
+                "Base System",
+                "Main Prompt",
+                "<wi>Lore Before</wi>",
+                "Character Description",
+                "<wi>Lore After</wi>",
                 "Hello",
                 "Hi",
+                "Card Jailbreak",
             ),
             result.map { it.toText() }
         )
@@ -275,7 +280,7 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
-    fun `leading system prompt sections should collapse into one message`() {
+    fun `leading system prompt sections should stay separate until squash is enabled`() {
         val template = SillyTavernPromptTemplate(
             prompts = listOf(
                 SillyTavernPromptItem(identifier = "main", content = "Main Prompt"),
@@ -299,17 +304,67 @@ class SillyTavernPromptTransformerTest {
         )
 
         assertEquals(
-            listOf(MessageRole.SYSTEM, MessageRole.USER),
+            listOf(MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.USER, MessageRole.SYSTEM),
             result.map { it.role }
         )
         assertEquals(
-            "Base System\nMain Prompt\nCharacter Description\nJailbreak Prompt",
-            result.first().toText()
+            listOf(
+                "Base System",
+                "Main Prompt",
+                "Character Description",
+                "Hello",
+                "Jailbreak Prompt",
+            ),
+            result.map { it.toText() }
         )
     }
 
     @Test
-    fun `useSystemPrompt false should keep all leading system content before prompt text`() {
+    fun `squashSystemMessages should merge separated prompt sections only when enabled`() = runBlocking {
+        val template = SillyTavernPromptTemplate(
+            useSystemPrompt = true,
+            squashSystemMessages = true,
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "main", content = "Main Prompt"),
+                SillyTavernPromptItem(identifier = "charDescription", marker = true),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+                SillyTavernPromptItem(identifier = "jailbreak", content = "Jailbreak Prompt"),
+            ),
+            orderedPromptIds = listOf("main", "charDescription", "chatHistory", "jailbreak"),
+        )
+
+        val result = listOf(
+            UIMessage.system("Base System"),
+            UIMessage.user("Hello"),
+        ).transforms(
+            transformers = listOf(SillyTavernPromptTransformer, SillyTavernMacroTransformer),
+            context = ContextWrapper(null),
+            model = Model(),
+            assistant = Assistant(
+                stCharacterData = SillyTavernCharacterData(description = "Character Description"),
+            ),
+            settings = Settings(
+                stPresetEnabled = true,
+                stPresetTemplate = template,
+            ),
+        )
+
+        assertEquals(
+            listOf(MessageRole.SYSTEM, MessageRole.USER, MessageRole.SYSTEM),
+            result.map { it.role }
+        )
+        assertEquals(
+            listOf(
+                "Base System\nMain Prompt\nCharacter Description",
+                "Hello",
+                "Jailbreak Prompt",
+            ),
+            result.map { it.toText() }
+        )
+    }
+
+    @Test
+    fun `useSystemPrompt false should keep all leading system content before prompt text without collapsing it`() {
         val template = SillyTavernPromptTemplate(
             useSystemPrompt = false,
             prompts = listOf(
@@ -333,12 +388,17 @@ class SillyTavernPromptTransformerTest {
         )
 
         assertEquals(
-            listOf(MessageRole.SYSTEM, MessageRole.USER),
+            listOf(MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.USER),
             result.map { it.role }
         )
         assertEquals(
-            "Assistant System\nRuntime Tool Prompt\nST Main",
-            result.first().toText()
+            listOf(
+                "Assistant System",
+                "Runtime Tool Prompt",
+                "ST Main",
+                "Hello",
+            ),
+            result.map { it.toText() }
         )
     }
 
@@ -464,8 +524,8 @@ class SillyTavernPromptTransformerTest {
             template = template,
         )
 
-        assertTrue(result.first().toText().contains("beta breadcrumb"))
-        assertTrue(result.first().toText().contains("Recursive lore"))
+        assertEquals("beta breadcrumb", result[0].toText())
+        assertEquals("Recursive lore", result[1].toText())
     }
 
     @Test
@@ -682,7 +742,15 @@ class SillyTavernPromptTransformerTest {
 
         assertEquals(
             listOf(
-                "[Example Chat]\nUser: Lore Before\nAssistant: Lore Before Reply\n[Example Chat]\nUser: Base Example\nAssistant: Base Reply\n[Example Chat]\nUser: Lore After\nAssistant: Lore After Reply",
+                "[Example Chat]",
+                "User: Lore Before",
+                "Assistant: Lore Before Reply",
+                "[Example Chat]",
+                "User: Base Example",
+                "Assistant: Base Reply",
+                "[Example Chat]",
+                "User: Lore After",
+                "Assistant: Lore After Reply",
                 "Hello",
             ),
             result.map { it.toText() }
@@ -732,7 +800,7 @@ class SillyTavernPromptTransformerTest {
             normalResult.map { it.toText() }
         )
         assertEquals(
-            listOf("Main Prompt\nContinue Prompt", "Hello"),
+            listOf("Main Prompt", "Continue Prompt", "Hello"),
             continueResult.map { it.toText() }
         )
     }

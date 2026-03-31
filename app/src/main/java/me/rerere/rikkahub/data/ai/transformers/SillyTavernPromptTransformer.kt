@@ -142,11 +142,7 @@ internal fun transformSillyTavernPrompt(
     }
     processedHistoryMessages = applySendIfEmpty(processedHistoryMessages, template)
 
-    val leadingSystemSections = leadingSystemMessages
-        .map { it.toText().trim() }
-        .filter { it.isNotBlank() }
-        .toMutableList()
-    val result = mutableListOf<UIMessage>()
+    val result = leadingSystemMessages.toMutableList()
 
     orderedPrompts.forEach { (orderItem, prompt) ->
         if (
@@ -169,21 +165,9 @@ internal fun transformSillyTavernPrompt(
             exampleMessagesBefore = exampleMessagesBefore,
             exampleMessagesAfter = exampleMessagesAfter,
         )
-        appendResolvedMessages(
-            promptIdentifier = prompt.identifier,
-            resolvedMessages = resolvedMessages,
-            leadingSystemSections = leadingSystemSections,
-            result = result,
-        )
+        appendResolvedMessages(resolvedMessages = resolvedMessages, result = result)
     }
 
-    return collapseLeadingSystemMessages(
-        buildList {
-            if (leadingSystemSections.isNotEmpty()) {
-                add(UIMessage.system(leadingSystemSections.joinToString("\n")))
-            }
-            addAll(result)
-            addAll(runtimeBehavior.controlMessages)
-        }
-    )
+    result.addAll(runtimeBehavior.controlMessages)
+    return result
 }

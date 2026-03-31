@@ -145,22 +145,10 @@ internal fun applySendIfEmpty(
 }
 
 internal fun appendResolvedMessages(
-    promptIdentifier: String,
     resolvedMessages: List<UIMessage>,
-    leadingSystemSections: MutableList<String>,
     result: MutableList<UIMessage>,
 ) {
-    val hoistSystemMessages = promptIdentifier != "chatHistory"
-    resolvedMessages.forEach { message ->
-        if (hoistSystemMessages && message.role == MessageRole.SYSTEM) {
-            message.toText()
-                .trim()
-                .takeIf { it.isNotBlank() }
-                ?.let(leadingSystemSections::add)
-        } else {
-            result += message
-        }
-    }
+    result += resolvedMessages
 }
 
 internal fun collapseLeadingSystemMessages(messages: List<UIMessage>): List<UIMessage> {
