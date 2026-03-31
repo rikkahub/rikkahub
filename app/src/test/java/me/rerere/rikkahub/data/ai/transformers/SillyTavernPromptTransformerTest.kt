@@ -855,6 +855,7 @@ class SillyTavernPromptTransformerTest {
             lorebooks = emptyList(),
             template = template,
             generationType = "continue",
+            supportsAssistantPrefill = true,
         )
 
         assertEquals(
@@ -887,6 +888,7 @@ class SillyTavernPromptTransformerTest {
             lorebooks = emptyList(),
             template = template,
             generationType = "impersonate",
+            supportsAssistantPrefill = true,
         )
 
         assertEquals(
@@ -895,6 +897,73 @@ class SillyTavernPromptTransformerTest {
         )
         assertEquals(
             listOf(MessageRole.USER, MessageRole.ASSISTANT, MessageRole.SYSTEM, MessageRole.ASSISTANT),
+            result.map { it.role }
+        )
+    }
+
+    @Test
+    fun `continue prefill should not prepend assistant prefill on non claude providers`() {
+        val template = SillyTavernPromptTemplate(
+            assistantPrefill = "Prefill",
+            continuePrefill = true,
+            continuePostfix = " ",
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+            ),
+            assistant = Assistant(),
+            lorebooks = emptyList(),
+            template = template,
+            generationType = "continue",
+            supportsAssistantPrefill = false,
+        )
+
+        assertEquals(
+            listOf("U1", "A1 "),
+            result.map { it.toText() }
+        )
+        assertEquals(
+            listOf(MessageRole.USER, MessageRole.ASSISTANT),
+            result.map { it.role }
+        )
+    }
+
+    @Test
+    fun `impersonate generation should not append assistant seed on non claude providers`() {
+        val template = SillyTavernPromptTemplate(
+            impersonationPrompt = "Act as {{user}}",
+            assistantImpersonation = "I ",
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+            ),
+            assistant = Assistant(),
+            lorebooks = emptyList(),
+            template = template,
+            generationType = "impersonate",
+            supportsAssistantPrefill = false,
+        )
+
+        assertEquals(
+            listOf("U1", "A1", "Act as {{user}}"),
+            result.map { it.toText() }
+        )
+        assertEquals(
+            listOf(MessageRole.USER, MessageRole.ASSISTANT, MessageRole.SYSTEM),
             result.map { it.role }
         )
     }

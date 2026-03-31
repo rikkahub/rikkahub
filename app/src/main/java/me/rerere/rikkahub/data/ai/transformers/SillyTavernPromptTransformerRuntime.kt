@@ -17,10 +17,11 @@ internal fun applyGenerationTypeRuntimeBehavior(
     chatHistoryMessages: List<UIMessage>,
     template: SillyTavernPromptTemplate,
     generationType: String,
+    supportsAssistantPrefill: Boolean,
 ): StRuntimePromptBehavior {
     return when (generationType) {
-        "continue" -> buildContinueRuntimeBehavior(chatHistoryMessages, template)
-        "impersonate" -> buildImpersonationRuntimeBehavior(chatHistoryMessages, template)
+        "continue" -> buildContinueRuntimeBehavior(chatHistoryMessages, template, supportsAssistantPrefill)
+        "impersonate" -> buildImpersonationRuntimeBehavior(chatHistoryMessages, template, supportsAssistantPrefill)
         else -> StRuntimePromptBehavior(chatHistoryMessages = chatHistoryMessages)
     }
 }
@@ -79,6 +80,7 @@ internal fun collectLeadingSystemMessages(
 private fun buildContinueRuntimeBehavior(
     chatHistoryMessages: List<UIMessage>,
     template: SillyTavernPromptTemplate,
+    supportsAssistantPrefill: Boolean,
 ): StRuntimePromptBehavior {
     if (chatHistoryMessages.lastOrNull()?.role != MessageRole.ASSISTANT) {
         return StRuntimePromptBehavior(chatHistoryMessages = chatHistoryMessages)
@@ -92,7 +94,7 @@ private fun buildContinueRuntimeBehavior(
         postfix = template.continuePostfix,
     )
     val continuedPrompt = buildString {
-        if (template.continuePrefill) {
+        if (template.continuePrefill && supportsAssistantPrefill) {
             val assistantPrefill = template.assistantPrefill
             if (assistantPrefill.isNotBlank()) {
                 append(assistantPrefill)
@@ -134,6 +136,7 @@ private fun buildContinueRuntimeBehavior(
 private fun buildImpersonationRuntimeBehavior(
     chatHistoryMessages: List<UIMessage>,
     template: SillyTavernPromptTemplate,
+    supportsAssistantPrefill: Boolean,
 ): StRuntimePromptBehavior {
     val controlMessages = buildList {
         val impersonationPrompt = stripInlineRegexBlocks(template.impersonationPrompt).trim()
@@ -142,7 +145,7 @@ private fun buildImpersonationRuntimeBehavior(
         }
 
         val assistantImpersonation = template.assistantImpersonation
-        if (assistantImpersonation.isNotBlank()) {
+        if (supportsAssistantPrefill && assistantImpersonation.isNotBlank()) {
             add(UIMessage.assistant(assistantImpersonation))
         }
     }

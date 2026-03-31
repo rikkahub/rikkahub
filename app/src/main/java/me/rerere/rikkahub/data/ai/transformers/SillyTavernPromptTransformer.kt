@@ -2,7 +2,9 @@ package me.rerere.rikkahub.data.ai.transformers
 
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
@@ -21,6 +23,7 @@ object SillyTavernPromptTransformer : InputMessageTransformer {
         val template = ctx.settings.activeStPresetTemplate()
             ?.takeIf { ctx.settings.stPresetEnabled }
             ?: return messages
+        val provider = ctx.model.findProvider(ctx.settings.providers)
         return transformSillyTavernPrompt(
             messages = messages,
             assistant = ctx.assistant,
@@ -31,6 +34,7 @@ object SillyTavernPromptTransformer : InputMessageTransformer {
             personaDescription = ctx.settings.effectiveUserPersona(ctx.assistant),
             runtimeState = ctx.lorebookRuntimeState,
             stMacroState = ctx.stMacroState,
+            supportsAssistantPrefill = provider is ProviderSetting.Claude,
         )
     }
 }
@@ -45,6 +49,7 @@ internal fun transformSillyTavernPrompt(
     personaDescription: String = assistant.userPersona,
     runtimeState: LorebookRuntimeState? = null,
     stMacroState: StMacroState? = null,
+    supportsAssistantPrefill: Boolean = false,
 ): List<UIMessage> {
     val normalizedGenerationType = generationType.trim().lowercase().ifBlank { "normal" }
     val normalizedPersonaDescription = personaDescription.trim()
@@ -61,6 +66,7 @@ internal fun transformSillyTavernPrompt(
         chatHistoryMessages = chatHistoryMessages,
         template = template,
         generationType = normalizedGenerationType,
+        supportsAssistantPrefill = supportsAssistantPrefill,
     )
 
     val triggeredLorebookEntries = collectTriggeredLorebookEntries(
