@@ -86,13 +86,13 @@ class SillyTavernPromptTransformerTest {
         assertEquals(
             listOf(
                 "Base System",
-                "Main Prompt",
                 "<wi>Lore Before</wi>",
-                "Character Description",
+                "Main Prompt",
                 "<wi>Lore After</wi>",
+                "Character Description",
+                "Card Jailbreak",
                 "Hello",
                 "Hi",
-                "Card Jailbreak",
             ),
             result.map { it.toText() }
         )
@@ -304,7 +304,7 @@ class SillyTavernPromptTransformerTest {
         )
 
         assertEquals(
-            listOf(MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.USER, MessageRole.SYSTEM),
+            listOf(MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.USER),
             result.map { it.role }
         )
         assertEquals(
@@ -312,8 +312,8 @@ class SillyTavernPromptTransformerTest {
                 "Base System",
                 "Main Prompt",
                 "Character Description",
-                "Hello",
                 "Jailbreak Prompt",
+                "Hello",
             ),
             result.map { it.toText() }
         )
@@ -350,14 +350,13 @@ class SillyTavernPromptTransformerTest {
         )
 
         assertEquals(
-            listOf(MessageRole.SYSTEM, MessageRole.USER, MessageRole.SYSTEM),
+            listOf(MessageRole.SYSTEM, MessageRole.USER),
             result.map { it.role }
         )
         assertEquals(
             listOf(
-                "Base System\nMain Prompt\nCharacter Description",
+                "Base System\nMain Prompt\nCharacter Description\nJailbreak Prompt",
                 "Hello",
-                "Jailbreak Prompt",
             ),
             result.map { it.toText() }
         )
@@ -742,16 +741,13 @@ class SillyTavernPromptTransformerTest {
 
         assertEquals(
             listOf(
-                "[Example Chat]",
+                "Hello",
                 "User: Lore Before",
                 "Assistant: Lore Before Reply",
-                "[Example Chat]",
                 "User: Base Example",
                 "Assistant: Base Reply",
-                "[Example Chat]",
                 "User: Lore After",
                 "Assistant: Lore After Reply",
-                "Hello",
             ),
             result.map { it.toText() }
         )
@@ -769,6 +765,7 @@ class SillyTavernPromptTransformerTest {
                 SillyTavernPromptItem(
                     identifier = "continueOnly",
                     content = "Continue Prompt",
+                    systemPrompt = false,
                     injectionTriggers = listOf("continue"),
                 ),
                 SillyTavernPromptItem(identifier = "chatHistory", marker = true),

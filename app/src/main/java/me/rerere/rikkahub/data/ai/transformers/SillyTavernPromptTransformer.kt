@@ -144,15 +144,10 @@ internal fun transformSillyTavernPrompt(
 
     val result = leadingSystemMessages.toMutableList()
 
-    orderedPrompts.forEach { (orderItem, prompt) ->
-        if (
-            !orderItem.enabled ||
-            prompt.injectionPosition == me.rerere.rikkahub.data.model.StPromptInjectionPosition.ABSOLUTE ||
-            !prompt.matchesGenerationType(generationType)
-        ) {
-            return@forEach
-        }
-
+    orderRelativePromptsLikeSt(
+        orderedPrompts = orderedPrompts,
+        generationType = generationType,
+    ).forEach { prompt ->
         val resolvedMessages = resolveRelativePromptMessages(
             prompt = prompt,
             assistant = assistant,

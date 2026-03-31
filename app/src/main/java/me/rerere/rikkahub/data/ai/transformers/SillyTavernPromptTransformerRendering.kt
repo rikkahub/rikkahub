@@ -151,6 +151,70 @@ internal fun appendResolvedMessages(
     result += resolvedMessages
 }
 
+private val stMarkerPromptIdentifiers = listOf(
+    "worldInfoBefore",
+    "main",
+    "worldInfoAfter",
+    "charDescription",
+    "charPersonality",
+    "scenario",
+    "personaDescription",
+)
+
+private val stSystemPromptIdentifiers = listOf(
+    "nsfw",
+    "jailbreak",
+)
+
+private const val stEnhanceDefinitionsIdentifier = "enhanceDefinitions"
+private const val stChatHistoryIdentifier = "chatHistory"
+private const val stDialogueExamplesIdentifier = "dialogueExamples"
+
+internal fun orderRelativePromptsLikeSt(
+    orderedPrompts: List<Pair<SillyTavernPromptOrderItem, SillyTavernPromptItem>>,
+    generationType: String,
+): List<SillyTavernPromptItem> {
+    val enabledRelativePrompts = orderedPrompts
+        .filter { (orderItem, prompt) ->
+            orderItem.enabled &&
+                prompt.injectionPosition != StPromptInjectionPosition.ABSOLUTE &&
+                prompt.matchesGenerationType(generationType)
+        }
+        .map { (_, prompt) -> prompt }
+
+    val promptById = enabledRelativePrompts.associateBy { it.identifier }
+    val handledIdentifiers = mutableSetOf<String>()
+    val result = mutableListOf<SillyTavernPromptItem>()
+
+    fun addIfPresent(identifier: String) {
+        val prompt = promptById[identifier] ?: return
+        if (!handledIdentifiers.add(identifier)) return
+        result += prompt
+    }
+
+    stMarkerPromptIdentifiers.forEach(::addIfPresent)
+    stSystemPromptIdentifiers.forEach(::addIfPresent)
+
+    enabledRelativePrompts
+        .filter { prompt ->
+            !prompt.systemPrompt &&
+                prompt.identifier !in handledIdentifiers &&
+                prompt.identifier != stEnhanceDefinitionsIdentifier &&
+                prompt.identifier != stChatHistoryIdentifier &&
+                prompt.identifier != stDialogueExamplesIdentifier
+        }
+        .forEach { prompt ->
+            handledIdentifiers += prompt.identifier
+            result += prompt
+        }
+
+    addIfPresent(stEnhanceDefinitionsIdentifier)
+    addIfPresent(stChatHistoryIdentifier)
+    addIfPresent(stDialogueExamplesIdentifier)
+
+    return result
+}
+
 internal fun collapseLeadingSystemMessages(messages: List<UIMessage>): List<UIMessage> {
     val leadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
     if (leadingSystemCount <= 1) return messages
@@ -305,7 +369,7 @@ private fun parseDialogueExampleMessages(
     introPrompt: String,
 ): List<UIMessage> {
     if (raw.isBlank()) return emptyList()
-    val normalizedIntroPrompt = introPrompt.trim().ifBlank { "[Example Chat]" }
+    val normalizedIntroPrompt = introPrompt.trim()
 
     return raw
         .replace("\r", "")
@@ -315,7 +379,9 @@ private fun parseDialogueExampleMessages(
         .flatMap { block ->
             val turns = splitDialogueTurns(block)
             buildList {
-                add(UIMessage.system(normalizedIntroPrompt))
+                if (normalizedIntroPrompt.isNotBlank()) {
+                    add(UIMessage.system(normalizedIntroPrompt))
+                }
                 if (turns.isEmpty()) {
                     add(UIMessage.system(block))
                 } else {
