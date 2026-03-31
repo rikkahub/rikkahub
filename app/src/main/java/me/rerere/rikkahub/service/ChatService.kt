@@ -57,6 +57,7 @@ import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.TOOL_APPROVAL_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.hasBlockingToolsForContinuation
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
@@ -871,6 +872,16 @@ class ChatService(
         message: UIMessage,
     ) {
         if (message.role != MessageRole.ASSISTANT) return
+        if (message.hasBlockingToolsForContinuation()) {
+            message.getTools().lastOrNull { it.isPending }?.let { pendingTool ->
+                sendToolApprovalNotification(conversationId, pendingTool)
+            }
+            addError(
+                IllegalStateException("Continue is unavailable until this message's tool calls are resolved."),
+                conversationId
+            )
+            return
+        }
 
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()

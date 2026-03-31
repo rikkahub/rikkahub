@@ -74,8 +74,9 @@ internal suspend fun parseAssistantImportFromUri(
     uri: Uri,
     filesManager: FilesManager,
 ): AssistantImportPayload {
-    val sourceName = getDisplayName(context, uri)?.substringBeforeLast('.')?.ifBlank { "Imported" } ?: "Imported"
-    val mime = withContext(Dispatchers.IO) { filesManager.getFileMimeType(uri) }
+    val displayName = getDisplayName(context, uri)
+    val sourceName = displayName?.substringBeforeLast('.')?.ifBlank { "Imported" } ?: "Imported"
+    val mime = withContext(Dispatchers.IO) { filesManager.resolveMimeType(uri, displayName) }
     val (jsonString, avatarImportSourceUri) = withContext(Dispatchers.IO) {
         when (mime) {
             "image/png" -> {
@@ -93,7 +94,7 @@ internal suspend fun parseAssistantImportFromUri(
                 json to null
             }
 
-            else -> error("Unsupported file type: ${mime ?: "unknown"}")
+            else -> error("Unsupported file type: $mime")
         }
     }
     return parseAssistantImportFromJson(
