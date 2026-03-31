@@ -56,6 +56,21 @@ private data class StCompatExecutionRequest(
     val messages: List<StCompatMessage>,
     val chat: List<StCompatChatMessage>,
     val extensionSettings: JsonObject,
+    val temperature: Double? = null,
+    val frequencyPenalty: Double? = null,
+    val presencePenalty: Double? = null,
+    val topP: Double? = null,
+    val topK: Int? = null,
+    val topA: Double? = null,
+    val minP: Double? = null,
+    val repetitionPenalty: Double? = null,
+    val maxTokens: Int? = null,
+    val seed: Long? = null,
+    val stopSequences: List<String> = emptyList(),
+    val stream: Boolean = true,
+    val replyCount: Int = 1,
+    val enableWebSearch: Boolean = false,
+    val reasoningEffort: String = "",
 )
 
 @Serializable
@@ -111,6 +126,20 @@ class SillyTavernCompatScriptTransformer(
                     charName = charName,
                 ),
                 extensionSettings = assistant.stCompatExtensionSettings,
+                temperature = assistant.temperature?.toDouble(),
+                frequencyPenalty = assistant.frequencyPenalty?.toDouble(),
+                presencePenalty = assistant.presencePenalty?.toDouble(),
+                topP = assistant.topP?.toDouble(),
+                topK = assistant.topK,
+                topA = assistant.topA?.toDouble(),
+                minP = assistant.minP?.toDouble(),
+                repetitionPenalty = assistant.repetitionPenalty?.toDouble(),
+                maxTokens = assistant.maxTokens,
+                seed = assistant.seed,
+                stopSequences = assistant.stopSequences,
+                stream = assistant.streamOutput,
+                enableWebSearch = ctx.settings.enableWebSearch,
+                reasoningEffort = assistant.openAIReasoningEffort,
             )
         )
 
@@ -231,6 +260,36 @@ class SillyTavernCompatScriptTransformer(
                 return prop in target ? target[prop] : prop.toLowerCase();
               },
             });
+            const extension_prompt_types = {
+              NONE: -1,
+              IN_PROMPT: 0,
+              IN_CHAT: 1,
+              BEFORE_PROMPT: 2,
+            };
+            const extension_prompt_roles = {
+              SYSTEM: 0,
+              USER: 1,
+              ASSISTANT: 2,
+            };
+            const resolvePromptRoleName = (role) => {
+              switch (Number(role)) {
+                case extension_prompt_roles.USER:
+                  return 'user';
+                case extension_prompt_roles.ASSISTANT:
+                  return 'assistant';
+                default:
+                  return 'system';
+              }
+            };
+            const substituteParams = (value, options = {}) => {
+              const userName = String(options.name1Override ?? input.userName ?? 'User');
+              const charName = String(options.name2Override ?? input.charName ?? 'Assistant');
+              return String(value ?? '')
+                .replace(/\{\{(user|name1)\}\}/gi, userName)
+                .replace(/\{(user|name1)\}/gi, userName)
+                .replace(/\{\{(char|bot|name2)\}\}/gi, charName)
+                .replace(/\{(char|bot|name2)\}/gi, charName);
+            };
             const listeners = new Map();
             const addListener = (event, listener, { once = false, prepend = false } = {}) => {
               const list = listeners.get(event) || [];
@@ -581,12 +640,84 @@ class SillyTavernCompatScriptTransformer(
             const setExtensionPrompt = async (promptId, content, position, depth, scan = false, role = 0, filter = () => true) => {
               sharedContext.extensionPrompts[promptId] = {
                 value: String(content ?? ''),
-                position,
-                depth,
+                position: Number(position ?? extension_prompt_types.IN_PROMPT),
+                depth: Number(depth ?? 0),
                 scan: Boolean(scan),
-                role: Number(role),
+                role: Number(role ?? extension_prompt_roles.SYSTEM),
                 filter,
               };
+            };
+            const getExtensionPrompt = async (position = extension_prompt_types.IN_PROMPT, depth = undefined, separator = '\n', role = undefined, wrap = true) => {
+              const values = [];
+              const entries = Object.entries(sharedContext.extensionPrompts)
+                .sort(([left], [right]) => left.localeCompare(right));
+              for (const [, prompt] of entries) {
+                if (!prompt || !prompt.value) continue;
+                if (prompt.position !== position) continue;
+                if (typeof depth !== 'undefined' && typeof prompt.depth !== 'undefined' && prompt.depth !== depth) continue;
+                if (typeof role !== 'undefined' && typeof prompt.role !== 'undefined' && prompt.role !== role) continue;
+                if (typeof prompt.filter === 'function') {
+                  const include = await prompt.filter();
+                  if (!include) continue;
+                }
+                values.push(String(prompt.value).trim());
+              }
+              let result = values.filter(Boolean).join(separator);
+              if (!result) return '';
+              if (wrap && !result.startsWith(separator)) {
+                result = separator + result;
+              }
+              if (wrap && !result.endsWith(separator)) {
+                result = result + separator;
+              }
+              return substituteParams(result);
+            };
+            const applyExtensionPromptsToMessages = async (messages) => {
+              let result = clone(messages || []);
+              const entries = Object.entries(sharedContext.extensionPrompts)
+                .sort(([left], [right]) => left.localeCompare(right));
+              const prompts = [];
+              for (const [, prompt] of entries) {
+                if (!prompt || !prompt.value) continue;
+                if (typeof prompt.filter === 'function') {
+                  const include = await prompt.filter();
+                  if (!include) continue;
+                }
+                prompts.push(prompt);
+              }
+
+              const leadingPrompts = prompts.filter(prompt =>
+                prompt.position === extension_prompt_types.BEFORE_PROMPT ||
+                prompt.position === extension_prompt_types.IN_PROMPT
+              );
+              if (leadingPrompts.length > 0) {
+                const injectedMessages = leadingPrompts.map(prompt => ({
+                  role: resolvePromptRoleName(prompt.role),
+                  content: substituteParams(String(prompt.value).trim()),
+                })).filter(message => message.content);
+                result = [...injectedMessages, ...result];
+              }
+
+              const inChatPrompts = prompts.filter(prompt => prompt.position === extension_prompt_types.IN_CHAT);
+              for (const prompt of inChatPrompts) {
+                const content = substituteParams(String(prompt.value).trim());
+                if (!content) continue;
+                const message = {
+                  role: resolvePromptRoleName(prompt.role),
+                  content,
+                };
+                if (result.length === 0) {
+                  result.push(message);
+                  continue;
+                }
+                const depth = Number(prompt.depth ?? 0);
+                const insertIndex = depth <= 0
+                  ? result.length
+                  : Math.max(0, result.length - depth);
+                result.splice(insertIndex, 0, message);
+              }
+
+              return result;
             };
             const writeExtensionField = async (_characterId, key, value) => {
               if (typeof value === 'undefined') {
@@ -639,6 +770,7 @@ class SillyTavernCompatScriptTransformer(
               getContext: () => sharedContext,
               setting: () => makeSettingBuilder(),
               setExtensionPrompt,
+              getExtensionPrompt,
               writeExtensionField,
               toastr: {
                 info: (...args) => pushLog('TOAST', args),
@@ -659,20 +791,28 @@ class SillyTavernCompatScriptTransformer(
               eventTypes: event_types,
               saveSettingsDebounced: async () => {},
               setExtensionPrompt,
+              getExtensionPrompt,
               writeExtensionField,
               getRequestHeaders: sharedContext.getRequestHeaders,
               mainApi: sharedContext.mainApi,
               extensionSettings: sharedContext.extensionSettings,
+              extensionPrompts: sharedContext.extensionPrompts,
               chat: sharedContext.chat,
               name1: sharedContext.name1,
               name2: sharedContext.name2,
             };
             globalThis.eventSource = eventSource;
             globalThis.event_types = event_types;
+            globalThis.extension_prompt_types = extension_prompt_types;
+            globalThis.extension_prompt_roles = extension_prompt_roles;
+            globalThis.extension_prompts = sharedContext.extensionPrompts;
             globalThis.saveSettingsDebounced = async () => {};
             globalThis.getContext = () => sharedContext;
             globalThis.setExtensionPrompt = setExtensionPrompt;
+            globalThis.getExtensionPrompt = getExtensionPrompt;
             globalThis.getRequestHeaders = sharedContext.getRequestHeaders;
+            globalThis.substituteParams = substituteParams;
+            globalThis.baseChatReplace = substituteParams;
             globalThis['${'$'}'] = jq;
             globalThis.jQuery = jq;
             (async () => {
@@ -681,26 +821,33 @@ class SillyTavernCompatScriptTransformer(
                 const completion = {
                   messages: clone(input.messages || []),
                   model: input.modelId,
-                  temprature: 1,
-                  temperature: 1,
-                  frequency_penalty: 0,
-                  presence_penalty: 0,
-                  top_p: 1,
-                  max_tokens: 0,
-                  stream: true,
+                  temprature: Number(input.temperature ?? 1),
+                  temperature: Number(input.temperature ?? 1),
+                  frequency_penalty: Number(input.frequencyPenalty ?? 0),
+                  presence_penalty: Number(input.presencePenalty ?? 0),
+                  top_p: Number(input.topP ?? 1),
+                  top_k: Number(input.topK ?? 0),
+                  top_a: Number(input.topA ?? 0),
+                  min_p: Number(input.minP ?? 0),
+                  repetition_penalty: Number(input.repetitionPenalty ?? 1),
+                  max_tokens: Number(input.maxTokens ?? 0),
+                  seed: input.seed ?? -1,
+                  stream: Boolean(input.stream ?? true),
                   logit_bias: {},
-                  stop: [],
+                  stop: clone(input.stopSequences || []),
                   chat_completion_source: input.chatCompletionSource || input.mainApi,
                   chat_comletion_source: input.chatCompletionSource || input.mainApi,
-                  n: 1,
+                  enable_web_search: Boolean(input.enableWebSearch),
+                  n: Number(input.replyCount ?? 1),
                   user_name: input.userName,
                   char_name: input.charName,
                   group_names: clone(input.groupNames || []),
-                  include_reasoning: false,
-                  reasoning_effort: 'medium',
+                  include_reasoning: Boolean(input.reasoningEffort),
+                  reasoning_effort: input.reasoningEffort || 'medium',
                   json_schema: null,
                 };
                 await emit(event_types.CHAT_COMPLETION_SETTINGS_READY, completion);
+                completion.messages = await applyExtensionPromptsToMessages(completion.messages);
                 sharedContext.chat = toContextChat(completion.messages);
                 globalThis.SillyTavern.chat = sharedContext.chat;
                 process.stdout.write(JSON.stringify({

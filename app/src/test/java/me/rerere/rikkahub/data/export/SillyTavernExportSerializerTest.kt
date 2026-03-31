@@ -168,7 +168,7 @@ class SillyTavernExportSerializerTest {
     }
 
     @Test
-    fun `preset export should mark and reimport rikkahub inline prompt regexes`() {
+    fun `preset export should keep inline regex blocks inside prompts on reimport`() {
         val preset = SillyTavernPreset(
             template = defaultSillyTavernPromptTemplate().copy(
                 sourceName = "Inline Regex Export",
@@ -222,8 +222,9 @@ class SillyTavernExportSerializerTest {
             sourceName = "inline-export",
         )
 
-        assertTrue(payload.regexes.any { it.sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT })
-        assertEquals("Main body", payload.presetTemplate?.findPrompt("main")?.content)
+        assertFalse(payload.regexes.any { it.sourceKind == AssistantRegexSourceKind.ST_INLINE_PROMPT })
+        assertTrue(payload.presetTemplate?.findPrompt("main")?.content?.contains("<regex>") == true)
+        assertTrue(payload.presetTemplate?.findPrompt("main")?.content?.contains("\"foo\":\"baz\"") == true)
     }
 
     @Test

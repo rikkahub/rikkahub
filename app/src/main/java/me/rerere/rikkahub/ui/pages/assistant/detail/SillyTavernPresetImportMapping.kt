@@ -4,14 +4,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
-import me.rerere.rikkahub.data.ai.transformers.stripInlineRegexBlocks
-import me.rerere.rikkahub.data.model.AssistantAffectScope
-import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
-import me.rerere.rikkahub.data.model.matchesGenerationType
 import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 
@@ -42,20 +38,13 @@ internal fun buildPresetPromptOrder(preset: StPresetImport): List<SillyTavernPro
         }
 }
 
-internal fun buildPresetPromptItems(
-    preset: StPresetImport,
-    importInlinePromptRegexes: Boolean,
-): List<SillyTavernPromptItem> {
+internal fun buildPresetPromptItems(preset: StPresetImport): List<SillyTavernPromptItem> {
     return preset.prompts.map { prompt ->
         SillyTavernPromptItem(
             identifier = prompt.identifier,
             name = prompt.name.orEmpty(),
             role = prompt.role.toMessageRole(),
-            content = if (importInlinePromptRegexes) {
-                stripInlineRegexBlocks(prompt.content.orEmpty())
-            } else {
-                prompt.content.orEmpty()
-            },
+            content = prompt.content.orEmpty(),
             systemPrompt = prompt.systemPrompt ?: true,
             marker = prompt.marker ?: false,
             enabled = prompt.enabled ?: true,
@@ -105,10 +94,7 @@ internal fun buildPresetTemplate(
 internal fun buildPresetRegexes(
     json: JsonObject,
     preset: StPresetImport,
-    promptItems: List<SillyTavernPromptItem>,
-    promptOrder: List<SillyTavernPromptOrderItem>,
 ): List<me.rerere.rikkahub.data.model.AssistantRegex> {
-    val shouldImportInlinePromptRegexes = json.hasRikkaHubInlinePromptRegexMarker()
     return buildList {
         addAll(parseRegexScripts(json["extensions"]?.jsonObject?.get("regex_scripts"), sourceName = preset.name))
         addAll(parseRegexScripts(
@@ -120,53 +106,7 @@ internal fun buildPresetRegexes(
                 ?.get("regexes"),
             sourceName = "${preset.name} (SPreset)",
         ))
-        val promptOrderMap = promptOrder.associateBy { it.identifier }
-        if (shouldImportInlinePromptRegexes) {
-            promptItems
-                .filter { prompt ->
-                    val orderItem = promptOrderMap[prompt.identifier] ?: return@filter false
-                    orderItem.enabled && prompt.matchesGenerationType("normal")
-                }
-                .forEach { prompt ->
-                    val rawContent = preset.prompts
-                        .firstOrNull { it.identifier == prompt.identifier }
-                        ?.content
-                        .orEmpty()
-                    addAll(parseInlinePromptRegexes(prompt.copy(content = rawContent)))
-                }
-        }
     }.distinctBy(::regexDedupKey)
-}
-
-private fun parseInlinePromptRegexes(prompt: SillyTavernPromptItem): List<me.rerere.rikkahub.data.model.AssistantRegex> {
-    val content = prompt.content
-    if (content.isBlank()) return emptyList()
-
-    val regex = Regex("""<regex(?:\s+order=(-?\d+))?>([\s\S]*?)</regex>""")
-    return regex.findAll(content).mapIndexedNotNull { index, match ->
-        val body = match.groupValues[2].trim()
-        val jsonObject = runCatching {
-            ImportJson.parseToJsonElement("{${body}}").jsonObject
-        }.getOrNull() ?: return@mapIndexedNotNull null
-
-        val entry = jsonObject.entries.firstOrNull() ?: return@mapIndexedNotNull null
-        mapRegexScript(
-            sourceName = prompt.name.ifBlank { prompt.identifier },
-            name = "${prompt.name.ifBlank { prompt.identifier }} Regex ${index + 1}",
-            findRegex = entry.key,
-            replaceString = entry.value.jsonPrimitiveOrNull?.contentOrNull.orEmpty(),
-            placement = listOf(1),
-            disabled = false,
-            promptOnly = true,
-            markdownOnly = false,
-            minDepth = null,
-            maxDepth = null,
-            affectingScopeOverride = setOf(AssistantAffectScope.SYSTEM),
-            stPlacementsOverride = emptySet(),
-            sourceKind = AssistantRegexSourceKind.ST_INLINE_PROMPT,
-            sourceRef = prompt.identifier,
-        )
-    }.toList()
 }
 
 private fun selectPresetOrder(promptOrders: List<StPresetOrderList>): List<StPresetOrderItem> {

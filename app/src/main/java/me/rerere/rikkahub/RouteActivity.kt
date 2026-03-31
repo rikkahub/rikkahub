@@ -77,6 +77,7 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantInjectionsPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPluginPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantSkillsPage
@@ -449,6 +450,10 @@ class RouteActivity : ComponentActivity() {
                                 AssistantRequestPage(key.id)
                             }
 
+                            entry<Screen.AssistantPlugin> { key ->
+                                AssistantPluginPage(key.id)
+                            }
+
                             entry<Screen.AssistantMcp> { key ->
                                 AssistantMcpPage(key.id)
                             }
@@ -686,6 +691,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class AssistantRequest(val id: String) : Screen
+
+    @Serializable
+    data class AssistantPlugin(val id: String) : Screen
 
     @Serializable
     data class AssistantMcp(val id: String) : Screen
