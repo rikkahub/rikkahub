@@ -50,7 +50,6 @@ Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
 - **MessageNode**: A container holding one or more UIMessages to implement message branching functionality. Each node maintains a list of alternative messages and tracks which message is currently selected (selectIndex). This enables users to regenerate responses and switch between different conversation branches, creating a tree-like conversation structure. (app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt)
 
 - **Message Transformer**: A pipeline mechanism for transforming messages before sending to AI providers (InputMessageTransformer) or after receiving responses (OutputMessageTransformer). Transformers can modify message content, add metadata, apply templates, handle special tags, convert formats, and perform OCR. Common transformers include:
-  - TemplateTransformer: Apply Pebble templates to user messages with variables like time/date
   - ThinkTagTransformer: Extract `<think>` tags and convert to reasoning parts
   - RegexOutputTransformer: Apply regex replacements to assistant responses
   - DocumentAsPromptTransformer: Convert document attachments to text prompts

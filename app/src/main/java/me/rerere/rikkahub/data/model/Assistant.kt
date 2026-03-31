@@ -32,7 +32,6 @@ data class Assistant(
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableRecentChatsReference: Boolean = false,
-    val messageTemplate: String = "{{ message }}",
     val presetMessages: List<UIMessage> = emptyList(),
     val quickMessageIds: Set<Uuid> = emptySet(),
     val scheduledPromptTasks: List<ScheduledPromptTask> = emptyList(),
@@ -61,7 +60,6 @@ data class Assistant(
     val background: String? = null,
     val backgroundOpacity: Float = 1.0f,
     val backgroundBlur: Float = 0f,
-    val messageInjectionTemplate: MessageInjectionTemplate = MessageInjectionTemplate.default(),
     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入

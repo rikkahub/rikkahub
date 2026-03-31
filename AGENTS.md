@@ -70,7 +70,6 @@
   InputMessageTransformer) or after receiving responses (OutputMessageTransformer). Transformers can modify message
   content, add metadata, apply templates, handle special tags, convert formats, and perform OCR. Common transformers
   include:
-  - TemplateTransformer: Apply Pebble templates to user messages with variables like time/date
   - ThinkTagTransformer: Extract `<think>` tags and convert to reasoning parts
   - RegexOutputTransformer: Apply regex replacements to assistant responses
   - DocumentAsPromptTransformer: Convert document attachments to text prompts

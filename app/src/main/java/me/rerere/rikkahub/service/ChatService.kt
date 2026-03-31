@@ -81,7 +81,6 @@ import me.rerere.rikkahub.data.ai.transformers.SillyTavernCompatScriptTransforme
 import me.rerere.rikkahub.data.ai.transformers.StMacroState
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernMacroTransformer
-import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.readStRuntimeSnapshot
@@ -163,7 +162,6 @@ class ChatService(
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
     private val generationHandler: GenerationHandler,
-    private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
     private val stCompatScriptTransformer: SillyTavernCompatScriptTransformer,
@@ -348,7 +346,6 @@ class ChatService(
                     add(PromptInjectionTransformer)
                     add(SillyTavernMacroTransformer)
                     add(PlaceholderTransformer)
-                    add(templateTransformer)
                     add(RegexPromptOnlyTransformer)
                 },
                 context = context,
@@ -760,7 +757,6 @@ class ChatService(
             stMacroState = StMacroState(globalVariables = stMacroGlobalVariables),
             inputTransformers = buildList {
                 addAll(inputTransformers)
-                add(templateTransformer)
                 add(RegexPromptOnlyTransformer)
                 add(stCompatScriptTransformer)
             },
@@ -1046,7 +1042,6 @@ class ChatService(
                 lorebookRuntimeState = session.getLorebookRuntimeState(),
                 inputTransformers = buildList {
                     addAll(inputTransformers)
-                    add(templateTransformer)
                     add(RegexPromptOnlyTransformer)
                     add(stCompatScriptTransformer)
                 },

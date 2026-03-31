@@ -14,11 +14,9 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
-import me.rerere.rikkahub.data.model.MessageInjectionTemplate
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.StLorebookEntryExtension
 import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
-import me.rerere.rikkahub.data.model.withNewNodeIds
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDateTime
 import kotlin.uuid.Uuid
@@ -220,56 +218,6 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
             2 -> me.rerere.ai.core.MessageRole.ASSISTANT
             else -> me.rerere.ai.core.MessageRole.SYSTEM
         }
-    }
-}
-
-object MessageTemplateSerializer : ExportSerializer<MessageInjectionTemplate> {
-    override val type = "message_template"
-
-    override fun getExportFileName(data: MessageInjectionTemplate): String {
-        return "${data.name.ifEmpty { type }}.json"
-    }
-
-    override fun export(data: MessageInjectionTemplate): ExportData {
-        return ExportData(
-            type = type,
-            data = ExportSerializer.DefaultJson.encodeToJsonElement(data)
-        )
-    }
-
-    override fun import(context: Context, uri: Uri): Result<MessageInjectionTemplate> {
-        return runCatching {
-            val json = readUri(context, uri)
-            tryImportNative(json)
-                ?: tryImportTemplateJson(json)
-                ?: throw IllegalArgumentException("Unsupported format")
-        }
-    }
-
-    private fun tryImportNative(json: String): MessageInjectionTemplate? {
-        return runCatching {
-            val exportData = ExportSerializer.DefaultJson.decodeFromString(
-                ExportData.serializer(),
-                json
-            )
-            if (exportData.type != type) return null
-            ExportSerializer.DefaultJson
-                .decodeFromJsonElement<MessageInjectionTemplate>(exportData.data)
-                .withNewNodeIds()
-        }.getOrNull()
-    }
-
-    internal fun tryImportTemplateJson(json: String): MessageInjectionTemplate? {
-        return runCatching {
-            val element = ExportSerializer.DefaultJson.parseToJsonElement(json)
-            val obj = element as? JsonObject ?: return null
-            // Avoid accepting arbitrary JSON objects as a default template.
-            if (!obj.containsKey("template")) return null
-
-            ExportSerializer.DefaultJson
-                .decodeFromJsonElement<MessageInjectionTemplate>(obj)
-                .withNewNodeIds()
-        }.getOrNull()
     }
 }
 

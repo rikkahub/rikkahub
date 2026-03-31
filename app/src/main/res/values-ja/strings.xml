@@ -13,7 +13,7 @@
   <string name="assistant_detail_local_tools_desc">JavaScriptエンジンなどのローカルツールを有効化</string>
   <string name="assistant_detail_mcp_desc">アシスタント用のMCPサーバーツールを設定</string>
   <string name="assistant_detail_memory_desc">アシスタントメモリと最近のチャット参照を管理</string>
-  <string name="assistant_detail_prompt_desc">システムプロンプト、メッセージテンプレート、正規表現ルールを設定</string>
+  <string name="assistant_detail_prompt_desc">システムプロンプトと正規表現ルールを設定</string>
   <string name="assistant_detail_request_desc">カスタムリクエストヘッダーとボディパラメータを設定</string>
   <string name="assistant_importer_import_failed">インポートに失敗しました</string>
   <string name="assistant_importer_import_tavern_json">タバーンキャラクターカードをインポート (JSON)</string>
@@ -75,8 +75,6 @@
   <string name="assistant_page_memory">記憶</string>
   <string name="assistant_page_memory_count">記憶: %d</string>
   <string name="assistant_page_memory_desc">記憶を有効にすると、モデルは会話中にあなたの情報を積極的に記録し、後続の会話で使用しようとします。この機能が正常に動作するには、モデルがツール呼び出しをサポートしている必要があります</string>
-  <string name="assistant_page_message_template">チャットコンテンツテンプレート</string>
-  <string name="assistant_page_message_template_desc">チャットメッセージがLLMに送信される前のコンテンツ形式を制御します。通常は変更する必要がありません</string>
   <string name="assistant_page_name">アシスタント名</string>
   <string name="assistant_page_preset_messages">プリセットチャットメッセージ</string>
   <string name="assistant_page_preset_messages_desc">初期会話メッセージを設定</string>
@@ -116,12 +114,6 @@
   <string name="assistant_page_tab_request">カスタムリクエスト</string>
   <string name="assistant_page_tags">タグ</string>
   <string name="assistant_page_temperature">温度</string>
-  <string name="assistant_page_template_preview">プレビュー:</string>
-  <string name="assistant_page_template_variable_date">日付</string>
-  <string name="assistant_page_template_variable_message">内容</string>
-  <string name="assistant_page_template_variable_role">役割</string>
-  <string name="assistant_page_template_variable_time">時間</string>
-  <string name="assistant_page_template_variables_label">変数:</string>
   <string name="assistant_page_thinking_budget">思考バジェット</string>
   <string name="assistant_page_title">アシスタント設定</string>
   <string name="assistant_page_top_p">Top P</string>
@@ -652,32 +644,10 @@
   <string name="web_search_disabled">ウェブ検索が無効になりました</string>
   <string name="web_search_enabled">ウェブ検索が有効になりました</string>
   <string name="prompt_page_title">プロンプトインジェクション</string>
-  <string name="prompt_page_message_template_tab">メッセージテンプレート</string>
   <string name="prompt_page_mode_injection_tab">モードインジェクション</string>
   <string name="prompt_page_lorebook_tab">ロアブック</string>
   <string name="prompt_page_mode_injection_empty">モードインジェクションがありません</string>
-  <string name="prompt_page_message_template_empty">テンプレートノードを下で追加するか、テンプレート JSON をインポートしてください</string>
-  <string name="prompt_page_message_template_enabled_desc">無効時はチャットメッセージは元の形式のままです</string>
-  <string name="prompt_page_message_template_disabled_hint">メッセージテンプレートは現在オフです。オンにするとテンプレートノードが適用されます。</string>
   <string name="prompt_page_empty_hint">下のボタンをクリックして追加</string>
-  <string name="prompt_page_message_template_import">テンプレート JSON をインポート</string>
-  <string name="prompt_page_message_template_export">テンプレート JSON をエクスポート</string>
-  <string name="prompt_page_message_template_add_prompt">プロンプト</string>
-  <string name="prompt_page_message_template_add_history">履歴</string>
-  <string name="prompt_page_message_template_add_last_user">最新のユーザーメッセージ</string>
-  <string name="prompt_page_message_template_edit_node">テンプレートノードを編集</string>
-  <string name="prompt_page_message_template_name">ノード名</string>
-  <string name="prompt_page_message_template_role">役割</string>
-  <string name="prompt_page_message_template_content">内容</string>
-  <string name="prompt_page_message_template_node_prompt">プロンプト</string>
-  <string name="prompt_page_message_template_node_history">履歴</string>
-  <string name="prompt_page_message_template_node_last_user">最新ユーザーメッセージ</string>
-  <string name="prompt_page_message_template_history_title">チャット履歴</string>
-  <string name="prompt_page_message_template_last_user_title">最新のユーザーメッセージ</string>
-  <string name="prompt_page_message_template_mapping_system">システム</string>
-  <string name="prompt_page_message_template_mapping_user">ユーザー</string>
-  <string name="prompt_page_message_template_mapping_assistant">アシスタント</string>
-  <string name="prompt_page_message_template_prompt_default_name">新しいプロンプト</string>
   <string name="prompt_page_add_mode_injection">モードインジェクションを追加</string>
   <string name="prompt_page_unnamed">名前なし</string>
   <string name="prompt_page_priority_format">優先度: %d</string>
@@ -2088,4 +2058,3 @@ Any secondary keyword
   <string name="prompt_page_lorebook_global_group_scoring">グローバル グループスコアリング</string>
   <string name="prompt_page_lorebook_global_overflow_alert">オーバーフロー警告</string>
 </resources>
-

@@ -13,7 +13,7 @@
   <string name="assistant_detail_local_tools_desc">JavaScript 엔진 같은 로컬 도구 활성화</string>
   <string name="assistant_detail_mcp_desc">어시스턴트용 MCP 서버 도구 구성</string>
   <string name="assistant_detail_memory_desc">어시스턴트 메모리 및 최근 채팅 참조 관리</string>
-  <string name="assistant_detail_prompt_desc">시스템 프롬프트, 메시지 템플릿 및 정규식 규칙 설정</string>
+  <string name="assistant_detail_prompt_desc">시스템 프롬프트 및 정규식 규칙 설정</string>
   <string name="assistant_detail_request_desc">사용자 지정 요청 헤더 및 본문 매개변수 구성</string>
   <string name="assistant_importer_import_failed">가져오기 실패</string>
   <string name="assistant_importer_import_tavern_json">타번 캐릭터 카드 가져오기 (JSON)</string>
@@ -75,8 +75,6 @@
   <string name="assistant_page_memory">기억 기능</string>
   <string name="assistant_page_memory_count">기억: %d</string>
   <string name="assistant_page_memory_desc">기억 기능 활성화 시, 모델이 대화 중 사용자 정보를 적극적으로 기록하고 이후 대화에서 활용합니다. 이 기능은 모델이 도구 호출을 지원해야 제대로 작동합니다</string>
-  <string name="assistant_page_message_template">메시지 내용 템플릿</string>
-  <string name="assistant_page_message_template_desc">LLM에 전송되기 전 채팅 메시지 형식을 제어. 일반적으로 수정할 필요 없음</string>
   <string name="assistant_page_name">어시스턴트 이름</string>
   <string name="assistant_page_preset_messages">사전 설정된 채팅 메시지</string>
   <string name="assistant_page_preset_messages_desc">초기 대화 메시지 설정</string>
@@ -116,12 +114,6 @@
   <string name="assistant_page_tab_request">사용자 요청</string>
   <string name="assistant_page_tags">태그</string>
   <string name="assistant_page_temperature">온도</string>
-  <string name="assistant_page_template_preview">미리보기:</string>
-  <string name="assistant_page_template_variable_date">날짜</string>
-  <string name="assistant_page_template_variable_message">내용</string>
-  <string name="assistant_page_template_variable_role">역할</string>
-  <string name="assistant_page_template_variable_time">시간</string>
-  <string name="assistant_page_template_variables_label">변수:</string>
   <string name="assistant_page_thinking_budget">사고 예산</string>
   <string name="assistant_page_title">어시스턴트 설정</string>
   <string name="assistant_page_top_p">Top P</string>
@@ -652,32 +644,10 @@
   <string name="web_search_disabled">웹 검색 비활성화됨</string>
   <string name="web_search_enabled">웹 검색 활성화됨</string>
   <string name="prompt_page_title">프롬프트 인젝션</string>
-  <string name="prompt_page_message_template_tab">메시지 템플릿</string>
   <string name="prompt_page_mode_injection_tab">모드 인젝션</string>
   <string name="prompt_page_lorebook_tab">로어북</string>
   <string name="prompt_page_mode_injection_empty">모드 주입 없음</string>
-  <string name="prompt_page_message_template_empty">템플릿 JSON을 가져오거나 아래에서 템플릿 노드를 추가하세요</string>
-  <string name="prompt_page_message_template_enabled_desc">비활성화하면 채팅 메시지는 원래 형식을 유지합니다</string>
-  <string name="prompt_page_message_template_disabled_hint">메시지 템플릿이 현재 꺼져 있습니다. 켜면 템플릿 노드가 적용됩니다.</string>
   <string name="prompt_page_empty_hint">아래 버튼을 클릭하여 추가하세요</string>
-  <string name="prompt_page_message_template_import">템플릿 JSON 가져오기</string>
-  <string name="prompt_page_message_template_export">템플릿 JSON 내보내기</string>
-  <string name="prompt_page_message_template_add_prompt">프롬프트</string>
-  <string name="prompt_page_message_template_add_history">대화 기록</string>
-  <string name="prompt_page_message_template_add_last_user">마지막 사용자 메시지</string>
-  <string name="prompt_page_message_template_edit_node">템플릿 노드 편집</string>
-  <string name="prompt_page_message_template_name">노드 이름</string>
-  <string name="prompt_page_message_template_role">역할</string>
-  <string name="prompt_page_message_template_content">내용</string>
-  <string name="prompt_page_message_template_node_prompt">프롬프트</string>
-  <string name="prompt_page_message_template_node_history">대화 기록</string>
-  <string name="prompt_page_message_template_node_last_user">마지막 사용자 메시지</string>
-  <string name="prompt_page_message_template_history_title">대화 기록</string>
-  <string name="prompt_page_message_template_last_user_title">마지막 사용자 메시지</string>
-  <string name="prompt_page_message_template_mapping_system">시스템</string>
-  <string name="prompt_page_message_template_mapping_user">사용자</string>
-  <string name="prompt_page_message_template_mapping_assistant">어시스턴트</string>
-  <string name="prompt_page_message_template_prompt_default_name">새 프롬프트</string>
   <string name="prompt_page_add_mode_injection">모드 주입 추가</string>
   <string name="prompt_page_unnamed">이름 없음</string>
   <string name="prompt_page_priority_format">우선순위: %d</string>
@@ -2088,4 +2058,3 @@ vale, elira
   <string name="prompt_page_lorebook_global_group_scoring">전역 그룹 점수</string>
   <string name="prompt_page_lorebook_global_overflow_alert">오버플로 경고</string>
 </resources>
-

@@ -13,7 +13,7 @@
   <string name="assistant_detail_local_tools_desc">Включите локальные инструменты, например движок JavaScript</string>
   <string name="assistant_detail_mcp_desc">Настройте инструменты MCP-сервера для ассистента</string>
   <string name="assistant_detail_memory_desc">Управляйте памятью ассистента и ссылками на недавние чаты</string>
-  <string name="assistant_detail_prompt_desc">Задайте системные подсказки, шаблоны сообщений и правила regex</string>
+  <string name="assistant_detail_prompt_desc">Задайте системные подсказки и правила regex</string>
   <string name="assistant_detail_request_desc">Настройте пользовательские заголовки и параметры тела запроса</string>
   <string name="assistant_importer_import_failed">Импорт не удался</string>
   <string name="assistant_importer_import_tavern_json">Импортировать карточку персонажа Tavern (JSON)</string>
@@ -75,8 +75,6 @@
   <string name="assistant_page_memory">Память</string>
   <string name="assistant_page_memory_count">Память: %d</string>
   <string name="assistant_page_memory_desc">Когда память включена, модель будет стараться активно записывать вашу информацию во время разговоров и использовать её в последующих беседах. Для работы этой функции модель должна поддерживать вызовы инструментов</string>
-  <string name="assistant_page_message_template">Шаблон содержимого сообщения</string>
-  <string name="assistant_page_message_template_desc">Управляет форматом содержимого сообщений чата перед отправкой в LLM, обычно изменять не требуется</string>
   <string name="assistant_page_name">Имя ассистента</string>
   <string name="assistant_page_preset_messages">Предустановленные сообщения чата</string>
   <string name="assistant_page_preset_messages_desc">Установить начальные сообщения разговора</string>
@@ -116,12 +114,6 @@
   <string name="assistant_page_tab_request">Пользовательский запрос</string>
   <string name="assistant_page_tags">Теги</string>
   <string name="assistant_page_temperature">Температура</string>
-  <string name="assistant_page_template_preview">Предпросмотр:</string>
-  <string name="assistant_page_template_variable_date">Дата</string>
-  <string name="assistant_page_template_variable_message">Содержимое</string>
-  <string name="assistant_page_template_variable_role">Роль</string>
-  <string name="assistant_page_template_variable_time">Время</string>
-  <string name="assistant_page_template_variables_label">Переменные:</string>
   <string name="assistant_page_thinking_budget">Бюджет на размышления</string>
   <string name="assistant_page_title">Настройки ассистента</string>
   <string name="assistant_page_top_p">Top P</string>
@@ -650,32 +642,10 @@
   <string name="web_search_disabled">Веб-поиск отключён</string>
   <string name="web_search_enabled">Веб-поиск включён</string>
   <string name="prompt_page_title">Внедрение подсказок</string>
-  <string name="prompt_page_message_template_tab">Шаблон сообщений</string>
   <string name="prompt_page_mode_injection_tab">Внедрение режима</string>
   <string name="prompt_page_lorebook_tab">Лорбук</string>
   <string name="prompt_page_mode_injection_empty">Нет внедрений режима</string>
-  <string name="prompt_page_message_template_empty">Импортируйте JSON шаблона или добавьте узлы шаблона ниже</string>
-  <string name="prompt_page_message_template_enabled_desc">Когда отключено, сообщения чата сохраняют исходный формат</string>
-  <string name="prompt_page_message_template_disabled_hint">Шаблон сообщений сейчас отключен. Включите его, чтобы применять узлы шаблона.</string>
   <string name="prompt_page_empty_hint">Нажмите кнопку ниже, чтобы добавить</string>
-  <string name="prompt_page_message_template_import">Импорт шаблона JSON</string>
-  <string name="prompt_page_message_template_export">Экспорт шаблона JSON</string>
-  <string name="prompt_page_message_template_add_prompt">Промпт</string>
-  <string name="prompt_page_message_template_add_history">История</string>
-  <string name="prompt_page_message_template_add_last_user">Последнее сообщение пользователя</string>
-  <string name="prompt_page_message_template_edit_node">Редактировать узел шаблона</string>
-  <string name="prompt_page_message_template_name">Имя узла</string>
-  <string name="prompt_page_message_template_role">Роль</string>
-  <string name="prompt_page_message_template_content">Содержимое</string>
-  <string name="prompt_page_message_template_node_prompt">ПРОМПТ</string>
-  <string name="prompt_page_message_template_node_history">ИСТОРИЯ</string>
-  <string name="prompt_page_message_template_node_last_user">ПОСЛЕДНЕЕ_СООБЩЕНИЕ_ПОЛЬЗОВАТЕЛЯ</string>
-  <string name="prompt_page_message_template_history_title">История чата</string>
-  <string name="prompt_page_message_template_last_user_title">Последнее сообщение пользователя</string>
-  <string name="prompt_page_message_template_mapping_system">Система</string>
-  <string name="prompt_page_message_template_mapping_user">Пользователь</string>
-  <string name="prompt_page_message_template_mapping_assistant">Ассистент</string>
-  <string name="prompt_page_message_template_prompt_default_name">Новый промпт</string>
   <string name="prompt_page_add_mode_injection">Добавить режим инъекции</string>
   <string name="prompt_page_unnamed">Без имени</string>
   <string name="prompt_page_priority_format">Приоритет: %d</string>
@@ -2088,4 +2058,3 @@ vale, elira
   <string name="prompt_page_lorebook_global_overflow_alert">Предупреждение о переполнении</string>
   <string name="user_persona_page_delete_action">Удалить персону</string>
 </resources>
-

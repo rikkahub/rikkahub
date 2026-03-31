@@ -12,11 +12,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
@@ -469,9 +467,6 @@ class SettingsStore(
                 quickMessages = settings.quickMessages.distinctBy { it.id },
                 lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized(),
             )
-        }
-        .onEach {
-            get<PebbleEngine>().templateCache.invalidateAll()
         }
 
     val settingsFlow = settingsFlowRaw

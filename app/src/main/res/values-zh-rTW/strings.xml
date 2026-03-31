@@ -13,7 +13,7 @@
   <string name="assistant_detail_local_tools_desc">啟用本機工具如 JavaScript 引擎</string>
   <string name="assistant_detail_mcp_desc">為助理設定 MCP 伺服器工具</string>
   <string name="assistant_detail_memory_desc">管理助理記憶體與近期聊天參考</string>
-  <string name="assistant_detail_prompt_desc">設定系統提示、訊息範本與正規表示式規則</string>
+  <string name="assistant_detail_prompt_desc">設定系統提示與正規表示式規則</string>
   <string name="assistant_detail_request_desc">設定自訂請求標頭與主體參數</string>
   <string name="assistant_importer_import_failed">匯入失敗</string>
   <string name="assistant_importer_import_tavern_json">匯入酒館角色卡 (JSON)</string>
@@ -75,8 +75,6 @@
   <string name="assistant_page_memory">記憶</string>
   <string name="assistant_page_memory_count">記憶: %d</string>
   <string name="assistant_page_memory_desc">啟用記憶後，模型在與你對話時嘗試主動記錄你的資訊，並在後續其他對話中使用，此功能需要模型支援工具調用才能正常工作</string>
-  <string name="assistant_page_message_template">聊天內容模板</string>
-  <string name="assistant_page_message_template_desc">控制聊天訊息在發送給LLM之前的內容格式，通常不需要修改</string>
   <string name="assistant_page_name">助手名稱</string>
   <string name="assistant_page_preset_messages">預設聊天訊息</string>
   <string name="assistant_page_preset_messages_desc">設定對話初始訊息</string>
@@ -116,12 +114,6 @@
   <string name="assistant_page_tab_request">自定義請求</string>
   <string name="assistant_page_tags">標籤</string>
   <string name="assistant_page_temperature">溫度</string>
-  <string name="assistant_page_template_preview">預覽:</string>
-  <string name="assistant_page_template_variable_date">日期</string>
-  <string name="assistant_page_template_variable_message">內容</string>
-  <string name="assistant_page_template_variable_role">角色</string>
-  <string name="assistant_page_template_variable_time">時間</string>
-  <string name="assistant_page_template_variables_label">變數:</string>
   <string name="assistant_page_thinking_budget">思考預算</string>
   <string name="assistant_page_title">助手設定</string>
   <string name="assistant_page_top_p">Top P</string>
@@ -652,32 +644,10 @@
   <string name="web_search_disabled">已禁用網頁搜尋</string>
   <string name="web_search_enabled">已啟用網頁搜尋</string>
   <string name="prompt_page_title">提示注入</string>
-  <string name="prompt_page_message_template_tab">訊息模板</string>
   <string name="prompt_page_mode_injection_tab">模式注入</string>
   <string name="prompt_page_lorebook_tab">Lorebook</string>
   <string name="prompt_page_mode_injection_empty">無模式注入</string>
-  <string name="prompt_page_message_template_empty">請先匯入模板 JSON 或在下方新增模板節點</string>
-  <string name="prompt_page_message_template_enabled_desc">停用後，聊天訊息將維持原始格式</string>
-  <string name="prompt_page_message_template_disabled_hint">訊息模板目前已關閉，啟用後才會套用模板節點。</string>
   <string name="prompt_page_empty_hint">點擊下方按鈕以新增</string>
-  <string name="prompt_page_message_template_import">匯入模板 JSON</string>
-  <string name="prompt_page_message_template_export">匯出模板 JSON</string>
-  <string name="prompt_page_message_template_add_prompt">提示詞</string>
-  <string name="prompt_page_message_template_add_history">歷史訊息</string>
-  <string name="prompt_page_message_template_add_last_user">最後一則使用者訊息</string>
-  <string name="prompt_page_message_template_edit_node">編輯模板節點</string>
-  <string name="prompt_page_message_template_name">節點名稱</string>
-  <string name="prompt_page_message_template_role">角色</string>
-  <string name="prompt_page_message_template_content">內容</string>
-  <string name="prompt_page_message_template_node_prompt">提示詞</string>
-  <string name="prompt_page_message_template_node_history">歷史訊息</string>
-  <string name="prompt_page_message_template_node_last_user">最後一則使用者訊息</string>
-  <string name="prompt_page_message_template_history_title">聊天歷史</string>
-  <string name="prompt_page_message_template_last_user_title">最後一則使用者訊息</string>
-  <string name="prompt_page_message_template_mapping_system">系統</string>
-  <string name="prompt_page_message_template_mapping_user">使用者</string>
-  <string name="prompt_page_message_template_mapping_assistant">助手</string>
-  <string name="prompt_page_message_template_prompt_default_name">新提示詞</string>
   <string name="prompt_page_add_mode_injection">新增模式注入</string>
   <string name="prompt_page_unnamed">未命名</string>
   <string name="prompt_page_priority_format">優先順序：%d</string>
@@ -2058,4 +2028,3 @@ vale, elira
   <string name="assistant_page_skills_workdir_folder">資料夾</string>
   <string name="assistant_page_skills_workdir_unknown_time">未知</string>
 </resources>
-

@@ -43,36 +43,25 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.transformers.DefaultPlaceholderProvider
-import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
-import me.rerere.rikkahub.data.ai.transformers.TransformerContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.export.SillyTavernCharacterCardExportData
 import me.rerere.rikkahub.data.export.SillyTavernCharacterCardPngSerializer
@@ -98,9 +87,7 @@ import me.rerere.rikkahub.data.model.runtimeRegexes
 import me.rerere.rikkahub.data.model.sourceLabel
 import me.rerere.rikkahub.data.model.upsertStPreset
 import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
-import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.model.withPromptOrder
-import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -108,19 +95,10 @@ import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.TextArea
-import me.rerere.rikkahub.ui.hooks.rememberDebouncedTextState
 import me.rerere.rikkahub.ui.pages.extensions.RegexEditorSection
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.ui.theme.JetbrainsMono
-import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
-import me.rerere.rikkahub.ui.theme.ThemeTokenTextScaleGroup
-import me.rerere.rikkahub.ui.theme.applyThemeTokenTextScale
-import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.insertAtCursor
-import me.rerere.rikkahub.utils.onError
-import me.rerere.rikkahub.utils.onSuccess
 import org.koin.androidx.compose.koinViewModel
-import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlinx.coroutines.delay
 import kotlin.uuid.Uuid
@@ -182,8 +160,6 @@ private fun AssistantPromptContent(
     onUpdateWithLorebooks: (Assistant, List<me.rerere.rikkahub.data.model.Lorebook>) -> Unit,
 ) {
     val context = LocalContext.current
-    val templateTransformer = koinInject<TemplateTransformer>()
-    val themeTokens = LocalThemeTokenOverrides.current
     val latestAssistant by rememberUpdatedState(assistant)
     val latestOnUpdate by rememberUpdatedState(onUpdate)
     val latestSettings by rememberUpdatedState(settings)
@@ -475,133 +451,6 @@ private fun AssistantPromptContent(
                                 Text(": {{$k}}")
                             }
                         }
-                    }
-                }
-            }
-        }
-
-        Card(
-            colors = CustomColors.cardColorsOnSurfaceContainer
-        ) {
-            val messageTemplateState = rememberDebouncedTextState(
-                value = assistant.messageTemplate,
-                onDebouncedValueChange = { value ->
-                    latestOnUpdate(
-                        latestAssistant.copy(
-                            messageTemplate = value
-                        )
-                    )
-                }
-            )
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_message_template))
-                },
-                content = {
-                    OutlinedTextField(
-                        value = messageTemplateState.value,
-                        onValueChange = { messageTemplateState.value = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 5,
-                        maxLines = 15,
-                        textStyle = themeTokens.applyThemeTokenTextScale(
-                            style = TextStyle(
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                fontFamily = JetbrainsMono,
-                            ),
-                            group = ThemeTokenTextScaleGroup.BODY,
-                        ).copy(
-                            fontFamily = JetbrainsMono,
-                        )
-                    )
-                },
-                description = {
-                    Text(stringResource(R.string.assistant_page_message_template_desc))
-                    Text(buildAnnotatedString {
-                        append(stringResource(R.string.assistant_page_template_variables_label))
-                        append(" ")
-                        append(stringResource(R.string.assistant_page_template_variable_role))
-                        append(": ")
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                            append("{{ role }}")
-                        }
-                        append(", ")
-                        append(stringResource(R.string.assistant_page_template_variable_message))
-                        append(": ")
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                            append("{{ message }}")
-                        }
-                        append(", ")
-                        append(stringResource(R.string.assistant_page_template_variable_time))
-                        append(": ")
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                            append("{{ time }}")
-                        }
-                        append(", ")
-                        append(stringResource(R.string.assistant_page_template_variable_date))
-                        append(": ")
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                            append("{{ date }}")
-                        }
-                    })
-                }
-            )
-            Column(
-                modifier = Modifier
-                    .padding(8.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(8.dp)
-                    .fillMaxWidth()
-            ) {
-                Text(
-                    text = stringResource(R.string.assistant_page_template_preview),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                val rawMessages = listOf(
-                    UIMessage.user("你好啊"),
-                    UIMessage.assistant("你好，有什么我可以帮你的吗？"),
-                )
-                val preview by produceState<UiState<List<UIMessage>>>(
-                    UiState.Success(rawMessages),
-                    assistant
-                ) {
-                    value = runCatching {
-                        UiState.Success(
-                            templateTransformer.transform(
-                                ctx = TransformerContext(
-                                    context = context,
-                                    model = Model(modelId = "gpt-4o", displayName = "GPT-4o"),
-                                    assistant = assistant,
-                                    settings = settings
-                                ),
-                                messages = rawMessages
-                            )
-                        )
-                    }.getOrElse {
-                        UiState.Error(it)
-                    }
-                }
-                preview.onError {
-                    Text(
-                        text = it.message ?: it.javaClass.name,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                preview.onSuccess {
-                    it.fastForEach { message ->
-                        ChatMessage(
-                            node = message.toMessageNode(),
-                            onFork = {},
-                            onRegenerate = {},
-                            onContinue = {},
-                            onEdit = {},
-                            onShare = {},
-                            onDelete = {},
-                            onUpdate = {},
-                        )
                     }
                 }
             }
