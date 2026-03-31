@@ -55,6 +55,45 @@ class GoogleProviderMessageTest {
         return method.invoke(provider, listOf(UIMessage.user("hello")), params) as JsonObject
     }
 
+    private fun invokeBuildRequestBody(messages: List<UIMessage>, params: TextGenerationParams): JsonObject {
+        val method = GoogleProvider::class.java.getDeclaredMethod(
+            "buildCompletionRequestBody",
+            List::class.java,
+            TextGenerationParams::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(provider, messages, params) as JsonObject
+    }
+
+    @Test
+    fun `request should keep late system messages as user content after systemInstruction`() {
+        val request = invokeBuildRequestBody(
+            messages = listOf(
+                UIMessage.system("Prelude"),
+                UIMessage.user("Hello"),
+                UIMessage.system("Late System"),
+                UIMessage.assistant("Reply"),
+            ),
+            params = TextGenerationParams(model = Model(modelId = "gemini-test"))
+        )
+
+        assertEquals(
+            listOf("Prelude"),
+            request["systemInstruction"]!!.jsonObject["parts"]!!.jsonArray
+                .map { it.jsonObject["text"]!!.jsonPrimitive.content }
+        )
+        assertEquals(
+            listOf("user", "user", "model"),
+            request["contents"]!!.jsonArray.map { it.jsonObject["role"]!!.jsonPrimitive.content }
+        )
+        assertEquals(
+            "Late System",
+            request["contents"]!!.jsonArray[1]
+                .jsonObject["parts"]!!.jsonArray[0]
+                .jsonObject["text"]!!.jsonPrimitive.content
+        )
+    }
+
     @Test
     fun `multi-round tool calls should produce functionCall followed by functionResponse`() {
         // Scenario: Multiple rounds of tool calls

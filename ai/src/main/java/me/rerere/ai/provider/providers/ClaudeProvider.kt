@@ -266,10 +266,14 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         stream: Boolean = false
     ): JsonObject {
         fun cacheControlEphemeral() = buildJsonObject { put("type", "ephemeral") }
+        val normalizedMessages = demoteSystemMessages(
+            splitLeadingSystemMessages(messages).remainingMessages
+        )
+        val systemTextParts = collectLeadingSystemTextParts(messages)
 
         return buildJsonObject {
             put("model", params.model.modelId)
-            put("messages", buildMessages(messages, providerSetting.promptCaching))
+            put("messages", buildMessages(normalizedMessages, providerSetting.promptCaching))
             put("max_tokens", params.maxTokens ?: 64_000)
 
             if (params.temperature != null && (params.thinkingBudget ?: 0) == 0) put(
@@ -285,8 +289,6 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             put("stream", stream)
 
             // system prompt
-            val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
-            val systemTextParts = systemMessage?.parts?.filterIsInstance<UIMessagePart.Text>().orEmpty()
             if (systemTextParts.isNotEmpty()) {
                 put("system", buildJsonArray {
                     systemTextParts.forEachIndexed { index, part ->
@@ -342,7 +344,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
     private fun buildMessages(messages: List<UIMessage>, promptCaching: Boolean) = buildJsonArray {
         messages
-            .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
+            .filter { it.isValidToUpload() }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
                     addAssistantMessage(message)
@@ -439,7 +441,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
     private fun JsonArrayBuilder.addUserMessage(message: UIMessage) {
         add(buildJsonObject {
-            put("role", message.role.name.lowercase())
+            put("role", "user")
             putJsonArray("content") {
                 message.parts.mapNotNull { it.toContentBlock() }.forEach { add(it) }
             }

@@ -50,6 +50,15 @@ class ResponseAPIMessageTest {
         return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
     }
 
+    private fun invokeBuildRequestBody(
+        providerSetting: ProviderSetting.OpenAI,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+        stream: Boolean = false
+    ): JsonObject {
+        return api.buildRequestBody(providerSetting, messages, params, stream)
+    }
+
     private fun createReasoningParams(
         thinkingBudget: Int? = null,
         openAIReasoningEffort: String = ""
@@ -127,6 +136,30 @@ class ResponseAPIMessageTest {
         val output2 = functionOutputs[1].jsonObject
         assertEquals("call_2", output2["call_id"]?.jsonPrimitive?.content)
         assertTrue(output2["output"]?.jsonPrimitive?.content?.contains("4") == true)
+    }
+
+    @Test
+    fun `request should keep late system messages as user input after instructions`() {
+        val request = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(),
+            messages = listOf(
+                UIMessage.system("Prelude"),
+                UIMessage.user("Hello"),
+                UIMessage.system("Late System"),
+                UIMessage.assistant("Reply"),
+            ),
+            params = TextGenerationParams(model = Model(modelId = "gpt-test"))
+        )
+
+        assertEquals("Prelude", request["instructions"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf("user", "user", "assistant"),
+            request["input"]!!.jsonArray.map { it.jsonObject["role"]!!.jsonPrimitive.content }
+        )
+        assertEquals(
+            "Late System",
+            request["input"]!!.jsonArray[1].jsonObject["content"]!!.jsonPrimitive.content
+        )
     }
 
     @Test

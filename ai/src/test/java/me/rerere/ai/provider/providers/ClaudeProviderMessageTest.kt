@@ -13,6 +13,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -63,6 +64,55 @@ class ClaudeProviderMessageTest {
             params,
             false
         ) as JsonObject
+    }
+
+    private fun invokeBuildRequestBody(messages: List<UIMessage>, params: TextGenerationParams): JsonObject {
+        val method = ClaudeProvider::class.java.getDeclaredMethod(
+            "buildMessageRequest",
+            ProviderSetting.Claude::class.java,
+            List::class.java,
+            TextGenerationParams::class.java,
+            java.lang.Boolean.TYPE
+        )
+        method.isAccessible = true
+        return method.invoke(
+            provider,
+            ProviderSetting.Claude(),
+            messages,
+            params,
+            false
+        ) as JsonObject
+    }
+
+    @Test
+    fun `request should keep late system messages as user content after native system prompt`() {
+        val request = invokeBuildRequestBody(
+            messages = listOf(
+                UIMessage.system("Prelude"),
+                UIMessage.user("Hello"),
+                UIMessage.system("Late System"),
+                UIMessage.assistant("Reply"),
+            ),
+            params = TextGenerationParams(model = Model(modelId = "claude-test"))
+        )
+
+        assertEquals(
+            listOf("Prelude"),
+            request["system"]!!.jsonArray.map { it.jsonObject["text"]!!.jsonPrimitive.content }
+        )
+        assertEquals(
+            listOf("user", "user", "assistant"),
+            request["messages"]!!.jsonArray.map { it.jsonObject["role"]!!.jsonPrimitive.content }
+        )
+        assertEquals(
+            "Late System",
+            request["messages"]!!.jsonArray[1]
+                .jsonObject["content"]!!.jsonArray[0]
+                .jsonObject["text"]!!.jsonPrimitive.content
+        )
+        assertFalse(
+            request["messages"]!!.jsonArray.any { it.jsonObject["role"]!!.jsonPrimitive.content == "system" }
+        )
     }
 
     @Test

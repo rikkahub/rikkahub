@@ -323,162 +323,167 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     private fun buildCompletionRequestBody(
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): JsonObject = buildJsonObject {
-        // System message if available
-        val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
-        if (systemMessage != null && !params.model.outputModalities.contains(Modality.IMAGE)) {
-            put("systemInstruction", buildJsonObject {
-                putJsonArray("parts") {
-                    add(buildJsonObject {
-                        put(
-                            "text",
-                            systemMessage.parts.filterIsInstance<UIMessagePart.Text>()
-                                .joinToString { it.text })
-                    })
-                }
-            })
-        }
-
-        // Generation config
-        put("generationConfig", buildJsonObject {
-            if (params.temperature != null) put("temperature", params.temperature)
-            if (params.topP != null) put("topP", params.topP)
-            params.topK.normalizedTopKOrNull()?.let { put("topK", it) }
-            if (params.presencePenalty != null) put("presencePenalty", params.presencePenalty)
-            if (params.frequencyPenalty != null) put("frequencyPenalty", params.frequencyPenalty)
-            params.seed.normalizedSeedOrNull()?.let { put("seed", it) }
-            params.stopSequences.normalizedStopSequencesOrNull()?.let { stopSequences ->
-                put("stopSequences", json.encodeToJsonElement(stopSequences))
-            }
-            params.googleResponseMimeType.normalizedNonBlankOrNull()?.let { put("responseMimeType", it) }
-            if (params.maxTokens != null) put("maxOutputTokens", params.maxTokens)
-            if (params.model.outputModalities.contains(Modality.IMAGE)) {
-                put("responseModalities", buildJsonArray {
-                    add(JsonPrimitive("TEXT"))
-                    add(JsonPrimitive("IMAGE"))
-                })
-            }
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
-                put("thinkingConfig", buildJsonObject {
-                    put("includeThoughts", true)
-
-                    val isGeminiPro =
-                        params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
-
-                    when (params.thinkingBudget) {
-                        null, -1 -> {} // 如果是自动，不设置thinkingBudget参数
-
-                        0 -> {
-                            // disable thinking if not gemini pro
-                            if (!isGeminiPro) {
-                                put("thinkingBudget", 0)
-                                put("includeThoughts", false)
-                            }
-                        }
-
-                        else -> {
-                            if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
-                                when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
-                                    ReasoningLevel.HIGH -> put("thinkingLevel", "high")
-                                    ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
-                                    ReasoningLevel.LOW -> put("thinkingLevel", "low")
-                                    else -> error("Unknown reasoning level: $level")
-                                }
-                            } else {
-                                put("thinkingBudget", params.thinkingBudget)
-                            }
-                        }
-                    }
-                })
-            }
-        })
-
-        // Contents (user messages)
-        put(
-            "contents",
-            buildContents(messages)
+    ): JsonObject {
+        val normalizedMessages = demoteSystemMessages(
+            splitLeadingSystemMessages(messages).remainingMessages
         )
-
-        // Tools
-        if (params.tools.isNotEmpty() && params.model.abilities.contains(ModelAbility.TOOL)) {
-            put("tools", buildJsonArray {
-                add(buildJsonObject {
-                    put("functionDeclarations", buildJsonArray {
-                        params.tools.forEach { tool ->
+        val systemTextParts = collectLeadingSystemTextParts(messages)
+        return buildJsonObject {
+            // System message if available
+            if (systemTextParts.isNotEmpty() && !params.model.outputModalities.contains(Modality.IMAGE)) {
+                put("systemInstruction", buildJsonObject {
+                    putJsonArray("parts") {
+                        systemTextParts.forEach { part ->
                             add(buildJsonObject {
-                                put("name", JsonPrimitive(tool.name))
-                                put("description", JsonPrimitive(tool.description))
-                                put(
-                                    key = "parameters",
-                                    element = json.encodeToJsonElement(tool.parameters())
-                                        .removeElements(
-                                            listOf(
-                                                "const",
-                                                "exclusiveMaximum",
-                                                "exclusiveMinimum",
-                                                "format",
-                                                "additionalProperties",
-                                                "enum",
-                                            )
-                                        )
-                                )
-                            })
-                        }
-                    })
-                })
-            })
-        }
-        // Model BuiltIn Tools
-        // 目前不能和工具调用兼容
-        if (params.model.tools.isNotEmpty()) {
-            put("tools", buildJsonArray {
-                params.model.tools.forEach { builtInTool ->
-                    when (builtInTool) {
-                        BuiltInTools.Search -> {
-                            add(buildJsonObject {
-                                put("googleSearch", buildJsonObject {})
-                            })
-                        }
-
-                        BuiltInTools.UrlContext -> {
-                            add(buildJsonObject {
-                                put("urlContext", buildJsonObject {})
+                                put("text", part.text)
                             })
                         }
                     }
+                })
+            }
+
+            // Generation config
+            put("generationConfig", buildJsonObject {
+                if (params.temperature != null) put("temperature", params.temperature)
+                if (params.topP != null) put("topP", params.topP)
+                params.topK.normalizedTopKOrNull()?.let { put("topK", it) }
+                if (params.presencePenalty != null) put("presencePenalty", params.presencePenalty)
+                if (params.frequencyPenalty != null) put("frequencyPenalty", params.frequencyPenalty)
+                params.seed.normalizedSeedOrNull()?.let { put("seed", it) }
+                params.stopSequences.normalizedStopSequencesOrNull()?.let { stopSequences ->
+                    put("stopSequences", json.encodeToJsonElement(stopSequences))
+                }
+                params.googleResponseMimeType.normalizedNonBlankOrNull()?.let { put("responseMimeType", it) }
+                if (params.maxTokens != null) put("maxOutputTokens", params.maxTokens)
+                if (params.model.outputModalities.contains(Modality.IMAGE)) {
+                    put("responseModalities", buildJsonArray {
+                        add(JsonPrimitive("TEXT"))
+                        add(JsonPrimitive("IMAGE"))
+                    })
+                }
+                if (params.model.abilities.contains(ModelAbility.REASONING)) {
+                    put("thinkingConfig", buildJsonObject {
+                        put("includeThoughts", true)
+
+                        val isGeminiPro =
+                            params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
+
+                        when (params.thinkingBudget) {
+                            null, -1 -> {} // 如果是自动，不设置thinkingBudget参数
+
+                            0 -> {
+                                // disable thinking if not gemini pro
+                                if (!isGeminiPro) {
+                                    put("thinkingBudget", 0)
+                                    put("includeThoughts", false)
+                                }
+                            }
+
+                            else -> {
+                                if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
+                                    when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
+                                        ReasoningLevel.HIGH -> put("thinkingLevel", "high")
+                                        ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
+                                        ReasoningLevel.LOW -> put("thinkingLevel", "low")
+                                        else -> error("Unknown reasoning level: $level")
+                                    }
+                                } else {
+                                    put("thinkingBudget", params.thinkingBudget)
+                                }
+                            }
+                        }
+                    })
                 }
             })
-        }
 
-        // Safety Settings
-        putJsonArray("safetySettings") {
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_HARASSMENT")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_HATE_SPEECH")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_SEXUALLY_EXPLICIT")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_DANGEROUS_CONTENT")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_CIVIC_INTEGRITY")
-                put("threshold", "OFF")
-            })
+            // Contents (user messages)
+            put(
+                "contents",
+                buildContents(normalizedMessages)
+            )
+
+            // Tools
+            if (params.tools.isNotEmpty() && params.model.abilities.contains(ModelAbility.TOOL)) {
+                put("tools", buildJsonArray {
+                    add(buildJsonObject {
+                        put("functionDeclarations", buildJsonArray {
+                            params.tools.forEach { tool ->
+                                add(buildJsonObject {
+                                    put("name", JsonPrimitive(tool.name))
+                                    put("description", JsonPrimitive(tool.description))
+                                    put(
+                                        key = "parameters",
+                                        element = json.encodeToJsonElement(tool.parameters())
+                                            .removeElements(
+                                                listOf(
+                                                    "const",
+                                                    "exclusiveMaximum",
+                                                    "exclusiveMinimum",
+                                                    "format",
+                                                    "additionalProperties",
+                                                    "enum",
+                                                )
+                                            )
+                                    )
+                                })
+                            }
+                        })
+                    })
+                })
+            }
+            // Model BuiltIn Tools
+            // 目前不能和工具调用兼容
+            if (params.model.tools.isNotEmpty()) {
+                put("tools", buildJsonArray {
+                    params.model.tools.forEach { builtInTool ->
+                        when (builtInTool) {
+                            BuiltInTools.Search -> {
+                                add(buildJsonObject {
+                                    put("googleSearch", buildJsonObject {})
+                                })
+                            }
+
+                            BuiltInTools.UrlContext -> {
+                                add(buildJsonObject {
+                                    put("urlContext", buildJsonObject {})
+                                })
+                            }
+                        }
+                    }
+                })
+            }
+
+            // Safety Settings
+            putJsonArray("safetySettings") {
+                add(buildJsonObject {
+                    put("category", "HARM_CATEGORY_HARASSMENT")
+                    put("threshold", "OFF")
+                })
+                add(buildJsonObject {
+                    put("category", "HARM_CATEGORY_HATE_SPEECH")
+                    put("threshold", "OFF")
+                })
+                add(buildJsonObject {
+                    put("category", "HARM_CATEGORY_SEXUALLY_EXPLICIT")
+                    put("threshold", "OFF")
+                })
+                add(buildJsonObject {
+                    put("category", "HARM_CATEGORY_DANGEROUS_CONTENT")
+                    put("threshold", "OFF")
+                })
+                add(buildJsonObject {
+                    put("category", "HARM_CATEGORY_CIVIC_INTEGRITY")
+                    put("threshold", "OFF")
+                })
+            }
         }
-    }.mergeCustomBody(params.customBody)
+            .mergeCustomBody(params.customBody)
+    }
 
     private fun commonRoleToGoogleRole(role: MessageRole): String {
         return when (role) {
             MessageRole.USER -> "user"
-            MessageRole.SYSTEM -> "system"
+            MessageRole.SYSTEM -> "user"
             MessageRole.ASSISTANT -> "model"
             MessageRole.TOOL -> "user" // google api中, tool结果是用户role发送的
         }
@@ -585,7 +590,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     private fun buildContents(messages: List<UIMessage>): JsonArray {
         return buildJsonArray {
             messages
-                .filter { it.role != MessageRole.SYSTEM && it.isValidToUpload() }
+                .filter { it.isValidToUpload() }
                 .forEach { message ->
                     if (message.role == MessageRole.ASSISTANT) {
                         addModelMessage(message)
