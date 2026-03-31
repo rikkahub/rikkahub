@@ -123,6 +123,7 @@ internal fun resolvePresetStopSequences(
     preset: StPresetImport,
 ): List<String> {
     val topLevelStopSequences = when {
+        preset.enableStopString == false -> emptyList()
         preset.stopStrings.isNotEmpty() -> preset.stopStrings
             .map { it.trim() }
             .filter { it.isNotEmpty() }

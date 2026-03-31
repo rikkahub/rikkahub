@@ -149,6 +149,36 @@ class SillyTavernImportTest {
     }
 
     @Test
+    fun `preset import should preserve explicit zero top k`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Zero Top K",
+                  "top_k": 0,
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            sourceName = "preset-zero-top-k",
+        )
+
+        assertEquals(0, payload.assistant.topK)
+    }
+
+    @Test
     fun `preset import should skip neutral advanced request params`() {
         val payload = parseAssistantImportFromJson(
             jsonString = """
@@ -184,6 +214,7 @@ class SillyTavernImportTest {
         assertNull(payload.assistant.frequencyPenalty)
         assertNull(payload.assistant.presencePenalty)
         assertNull(payload.assistant.minP)
+        assertNull(payload.assistant.topK)
         assertNull(payload.assistant.topA)
         assertNull(payload.assistant.repetitionPenalty)
         assertNull(payload.assistant.seed)
@@ -225,6 +256,37 @@ class SillyTavernImportTest {
         )
 
         assertEquals(listOf("User:"), payload.assistant.stopSequences)
+    }
+
+    @Test
+    fun `preset import should ignore disabled top level stop strings`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Disabled Stops",
+                  "enable_stop_string": false,
+                  "stop_strings": ["User:", " Assistant: "],
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            sourceName = "preset-disabled-stops",
+        )
+
+        assertEquals(emptyList<String>(), payload.assistant.stopSequences)
     }
 
     @Test

@@ -162,7 +162,7 @@ fun PresetSamplingEditorCard(
                     value = sampling.topK,
                     description = "只在分数最高的 K 个候选里采样。越小越稳，越大越开放。",
                     defaultValue = 40,
-                    valueRange = 0..200,
+                    valueRange = 0..500,
                     onValueChange = { onUpdate(sampling.copy(topK = it)) },
                     status = { currentTopK ->
                         when {

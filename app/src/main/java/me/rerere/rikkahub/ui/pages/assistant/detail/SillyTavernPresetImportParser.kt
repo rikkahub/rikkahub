@@ -40,8 +40,7 @@ internal fun parsePresetImport(
             minP = preset.minP
                 ?.takeUnless { it == 0.0 }
                 ?.toFloat(),
-            topK = preset.topK
-                ?.takeUnless { it == 0 },
+            topK = preset.topK,
             topA = preset.topA
                 ?.takeUnless { it == 0.0 }
                 ?.toFloat(),
