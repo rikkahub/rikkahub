@@ -9,6 +9,21 @@ fun interface ModelData<T> {
 }
 
 object ModelRegistry {
+    private enum class OpenAIReasoningProfile {
+        GPT_5,
+        GPT_5_PRO,
+        GPT_5_CODEX,
+        GPT_5_1,
+        GPT_5_1_CODEX,
+        GPT_5_1_CODEX_MAX,
+        GPT_5_2,
+        GPT_5_2_PRO,
+        GPT_5_2_CODEX,
+        OPENAI_O,
+        GPT_OSS,
+        DEFAULT,
+    }
+
     private val GPT4O = defineModel {
         tokens("gpt", "4", "o")
         visionInput()
@@ -425,51 +440,114 @@ object ModelRegistry {
     /**
      * Returns the list of supported [ReasoningLevel] values for a given model.
      * Different models support different subsets of reasoning effort levels.
+     * Model-specific GPT-5 variants follow the same compatibility buckets used by Cherry Studio.
      * See: https://github.com/rikkahub/rikkahub/issues/1024
      */
-    val SUPPORTED_REASONING_LEVELS = ModelData { modelId ->
-        when {
-            // GPT-5.2+: supports none/low/medium/high/xhigh
-            GPT_5_2.match(modelId) ||
-                GPT_5_4.match(modelId) || GPT_5_4_MINI.match(modelId) ||
-                GPT_5_4_NANO.match(modelId) ->
+    val SUPPORTED_REASONING_LEVELS = ModelData { modelId -> supportedReasoningLevels(modelId) }
+
+    fun supportedReasoningLevels(
+        modelId: String,
+        hasBuiltInWebSearch: Boolean = false
+    ): List<ReasoningLevel> {
+        val levels = when (resolveOpenAIReasoningProfile(modelId)) {
+            OpenAIReasoningProfile.GPT_5 ->
+                listOf(
+                    ReasoningLevel.AUTO,
+                    ReasoningLevel.MINIMAL, ReasoningLevel.LOW,
+                    ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                )
+
+            OpenAIReasoningProfile.GPT_5_PRO ->
+                listOf(
+                    ReasoningLevel.AUTO,
+                    ReasoningLevel.HIGH
+                )
+
+            OpenAIReasoningProfile.GPT_5_CODEX ->
+                listOf(
+                    ReasoningLevel.AUTO,
+                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                )
+
+            OpenAIReasoningProfile.GPT_5_1 ->
+                listOf(
+                    ReasoningLevel.OFF, ReasoningLevel.AUTO,
+                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                )
+
+            OpenAIReasoningProfile.GPT_5_1_CODEX ->
+                listOf(
+                    ReasoningLevel.AUTO,
+                    ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                )
+
+            OpenAIReasoningProfile.GPT_5_1_CODEX_MAX ->
+                listOf(
+                    ReasoningLevel.AUTO,
+                    ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH
+                )
+
+            OpenAIReasoningProfile.GPT_5_2 ->
                 listOf(
                     ReasoningLevel.OFF, ReasoningLevel.AUTO,
                     ReasoningLevel.LOW, ReasoningLevel.MEDIUM,
                     ReasoningLevel.HIGH, ReasoningLevel.XHIGH
                 )
 
-            // GPT-5.1: supports none/low/medium/high
-            GPT_5_1.match(modelId) ->
+            OpenAIReasoningProfile.GPT_5_2_PRO ->
                 listOf(
-                    ReasoningLevel.OFF, ReasoningLevel.AUTO,
-                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                    ReasoningLevel.AUTO,
+                    ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH
                 )
 
-            // GPT-5: supports minimal/low/medium/high
-            GPT_5.match(modelId) ->
+            OpenAIReasoningProfile.GPT_5_2_CODEX ->
                 listOf(
-                    ReasoningLevel.OFF, ReasoningLevel.AUTO,
-                    ReasoningLevel.MINIMAL, ReasoningLevel.LOW,
-                    ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                    ReasoningLevel.AUTO,
+                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM,
+                    ReasoningLevel.HIGH, ReasoningLevel.XHIGH
                 )
 
-            // OpenAI o-series: supports low/medium/high
-            OPENAI_O_MODELS.match(modelId) ->
+            OpenAIReasoningProfile.OPENAI_O,
+            OpenAIReasoningProfile.GPT_OSS ->
                 listOf(
                     ReasoningLevel.AUTO,
                     ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
                 )
 
-            // GPT-OSS: supports low/medium/high
-            GPT_OSS.match(modelId) ->
-                listOf(
-                    ReasoningLevel.AUTO,
-                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
-                )
+            OpenAIReasoningProfile.DEFAULT -> ReasoningLevel.entries.toList()
+        }
 
-            // Default: all levels
-            else -> ReasoningLevel.entries.toList()
+        return if (hasBuiltInWebSearch && GPT_5.match(modelId)) {
+            levels.filterNot { it == ReasoningLevel.MINIMAL }
+        } else {
+            levels
+        }
+    }
+
+    fun normalizeReasoningLevel(
+        modelId: String,
+        requested: ReasoningLevel,
+        hasBuiltInWebSearch: Boolean = false
+    ): ReasoningLevel {
+        val supportedLevels = supportedReasoningLevels(
+            modelId = modelId,
+            hasBuiltInWebSearch = hasBuiltInWebSearch
+        )
+
+        if (requested == ReasoningLevel.AUTO && ReasoningLevel.AUTO in supportedLevels) {
+            return ReasoningLevel.AUTO
+        }
+
+        val candidates = supportedLevels.filter { it != ReasoningLevel.AUTO }
+        if (candidates.isEmpty()) {
+            return requested
+        }
+
+        return if (requested in candidates) {
+            requested
+        } else {
+            candidates.minByOrNull { kotlin.math.abs(it.budgetTokens - requested.budgetTokens) }
+                ?: candidates.first()
         }
     }
 
@@ -478,28 +556,47 @@ object ModelRegistry {
         requested: ReasoningLevel,
         hasBuiltInWebSearch: Boolean = false
     ): String? {
-        if (requested == ReasoningLevel.AUTO || requested == ReasoningLevel.OFF) {
+        if (requested == ReasoningLevel.AUTO) {
             return null
         }
 
-        val normalizedRequested = if (
-            hasBuiltInWebSearch && GPT_5.match(modelId) && requested == ReasoningLevel.MINIMAL
-        ) {
-            ReasoningLevel.LOW
-        } else {
-            requested
-        }
+        return normalizeReasoningLevel(
+            modelId = modelId,
+            requested = requested,
+            hasBuiltInWebSearch = hasBuiltInWebSearch
+        ).effort
+    }
 
-        val supportedLevels = SUPPORTED_REASONING_LEVELS.getData(modelId)
-            .filter { it != ReasoningLevel.AUTO && it != ReasoningLevel.OFF }
-        val effectiveLevel = if (normalizedRequested in supportedLevels) {
-            normalizedRequested
-        } else {
-            supportedLevels.minByOrNull { kotlin.math.abs(it.budgetTokens - normalizedRequested.budgetTokens) }
-                ?: ReasoningLevel.MEDIUM
-        }
+    private fun resolveOpenAIReasoningProfile(modelId: String): OpenAIReasoningProfile {
+        val normalizedId = modelId.lowercase()
+        val isCodex = normalizedId.contains("codex")
+        val isCodexMax = normalizedId.contains("codex-max")
+        val isPro = normalizedId.contains("-pro")
 
-        return effectiveLevel.effort
+        return when {
+            GPT_5_1.match(modelId) && isCodexMax -> OpenAIReasoningProfile.GPT_5_1_CODEX_MAX
+            GPT_5_1.match(modelId) && isCodex -> OpenAIReasoningProfile.GPT_5_1_CODEX
+            GPT_5_1.match(modelId) -> OpenAIReasoningProfile.GPT_5_1
+            GPT_5.match(modelId) && isCodex -> OpenAIReasoningProfile.GPT_5_CODEX
+            GPT_5.match(modelId) && isPro -> OpenAIReasoningProfile.GPT_5_PRO
+            GPT_5.match(modelId) -> OpenAIReasoningProfile.GPT_5
+            isGpt52OrLater(modelId) && GPT_OSS.match(modelId).not() && isCodex -> OpenAIReasoningProfile.GPT_5_2_CODEX
+            isGpt52OrLater(modelId) && isPro -> OpenAIReasoningProfile.GPT_5_2_PRO
+            isGpt52OrLater(modelId) -> OpenAIReasoningProfile.GPT_5_2
+            OPENAI_O_MODELS.match(modelId) -> OpenAIReasoningProfile.OPENAI_O
+            GPT_OSS.match(modelId) -> OpenAIReasoningProfile.GPT_OSS
+            else -> OpenAIReasoningProfile.DEFAULT
+        }
+    }
+
+    private fun isGpt52OrLater(modelId: String): Boolean {
+        val version = Regex("""gpt-5\.(\d+)""", RegexOption.IGNORE_CASE)
+            .find(modelId)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+            ?: return false
+        return version >= 2
     }
 
     private fun resolveModels(modelId: String): List<ModelDefinition> {

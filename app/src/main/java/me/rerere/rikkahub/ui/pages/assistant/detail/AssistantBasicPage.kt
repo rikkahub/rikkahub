@@ -31,7 +31,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.registry.ModelRegistry
@@ -40,6 +39,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.ai.guardReasoningUpdate
+import me.rerere.rikkahub.ui.components.ai.normalizeReasoningTokensForModel
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -220,9 +220,15 @@ internal fun AssistantBasicContent(
                         providers = providers,
                         type = ModelType.CHAT,
                         onSelect = {
+                            val normalizedThinkingBudget = normalizeReasoningTokensForModel(
+                                modelId = it.modelId,
+                                hasBuiltInWebSearch = it.tools.contains(BuiltInTools.Search),
+                                tokens = assistant.thinkingBudget ?: 0,
+                            )
                             onUpdate(
                                 assistant.copy(
-                                    chatModelId = it.id
+                                    chatModelId = it.id,
+                                    thinkingBudget = normalizedThinkingBudget
                                 )
                             )
                         },
@@ -440,8 +446,13 @@ internal fun AssistantBasicContent(
                         )
                     },
                     supportedLevels = chatModel?.modelId
-                        ?.let { ModelRegistry.SUPPORTED_REASONING_LEVELS.getData(it) }
-                        ?: ReasoningLevel.entries,
+                        ?.let {
+                            ModelRegistry.supportedReasoningLevels(
+                                modelId = it,
+                                hasBuiltInWebSearch = chatModel.tools.contains(BuiltInTools.Search)
+                            )
+                        }
+                        ?: emptyList(),
                 )
             }
             HorizontalDivider()

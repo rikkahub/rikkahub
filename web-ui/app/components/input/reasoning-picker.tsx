@@ -45,35 +45,83 @@ interface ReasoningPreset {
 
 const ALL_LEVELS: ReasoningLevel[] = ["OFF", "AUTO", "MINIMAL", "LOW", "MEDIUM", "HIGH", "XHIGH"];
 
-function getSupportedLevels(modelId: string | undefined | null): ReasoningLevel[] {
-  if (!modelId) {
+const OPENAI_O_LEVELS: ReasoningLevel[] = ["AUTO", "LOW", "MEDIUM", "HIGH"];
+
+function getToolType(tool: ProviderModel["tools"] extends Array<infer T> ? T : unknown): string | null {
+  if (!tool || typeof tool !== "object") {
+    return null;
+  }
+
+  const value = "type" in tool ? tool.type : null;
+  return typeof value === "string" ? value.trim().toLowerCase() : null;
+}
+
+function hasBuiltInSearch(tools: ProviderModel["tools"] | undefined): boolean {
+  if (!tools || tools.length === 0) {
+    return false;
+  }
+
+  return tools.some((tool) => getToolType(tool) === "search");
+}
+
+function isGpt52OrLater(modelId: string): boolean {
+  const match = modelId.match(/gpt-5\.(\d+)/i);
+  if (!match) {
+    return false;
+  }
+
+  return Number.parseInt(match[1] ?? "", 10) >= 2;
+}
+
+function getSupportedLevels(model: ProviderModel | null): ReasoningLevel[] {
+  if (!model?.modelId) {
     return ALL_LEVELS;
   }
 
-  const id = modelId.toLowerCase();
+  const id = model.modelId.toLowerCase();
+  const hasCodex = id.includes("codex");
+  const hasCodexMax = id.includes("codex-max");
+  const hasPro = id.includes("-pro");
 
-  // GPT-5.2+
-  if (/\bgpt[-.]?5[-.]?[2-9]/.test(id) || /\bgpt[-.]?5[-.]?4[-.]?(mini|nano)/.test(id)) {
-    return ["OFF", "AUTO", "LOW", "MEDIUM", "HIGH", "XHIGH"];
-  }
-  // GPT-5.1
+  let levels: ReasoningLevel[];
+
   if (/\bgpt[-.]?5[-.]?1/.test(id)) {
-    return ["OFF", "AUTO", "LOW", "MEDIUM", "HIGH"];
-  }
-  // GPT-5 (base)
-  if (/\bgpt[-.]?5\b/.test(id)) {
-    return ["OFF", "AUTO", "MINIMAL", "LOW", "MEDIUM", "HIGH"];
-  }
-  // OpenAI o-series
-  if (/^o\d+/.test(id) || /\bo\d+/.test(id)) {
-    return ["AUTO", "LOW", "MEDIUM", "HIGH"];
-  }
-  // GPT-OSS
-  if (/\bgpt[-.]?oss\b/.test(id)) {
-    return ["AUTO", "LOW", "MEDIUM", "HIGH"];
+    if (hasCodexMax) {
+      levels = ["AUTO", "MEDIUM", "HIGH", "XHIGH"];
+    } else if (hasCodex) {
+      levels = ["AUTO", "MEDIUM", "HIGH"];
+    } else {
+      levels = ["OFF", "AUTO", "LOW", "MEDIUM", "HIGH"];
+    }
+  } else if (/\bgpt[-.]?5(?![.\d])/.test(id)) {
+    if (hasCodex) {
+      levels = ["AUTO", "LOW", "MEDIUM", "HIGH"];
+    } else if (hasPro) {
+      levels = ["AUTO", "HIGH"];
+    } else {
+      levels = ["AUTO", "MINIMAL", "LOW", "MEDIUM", "HIGH"];
+    }
+  } else if (isGpt52OrLater(id)) {
+    if (hasCodex) {
+      levels = ["AUTO", "LOW", "MEDIUM", "HIGH", "XHIGH"];
+    } else if (hasPro) {
+      levels = ["AUTO", "MEDIUM", "HIGH", "XHIGH"];
+    } else {
+      levels = ["OFF", "AUTO", "LOW", "MEDIUM", "HIGH", "XHIGH"];
+    }
+  } else if (/^o\d+/.test(id) || /\bo\d+/.test(id)) {
+    levels = OPENAI_O_LEVELS;
+  } else if (/\bgpt[-.]?oss\b/.test(id)) {
+    levels = OPENAI_O_LEVELS;
+  } else {
+    levels = ALL_LEVELS;
   }
 
-  return ALL_LEVELS;
+  if (hasBuiltInSearch(model.tools) && /\bgpt[-.]?5(?![.\d])/.test(id)) {
+    return levels.filter((level) => level !== "MINIMAL");
+  }
+
+  return levels;
 }
 
 export interface ReasoningPickerButtonProps {
@@ -100,10 +148,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   const canUse = Boolean(settings && currentAssistant && !disabled);
   const canReasoning = isReasoningModel(currentModel);
   const { open, error, setError, popoverProps } = usePickerPopover(canUse);
-  const supportedLevels = React.useMemo(
-    () => getSupportedLevels(currentModel?.modelId ?? null),
-    [currentModel?.modelId],
-  );
+  const supportedLevels = React.useMemo(() => getSupportedLevels(currentModel), [currentModel]);
 
   const reasoningPresets = React.useMemo<ReasoningPreset[]>(() => {
     const allPresets: Record<ReasoningLevel, () => ReasoningPreset> = {

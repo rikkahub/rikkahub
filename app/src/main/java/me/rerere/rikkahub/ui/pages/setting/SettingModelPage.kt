@@ -50,7 +50,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.rikkahub.R
@@ -60,6 +60,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
+import me.rerere.rikkahub.ui.components.ai.normalizeReasoningTokensForModel
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -147,9 +148,15 @@ private fun DefaultTranslationModelSetting(
                     modelId = settings.translateModeId,
                     type = ModelType.CHAT,
                     onSelect = {
+                        val normalizedThinkingBudget = normalizeReasoningTokensForModel(
+                            modelId = it.modelId,
+                            hasBuiltInWebSearch = it.tools.contains(BuiltInTools.Search),
+                            tokens = settings.translateThinkingBudget,
+                        )
                         vm.updateSettings(
                             settings.copy(
-                                translateModeId = it.id
+                                translateModeId = it.id,
+                                translateThinkingBudget = normalizedThinkingBudget
                             )
                         )
                     },
@@ -181,6 +188,7 @@ private fun DefaultTranslationModelSetting(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                val translateModel = settings.findModelById(settings.translateModeId)
                 FormItem(
                     label = {
                         Text(stringResource(R.string.assistant_page_thinking_budget))
@@ -191,9 +199,14 @@ private fun DefaultTranslationModelSetting(
                         onUpdateReasoningTokens = {
                             vm.updateSettings(settings.copy(translateThinkingBudget = it))
                         },
-                        supportedLevels = settings.findModelById(settings.translateModeId)?.modelId
-                            ?.let { ModelRegistry.SUPPORTED_REASONING_LEVELS.getData(it) }
-                            ?: ReasoningLevel.entries,
+                        supportedLevels = translateModel?.modelId
+                            ?.let { modelId ->
+                                ModelRegistry.supportedReasoningLevels(
+                                    modelId = modelId,
+                                    hasBuiltInWebSearch = translateModel.tools.contains(BuiltInTools.Search)
+                                )
+                            }
+                            ?: emptyList(),
                     )
                 }
 

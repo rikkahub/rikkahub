@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
@@ -50,12 +51,17 @@ class ResponseAPIMessageTest {
         return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
     }
 
-    private fun createReasoningParams(thinkingBudget: Int? = null): TextGenerationParams {
+    private fun createReasoningParams(
+        modelId: String = "test-model",
+        thinkingBudget: Int? = null,
+        tools: Set<BuiltInTools> = emptySet(),
+    ): TextGenerationParams {
         return TextGenerationParams(
             model = Model(
-                modelId = "test-model",
-                displayName = "test-model",
+                modelId = modelId,
+                displayName = modelId,
                 abilities = listOf(ModelAbility.REASONING),
+                tools = tools,
             ),
             thinkingBudget = thinkingBudget
         )
@@ -346,6 +352,61 @@ class ResponseAPIMessageTest {
         val requestBody = invokeBuildRequestBody(
             providerSetting = providerSetting,
             params = createReasoningParams(thinkingBudget = 1024)
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertTrue("reasoning should exist", reasoning != null)
+        assertEquals("low", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `response api should preserve none for models that support disabling reasoning`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(
+                modelId = "gpt-5.1",
+                thinkingBudget = 0
+            )
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertTrue("reasoning should exist", reasoning != null)
+        assertEquals("none", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `response api should clamp unsupported none to a valid effort`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(
+                modelId = "gpt-5-pro",
+                thinkingBudget = 0
+            )
+        )
+
+        val reasoning = requestBody["reasoning"]?.jsonObject
+        assertTrue("reasoning should exist", reasoning != null)
+        assertEquals("high", reasoning!!["effort"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `response api should avoid minimal when built in web search is enabled`() {
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = "https://api.openai.com/v1"
+        )
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = providerSetting,
+            params = createReasoningParams(
+                modelId = "gpt-5",
+                thinkingBudget = 512,
+                tools = setOf(BuiltInTools.Search)
+            )
         )
 
         val reasoning = requestBody["reasoning"]?.jsonObject

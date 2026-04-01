@@ -65,6 +65,28 @@ private fun ReasoningLevel.strings(): ReasoningLevelStrings = when (this) {
     ReasoningLevel.XHIGH -> ReasoningLevelStrings(R.string.reasoning_xhigh, R.string.reasoning_xhigh_desc)
 }
 
+private fun displayedReasoningLevel(
+    reasoningTokens: Int,
+    supportedLevels: List<ReasoningLevel>,
+): ReasoningLevel {
+    val availableLevels = supportedLevels.ifEmpty { ReasoningLevel.entries.toList() }
+    val requested = ReasoningLevel.fromBudgetTokens(reasoningTokens)
+    if (requested == ReasoningLevel.AUTO && ReasoningLevel.AUTO in availableLevels) {
+        return ReasoningLevel.AUTO
+    }
+
+    val candidates = availableLevels.filter { it != ReasoningLevel.AUTO }
+    if (candidates.isEmpty()) {
+        return requested
+    }
+
+    return if (requested in candidates) {
+        requested
+    } else {
+        candidates.minByOrNull { kotlin.math.abs(it.budgetTokens - reasoningTokens) } ?: requested
+    }
+}
+
 internal fun guardReasoningUpdate(
     modelId: String?,
     hasBuiltInWebSearch: Boolean,
@@ -82,6 +104,27 @@ internal fun guardReasoningUpdate(
     } else {
         onAllowed(tokens)
     }
+}
+
+internal fun normalizeReasoningTokensForModel(
+    modelId: String?,
+    hasBuiltInWebSearch: Boolean,
+    tokens: Int,
+): Int {
+    if (modelId == null) {
+        return tokens
+    }
+
+    val baseSupportedLevels = ModelRegistry.SUPPORTED_REASONING_LEVELS.getData(modelId)
+    if (baseSupportedLevels == ReasoningLevel.entries.toList()) {
+        return tokens
+    }
+
+    return ModelRegistry.normalizeReasoningLevel(
+        modelId = modelId,
+        requested = ReasoningLevel.fromBudgetTokens(tokens),
+        hasBuiltInWebSearch = hasBuiltInWebSearch,
+    ).budgetTokens
 }
 
 @Composable
@@ -103,7 +146,7 @@ fun ReasoningButton(
         )
     }
 
-    val level = ReasoningLevel.fromBudgetTokens(reasoningTokens)
+    val level = displayedReasoningLevel(reasoningTokens, supportedLevels)
     ToggleSurface(
         checked = level.isEnabled,
         onClick = {
@@ -135,7 +178,7 @@ fun ReasoningPicker(
     onUpdateReasoningTokens: (Int) -> Unit,
     supportedLevels: List<ReasoningLevel> = ReasoningLevel.entries,
 ) {
-    val currentLevel = ReasoningLevel.fromBudgetTokens(reasoningTokens)
+    val currentLevel = displayedReasoningLevel(reasoningTokens, supportedLevels)
     ModalBottomSheet(
         onDismissRequest = {
             onDismissRequest()

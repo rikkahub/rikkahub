@@ -430,7 +430,15 @@ fun ChatInput(
                                 modelId = assistant.chatModelId ?: settings.chatModelId,
                                 providers = settings.providers,
                                 onSelect = {
+                                    val normalizedThinkingBudget = normalizeReasoningTokensForModel(
+                                        modelId = it.modelId,
+                                        hasBuiltInWebSearch = it.tools.contains(BuiltInTools.Search),
+                                        tokens = assistant.thinkingBudget ?: 0,
+                                    )
                                     onUpdateChatModel(it)
+                                    if (normalizedThinkingBudget != (assistant.thinkingBudget ?: 0)) {
+                                        onUpdateAssistant(assistant.copy(thinkingBudget = normalizedThinkingBudget))
+                                    }
                                     dismissExpand()
                                 },
                                 type = ModelType.CHAT,
@@ -486,8 +494,9 @@ fun ChatInput(
                                         )
                                     },
                                     onlyIcon = true,
-                                    supportedLevels = ModelRegistry.SUPPORTED_REASONING_LEVELS.getData(
-                                        model.modelId
+                                    supportedLevels = ModelRegistry.supportedReasoningLevels(
+                                        modelId = model.modelId,
+                                        hasBuiltInWebSearch = model.tools.contains(BuiltInTools.Search)
                                     ),
                                 )
                             }

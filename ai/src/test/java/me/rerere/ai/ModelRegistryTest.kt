@@ -1,5 +1,6 @@
 package me.rerere.ai
 
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.registry.ModelRegistry
@@ -88,6 +89,86 @@ class ModelRegistryTest {
         assertEquals(
             listOf(ModelAbility.TOOL, ModelAbility.REASONING),
             ModelRegistry.MODEL_ABILITIES.getData("minimax-m2.5")
+        )
+    }
+
+    @Test
+    fun testSupportedReasoningLevelsForGpt5Variants() {
+        assertEquals(
+            listOf(
+                ReasoningLevel.AUTO,
+                ReasoningLevel.MINIMAL,
+                ReasoningLevel.LOW,
+                ReasoningLevel.MEDIUM,
+                ReasoningLevel.HIGH
+            ),
+            ModelRegistry.SUPPORTED_REASONING_LEVELS.getData("gpt-5")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.AUTO, ReasoningLevel.HIGH),
+            ModelRegistry.SUPPORTED_REASONING_LEVELS.getData("gpt-5-pro")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.AUTO, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH),
+            ModelRegistry.SUPPORTED_REASONING_LEVELS.getData("gpt-5.1-codex")
+        )
+        assertEquals(
+            listOf(
+                ReasoningLevel.AUTO,
+                ReasoningLevel.MEDIUM,
+                ReasoningLevel.HIGH,
+                ReasoningLevel.XHIGH
+            ),
+            ModelRegistry.SUPPORTED_REASONING_LEVELS.getData("gpt-5.1-codex-max")
+        )
+        assertEquals(
+            listOf(
+                ReasoningLevel.AUTO,
+                ReasoningLevel.MEDIUM,
+                ReasoningLevel.HIGH,
+                ReasoningLevel.XHIGH
+            ),
+            ModelRegistry.SUPPORTED_REASONING_LEVELS.getData("gpt-5.4-pro")
+        )
+    }
+
+    @Test
+    fun testReasoningEffortNormalization() {
+        assertEquals(
+            "none",
+            ModelRegistry.reasoningEffortOrNull(
+                modelId = "gpt-5.1",
+                requested = ReasoningLevel.OFF
+            )
+        )
+        assertEquals(
+            "minimal",
+            ModelRegistry.reasoningEffortOrNull(
+                modelId = "gpt-5",
+                requested = ReasoningLevel.OFF
+            )
+        )
+        assertEquals(
+            "low",
+            ModelRegistry.reasoningEffortOrNull(
+                modelId = "gpt-5",
+                requested = ReasoningLevel.MINIMAL,
+                hasBuiltInWebSearch = true
+            )
+        )
+        assertEquals(
+            "high",
+            ModelRegistry.reasoningEffortOrNull(
+                modelId = "gpt-5-pro",
+                requested = ReasoningLevel.OFF
+            )
+        )
+        assertEquals(
+            ReasoningLevel.HIGH,
+            ModelRegistry.normalizeReasoningLevel(
+                modelId = "gpt-5-pro",
+                requested = ReasoningLevel.OFF
+            )
         )
     }
 }
