@@ -99,12 +99,12 @@ internal fun selectTriggeredLorebookEntries(
     var currentBudget = 0
 
     for (candidate in orderedEntries) {
-        val contentTokens = estimateLorebookTokenCount(candidate.entry.content)
-        if (!candidate.entry.ignoreBudget() && currentBudget + contentTokens > budget) {
+        val budgetedTokens = candidate.entry.budgetedTokenCount()
+        if (currentBudget + budgetedTokens > budget) {
             continue
         }
 
-        currentBudget += contentTokens
+        currentBudget += budgetedTokens
         selected += candidate.entry
     }
 
@@ -216,21 +216,25 @@ internal fun selectBudgetedCandidates(
             .thenByDescending { it.entry.priority },
     )
     val selected = mutableListOf<PromptInjection.RegexInjection>()
-    var currentBudget = activatedEntries.sumOf { estimateLorebookTokenCount(it.content) }
+    var currentBudget = activatedEntries.sumOf { it.budgetedTokenCount() }
 
     for (candidate in orderedCandidates) {
         if (!candidate.entry.passesProbabilityCheck(forceSuccess = candidate.isSticky)) continue
 
-        val contentTokens = estimateLorebookTokenCount(candidate.entry.content)
-        if (budget != null && budget > 0 && !candidate.entry.ignoreBudget() && currentBudget + contentTokens > budget) {
+        val budgetedTokens = candidate.entry.budgetedTokenCount()
+        if (budget != null && budget > 0 && currentBudget + budgetedTokens > budget) {
             continue
         }
 
-        currentBudget += contentTokens
+        currentBudget += budgetedTokens
         selected += candidate.entry
     }
 
     return selected
+}
+
+private fun PromptInjection.RegexInjection.budgetedTokenCount(): Int {
+    return if (ignoreBudget()) 0 else estimateLorebookTokenCount(content)
 }
 
 internal fun estimateLorebookTokenCount(text: String): Int {

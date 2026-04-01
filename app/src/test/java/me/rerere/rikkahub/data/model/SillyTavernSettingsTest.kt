@@ -202,4 +202,27 @@ class SillyTavernSettingsTest {
         assertEquals(listOf(globalRegex), switched.runtimeRegexes())
         assertEquals(emptyList<AssistantRegex>(), switched.activeStPresetRegexes())
     }
+
+    @Test
+    fun `runtime regexes should fall back to legacy cache when preset state is missing`() {
+        val globalRegex = AssistantRegex(
+            id = Uuid.random(),
+            name = "Global",
+            findRegex = "foo",
+            replaceString = "bar",
+        )
+        val legacyRegex = AssistantRegex(
+            id = Uuid.random(),
+            name = "Legacy",
+            findRegex = "bar",
+            replaceString = "baz",
+        )
+        val settings = Settings(
+            globalRegexes = listOf(globalRegex),
+            regexes = listOf(legacyRegex),
+        )
+
+        assertEquals(listOf(globalRegex, legacyRegex), settings.runtimeRegexes())
+        assertEquals(emptyList<AssistantRegex>(), settings.activeStPresetRegexes())
+    }
 }

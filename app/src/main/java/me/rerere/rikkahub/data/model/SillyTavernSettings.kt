@@ -88,7 +88,12 @@ fun Settings.activeGlobalRegexes(): List<AssistantRegex> {
     return if (globalRegexEnabled) globalRegexes else emptyList()
 }
 
-fun Settings.runtimeRegexes(): List<AssistantRegex> = activeGlobalRegexes() + activeStPresetRegexes()
+private fun Settings.legacyRuntimeRegexes(): List<AssistantRegex> {
+    if (regexes.isEmpty()) return emptyList()
+    return if (resolveStPresetState().activePreset == null) regexes else emptyList()
+}
+
+fun Settings.runtimeRegexes(): List<AssistantRegex> = activeGlobalRegexes() + activeStPresetRegexes() + legacyRuntimeRegexes()
 
 fun Settings.applyActiveStPresetSampling(assistant: Assistant): Assistant {
     if (!stPresetEnabled) return assistant
