@@ -78,16 +78,16 @@ private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
     root["continue_prefill"] = JsonPrimitive(template.continuePrefill)
     root["continue_postfix"] = JsonPrimitive(template.continuePostfix)
     root["send_if_empty"] = JsonPrimitive(template.sendIfEmpty)
-    data.sampling.temperature?.let { root["temperature"] = JsonPrimitive(it) }
-    data.sampling.topP?.let { root["top_p"] = JsonPrimitive(it) }
-    data.sampling.maxTokens?.let { root["openai_max_tokens"] = JsonPrimitive(it) }
-    data.sampling.frequencyPenalty?.let { root["frequency_penalty"] = JsonPrimitive(it) }
-    data.sampling.presencePenalty?.let { root["presence_penalty"] = JsonPrimitive(it) }
-    data.sampling.minP?.let { root["min_p"] = JsonPrimitive(it) }
-    data.sampling.topK?.let { root["top_k"] = JsonPrimitive(it) }
-    data.sampling.topA?.let { root["top_a"] = JsonPrimitive(it) }
-    data.sampling.repetitionPenalty?.let { root["repetition_penalty"] = JsonPrimitive(it) }
-    data.sampling.seed?.let { root["seed"] = JsonPrimitive(it) }
+    root.putOrRemoveNumber("temperature", data.sampling.temperature)
+    root.putOrRemoveNumber("top_p", data.sampling.topP)
+    root.putOrRemoveNumber("openai_max_tokens", data.sampling.maxTokens)
+    root.putOrRemoveNumber("frequency_penalty", data.sampling.frequencyPenalty)
+    root.putOrRemoveNumber("presence_penalty", data.sampling.presencePenalty)
+    root.putOrRemoveNumber("min_p", data.sampling.minP)
+    root.putOrRemoveNumber("top_k", data.sampling.topK)
+    root.putOrRemoveNumber("top_a", data.sampling.topA)
+    root.putOrRemoveNumber("repetition_penalty", data.sampling.repetitionPenalty)
+    root.putOrRemoveNumber("seed", data.sampling.seed)
     if (data.sampling.stopSequences.isNotEmpty()) {
         root["enable_stop_string"] = JsonPrimitive(true)
         root["stop_string"] = JsonPrimitive(data.sampling.stopSequences.first())
@@ -99,12 +99,8 @@ private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
         root.remove("stop_string")
         root.remove("stop_strings")
     }
-    if (data.sampling.openAIReasoningEffort.isNotBlank()) {
-        root["reasoning_effort"] = JsonPrimitive(data.sampling.openAIReasoningEffort)
-    }
-    if (data.sampling.openAIVerbosity.isNotBlank()) {
-        root["verbosity"] = JsonPrimitive(data.sampling.openAIVerbosity)
-    }
+    root.putOrRemoveString("reasoning_effort", data.sampling.openAIReasoningEffort)
+    root.putOrRemoveString("verbosity", data.sampling.openAIVerbosity)
     template.namesBehavior?.let { root["names_behavior"] = JsonPrimitive(it) }
     root["use_sysprompt"] = JsonPrimitive(template.useSystemPrompt)
     root["squash_system_messages"] = JsonPrimitive(template.squashSystemMessages)
@@ -267,6 +263,8 @@ private fun buildPresetExtensions(
         preset.rawPresetJson["extensions"]?.jsonObjectOrNull() ?: emptyMap()
     )
 
+    updated.clearLegacyRegexBindingRegexes()
+
     if (scriptRegexes.isNotEmpty()) {
         updated["regex_scripts"] = buildJsonArray {
             scriptRegexes.forEach { regex ->
@@ -338,6 +336,44 @@ private fun MutableMap<String, JsonElement>.clearChatSquashStopStrings() {
         this["ChatSquash"] = JsonObject(updatedChatSquash)
     }
     this["SPreset"] = JsonObject(updatedSPreset)
+}
+
+private fun MutableMap<String, JsonElement>.clearLegacyRegexBindingRegexes() {
+    val sPreset = this["SPreset"]?.jsonObjectOrNull() ?: return
+    val regexBinding = sPreset["RegexBinding"]?.jsonObjectOrNull() ?: return
+
+    val updatedRegexBinding = LinkedHashMap<String, JsonElement>(regexBinding).apply {
+        remove("regexes")
+    }
+    val updatedSPreset = LinkedHashMap<String, JsonElement>(sPreset).apply {
+        if (updatedRegexBinding.isNotEmpty()) {
+            this["RegexBinding"] = JsonObject(updatedRegexBinding)
+        } else {
+            remove("RegexBinding")
+        }
+    }
+
+    if (updatedSPreset.isNotEmpty()) {
+        this["SPreset"] = JsonObject(updatedSPreset)
+    } else {
+        remove("SPreset")
+    }
+}
+
+private fun MutableMap<String, JsonElement>.putOrRemoveNumber(key: String, value: Number?) {
+    if (value != null) {
+        this[key] = JsonPrimitive(value)
+    } else {
+        remove(key)
+    }
+}
+
+private fun MutableMap<String, JsonElement>.putOrRemoveString(key: String, value: String) {
+    if (value.isNotBlank()) {
+        this[key] = JsonPrimitive(value)
+    } else {
+        remove(key)
+    }
 }
 
 private inline fun <T> List<T>.indexOfFirst(predicate: (Int, T) -> Boolean): Int {

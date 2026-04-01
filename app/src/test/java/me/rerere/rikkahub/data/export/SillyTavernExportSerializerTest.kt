@@ -507,6 +507,99 @@ class SillyTavernExportSerializerTest {
     }
 
     @Test
+    fun `preset export should clear removed sampling overrides from imported presets`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Cleared Sampling Preset",
+                  "temperature": 0.8,
+                  "top_p": 0.9,
+                  "openai_max_tokens": 512,
+                  "frequency_penalty": 0.2,
+                  "presence_penalty": 0.3,
+                  "min_p": 0.05,
+                  "top_k": 40,
+                  "top_a": 0.1,
+                  "repetition_penalty": 1.1,
+                  "seed": 1234,
+                  "reasoning_effort": "high",
+                  "verbosity": "low",
+                  "stream_openai": false,
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "name": "Main Prompt",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100001,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            sourceName = "cleared-sampling",
+        )
+
+        val preset = payload.toSillyTavernPreset()
+        val exportedJson = SillyTavernPresetExportSerializer.exportToJson(
+            preset.copy(
+                sampling = preset.sampling.copy(
+                    temperature = null,
+                    topP = null,
+                    maxTokens = null,
+                    frequencyPenalty = null,
+                    presencePenalty = null,
+                    minP = null,
+                    topK = null,
+                    topA = null,
+                    repetitionPenalty = null,
+                    seed = null,
+                    openAIReasoningEffort = "",
+                    openAIVerbosity = "",
+                )
+            )
+        )
+        val exported = Json.parseToJsonElement(exportedJson).jsonObject
+        val roundTrippedAssistant = parseAssistantImportFromJson(
+            exportedJson,
+            sourceName = "cleared-sampling-roundtrip",
+        ).assistant
+
+        assertNull(exported["temperature"])
+        assertNull(exported["top_p"])
+        assertNull(exported["openai_max_tokens"])
+        assertNull(exported["frequency_penalty"])
+        assertNull(exported["presence_penalty"])
+        assertNull(exported["min_p"])
+        assertNull(exported["top_k"])
+        assertNull(exported["top_a"])
+        assertNull(exported["repetition_penalty"])
+        assertNull(exported["seed"])
+        assertNull(exported["reasoning_effort"])
+        assertNull(exported["verbosity"])
+        assertEquals("false", exported["stream_openai"]?.jsonPrimitive?.content)
+
+        assertNull(roundTrippedAssistant.temperature)
+        assertNull(roundTrippedAssistant.topP)
+        assertNull(roundTrippedAssistant.maxTokens)
+        assertNull(roundTrippedAssistant.frequencyPenalty)
+        assertNull(roundTrippedAssistant.presencePenalty)
+        assertNull(roundTrippedAssistant.minP)
+        assertNull(roundTrippedAssistant.topK)
+        assertNull(roundTrippedAssistant.topA)
+        assertNull(roundTrippedAssistant.repetitionPenalty)
+        assertNull(roundTrippedAssistant.seed)
+        assertEquals("", roundTrippedAssistant.openAIReasoningEffort)
+        assertEquals("", roundTrippedAssistant.openAIVerbosity)
+    }
+
+    @Test
     fun `preset export should clear deleted regex scripts from extensions`() {
         val payload = parseAssistantImportFromJson(
             jsonString = """
@@ -564,6 +657,81 @@ class SillyTavernExportSerializerTest {
                 ?.content
         )
         assertTrue(parseAssistantImportFromJson(exportedJson, sourceName = "cleared-regex-roundtrip").regexes.isEmpty())
+    }
+
+    @Test
+    fun `preset export should clear legacy regex bindings from extensions`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Legacy Regex Binding Preset",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "name": "Main Prompt",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100001,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "SPreset": {
+                      "custom_flag": true,
+                      "RegexBinding": {
+                        "regexes": [
+                          {
+                            "scriptName": "Legacy Regex",
+                            "findRegex": "alpha",
+                            "replaceString": "beta",
+                            "placement": [2]
+                          }
+                        ]
+                      }
+                    },
+                    "tavern_helper": {
+                      "enabled": true
+                    }
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "legacy-regex-binding",
+        )
+
+        val preset = payload.toSillyTavernPreset()
+        val exportedJson = SillyTavernPresetExportSerializer.exportToJson(
+            preset.copy(regexes = emptyList())
+        )
+        val exported = Json.parseToJsonElement(exportedJson).jsonObject
+        val sPreset = exported["extensions"]
+            ?.jsonObject
+            ?.get("SPreset")
+            ?.jsonObject
+
+        assertNull(exported["extensions"]?.jsonObject?.get("regex_scripts"))
+        assertNull(sPreset?.get("RegexBinding"))
+        assertEquals("true", sPreset?.get("custom_flag")?.jsonPrimitive?.content)
+        assertEquals(
+            "true",
+            exported["extensions"]
+                ?.jsonObject
+                ?.get("tavern_helper")
+                ?.jsonObject
+                ?.get("enabled")
+                ?.jsonPrimitive
+                ?.content
+        )
+        assertTrue(
+            parseAssistantImportFromJson(exportedJson, sourceName = "legacy-regex-binding-roundtrip")
+                .regexes
+                .isEmpty()
+        )
     }
 
     @Test
