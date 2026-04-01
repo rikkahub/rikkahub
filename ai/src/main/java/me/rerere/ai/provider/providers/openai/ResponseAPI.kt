@@ -213,8 +213,12 @@ class ResponseAPI(
                     if (capabilities.supportsReasoningSummary) {
                         put("summary", "auto")
                     }
-                    if (level != ReasoningLevel.AUTO) {
-                        put("effort", level.effort)
+                    ModelRegistry.reasoningEffortOrNull(
+                        modelId = params.model.modelId,
+                        requested = level,
+                        hasBuiltInWebSearch = params.model.tools.contains(BuiltInTools.Search)
+                    )?.let { effort ->
+                        put("effort", effort)
                     }
                 })
                 if (capabilities.supportEncryptedContent) {
@@ -693,4 +697,3 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
         else -> ResponseProviderCapabilities()
     }
 }
-

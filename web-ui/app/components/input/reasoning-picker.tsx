@@ -27,9 +27,11 @@ import { PickerErrorAlert } from "./picker-error-alert";
 const PRESET_BUDGETS = {
   OFF: 0,
   AUTO: -1,
+  MINIMAL: 512,
   LOW: 1024,
   MEDIUM: 16_000,
   HIGH: 32_000,
+  XHIGH: 64_000,
 } as const;
 
 type ReasoningLevel = keyof typeof PRESET_BUDGETS;
@@ -41,13 +43,38 @@ interface ReasoningPreset {
   budget: number;
 }
 
-const REASONING_PRESET_BUDGETS: Array<Pick<ReasoningPreset, "key" | "budget">> = [
-  { key: "OFF", budget: PRESET_BUDGETS.OFF },
-  { key: "AUTO", budget: PRESET_BUDGETS.AUTO },
-  { key: "LOW", budget: PRESET_BUDGETS.LOW },
-  { key: "MEDIUM", budget: PRESET_BUDGETS.MEDIUM },
-  { key: "HIGH", budget: PRESET_BUDGETS.HIGH },
-];
+const ALL_LEVELS: ReasoningLevel[] = ["OFF", "AUTO", "MINIMAL", "LOW", "MEDIUM", "HIGH", "XHIGH"];
+
+function getSupportedLevels(modelId: string | undefined | null): ReasoningLevel[] {
+  if (!modelId) {
+    return ALL_LEVELS;
+  }
+
+  const id = modelId.toLowerCase();
+
+  // GPT-5.2+
+  if (/\bgpt[-.]?5[-.]?[2-9]/.test(id) || /\bgpt[-.]?5[-.]?4[-.]?(mini|nano)/.test(id)) {
+    return ["OFF", "AUTO", "LOW", "MEDIUM", "HIGH", "XHIGH"];
+  }
+  // GPT-5.1
+  if (/\bgpt[-.]?5[-.]?1/.test(id)) {
+    return ["OFF", "AUTO", "LOW", "MEDIUM", "HIGH"];
+  }
+  // GPT-5 (base)
+  if (/\bgpt[-.]?5\b/.test(id)) {
+    return ["OFF", "AUTO", "MINIMAL", "LOW", "MEDIUM", "HIGH"];
+  }
+  // OpenAI o-series
+  if (/^o\d+/.test(id) || /\bo\d+/.test(id)) {
+    return ["AUTO", "LOW", "MEDIUM", "HIGH"];
+  }
+  // GPT-OSS
+  if (/\bgpt[-.]?oss\b/.test(id)) {
+    return ["AUTO", "LOW", "MEDIUM", "HIGH"];
+  }
+
+  return ALL_LEVELS;
+}
 
 export interface ReasoningPickerButtonProps {
   disabled?: boolean;
@@ -62,22 +89,6 @@ function isReasoningModel(model: ProviderModel | null): boolean {
   return (model.abilities ?? []).includes("REASONING");
 }
 
-function getReasoningLevel(budget: number | null | undefined): ReasoningLevel {
-  const value = budget ?? PRESET_BUDGETS.AUTO;
-  let closest = REASONING_PRESET_BUDGETS[0];
-  let minDistance = Number.POSITIVE_INFINITY;
-
-  for (const preset of REASONING_PRESET_BUDGETS) {
-    const distance = Math.abs(value - preset.budget);
-    if (distance < minDistance) {
-      minDistance = distance;
-      closest = preset;
-    }
-  }
-
-  return closest.key;
-}
-
 export function ReasoningPickerButton({ disabled = false, className }: ReasoningPickerButtonProps) {
   const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
@@ -89,46 +100,73 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   const canUse = Boolean(settings && currentAssistant && !disabled);
   const canReasoning = isReasoningModel(currentModel);
   const { open, error, setError, popoverProps } = usePickerPopover(canUse);
-  const reasoningPresets = React.useMemo<ReasoningPreset[]>(
-    () => [
-      {
+  const supportedLevels = React.useMemo(
+    () => getSupportedLevels(currentModel?.modelId ?? null),
+    [currentModel?.modelId],
+  );
+
+  const reasoningPresets = React.useMemo<ReasoningPreset[]>(() => {
+    const allPresets: Record<ReasoningLevel, () => ReasoningPreset> = {
+      OFF: () => ({
         key: "OFF",
         label: t("reasoning.presets.off.label"),
         description: t("reasoning.presets.off.description"),
         budget: PRESET_BUDGETS.OFF,
-      },
-      {
+      }),
+      AUTO: () => ({
         key: "AUTO",
         label: t("reasoning.presets.auto.label"),
         description: t("reasoning.presets.auto.description"),
         budget: PRESET_BUDGETS.AUTO,
-      },
-      {
+      }),
+      MINIMAL: () => ({
+        key: "MINIMAL",
+        label: t("reasoning.presets.minimal.label"),
+        description: t("reasoning.presets.minimal.description"),
+        budget: PRESET_BUDGETS.MINIMAL,
+      }),
+      LOW: () => ({
         key: "LOW",
         label: t("reasoning.presets.low.label"),
         description: t("reasoning.presets.low.description"),
         budget: PRESET_BUDGETS.LOW,
-      },
-      {
+      }),
+      MEDIUM: () => ({
         key: "MEDIUM",
         label: t("reasoning.presets.medium.label"),
         description: t("reasoning.presets.medium.description"),
         budget: PRESET_BUDGETS.MEDIUM,
-      },
-      {
+      }),
+      HIGH: () => ({
         key: "HIGH",
         label: t("reasoning.presets.high.label"),
         description: t("reasoning.presets.high.description"),
         budget: PRESET_BUDGETS.HIGH,
-      },
-    ],
-    [t],
-  );
+      }),
+      XHIGH: () => ({
+        key: "XHIGH",
+        label: t("reasoning.presets.xhigh.label"),
+        description: t("reasoning.presets.xhigh.description"),
+        budget: PRESET_BUDGETS.XHIGH,
+      }),
+    };
+    return supportedLevels.map((level) => allPresets[level]());
+  }, [t, supportedLevels]);
 
   const currentBudget = currentAssistant?.thinkingBudget ?? PRESET_BUDGETS.AUTO;
-  const currentLevel = getReasoningLevel(currentBudget);
-  const currentPreset =
-    reasoningPresets.find((preset) => preset.key === currentLevel) ?? reasoningPresets[0];
+  const currentPreset = React.useMemo<ReasoningPreset | null>(
+    () =>
+      reasoningPresets.reduce<ReasoningPreset | null>((closest, preset) => {
+        if (!closest) {
+          return preset;
+        }
+
+        return Math.abs(currentBudget - preset.budget) < Math.abs(currentBudget - closest.budget)
+          ? preset
+          : closest;
+      }, null),
+    [currentBudget, reasoningPresets],
+  );
 
   React.useEffect(() => {
     if (!canUse || !canReasoning) {
@@ -180,7 +218,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
             className,
           )}
         >
-          <span>{currentPreset.label}</span>
+          <span>{currentPreset?.label ?? reasoningPresets[0]?.label ?? ""}</span>
           <span className="hidden sm:block">
             {loading ? (
               <LoaderCircle className="size-3.5 animate-spin" />
@@ -200,9 +238,9 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
         <div className="max-h-[70svh] space-y-3 overflow-y-auto px-4 py-4">
           <PickerErrorAlert error={error} />
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="flex flex-wrap gap-2">
             {reasoningPresets.map((preset) => {
-              const selected = preset.key === currentLevel;
+              const selected = preset.key === currentPreset?.key;
               const switching =
                 updateThinkingBudgetMutation.isPending &&
                 updateThinkingBudgetMutation.variables?.thinkingBudget === preset.budget;
@@ -243,7 +281,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
           </div>
 
           <div className="text-muted-foreground h-4 truncate text-xs">
-            {currentPreset.description}
+            {currentPreset?.description ?? ""}
           </div>
 
           <div className="space-y-2 px-1 py-1">

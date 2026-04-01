@@ -523,6 +523,7 @@
   <string name="reasoning_medium_desc">The model will use more reasoning to answer questions.</string>
   <string name="reasoning_minimal">Minimal reasoning</string>
   <string name="reasoning_minimal_desc">The model will use minimal reasoning effort.</string>
+  <string name="reasoning_minimal_search_unsupported">GPT-5 minimal reasoning cannot be used with built-in web search.</string>
   <string name="reasoning_off">Off</string>
   <string name="reasoning_off_desc">Turn off reasoning functionality, the model will directly answer questions.</string>
   <string name="reasoning_xhigh">Extra heavy reasoning</string>
@@ -974,4 +975,3 @@
   <string name="web_search_disabled">Web search disabled</string>
   <string name="web_search_enabled">Web search enabled</string>
 </resources>
-

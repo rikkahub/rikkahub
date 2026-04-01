@@ -430,7 +430,7 @@ object ModelRegistry {
     val SUPPORTED_REASONING_LEVELS = ModelData { modelId ->
         when {
             // GPT-5.2+: supports none/low/medium/high/xhigh
-            GPT_5_2.match(modelId) || GPT_5_3.match(modelId) ||
+            GPT_5_2.match(modelId) ||
                 GPT_5_4.match(modelId) || GPT_5_4_MINI.match(modelId) ||
                 GPT_5_4_NANO.match(modelId) ->
                 listOf(
@@ -468,17 +468,38 @@ object ModelRegistry {
                     ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
                 )
 
-            // Claude 4.6: supports low/medium/high/xhigh
-            CLAUDE_SONNET_4_6.match(modelId) ->
-                listOf(
-                    ReasoningLevel.OFF, ReasoningLevel.AUTO,
-                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM,
-                    ReasoningLevel.HIGH, ReasoningLevel.XHIGH
-                )
-
             // Default: all levels
             else -> ReasoningLevel.entries.toList()
         }
+    }
+
+    fun reasoningEffortOrNull(
+        modelId: String,
+        requested: ReasoningLevel,
+        hasBuiltInWebSearch: Boolean = false
+    ): String? {
+        if (requested == ReasoningLevel.AUTO || requested == ReasoningLevel.OFF) {
+            return null
+        }
+
+        val normalizedRequested = if (
+            hasBuiltInWebSearch && GPT_5.match(modelId) && requested == ReasoningLevel.MINIMAL
+        ) {
+            ReasoningLevel.LOW
+        } else {
+            requested
+        }
+
+        val supportedLevels = SUPPORTED_REASONING_LEVELS.getData(modelId)
+            .filter { it != ReasoningLevel.AUTO && it != ReasoningLevel.OFF }
+        val effectiveLevel = if (normalizedRequested in supportedLevels) {
+            normalizedRequested
+        } else {
+            supportedLevels.minByOrNull { kotlin.math.abs(it.budgetTokens - normalizedRequested.budgetTokens) }
+                ?: ReasoningLevel.MEDIUM
+        }
+
+        return effectiveLevel.effort
     }
 
     private fun resolveModels(modelId: String): List<ModelDefinition> {

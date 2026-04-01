@@ -55,7 +55,7 @@ class ResponseAPIMessageTest {
             model = Model(
                 modelId = "test-model",
                 displayName = "test-model",
-                abilities = listOf(ModelAbility.REASONING)
+                abilities = listOf(ModelAbility.REASONING),
             ),
             thinkingBudget = thinkingBudget
         )

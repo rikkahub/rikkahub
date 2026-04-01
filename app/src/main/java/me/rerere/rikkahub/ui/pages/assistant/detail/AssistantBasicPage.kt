@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import com.dokar.sonner.ToastType
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,24 +32,28 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
+import me.rerere.rikkahub.ui.components.ai.guardReasoningUpdate
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.toFixed
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.seconds
 import me.rerere.rikkahub.data.model.Tag as DataTag
 
 @Composable
@@ -99,6 +104,9 @@ internal fun AssistantBasicContent(
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    val toaster = LocalToaster.current
+    val minimalReasoningSearchWarning = stringResource(R.string.reasoning_minimal_search_unsupported)
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -405,18 +413,34 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_thinking_budget))
                 },
             ) {
+                val chatModel = assistant.chatModelId?.let { id ->
+                    providers.flatMap { it.models }.find { it.id == id }
+                }
                 ReasoningButton(
                     reasoningTokens = assistant.thinkingBudget ?: 0,
                     onUpdateReasoningTokens = { tokens ->
-                        onUpdate(
-                            assistant.copy(
-                                thinkingBudget = tokens
-                            )
+                        guardReasoningUpdate(
+                            modelId = chatModel?.modelId,
+                            hasBuiltInWebSearch = chatModel?.tools?.contains(BuiltInTools.Search) == true,
+                            tokens = tokens,
+                            onBlocked = {
+                                toaster.show(
+                                    message = minimalReasoningSearchWarning,
+                                    duration = 1.seconds,
+                                    type = ToastType.Warning
+                                )
+                            },
+                            onAllowed = {
+                                onUpdate(
+                                    assistant.copy(
+                                        thinkingBudget = it
+                                    )
+                                )
+                            }
                         )
                     },
-                    supportedLevels = assistant.chatModelId?.let { id ->
-                        providers.flatMap { it.models }.find { it.id == id }?.modelId
-                    }?.let { ModelRegistry.SUPPORTED_REASONING_LEVELS.getData(it) }
+                    supportedLevels = chatModel?.modelId
+                        ?.let { ModelRegistry.SUPPORTED_REASONING_LEVELS.getData(it) }
                         ?: ReasoningLevel.entries,
                 )
             }

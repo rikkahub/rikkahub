@@ -33,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Idea
 import me.rerere.hugeicons.stroke.Idea01
@@ -62,6 +63,25 @@ private fun ReasoningLevel.strings(): ReasoningLevelStrings = when (this) {
     ReasoningLevel.MEDIUM -> ReasoningLevelStrings(R.string.reasoning_medium, R.string.reasoning_medium_desc)
     ReasoningLevel.HIGH -> ReasoningLevelStrings(R.string.reasoning_heavy, R.string.reasoning_heavy_desc)
     ReasoningLevel.XHIGH -> ReasoningLevelStrings(R.string.reasoning_xhigh, R.string.reasoning_xhigh_desc)
+}
+
+internal fun guardReasoningUpdate(
+    modelId: String?,
+    hasBuiltInWebSearch: Boolean,
+    tokens: Int,
+    onBlocked: () -> Unit,
+    onAllowed: (Int) -> Unit,
+) {
+    val isMinimalWebSearchConflict = modelId != null &&
+        hasBuiltInWebSearch &&
+        ModelRegistry.GPT_5.match(modelId) &&
+        ReasoningLevel.fromBudgetTokens(tokens) == ReasoningLevel.MINIMAL
+
+    if (isMinimalWebSearchConflict) {
+        onBlocked()
+    } else {
+        onAllowed(tokens)
+    }
 }
 
 @Composable

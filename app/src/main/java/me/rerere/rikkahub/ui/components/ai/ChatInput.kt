@@ -101,6 +101,7 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
@@ -463,10 +464,26 @@ fun ChatInput(
                             // Reasoning
                             val model = settings.getCurrentChatModel()
                             if (model?.abilities?.contains(ModelAbility.REASONING) == true) {
+                                val minimalReasoningSearchWarning =
+                                    stringResource(R.string.reasoning_minimal_search_unsupported)
                                 ReasoningButton(
                                     reasoningTokens = assistant.thinkingBudget ?: 0,
-                                    onUpdateReasoningTokens = {
-                                        onUpdateAssistant(assistant.copy(thinkingBudget = it))
+                                    onUpdateReasoningTokens = { tokens ->
+                                        guardReasoningUpdate(
+                                            modelId = model.modelId,
+                                            hasBuiltInWebSearch = model.tools.contains(BuiltInTools.Search),
+                                            tokens = tokens,
+                                            onBlocked = {
+                                                toaster.show(
+                                                    message = minimalReasoningSearchWarning,
+                                                    duration = 1.seconds,
+                                                    type = ToastType.Warning
+                                                )
+                                            },
+                                            onAllowed = {
+                                                onUpdateAssistant(assistant.copy(thinkingBudget = it))
+                                            }
+                                        )
                                     },
                                     onlyIcon = true,
                                     supportedLevels = ModelRegistry.SUPPORTED_REASONING_LEVELS.getData(
