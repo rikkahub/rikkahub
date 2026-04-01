@@ -80,14 +80,8 @@ internal fun buildAuthorNoteAbsoluteMessage(
     val content = buildAuthorNoteContent(topEntries, bottomEntries)
     if (content.isBlank()) return null
 
-    val authorNoteDepth = (topEntries + bottomEntries)
-        .map { it.injectDepth }
-        .maxOrNull()
-        ?.coerceAtLeast(0)
-        ?: DEFAULT_ST_AUTHOR_NOTE_DEPTH
-
     return StAbsoluteMessage(
-        depth = authorNoteDepth,
+        depth = resolveAuthorNoteDepth(topEntries + bottomEntries),
         order = Int.MAX_VALUE,
         role = MessageRole.SYSTEM,
         content = content,
@@ -239,7 +233,7 @@ internal fun applyAbsoluteMessages(
         .sortedDescending()
         .forEach { depth ->
             val depthPrompts = prompts.filter { it.depth == depth }
-            var insertIndex = (result.size - depth).coerceIn(0, result.size)
+            var insertIndex = findNonToolDepthInsertIndex(result, depth)
             insertIndex = findSafeInsertIndex(result, insertIndex)
 
             depthPrompts
@@ -260,6 +254,17 @@ internal fun applyAbsoluteMessages(
         }
 
     return result
+}
+
+private fun findNonToolDepthInsertIndex(messages: List<UIMessage>, depth: Int): Int {
+    val nonToolIndices = messages.indices.filter { messages[it].role != MessageRole.TOOL }
+    if (nonToolIndices.isEmpty()) {
+        return if (depth.coerceAtLeast(0) == 0) messages.size else 0
+    }
+
+    val effectiveDepth = depth.coerceAtLeast(0)
+    val relativeIndex = (nonToolIndices.size - effectiveDepth).coerceIn(0, nonToolIndices.size)
+    return nonToolIndices.getOrNull(relativeIndex) ?: messages.size
 }
 
 internal fun stripInlineRegexBlocks(content: String): String {

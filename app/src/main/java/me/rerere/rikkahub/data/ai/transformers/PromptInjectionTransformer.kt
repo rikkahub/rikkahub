@@ -265,12 +265,19 @@ private fun applyAuthorNoteInjection(
     val authorNoteContent = buildAuthorNoteContent(topEntries, bottomEntries)
     if (authorNoteContent.isBlank()) return
 
+    val authorNoteDepth = resolveAuthorNoteDepth(topEntries + bottomEntries)
     var insertIndex = findChatDepthInsertIndex(
         messages = result,
-        depth = DEFAULT_ST_AUTHOR_NOTE_DEPTH,
+        depth = authorNoteDepth,
     )
     insertIndex = findSafeInsertIndex(result, insertIndex)
     result.add(insertIndex, UIMessage.system(authorNoteContent))
+}
+
+internal fun resolveAuthorNoteDepth(entries: List<PromptInjection>): Int {
+    return entries
+        .maxOfOrNull { it.injectDepth.coerceAtLeast(0) }
+        ?: DEFAULT_ST_AUTHOR_NOTE_DEPTH
 }
 
 internal fun buildAuthorNoteContent(
@@ -293,9 +300,13 @@ private fun findChatDepthInsertIndex(
     depth: Int,
 ): Int {
     val leadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
-    val chatMessageCount = (messages.size - leadingSystemCount).coerceAtLeast(0)
-    val relativeIndex = (chatMessageCount - depth.coerceAtLeast(1)).coerceIn(0, chatMessageCount)
-    return leadingSystemCount + relativeIndex
+    val chatIndices = messages.indices.filter { index ->
+        index >= leadingSystemCount && messages[index].role != MessageRole.TOOL
+    }
+    if (chatIndices.isEmpty()) return leadingSystemCount
+
+    val relativeIndex = (chatIndices.size - depth.coerceAtLeast(1)).coerceIn(0, chatIndices.lastIndex)
+    return chatIndices[relativeIndex]
 }
 
 /**

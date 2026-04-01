@@ -5,6 +5,7 @@ import kotlinx.coroutines.runBlocking
 import me.rerere.ai.provider.Model
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
@@ -26,6 +27,33 @@ import org.junit.Test
 import kotlin.uuid.Uuid
 
 class SillyTavernPromptTransformerTest {
+    private fun getMessageText(message: UIMessage): String {
+        return message.parts
+            .filterIsInstance<UIMessagePart.Text>()
+            .joinToString("") { it.text }
+    }
+
+    private fun createAssistantWithUnexecutedTool(toolCallId: String, toolName: String): UIMessage {
+        return UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Tool(
+                    toolCallId = toolCallId,
+                    toolName = toolName,
+                    input = "{}",
+                    output = emptyList()
+                )
+            )
+        )
+    }
+
+    private fun createLegacyToolMessage(content: String = "tool result"): UIMessage {
+        return UIMessage(
+            role = MessageRole.TOOL,
+            parts = listOf(UIMessagePart.Text(content))
+        )
+    }
+
     @Test
     fun `template should map card data and lorebook markers into ordered prompts`() {
         val lorebook = Lorebook(
@@ -148,6 +176,32 @@ class SillyTavernPromptTransformerTest {
             ),
             result.map { it.role }
         )
+    }
+
+    @Test
+    fun `absolute prompts should ignore TOOL results when resolving depth`() {
+        val result = applyAbsoluteMessages(
+            messages = listOf(
+                UIMessage.user("U1"),
+                UIMessage.assistant("A1"),
+                UIMessage.user("U2"),
+                UIMessage.assistant("A2"),
+                createAssistantWithUnexecutedTool("call_1", "tool"),
+                createLegacyToolMessage(),
+            ),
+            prompts = listOf(
+                StAbsoluteMessage(
+                    depth = 3,
+                    order = 100,
+                    role = MessageRole.SYSTEM,
+                    content = "Depth Prompt",
+                )
+            )
+        )
+
+        assertEquals("Depth Prompt", getMessageText(result[2]))
+        assertEquals("U2", getMessageText(result[3]))
+        assertEquals("A2", getMessageText(result[4]))
     }
 
     @Test

@@ -461,6 +461,31 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
+    fun `AUTHOR_NOTE_TOP lorebook entry should respect inject depth in generic mode`() {
+        val injection = createRegexInjection(
+            position = InjectionPosition.AUTHOR_NOTE_TOP,
+            injectDepth = 1,
+            content = "Author note top content",
+            role = MessageRole.SYSTEM,
+        )
+
+        val messages = listOf(
+            UIMessage.system("System prompt"),
+            UIMessage.user("Message 1"),
+            UIMessage.assistant("Response 1"),
+            UIMessage.user("Message 2"),
+        )
+
+        val result = transformWithAlwaysActiveLorebookEntry(injection, messages)
+
+        assertEquals(5, result.size)
+        assertEquals("Response 1", getMessageText(result[2]))
+        assertEquals("Author note top content", getMessageText(result[3]))
+        assertEquals(MessageRole.SYSTEM, result[3].role)
+        assertEquals("Message 2", getMessageText(result[4]))
+    }
+
+    @Test
     fun `lorebook entry with BOTTOM_OF_CHAT should insert before last message`() {
         val injection = createRegexInjection(
             position = InjectionPosition.BOTTOM_OF_CHAT,
