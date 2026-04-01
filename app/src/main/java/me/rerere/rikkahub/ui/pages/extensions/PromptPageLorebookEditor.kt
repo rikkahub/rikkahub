@@ -106,7 +106,7 @@ internal fun RegexInjectionEditDialog(
                 )
                 EditorGuideAction(
                     title = stringResource(R.string.prompt_page_lorebook_entry_help_title),
-                    body = stringResource(R.string.prompt_page_lorebook_entry_help_body_markdown),
+                    bodyResId = R.raw.prompt_page_lorebook_entry_help_body_markdown,
                 )
             }
 

@@ -132,7 +132,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 actions = {
                     EditorGuideAction(
                         title = stringResource(R.string.prompt_page_help_title),
-                        body = stringResource(R.string.prompt_page_help_body_markdown),
+                        bodyResId = R.raw.prompt_page_help_body_markdown,
                     )
                 },
                 scrollBehavior = scrollBehavior,
@@ -195,7 +195,7 @@ fun ModeInjectionsPage(vm: PromptVM = koinViewModel()) {
                 actions = {
                     EditorGuideAction(
                         title = stringResource(R.string.prompt_page_mode_injection_help_title),
-                        body = stringResource(R.string.prompt_page_mode_injection_help_body_markdown),
+                        bodyResId = R.raw.prompt_page_mode_injection_help_body_markdown,
                     )
                 },
                 scrollBehavior = scrollBehavior,
@@ -227,7 +227,7 @@ fun LorebooksPage(vm: PromptVM = koinViewModel()) {
                 actions = {
                     EditorGuideAction(
                         title = stringResource(R.string.prompt_page_lorebook_help_title),
-                        body = stringResource(R.string.prompt_page_lorebook_help_body_markdown),
+                        bodyResId = R.raw.prompt_page_lorebook_help_body_markdown,
                     )
                 },
                 scrollBehavior = scrollBehavior,
@@ -1326,7 +1326,7 @@ private fun LorebookEditSheet(
                 )
                 EditorGuideAction(
                     title = stringResource(R.string.prompt_page_lorebook_editor_help_title),
-                    body = stringResource(R.string.prompt_page_lorebook_editor_help_body_markdown),
+                    bodyResId = R.raw.prompt_page_lorebook_editor_help_body_markdown,
                 )
             }
 

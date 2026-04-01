@@ -91,7 +91,7 @@ fun SillyTavernPresetPage(vm: PromptVM = koinViewModel()) {
                 actions = {
                     EditorGuideAction(
                         title = stringResource(R.string.prompt_page_st_preset_help_title),
-                        body = stringResource(R.string.prompt_page_st_preset_help_body_markdown),
+                        bodyResId = R.raw.prompt_page_st_preset_help_body_markdown,
                     )
                 },
                 scrollBehavior = scrollBehavior,

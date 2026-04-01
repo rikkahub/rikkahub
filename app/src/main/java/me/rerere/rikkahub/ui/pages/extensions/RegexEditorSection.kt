@@ -90,7 +90,7 @@ fun RegexEditorSection(
             tail = {
                 EditorGuideAction(
                     title = stringResource(R.string.assistant_page_regex_help_title),
-                    body = stringResource(R.string.assistant_page_regex_help_body_markdown),
+                    bodyResId = R.raw.assistant_page_regex_help_body_markdown,
                 )
             }
         )
