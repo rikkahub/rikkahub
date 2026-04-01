@@ -137,6 +137,31 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "RouteActivity"
 
+internal data class ShareHandlerRequest(
+    val text: String,
+    val streamUri: String? = null,
+)
+
+internal fun resolveShareHandlerRequest(
+    action: String?,
+    sharedText: String?,
+    sharedImageUri: String?,
+    processedText: CharSequence?,
+): ShareHandlerRequest? {
+    return when (action) {
+        Intent.ACTION_SEND -> ShareHandlerRequest(
+            text = sharedText.orEmpty(),
+            streamUri = sharedImageUri,
+        )
+
+        Intent.ACTION_PROCESS_TEXT -> ShareHandlerRequest(
+            text = processedText?.toString().orEmpty(),
+        )
+
+        else -> null
+    }
+}
+
 class RouteActivity : ComponentActivity() {
     private val highlighter by inject<Highlighter>()
     private val okHttpClient by inject<OkHttpClient>()
@@ -195,27 +220,18 @@ class RouteActivity : ComponentActivity() {
 
     @Composable
     private fun ShareHandler(backStack: MutableList<NavKey>) {
-        val shareIntent = remember {
-            Intent().apply {
-                action = intent?.action
-                putExtra(Intent.EXTRA_TEXT, intent?.getStringExtra(Intent.EXTRA_TEXT))
-                putExtra(Intent.EXTRA_STREAM, intent?.getStringExtra(Intent.EXTRA_STREAM))
-                putExtra(Intent.EXTRA_PROCESS_TEXT, intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT))
-            }
+        val shareRequest = remember {
+            resolveShareHandlerRequest(
+                action = intent?.action,
+                sharedText = intent?.getStringExtra(Intent.EXTRA_TEXT),
+                sharedImageUri = intent?.getStringExtra(Intent.EXTRA_STREAM),
+                processedText = intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT),
+            )
         }
 
-        LaunchedEffect(backStack) {
-            when (shareIntent.action) {
-                Intent.ACTION_SEND -> {
-                    val text = shareIntent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
-                    val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
-                    backStack.add(Screen.ShareHandler(text, imageUri))
-                }
-
-                Intent.ACTION_PROCESS_TEXT -> {
-                    val text = shareIntent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString() ?: ""
-                    backStack.add(Screen.ShareHandler(text, null))
-                }
+        LaunchedEffect(backStack, shareRequest) {
+            shareRequest?.let {
+                backStack.add(Screen.ShareHandler(it.text, it.streamUri))
             }
         }
     }
@@ -296,6 +312,17 @@ class RouteActivity : ComponentActivity() {
         if (intent.getBooleanExtra("openScheduledTaskSettings", false)) {
             navStack?.add(Screen.SettingScheduledTasks)
             return
+        }
+        resolveShareHandlerRequest(
+            action = intent.action,
+            sharedText = intent.getStringExtra(Intent.EXTRA_TEXT),
+            sharedImageUri = intent.getStringExtra(Intent.EXTRA_STREAM),
+            processedText = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT),
+        )?.let { shareRequest ->
+            if (backStack != null) {
+                backStack.add(Screen.ShareHandler(shareRequest.text, shareRequest.streamUri))
+                return
+            }
         }
         // Navigate to the chat screen if a conversation ID is provided
         intent.getStringExtra("conversationId")?.let { text ->

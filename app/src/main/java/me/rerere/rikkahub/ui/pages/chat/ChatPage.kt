@@ -89,7 +89,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxDirectCommandParser
 import me.rerere.rikkahub.data.event.ChatComposerBridge
 import me.rerere.rikkahub.data.event.ChatHistoryBridge
-import me.rerere.rikkahub.data.event.replaceLastTextPart
+import me.rerere.rikkahub.data.event.replaceHistoryText
 import me.rerere.rikkahub.data.event.toChatHistorySnapshot
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
@@ -431,9 +431,14 @@ private fun ChatPageContent(
         }
         val historyDelegate = object : ChatHistoryBridge.Delegate {
             override fun editMessage(nodeId: String, text: String) {
+                if (latestLoadingJob != null) {
+                    vm.showEditBlockedWhileGeneratingError()
+                    return
+                }
+
                 val targetMessage = latestConversation.findCurrentMessageByNodeId(nodeId) ?: return
                 vm.handleMessageEdit(
-                    parts = targetMessage.parts.replaceLastTextPart(text),
+                    parts = targetMessage.parts.replaceHistoryText(text),
                     messageId = targetMessage.id,
                 )
             }

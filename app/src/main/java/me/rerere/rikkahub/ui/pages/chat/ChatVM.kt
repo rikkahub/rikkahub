@@ -288,9 +288,17 @@ class ChatVM(
         }
     }
 
+    fun showEditBlockedWhileGeneratingError() {
+        showHistoryMutationBlockedWhileGeneratingError("请先停止生成再编辑消息")
+    }
+
     fun showDeleteBlockedWhileGeneratingError() {
+        showHistoryMutationBlockedWhileGeneratingError("请先停止生成再删除消息")
+    }
+
+    private fun showHistoryMutationBlockedWhileGeneratingError(message: String) {
         chatService.addError(
-            error = IllegalStateException("请先停止生成再删除消息"),
+            error = IllegalStateException(message),
             conversationId = _conversationId
         )
     }

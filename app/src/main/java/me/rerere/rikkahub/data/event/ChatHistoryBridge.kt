@@ -53,9 +53,9 @@ fun Conversation.toChatHistorySnapshot(
                     userName = resolvedUserName,
                     assistantName = resolvedAssistantName,
                 ),
-                text = currentMessage.toText(),
+                text = currentMessage.toHistoryText(),
                 swipeIndex = node.selectIndex.coerceIn(0, node.messages.lastIndex),
-                swipes = node.messages.map(UIMessage::toText),
+                swipes = node.messages.map(UIMessage::toHistoryText),
             )
         },
     )
@@ -65,9 +65,13 @@ fun ChatHistorySnapshot.toJsonString(): String {
     return JsonInstant.encodeToString(ChatHistorySnapshot.serializer(), this)
 }
 
-fun List<UIMessagePart>.replaceLastTextPart(text: String): List<UIMessagePart> {
-    val lastTextIndex = indexOfLast { it is UIMessagePart.Text }
-    if (lastTextIndex == -1) {
+fun UIMessage.toHistoryText(): String {
+    return copy(parts = parts.filterIsInstance<UIMessagePart.Text>()).toText()
+}
+
+fun List<UIMessagePart>.replaceHistoryText(text: String): List<UIMessagePart> {
+    val firstTextIndex = indexOfFirst { it is UIMessagePart.Text }
+    if (firstTextIndex == -1) {
         return if (text.isBlank()) {
             this
         } else {
@@ -75,11 +79,13 @@ fun List<UIMessagePart>.replaceLastTextPart(text: String): List<UIMessagePart> {
         }
     }
 
-    return mapIndexed { index, part ->
-        if (index == lastTextIndex && part is UIMessagePart.Text) {
-            part.copy(text = text)
-        } else {
-            part
+    return buildList {
+        this@replaceHistoryText.forEachIndexed { index, part ->
+            when {
+                index == firstTextIndex && text.isNotBlank() -> add(UIMessagePart.Text(text))
+                part is UIMessagePart.Text -> Unit
+                else -> add(part)
+            }
         }
     }
 }
