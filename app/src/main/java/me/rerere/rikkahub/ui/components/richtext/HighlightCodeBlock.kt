@@ -413,7 +413,7 @@ private fun HighlightCodeActions(
                     modifier = Modifier
                         .clickable {
                             val content = if (language == "svg") {
-                                // Wrap SVG so WebView can render the snippet directly.
+                                // 将 SVG 包裹在 HTML 中以便 WebView 正确渲染
                                 """<!DOCTYPE html><html><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;">$code</body></html>"""
                             } else {
                                 code
