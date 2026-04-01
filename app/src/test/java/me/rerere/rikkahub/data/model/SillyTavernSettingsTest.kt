@@ -159,4 +159,47 @@ class SillyTavernSettingsTest {
         assertEquals(listOf(cachedRegex), normalized.regexes)
         assertEquals(preset.template, normalized.stPresetTemplate)
     }
+
+    @Test
+    fun `runtime regexes should combine global and selected preset groups`() {
+        val globalRegex = AssistantRegex(
+            id = Uuid.random(),
+            name = "Global",
+            findRegex = "foo",
+            replaceString = "bar",
+        )
+        val presetARegex = AssistantRegex(
+            id = Uuid.random(),
+            name = "Preset A",
+            findRegex = "bar",
+            replaceString = "baz",
+        )
+        val presetBRegex = AssistantRegex(
+            id = Uuid.random(),
+            name = "Preset B",
+            findRegex = "bar",
+            replaceString = "qux",
+        )
+        val presetA = SillyTavernPreset(
+            template = defaultSillyTavernPromptTemplate().copy(sourceName = "Preset A"),
+            regexes = listOf(presetARegex),
+        )
+        val presetB = SillyTavernPreset(
+            template = defaultSillyTavernPromptTemplate().copy(sourceName = "Preset B"),
+            regexEnabled = false,
+            regexes = listOf(presetBRegex),
+        )
+        val settings = Settings(
+            globalRegexes = listOf(globalRegex),
+            stPresets = listOf(presetA, presetB),
+            selectedStPresetId = presetA.id,
+        )
+
+        assertEquals(listOf(globalRegex, presetARegex), settings.runtimeRegexes())
+        assertEquals(listOf(presetARegex), settings.activeStPresetRegexes())
+
+        val switched = settings.selectStPreset(presetB.id)
+        assertEquals(listOf(globalRegex), switched.runtimeRegexes())
+        assertEquals(emptyList<AssistantRegex>(), switched.activeStPresetRegexes())
+    }
 }

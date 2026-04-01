@@ -167,6 +167,8 @@ class SettingsStore(
         val LOREBOOKS = stringPreferencesKey("lorebooks")
         val LOREBOOK_GLOBAL_SETTINGS = stringPreferencesKey("lorebook_global_settings")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
+        val GLOBAL_REGEX_ENABLED = booleanPreferencesKey("global_regex_enabled")
+        val GLOBAL_REGEXES = stringPreferencesKey("global_regexes")
         val REGEXES = stringPreferencesKey("regexes")
         val ST_PRESET_ENABLED = booleanPreferencesKey("st_preset_enabled")
         val ST_PRESET_TEMPLATE = stringPreferencesKey("st_preset_template")
@@ -291,6 +293,21 @@ class SettingsStore(
                 quickMessages = preferences[QUICK_MESSAGES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                globalRegexEnabled = preferences[GLOBAL_REGEX_ENABLED] != false,
+                globalRegexes = preferences[GLOBAL_REGEXES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: run {
+                    val hasStoredPresetLibrary =
+                        preferences[ST_PRESET_TEMPLATE] != null ||
+                            preferences[ST_PRESETS]
+                                ?.let { JsonInstant.decodeFromString<List<SillyTavernPreset>>(it) }
+                                ?.isNotEmpty() == true
+                    if (!hasStoredPresetLibrary) {
+                        preferences[REGEXES]?.let { JsonInstant.decodeFromString(it) } ?: emptyList()
+                    } else {
+                        emptyList()
+                    }
+                },
                 regexes = preferences[REGEXES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -442,6 +459,7 @@ class SettingsStore(
                     .map { it.normalizedForSystemPromptSupplement() }
                     .distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
+                globalRegexes = settings.globalRegexes.distinctBy { it.id },
                 regexes = normalizedStSettings.regexes.distinctBy { it.id },
                 stPresets = normalizedStSettings.stPresets,
                 selectedStPresetId = normalizedStSettings.selectedStPresetId,
@@ -482,6 +500,7 @@ class SettingsStore(
         val normalizedSettings = normalizedStSettings.copy(
             modeInjections = settings.modeInjections.map { it.normalizedForSystemPromptSupplement() },
             lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized(),
+            globalRegexes = settings.globalRegexes.distinctBy { it.id },
             stPresets = normalizedStSettings.stPresets,
             selectedStPresetId = normalizedStSettings.selectedStPresetId,
             stPresetTemplate = normalizedStSettings.stPresetTemplate,
@@ -552,6 +571,8 @@ class SettingsStore(
             preferences[LOREBOOKS] = JsonInstant.encodeToString(normalizedSettings.lorebooks)
             preferences[LOREBOOK_GLOBAL_SETTINGS] = JsonInstant.encodeToString(normalizedSettings.lorebookGlobalSettings)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(normalizedSettings.quickMessages)
+            preferences[GLOBAL_REGEX_ENABLED] = normalizedSettings.globalRegexEnabled
+            preferences[GLOBAL_REGEXES] = JsonInstant.encodeToString(normalizedSettings.globalRegexes)
             preferences[REGEXES] = JsonInstant.encodeToString(normalizedSettings.regexes)
             preferences[ST_PRESET_ENABLED] = normalizedSettings.stPresetEnabled
             normalizedSettings.stPresetTemplate?.let {
@@ -708,6 +729,9 @@ data class Settings(
     val lorebooks: List<Lorebook> = emptyList(),
     val lorebookGlobalSettings: LorebookGlobalSettings = LorebookGlobalSettings(),
     val quickMessages: List<QuickMessage> = emptyList(),
+    val globalRegexEnabled: Boolean = true,
+    val globalRegexes: List<AssistantRegex> = emptyList(),
+    // Legacy cache for older builds. Active preset regexes are mirrored here during persistence.
     val regexes: List<AssistantRegex> = emptyList(),
     val stPresetEnabled: Boolean = false,
     val stPresetTemplate: SillyTavernPromptTemplate? = null,

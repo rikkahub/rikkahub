@@ -83,7 +83,6 @@ import me.rerere.rikkahub.data.model.effectiveUserPersona
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.hasExplicitPromptOrder
 import me.rerere.rikkahub.data.model.resolvePromptOrder
-import me.rerere.rikkahub.data.model.runtimeRegexes
 import me.rerere.rikkahub.data.model.sourceLabel
 import me.rerere.rikkahub.data.model.upsertStPreset
 import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
@@ -242,7 +241,7 @@ private fun AssistantPromptContent(
                             currentAssistant = assistant,
                             payload = payload,
                             existingLorebooks = settings.lorebooks,
-                            existingSharedRegexes = settings.runtimeRegexes(),
+                            existingSharedRegexes = settings.globalRegexes,
                             includeRegexes = includeRegexes,
                         )
                         val importedLorebooks = application.lorebooks.filter { imported ->
@@ -271,7 +270,7 @@ private fun AssistantPromptContent(
                                         existing
                                     }
                                 },
-                                regexes = application.sharedRegexes,
+                                globalRegexes = application.sharedRegexes,
                             ),
                             latestAssistant,
                             nextAssistant,
@@ -318,7 +317,7 @@ private fun AssistantPromptContent(
                             )
                         }
                         Text(
-                            text = "当前预设 Regex ${settings.activeStPresetRegexes().size} 条，助手 Regex ${assistant.regexes.size} 条，关联世界书 ${linkedLorebooks.size} 本。",
+                            text = "全局 Regex ${settings.globalRegexes.size} 条，当前预设 Regex ${settings.activeStPresetRegexes().size} 条，助手 Regex ${assistant.regexes.size} 条，关联世界书 ${linkedLorebooks.size} 本。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -555,6 +554,41 @@ private fun AssistantPromptContent(
                 ) {
                     Icon(HugeIcons.Add01, null)
                 }
+            }
+        }
+
+        Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "角色 Regex 开关",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = if (assistant.regexEnabled) {
+                            "当前助手的 ${assistant.regexes.size} 条 Regex 会参与运行时处理。"
+                        } else {
+                            "当前助手的 Regex 已整体停用，列表会保留但不会参与匹配。"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = assistant.regexEnabled,
+                    onCheckedChange = { enabled ->
+                        onUpdate(assistant.copy(regexEnabled = enabled))
+                    },
+                )
             }
         }
 

@@ -76,11 +76,19 @@ fun Settings.activeStPresetTemplate(): SillyTavernPromptTemplate? {
 }
 
 fun Settings.activeStPresetRegexes(): List<AssistantRegex> {
-    return resolveStPresetState().activePreset?.regexes ?: regexes
+    val activePreset = resolveStPresetState().activePreset ?: return emptyList()
+    return if (activePreset.regexEnabled) {
+        activePreset.regexes
+    } else {
+        emptyList()
+    }
 }
 
-// Shared runtime regexes should always resolve through the active ST preset state.
-fun Settings.runtimeRegexes(): List<AssistantRegex> = activeStPresetRegexes()
+fun Settings.activeGlobalRegexes(): List<AssistantRegex> {
+    return if (globalRegexEnabled) globalRegexes else emptyList()
+}
+
+fun Settings.runtimeRegexes(): List<AssistantRegex> = activeGlobalRegexes() + activeStPresetRegexes()
 
 fun Settings.applyActiveStPresetSampling(assistant: Assistant): Assistant {
     if (!stPresetEnabled) return assistant

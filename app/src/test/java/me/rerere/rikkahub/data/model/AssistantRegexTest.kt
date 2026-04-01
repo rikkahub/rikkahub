@@ -101,7 +101,7 @@ class AssistantRegexTest {
     @Test
     fun `global and assistant regexes should be applied together in order`() {
         val settings = Settings(
-            regexes = listOf(
+            globalRegexes = listOf(
                 AssistantRegex(
                     id = Uuid.random(),
                     enabled = true,
@@ -128,6 +128,91 @@ class AssistantRegexTest {
             "foo".replaceRegexes(
                 assistant = assistant,
                 settings = settings,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
+    }
+
+    @Test
+    fun `group toggles should gate global preset and assistant regexes independently`() {
+        val globalRegex = AssistantRegex(
+            id = Uuid.random(),
+            enabled = true,
+            findRegex = "foo",
+            replaceString = "bar",
+            affectingScope = setOf(AssistantAffectScope.USER),
+        )
+        val presetRegex = AssistantRegex(
+            id = Uuid.random(),
+            enabled = true,
+            findRegex = "bar",
+            replaceString = "baz",
+            affectingScope = setOf(AssistantAffectScope.USER),
+        )
+        val assistantRegex = AssistantRegex(
+            id = Uuid.random(),
+            enabled = true,
+            findRegex = "baz",
+            replaceString = "qux",
+            affectingScope = setOf(AssistantAffectScope.USER),
+        )
+        val preset = SillyTavernPreset(
+            regexEnabled = false,
+            regexes = listOf(presetRegex),
+        )
+        val assistant = Assistant(
+            regexEnabled = false,
+            regexes = listOf(assistantRegex),
+        )
+        val settings = Settings(
+            globalRegexEnabled = false,
+            globalRegexes = listOf(globalRegex),
+            stPresets = listOf(preset),
+            selectedStPresetId = preset.id,
+        )
+
+        assertEquals(
+            "foo",
+            "foo".replaceRegexes(
+                assistant = assistant,
+                settings = settings,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
+
+        val globalOnly = settings.copy(globalRegexEnabled = true)
+        assertEquals(
+            "bar",
+            "foo".replaceRegexes(
+                assistant = assistant,
+                settings = globalOnly,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
+
+        val globalAndPreset = globalOnly.copy(
+            stPresets = listOf(preset.copy(regexEnabled = true)),
+        )
+        assertEquals(
+            "baz",
+            "foo".replaceRegexes(
+                assistant = assistant,
+                settings = globalAndPreset,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
+
+        val allEnabled = globalAndPreset
+        val assistantEnabled = assistant.copy(regexEnabled = true)
+        assertEquals(
+            "qux",
+            "foo".replaceRegexes(
+                assistant = assistantEnabled,
+                settings = allEnabled,
                 scope = AssistantAffectScope.USER,
                 phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
             )

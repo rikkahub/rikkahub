@@ -35,6 +35,7 @@ data class Assistant(
     val presetMessages: List<UIMessage> = emptyList(),
     val quickMessageIds: Set<Uuid> = emptySet(),
     val scheduledPromptTasks: List<ScheduledPromptTask> = emptyList(),
+    val regexEnabled: Boolean = true,
     val regexes: List<AssistantRegex> = emptyList(),
     val thinkingBudget: Int? = 1024,
     val maxTokens: Int? = null,
@@ -258,7 +259,11 @@ fun String.replaceRegexes(
     isEdit: Boolean = false,
     characterOverride: String? = null,
 ): String {
-    val effectiveRegexes = settings?.effectiveRegexes(assistant) ?: assistant?.regexes.orEmpty()
+    val effectiveRegexes = settings?.effectiveRegexes(assistant)
+        ?: assistant
+            ?.takeIf { it.regexEnabled }
+            ?.regexes
+            .orEmpty()
     if (effectiveRegexes.isEmpty()) return this
     return effectiveRegexes.fold(this) { acc, regex ->
         if (
@@ -306,7 +311,13 @@ fun String.replaceRegexes(
 }
 
 fun Settings.effectiveRegexes(assistant: Assistant?): List<AssistantRegex> {
-    return (runtimeRegexes() + assistant?.regexes.orEmpty())
+    return (
+        runtimeRegexes() +
+            assistant
+                ?.takeIf { it.regexEnabled }
+                ?.regexes
+                .orEmpty()
+        )
         .distinctBy { it.dedupKey() }
 }
 

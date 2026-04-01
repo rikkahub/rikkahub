@@ -11,6 +11,7 @@ import kotlin.uuid.Uuid
 data class SillyTavernPreset(
     val id: Uuid = Uuid.random(),
     val template: SillyTavernPromptTemplate = defaultSillyTavernPromptTemplate(),
+    val regexEnabled: Boolean = true,
     val regexes: List<AssistantRegex> = emptyList(),
     val sampling: SillyTavernPresetSampling = SillyTavernPresetSampling(),
     val rawPresetJson: JsonObject = buildJsonObject { },

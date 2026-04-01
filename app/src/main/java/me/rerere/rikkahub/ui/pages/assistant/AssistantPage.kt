@@ -68,7 +68,6 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Lorebook
-import me.rerere.rikkahub.data.model.runtimeRegexes
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.LuneBackdrop
@@ -99,11 +98,11 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val assistantMemoryCounts by vm.assistantMemoryCounts.collectAsStateWithLifecycle()
     var pendingImportedLorebooks by remember { mutableStateOf<List<Lorebook>>(emptyList()) }
-    var pendingImportedSharedRegexes by remember(settings) { mutableStateOf(settings.runtimeRegexes()) }
+    var pendingImportedSharedRegexes by remember(settings) { mutableStateOf(settings.globalRegexes) }
     val createState = useEditState<Assistant> {
         vm.addAssistantWithLorebooks(it, pendingImportedLorebooks, pendingImportedSharedRegexes)
         pendingImportedLorebooks = emptyList()
-        pendingImportedSharedRegexes = settings.runtimeRegexes()
+        pendingImportedSharedRegexes = settings.globalRegexes
     }
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -148,7 +147,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                             IconButton(
                                 onClick = {
                                     pendingImportedLorebooks = emptyList()
-                                    pendingImportedSharedRegexes = settings.runtimeRegexes()
+                                    pendingImportedSharedRegexes = settings.globalRegexes
                                     createState.open(Assistant())
                                 }) {
                                 Icon(HugeIcons.Add01, stringResource(R.string.assistant_page_add))
@@ -435,7 +434,7 @@ private fun AssistantCreationSheet(
         ModalBottomSheet(
             onDismissRequest = {
                 onPendingImportedLorebooksChange(emptyList())
-                onPendingImportedSharedRegexesChange(settings.runtimeRegexes())
+                onPendingImportedSharedRegexesChange(settings.globalRegexes)
                 state.dismiss()
             },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -498,7 +497,7 @@ private fun AssistantCreationSheet(
                     TextButton(
                         onClick = {
                             onPendingImportedLorebooksChange(emptyList())
-                            onPendingImportedSharedRegexesChange(settings.runtimeRegexes())
+                            onPendingImportedSharedRegexesChange(settings.globalRegexes)
                             state.dismiss()
                         }) {
                         Text(stringResource(R.string.assistant_page_cancel))

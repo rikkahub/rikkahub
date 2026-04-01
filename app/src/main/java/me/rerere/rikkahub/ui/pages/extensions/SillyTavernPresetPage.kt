@@ -222,6 +222,36 @@ private fun SillyTavernPresetPageContent(
                             },
                         )
                     }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = "全局 Regex",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = if (settings.globalRegexEnabled) {
+                                    "${settings.globalRegexes.size} 条全局规则会参与所有助手的运行时处理。"
+                                } else {
+                                    "全局规则已整体停用，但列表和顺序会保留。"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = settings.globalRegexEnabled,
+                            onCheckedChange = { enabled ->
+                                onUpdate(settings.copy(globalRegexEnabled = enabled))
+                            },
+                        )
+                    }
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -292,13 +322,67 @@ private fun SillyTavernPresetPageContent(
             item {
                 PresetSelectionCard(
                     preset = selectedPreset,
+                    globalRegexCount = settings.globalRegexes.size,
+                    globalRegexEnabled = settings.globalRegexEnabled,
                     presetCount = presets.size,
                     onManageLibrary = { showLibrarySheet = true },
                 )
             }
         }
 
+        item {
+            RegexEditorSection(
+                regexes = settings.globalRegexes,
+                onUpdate = { regexes ->
+                    onUpdate(settings.copy(globalRegexes = regexes))
+                },
+                title = "全局 Regex",
+                description = "总是先于预设和角色 Regex 执行。适合通用清洗、统一替换和跨助手共享规则。",
+            )
+        }
+
         selectedPreset?.let { preset ->
+            item {
+                Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = "当前预设 Regex",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(
+                                text = if (preset.regexEnabled) {
+                                    "切换到该预设时，会自动带上它自己的 ${preset.regexes.size} 条 Regex。"
+                                } else {
+                                    "该预设的 Regex 已整体停用，切换预设时不会自动参与运行时处理。"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = preset.regexEnabled,
+                            onCheckedChange = { enabled ->
+                                onUpdate(
+                                    settings.upsertStPreset(
+                                        preset.copy(regexEnabled = enabled),
+                                        select = true,
+                                    )
+                                )
+                            },
+                        )
+                    }
+                }
+            }
             item {
                 SillyTavernPresetEditorCard(
                     template = preset.template,
@@ -422,6 +506,13 @@ private fun SillyTavernPresetPageContent(
                             PresetLibraryCard(
                                 preset = preset,
                                 selected = preset.id == settings.selectedStPresetId,
+                                onToggleRegex = { enabled ->
+                                    onUpdate(
+                                        settings.upsertStPreset(
+                                            preset.copy(regexEnabled = enabled),
+                                        )
+                                    )
+                                },
                                 onSelect = {
                                     onUpdate(settings.selectStPreset(preset.id))
                                     showLibrarySheet = false
@@ -439,6 +530,8 @@ private fun SillyTavernPresetPageContent(
 @Composable
 private fun PresetSelectionCard(
     preset: SillyTavernPreset?,
+    globalRegexCount: Int,
+    globalRegexEnabled: Boolean,
     presetCount: Int,
     onManageLibrary: () -> Unit,
 ) {
@@ -463,12 +556,24 @@ private fun PresetSelectionCard(
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
-                    text = stringResource(
-                        R.string.prompt_page_st_preset_current_card_summary,
-                        preset.regexes.size,
-                        preset.sampling.configuredValueCount(),
-                        preset.template.resolvePromptOrder().size,
-                    ),
+                    text = buildString {
+                        append(
+                            stringResource(
+                                R.string.prompt_page_st_preset_current_card_summary,
+                                preset.regexes.size,
+                                preset.sampling.configuredValueCount(),
+                                preset.template.resolvePromptOrder().size,
+                            )
+                        )
+                        append(" · 全局 Regex ")
+                        append(globalRegexCount)
+                        if (!globalRegexEnabled) {
+                            append("（已停用）")
+                        }
+                        if (!preset.regexEnabled) {
+                            append(" · 当前预设 Regex 已停用")
+                        }
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -497,6 +602,7 @@ private fun PresetSelectionCard(
 private fun PresetLibraryCard(
     preset: SillyTavernPreset,
     selected: Boolean,
+    onToggleRegex: (Boolean) -> Unit,
     onSelect: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -542,6 +648,9 @@ private fun PresetLibraryCard(
                                 preset.regexes.size,
                             )
                         )
+                        if (!preset.regexEnabled) {
+                            append(" · Regex 已停用")
+                        }
                         val samplingCount = preset.sampling.configuredValueCount()
                         if (samplingCount > 0) {
                             append(
@@ -554,6 +663,20 @@ private fun PresetLibraryCard(
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Regex",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Switch(
+                    checked = preset.regexEnabled,
+                    onCheckedChange = onToggleRegex,
                 )
             }
             IconButton(onClick = { showExportDialog = true }) {
