@@ -328,6 +328,9 @@ fun SillyTavernPresetEditorCard(
                     label = { Text(stringResource(R.string.prompt_page_st_preset_editor_new_group_chat_prompt)) },
                     minLines = 2,
                 )
+                StEditorHint(
+                    text = stringResource(R.string.prompt_page_st_preset_editor_group_runtime_desc)
+                )
 
                 OutlinedTextField(
                     value = editorTemplate.newExampleChatPrompt,
@@ -364,6 +367,9 @@ fun SillyTavernPresetEditorCard(
                     label = { Text(stringResource(R.string.prompt_page_st_preset_editor_group_nudge_prompt)) },
                     minLines = 2,
                 )
+                StEditorHint(
+                    text = stringResource(R.string.prompt_page_st_preset_editor_group_runtime_desc)
+                )
 
                 OutlinedTextField(
                     value = editorTemplate.impersonationPrompt,
@@ -399,6 +405,9 @@ fun SillyTavernPresetEditorCard(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.prompt_page_st_preset_editor_assistant_impersonation)) },
                     minLines = 2,
+                )
+                StEditorHint(
+                    text = stringResource(R.string.prompt_page_st_preset_editor_impersonation_runtime_desc)
                 )
 
                 OutlinedTextField(
@@ -673,6 +682,15 @@ private fun StFeatureGuideRow(
 }
 
 @Composable
+private fun StEditorHint(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+@Composable
 private fun StPromptListItem(
     prompt: SillyTavernPromptItem,
     orderItem: SillyTavernPromptOrderItem,
@@ -742,12 +760,12 @@ private fun StPromptListItem(
                 ) {
                     if (prompt.marker) {
                         Tag(type = TagType.WARNING) {
-                            Text(stringResource(R.string.prompt_page_st_preset_editor_marker))
+                            Text(stringResource(R.string.prompt_page_st_preset_editor_marker_metadata_tag))
                         }
                     }
                     if (prompt.systemPrompt) {
                         Tag(type = TagType.INFO) {
-                            Text(stringResource(R.string.assistant_page_system_prompt))
+                            Text(stringResource(R.string.prompt_page_st_preset_editor_system_prompt_metadata_tag))
                         }
                     }
                     if (prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE) {
@@ -890,6 +908,9 @@ private fun StPromptEditSheet(
                     label = { Text(stringResource(R.string.prompt_page_st_preset_editor_display_name)) },
                     singleLine = true,
                 )
+                StEditorHint(
+                    text = stringResource(R.string.prompt_page_st_preset_editor_display_name_desc)
+                )
 
                 Select(
                     options = MessageRole.entries.toList(),
@@ -903,6 +924,9 @@ private fun StPromptEditSheet(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     optionToString = { stringResource(stRoleLabelRes(it)) }
+                )
+                StEditorHint(
+                    text = stringResource(R.string.prompt_page_st_preset_editor_role_desc)
                 )
 
                 Select(
@@ -995,33 +1019,43 @@ private fun StPromptEditSheet(
                         }
                     }
                 }
+                StEditorHint(
+                    text = stringResource(R.string.prompt_page_st_preset_editor_trigger_types_desc)
+                )
+
+                if (state.prompt.systemPrompt || state.prompt.marker) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.prompt_page_st_preset_editor_compat_metadata_title),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (state.prompt.systemPrompt) {
+                                Tag(type = TagType.INFO) {
+                                    Text(stringResource(R.string.prompt_page_st_preset_editor_system_prompt_metadata_label))
+                                }
+                            }
+                            if (state.prompt.marker) {
+                                Tag(type = TagType.WARNING) {
+                                    Text(stringResource(R.string.prompt_page_st_preset_editor_marker_metadata_label))
+                                }
+                            }
+                        }
+                        StEditorHint(
+                            text = stringResource(R.string.prompt_page_st_preset_editor_compat_flags_desc)
+                        )
+                    }
+                }
 
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    StCheckboxField(
-                        label = stringResource(R.string.assistant_page_system_prompt),
-                        checked = state.prompt.systemPrompt,
-                        onCheckedChange = { checked ->
-                            onEdit(
-                                state.copy(
-                                    prompt = state.prompt.copy(systemPrompt = checked)
-                                )
-                            )
-                        }
-                    )
-                    StCheckboxField(
-                        label = stringResource(R.string.prompt_page_st_preset_editor_marker),
-                        checked = state.prompt.marker,
-                        onCheckedChange = { checked ->
-                            onEdit(
-                                state.copy(
-                                    prompt = state.prompt.copy(marker = checked)
-                                )
-                            )
-                        }
-                    )
                     StCheckboxField(
                         label = stringResource(R.string.prompt_page_st_preset_editor_no_override),
                         checked = state.prompt.forbidOverrides,
@@ -1281,7 +1315,7 @@ private fun buildCustomStPrompt(
         identifier = identifier,
         name = nameForIndex(index),
         role = MessageRole.SYSTEM,
-        systemPrompt = true,
+        systemPrompt = false,
     )
 }
 
@@ -1291,7 +1325,7 @@ private fun defaultStPromptDefinition(identifier: String): SillyTavernPromptItem
             identifier = identifier,
             name = identifier.replaceFirstChar { it.uppercase() },
             role = MessageRole.SYSTEM,
-            systemPrompt = true,
+            systemPrompt = false,
         )
 }
 
