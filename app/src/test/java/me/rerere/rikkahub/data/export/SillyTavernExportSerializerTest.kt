@@ -16,8 +16,10 @@ import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.SillyTavernPresetSampling
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
+import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.findPrompt
+import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.ui.pages.assistant.detail.parseAssistantImportFromJson
 import me.rerere.rikkahub.ui.pages.assistant.detail.toSillyTavernPreset
 import org.junit.Assert.assertEquals
@@ -305,6 +307,263 @@ class SillyTavernExportSerializerTest {
                 ?.jsonPrimitive
                 ?.content
         )
+    }
+
+    @Test
+    fun `preset export should use edited prompt order for imported presets`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Edited Order Preset",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "name": "Main Prompt",
+                      "role": "system",
+                      "content": "Main"
+                    },
+                    {
+                      "identifier": "jailbreak",
+                      "name": "Jailbreak Prompt",
+                      "role": "system",
+                      "content": "Jailbreak"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100001,
+                      "xiaobai_ext": {
+                        "slot": 7
+                      },
+                      "order": [
+                        { "identifier": "main", "enabled": true },
+                        { "identifier": "jailbreak", "enabled": false, "custom_order_field": "keep-me" }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            sourceName = "edited-order",
+        )
+
+        val preset = payload.toSillyTavernPreset()
+        val exported = Json.parseToJsonElement(
+            SillyTavernPresetExportSerializer.exportToJson(
+                preset.copy(
+                    template = preset.template.withPromptOrder(
+                        listOf(
+                            SillyTavernPromptOrderItem(identifier = "jailbreak", enabled = true),
+                            SillyTavernPromptOrderItem(identifier = "main", enabled = false),
+                        )
+                    )
+                )
+            )
+        ).jsonObject
+
+        val exportedOrderList = exported["prompt_order"]
+            ?.jsonArray
+            ?.first()
+            ?.jsonObject
+        val exportedOrder = exportedOrderList
+            ?.get("order")
+            ?.jsonArray
+            .orEmpty()
+
+        assertEquals("7", exportedOrderList?.get("xiaobai_ext")?.jsonObject?.get("slot")?.jsonPrimitive?.content)
+        assertEquals("jailbreak", exportedOrder[0].jsonObject["identifier"]?.jsonPrimitive?.content)
+        assertEquals("true", exportedOrder[0].jsonObject["enabled"]?.jsonPrimitive?.content)
+        assertEquals("keep-me", exportedOrder[0].jsonObject["custom_order_field"]?.jsonPrimitive?.content)
+        assertEquals("main", exportedOrder[1].jsonObject["identifier"]?.jsonPrimitive?.content)
+        assertEquals("false", exportedOrder[1].jsonObject["enabled"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `preset export should drop deleted prompt definitions from imported presets`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Deleted Prompt Preset",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "name": "Main Prompt",
+                      "role": "system",
+                      "content": "Main",
+                      "custom_prompt_field": "keep-me"
+                    },
+                    {
+                      "identifier": "deleted",
+                      "name": "Deleted Prompt",
+                      "role": "system",
+                      "content": "Remove me",
+                      "custom_prompt_field": "drop-me"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100001,
+                      "order": [
+                        { "identifier": "main", "enabled": true },
+                        { "identifier": "deleted", "enabled": true }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            sourceName = "deleted-prompt",
+        )
+
+        val preset = payload.toSillyTavernPreset()
+        val editedTemplate = preset.template.copy(
+            prompts = preset.template.prompts.filterNot { it.identifier == "deleted" },
+        ).withPromptOrder(
+            listOf(SillyTavernPromptOrderItem(identifier = "main", enabled = true))
+        )
+        val exported = Json.parseToJsonElement(
+            SillyTavernPresetExportSerializer.exportToJson(
+                preset.copy(template = editedTemplate)
+            )
+        ).jsonObject
+
+        val exportedPrompts = exported["prompts"]?.jsonArray.orEmpty()
+        val exportedOrder = exported["prompt_order"]
+            ?.jsonArray
+            ?.first()
+            ?.jsonObject
+            ?.get("order")
+            ?.jsonArray
+            .orEmpty()
+
+        assertEquals(1, exportedPrompts.size)
+        assertEquals("main", exportedPrompts.first().jsonObject["identifier"]?.jsonPrimitive?.content)
+        assertEquals("keep-me", exportedPrompts.first().jsonObject["custom_prompt_field"]?.jsonPrimitive?.content)
+        assertEquals(1, exportedOrder.size)
+        assertEquals("main", exportedOrder.first().jsonObject["identifier"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `preset export should clear stop strings when imported preset removes them`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Cleared Stops Preset",
+                  "enable_stop_string": true,
+                  "stop_string": "User:",
+                  "stop_strings": ["User:", "Assistant:"],
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "name": "Main Prompt",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100001,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "SPreset": {
+                      "ChatSquash": {
+                        "enable_stop_string": true,
+                        "stop_string": "Legacy:"
+                      }
+                    }
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "cleared-stops",
+        )
+
+        val preset = payload.toSillyTavernPreset()
+        val exportedJson = SillyTavernPresetExportSerializer.exportToJson(
+            preset.copy(
+                sampling = preset.sampling.copy(stopSequences = emptyList())
+            )
+        )
+        val exported = Json.parseToJsonElement(exportedJson).jsonObject
+        val chatSquash = exported["extensions"]
+            ?.jsonObject
+            ?.get("SPreset")
+            ?.jsonObject
+            ?.get("ChatSquash")
+            ?.jsonObject
+
+        assertEquals("false", exported["enable_stop_string"]?.jsonPrimitive?.content)
+        assertNull(exported["stop_string"])
+        assertNull(exported["stop_strings"])
+        assertEquals("false", chatSquash?.get("enable_stop_string")?.jsonPrimitive?.content)
+        assertNull(chatSquash?.get("stop_string"))
+        assertTrue(
+            parseAssistantImportFromJson(exportedJson, sourceName = "cleared-stops-roundtrip")
+                .assistant
+                .stopSequences
+                .isEmpty()
+        )
+    }
+
+    @Test
+    fun `preset export should clear deleted regex scripts from extensions`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Cleared Regex Preset",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "name": "Main Prompt",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100001,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "regex_scripts": [
+                      {
+                        "scriptName": "Preset Regex",
+                        "findRegex": "alpha",
+                        "replaceString": "beta",
+                        "placement": [2]
+                      }
+                    ],
+                    "tavern_helper": {
+                      "enabled": true
+                    }
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "cleared-regex",
+        )
+
+        val preset = payload.toSillyTavernPreset()
+        val exportedJson = SillyTavernPresetExportSerializer.exportToJson(
+            preset.copy(regexes = emptyList())
+        )
+        val exported = Json.parseToJsonElement(exportedJson).jsonObject
+
+        assertNull(exported["extensions"]?.jsonObject?.get("regex_scripts"))
+        assertEquals(
+            "true",
+            exported["extensions"]
+                ?.jsonObject
+                ?.get("tavern_helper")
+                ?.jsonObject
+                ?.get("enabled")
+                ?.jsonPrimitive
+                ?.content
+        )
+        assertTrue(parseAssistantImportFromJson(exportedJson, sourceName = "cleared-regex-roundtrip").regexes.isEmpty())
     }
 
     @Test

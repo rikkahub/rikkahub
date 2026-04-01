@@ -11,10 +11,10 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
+import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImportKind
@@ -55,6 +55,7 @@ object SillyTavernPresetExportSerializer : ExportSerializer<SillyTavernPreset> {
 
 private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
     val template = data.template
+    val resolvedPromptOrder = template.resolvePromptOrder()
     val inlinePromptRegexesByIdentifier = data.regexes
         .filter { it.shouldExportAsInlinePrompt() }
         .groupBy { it.sourceRef }
@@ -93,8 +94,10 @@ private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
         root["stop_strings"] = buildJsonArray {
             data.sampling.stopSequences.forEach { add(JsonPrimitive(it)) }
         }
-    } else if (data.rawPresetJson.isEmpty()) {
+    } else {
         root["enable_stop_string"] = JsonPrimitive(false)
+        root.remove("stop_string")
+        root.remove("stop_strings")
     }
     if (data.sampling.openAIReasoningEffort.isNotBlank()) {
         root["reasoning_effort"] = JsonPrimitive(data.sampling.openAIReasoningEffort)
@@ -109,13 +112,16 @@ private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
         preset = data,
         inlinePromptRegexesByIdentifier = inlinePromptRegexesByIdentifier,
     )
-    root["prompt_order"] = data.rawPresetJson["prompt_order"]?.jsonArrayOrNull()
-        ?: buildCanonicalPromptOrder(template.resolvePromptOrder())
+    root["prompt_order"] = buildPresetPromptOrder(
+        rawPromptOrder = data.rawPresetJson["prompt_order"]?.jsonArrayOrNull(),
+        orderItems = resolvedPromptOrder,
+    )
 
     val extensions = buildPresetExtensions(
         preset = data,
         scriptRegexes = scriptRegexes,
         hasInlinePromptRegexes = inlinePromptRegexesByIdentifier.isNotEmpty(),
+        hasStopSequences = data.sampling.stopSequences.isNotEmpty(),
     )
     if (extensions != null) {
         root["extensions"] = extensions
@@ -137,8 +143,12 @@ private fun buildPresetPrompts(
     val consumedRawPromptIndexes = mutableSetOf<Int>()
 
     return buildJsonArray {
-        preset.template.prompts.forEach { prompt ->
-            val rawPromptIndex = rawPrompts.indexOfFirstUnusedPrompt(prompt.identifier, consumedRawPromptIndexes)
+        preset.template.prompts.forEachIndexed { promptIndex, prompt ->
+            val rawPromptIndex = rawPrompts.indexOfFirstUnusedPrompt(
+                prompt = prompt,
+                promptIndex = promptIndex,
+                consumedIndexes = consumedRawPromptIndexes,
+            )
             val rawPrompt = rawPrompts.getOrNull(rawPromptIndex)
             if (rawPromptIndex >= 0) {
                 consumedRawPromptIndexes += rawPromptIndex
@@ -150,12 +160,6 @@ private fun buildPresetPrompts(
                     inlineRegexes = inlinePromptRegexesByIdentifier[prompt.identifier].orEmpty(),
                 )
             )
-        }
-
-        rawPrompts.forEachIndexed { index, rawPrompt ->
-            if (index !in consumedRawPromptIndexes) {
-                add(rawPrompt)
-            }
         }
     }
 }
@@ -190,21 +194,66 @@ private fun buildPresetPrompt(
     return JsonObject(updated)
 }
 
+private fun buildPresetPromptOrder(
+    rawPromptOrder: JsonArray?,
+    orderItems: List<SillyTavernPromptOrderItem>,
+): JsonArray {
+    val rawOrderLists = rawPromptOrder
+        ?.mapNotNull { it.jsonObjectOrNull() }
+        .orEmpty()
+    if (rawOrderLists.isEmpty()) {
+        return buildCanonicalPromptOrder(orderItems)
+    }
+
+    return JsonArray(
+        rawOrderLists.map { rawOrderList ->
+            val updated = LinkedHashMap<String, JsonElement>(rawOrderList)
+            updated["order"] = buildPromptOrderEntries(
+                rawOrderItems = rawOrderList["order"]?.jsonArrayOrNull()
+                    ?.mapNotNull { it.jsonObjectOrNull() }
+                    .orEmpty(),
+                orderItems = orderItems,
+            )
+            JsonObject(updated)
+        }
+    )
+}
+
 private fun buildCanonicalPromptOrder(
-    orderItems: List<me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem>,
+    orderItems: List<SillyTavernPromptOrderItem>,
 ): JsonArray {
     return buildJsonArray {
         add(buildJsonObject {
             put("character_id", 100001)
-            putJsonArray("order") {
-                orderItems.forEach { item ->
-                    add(buildJsonObject {
-                        put("identifier", item.identifier)
-                        put("enabled", item.enabled)
-                    })
-                }
-            }
+            put("order", buildPromptOrderEntries(orderItems = orderItems))
         })
+    }
+}
+
+private fun buildPromptOrderEntries(
+    rawOrderItems: List<JsonObject> = emptyList(),
+    orderItems: List<SillyTavernPromptOrderItem>,
+): JsonArray {
+    val consumedRawOrderIndexes = mutableSetOf<Int>()
+
+    return buildJsonArray {
+        orderItems.forEachIndexed { orderIndex, item ->
+            val rawOrderIndex = rawOrderItems.indexOfFirstUnusedPromptOrder(
+                identifier = item.identifier,
+                orderIndex = orderIndex,
+                consumedIndexes = consumedRawOrderIndexes,
+            )
+            val rawOrder = rawOrderItems.getOrNull(rawOrderIndex)
+            if (rawOrderIndex >= 0) {
+                consumedRawOrderIndexes += rawOrderIndex
+            }
+
+            add(buildJsonObject {
+                (rawOrder ?: emptyMap()).forEach { (key, value) -> put(key, value) }
+                put("identifier", item.identifier)
+                put("enabled", item.enabled)
+            })
+        }
     }
 }
 
@@ -212,6 +261,7 @@ private fun buildPresetExtensions(
     preset: SillyTavernPreset,
     scriptRegexes: List<AssistantRegex>,
     hasInlinePromptRegexes: Boolean,
+    hasStopSequences: Boolean,
 ): JsonObject? {
     val updated = LinkedHashMap<String, JsonElement>(
         preset.rawPresetJson["extensions"]?.jsonObjectOrNull() ?: emptyMap()
@@ -223,23 +273,71 @@ private fun buildPresetExtensions(
                 add(buildRegexScript(regex))
             }
         }
+    } else {
+        updated.remove("regex_scripts")
     }
     if (hasInlinePromptRegexes) {
         updated[RIKKAHUB_INLINE_PROMPT_REGEXES_KEY] = JsonPrimitive(true)
+    } else {
+        updated.remove(RIKKAHUB_INLINE_PROMPT_REGEXES_KEY)
+    }
+    if (!hasStopSequences) {
+        updated.clearChatSquashStopStrings()
     }
 
     return updated.takeIf { it.isNotEmpty() }?.let(::JsonObject)
 }
 
 private fun List<JsonObject>.indexOfFirstUnusedPrompt(
-    identifier: String,
+    prompt: SillyTavernPromptItem,
+    promptIndex: Int,
     consumedIndexes: Set<Int>,
 ): Int {
-    if (identifier.isBlank()) return -1
-    return indexOfFirst { index, prompt ->
-        index !in consumedIndexes &&
-            prompt["identifier"]?.jsonPrimitiveOrNull?.contentOrNull == identifier
+    if (prompt.identifier.isNotBlank()) {
+        return indexOfFirst { index, rawPrompt ->
+            index !in consumedIndexes &&
+                rawPrompt["identifier"]?.jsonPrimitiveOrNull?.contentOrNull == prompt.identifier
+        }
     }
+
+    return indexOfFirst { index, rawPrompt ->
+        index !in consumedIndexes &&
+            rawPrompt["identifier"]?.jsonPrimitiveOrNull?.contentOrNull.isNullOrBlank() &&
+            index >= promptIndex
+    }
+}
+
+private fun List<JsonObject>.indexOfFirstUnusedPromptOrder(
+    identifier: String,
+    orderIndex: Int,
+    consumedIndexes: Set<Int>,
+): Int {
+    if (identifier.isNotBlank()) {
+        return indexOfFirst { index, orderItem ->
+            index !in consumedIndexes &&
+                orderItem["identifier"]?.jsonPrimitiveOrNull?.contentOrNull == identifier
+        }
+    }
+
+    return indexOfFirst { index, orderItem ->
+        index !in consumedIndexes &&
+            orderItem["identifier"]?.jsonPrimitiveOrNull?.contentOrNull.isNullOrBlank() &&
+            index >= orderIndex
+    }
+}
+
+private fun MutableMap<String, JsonElement>.clearChatSquashStopStrings() {
+    val sPreset = this["SPreset"]?.jsonObjectOrNull() ?: return
+    val chatSquash = sPreset["ChatSquash"]?.jsonObjectOrNull() ?: return
+
+    val updatedChatSquash = LinkedHashMap<String, JsonElement>(chatSquash).apply {
+        this["enable_stop_string"] = JsonPrimitive(false)
+        remove("stop_string")
+    }
+    val updatedSPreset = LinkedHashMap<String, JsonElement>(sPreset).apply {
+        this["ChatSquash"] = JsonObject(updatedChatSquash)
+    }
+    this["SPreset"] = JsonObject(updatedSPreset)
 }
 
 private inline fun <T> List<T>.indexOfFirst(predicate: (Int, T) -> Boolean): Int {
