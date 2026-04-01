@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -342,6 +343,17 @@ private fun ChatPageContent(
     val currentDraftText = inputState.textContent.text.toString()
     val historyUserName = setting.effectiveUserName().ifBlank { "User" }
     val historyAssistantName = setting.resolveHistoryAssistantName(conversation)
+    val chatHistorySnapshot = remember(
+        conversation.id,
+        conversation.messageNodes,
+        historyUserName,
+        historyAssistantName,
+    ) {
+        conversation.toChatHistorySnapshot(
+            userName = historyUserName,
+            assistantName = historyAssistantName,
+        )
+    }
 
     fun submitDraft(
         answer: Boolean,
@@ -407,12 +419,10 @@ private fun ChatPageContent(
 
     SideEffect {
         chatComposerBridge.updateDraftTextSnapshot(currentDraftText)
-        chatHistoryBridge.updateSnapshot(
-            conversation.toChatHistorySnapshot(
-                userName = historyUserName,
-                assistantName = historyAssistantName,
-            )
-        )
+    }
+
+    LaunchedEffect(chatHistoryBridge, chatHistorySnapshot) {
+        chatHistoryBridge.updateSnapshot(chatHistorySnapshot)
     }
 
     DisposableEffect(chatComposerBridge, chatHistoryBridge) {

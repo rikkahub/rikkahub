@@ -2,8 +2,12 @@ package me.rerere.rikkahub.utils
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.SequenceInputStream
 import java.util.Base64
+import java.util.Collections
 import kotlin.text.Charsets.ISO_8859_1
 
 class ImageUtilsTest {
@@ -56,25 +60,69 @@ class ImageUtilsTest {
         assertEquals(json, extracted)
     }
 
+    @Test
+    fun `stream extractor should skip large png chunks without buffering whole file`() {
+        val json = """{"spec":"chara_card_v2","data":{"name":"Streamed"}}"""
+        val largeChunkSize = 5 * 1024 * 1024
+        val stream = SequenceInputStream(
+            Collections.enumeration(
+                listOf(
+                    ByteArrayInputStream(PNG_SIGNATURE),
+                    ByteArrayInputStream(chunkHeader("IDAT", largeChunkSize)),
+                    ZeroInputStream(largeChunkSize),
+                    ByteArrayInputStream(EMPTY_CRC),
+                    ByteArrayInputStream(buildChunk("tEXt", ("ccv3\u0000$json").toByteArray(ISO_8859_1))),
+                    ByteArrayInputStream(buildChunk("IEND", ByteArray(0))),
+                )
+            )
+        )
+
+        val extracted = ImageUtils.extractTavernCharacterMetaFromPngStream(stream)
+
+        assertEquals(json, extracted)
+    }
+
     private fun buildPngWithTextChunks(vararg chunks: Pair<String, String>): ByteArray {
         val output = ByteArrayOutputStream()
         output.write(PNG_SIGNATURE)
         chunks.forEach { (keyword, text) ->
-            writeChunk(
-                output = output,
-                type = "tEXt",
-                data = (keyword + "\u0000" + text).toByteArray(ISO_8859_1),
-            )
+            output.write(buildChunk("tEXt", (keyword + "\u0000" + text).toByteArray(ISO_8859_1)))
         }
-        writeChunk(output = output, type = "IEND", data = ByteArray(0))
+        output.write(buildChunk("IEND", ByteArray(0)))
         return output.toByteArray()
     }
 
-    private fun writeChunk(output: ByteArrayOutputStream, type: String, data: ByteArray) {
-        output.write(intToBytes(data.size))
-        output.write(type.toByteArray(Charsets.US_ASCII))
-        output.write(data)
-        output.write(byteArrayOf(0, 0, 0, 0))
+    private fun buildChunk(type: String, data: ByteArray): ByteArray {
+        return ByteArrayOutputStream().apply {
+            write(chunkHeader(type, data.size))
+            write(data)
+            write(EMPTY_CRC)
+        }.toByteArray()
+    }
+
+    private fun chunkHeader(type: String, dataSize: Int): ByteArray {
+        return ByteArrayOutputStream().apply {
+            write(intToBytes(dataSize))
+            write(type.toByteArray(Charsets.US_ASCII))
+        }.toByteArray()
+    }
+
+    private class ZeroInputStream(
+        private var remaining: Int,
+    ) : InputStream() {
+        override fun read(): Int {
+            if (remaining <= 0) return -1
+            remaining--
+            return 0
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (remaining <= 0) return -1
+            val toRead = minOf(length, remaining)
+            buffer.fill(0.toByte(), offset, offset + toRead)
+            remaining -= toRead
+            return toRead
+        }
     }
 
     private fun intToBytes(value: Int): ByteArray {
@@ -87,6 +135,7 @@ class ImageUtilsTest {
     }
 
     companion object {
+        private val EMPTY_CRC = byteArrayOf(0, 0, 0, 0)
         private val PNG_SIGNATURE = byteArrayOf(
             0x89.toByte(),
             0x50,

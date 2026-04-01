@@ -13,7 +13,9 @@ import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import kotlin.text.Charsets.ISO_8859_1
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.zip.CRC32
 
 /**
@@ -235,9 +237,8 @@ object ImageUtils {
      * @return Result<String> 包含角色元数据的Result对象
      */
     fun getTavernCharacterMeta(context: Context, uri: Uri): Result<String> = runCatching {
-        val pngBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        context.contentResolver.openInputStream(uri)?.use(::extractTavernCharacterMetaFromPngStream)
             ?: error("Failed to read image data")
-        extractTavernCharacterMetaFromPngBytes(pngBytes)
     }
 
     internal fun embedTavernCharacterMetaIntoPngBytes(
@@ -291,24 +292,31 @@ object ImageUtils {
     }
 
     internal fun extractTavernCharacterMetaFromPngBytes(bytes: ByteArray): String {
-        require(bytes.size >= PNG_SIGNATURE.size) { "Invalid PNG data" }
-        require(bytes.copyOfRange(0, PNG_SIGNATURE.size).contentEquals(PNG_SIGNATURE)) {
+        return ByteArrayInputStream(bytes).use(::extractTavernCharacterMetaFromPngStream)
+    }
+
+    internal fun extractTavernCharacterMetaFromPngStream(inputStream: InputStream): String {
+        val signature = ByteArray(PNG_SIGNATURE.size)
+        readFully(inputStream, signature)
+        require(signature.contentEquals(PNG_SIGNATURE)) {
             "No PNG signature found, please check if the image is a character card"
         }
 
-        var offset = PNG_SIGNATURE.size
+        val chunkTypeBytes = ByteArray(PNG_CHUNK_TYPE_SIZE)
+        val skipBuffer = ByteArray(PNG_STREAM_BUFFER_SIZE)
         var legacyEncoded: String? = null
         val textChunks = linkedMapOf<String, String>()
 
-        while (offset + 12 <= bytes.size) {
-            val length = readPngInt(bytes, offset)
-            val dataStart = offset + 8
-            val dataEnd = dataStart + length
-            require(length >= 0 && dataEnd + 4 <= bytes.size) { "Invalid PNG chunk length" }
+        while (true) {
+            val length = readPngInt(inputStream)
+            require(length >= 0) { "Invalid PNG chunk length" }
+            readFully(inputStream, chunkTypeBytes)
 
-            val chunkType = bytes.decodeToString(offset + 4, offset + 8)
+            val chunkType = chunkTypeBytes.decodeToString()
             if (chunkType == "tEXt") {
-                parsePngTextChunk(bytes.copyOfRange(dataStart, dataEnd))?.let { (keyword, text) ->
+                val chunkData = ByteArray(length)
+                readFully(inputStream, chunkData)
+                parsePngTextChunk(chunkData)?.let { (keyword, text) ->
                     val normalizedKeyword = keyword.trim().lowercase()
                     if (normalizedKeyword.isNotBlank()) {
                         textChunks[normalizedKeyword] = text
@@ -317,9 +325,11 @@ object ImageUtils {
                         legacyEncoded = LEGACY_CHARA_REGEX.find(text)?.groupValues?.get(1)
                     }
                 }
+            } else {
+                skipFully(inputStream, length, skipBuffer)
             }
 
-            offset = dataEnd + 4
+            skipFully(inputStream, PNG_CRC_SIZE, skipBuffer)
             if (chunkType == "IEND") {
                 break
             }
@@ -336,6 +346,36 @@ object ImageUtils {
             ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
             ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
             (bytes[offset + 3].toInt() and 0xFF)
+    }
+
+    private fun readPngInt(inputStream: InputStream): Int {
+        val buffer = ByteArray(Int.SIZE_BYTES)
+        readFully(inputStream, buffer)
+        return readPngInt(buffer, 0)
+    }
+
+    private fun readFully(inputStream: InputStream, buffer: ByteArray) {
+        var offset = 0
+        while (offset < buffer.size) {
+            val read = inputStream.read(buffer, offset, buffer.size - offset)
+            require(read >= 0) { "Unexpected EOF while reading PNG data" }
+            offset += read
+        }
+    }
+
+    private fun skipFully(
+        inputStream: InputStream,
+        byteCount: Int,
+        skipBuffer: ByteArray,
+    ) {
+        require(byteCount >= 0) { "Invalid PNG chunk length" }
+
+        var remaining = byteCount
+        while (remaining > 0) {
+            val read = inputStream.read(skipBuffer, 0, minOf(skipBuffer.size, remaining))
+            require(read >= 0) { "Unexpected EOF while reading PNG data" }
+            remaining -= read
+        }
     }
 
     private fun buildPngTextChunk(keyword: String, text: String): ByteArray {
@@ -406,4 +446,7 @@ object ImageUtils {
 
     private val LEGACY_CHARA_REGEX = Regex("""\[chara:\s*(.+?)]""", setOf(RegexOption.IGNORE_CASE))
     private val TAVERN_CHARACTER_META_KEYS = setOf("ccv3", "chara")
+    private const val PNG_CHUNK_TYPE_SIZE = 4
+    private const val PNG_CRC_SIZE = 4
+    private const val PNG_STREAM_BUFFER_SIZE = 8 * 1024
 }
