@@ -105,6 +105,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.appTempFolder
 import me.rerere.hugeicons.HugeIcons
@@ -468,6 +469,9 @@ fun ChatInput(
                                         onUpdateAssistant(assistant.copy(thinkingBudget = it))
                                     },
                                     onlyIcon = true,
+                                    supportedLevels = ModelRegistry.SUPPORTED_REASONING_LEVELS.getData(
+                                        model.modelId
+                                    ),
                                 )
                             }
 

@@ -1,5 +1,6 @@
 package me.rerere.ai.registry
 
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ModelAbility
 
@@ -418,6 +419,65 @@ object ModelRegistry {
         buildList {
             if (ModelAbility.TOOL in abilities) add(ModelAbility.TOOL)
             if (ModelAbility.REASONING in abilities) add(ModelAbility.REASONING)
+        }
+    }
+
+    /**
+     * Returns the list of supported [ReasoningLevel] values for a given model.
+     * Different models support different subsets of reasoning effort levels.
+     * See: https://github.com/rikkahub/rikkahub/issues/1024
+     */
+    val SUPPORTED_REASONING_LEVELS = ModelData { modelId ->
+        when {
+            // GPT-5.2+: supports none/low/medium/high/xhigh
+            GPT_5_2.match(modelId) || GPT_5_3.match(modelId) ||
+                GPT_5_4.match(modelId) || GPT_5_4_MINI.match(modelId) ||
+                GPT_5_4_NANO.match(modelId) ->
+                listOf(
+                    ReasoningLevel.OFF, ReasoningLevel.AUTO,
+                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM,
+                    ReasoningLevel.HIGH, ReasoningLevel.XHIGH
+                )
+
+            // GPT-5.1: supports none/low/medium/high
+            GPT_5_1.match(modelId) ->
+                listOf(
+                    ReasoningLevel.OFF, ReasoningLevel.AUTO,
+                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                )
+
+            // GPT-5: supports minimal/low/medium/high
+            GPT_5.match(modelId) ->
+                listOf(
+                    ReasoningLevel.OFF, ReasoningLevel.AUTO,
+                    ReasoningLevel.MINIMAL, ReasoningLevel.LOW,
+                    ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                )
+
+            // OpenAI o-series: supports low/medium/high
+            OPENAI_O_MODELS.match(modelId) ->
+                listOf(
+                    ReasoningLevel.AUTO,
+                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                )
+
+            // GPT-OSS: supports low/medium/high
+            GPT_OSS.match(modelId) ->
+                listOf(
+                    ReasoningLevel.AUTO,
+                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+                )
+
+            // Claude 4.6: supports low/medium/high/xhigh
+            CLAUDE_SONNET_4_6.match(modelId) ->
+                listOf(
+                    ReasoningLevel.OFF, ReasoningLevel.AUTO,
+                    ReasoningLevel.LOW, ReasoningLevel.MEDIUM,
+                    ReasoningLevel.HIGH, ReasoningLevel.XHIGH
+                )
+
+            // Default: all levels
+            else -> ReasoningLevel.entries.toList()
         }
     }
 

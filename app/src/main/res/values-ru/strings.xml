@@ -971,4 +971,9 @@
   <string name="video">Видео</string>
   <string name="web_search_disabled">Веб-поиск отключён</string>
   <string name="web_search_enabled">Веб-поиск включён</string>
+  <string name="reasoning_minimal">Минимальное рассуждение</string>
+  <string name="reasoning_minimal_desc">Модель будет использовать минимальные усилия для рассуждения.</string>
+  <string name="reasoning_xhigh">Сверхвысокое рассуждение</string>
+  <string name="reasoning_xhigh_desc">Модель будет использовать максимальные усилия для решения сложных задач.</string>
 </resources>
+

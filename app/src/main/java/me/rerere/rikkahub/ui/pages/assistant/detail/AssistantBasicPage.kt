@@ -30,7 +30,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -411,7 +413,11 @@ internal fun AssistantBasicContent(
                                 thinkingBudget = tokens
                             )
                         )
-                    }
+                    },
+                    supportedLevels = assistant.chatModelId?.let { id ->
+                        providers.flatMap { it.models }.find { it.id == id }?.modelId
+                    }?.let { ModelRegistry.SUPPORTED_REASONING_LEVELS.getData(it) }
+                        ?: ReasoningLevel.entries,
                 )
             }
             HorizontalDivider()
