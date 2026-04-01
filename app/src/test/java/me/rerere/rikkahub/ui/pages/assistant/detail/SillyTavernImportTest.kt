@@ -1,11 +1,13 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import me.rerere.ai.core.MessageRole
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.applyActiveStPresetSampling
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.findPromptOrder
 import me.rerere.rikkahub.data.model.stExtension
@@ -179,7 +181,7 @@ class SillyTavernImportTest {
     }
 
     @Test
-    fun `preset import should skip neutral advanced request params`() {
+    fun `preset import should preserve neutral advanced request params`() {
         val payload = parseAssistantImportFromJson(
             jsonString = """
                 {
@@ -211,14 +213,35 @@ class SillyTavernImportTest {
             sourceName = "preset-defaults",
         )
 
-        assertNull(payload.assistant.frequencyPenalty)
-        assertNull(payload.assistant.presencePenalty)
-        assertNull(payload.assistant.minP)
+        assertEquals(0f, payload.assistant.frequencyPenalty!!, 0f)
+        assertEquals(0f, payload.assistant.presencePenalty!!, 0f)
+        assertEquals(0f, payload.assistant.minP!!, 0f)
         assertNull(payload.assistant.topK)
-        assertNull(payload.assistant.topA)
-        assertNull(payload.assistant.repetitionPenalty)
+        assertEquals(0f, payload.assistant.topA!!, 0f)
+        assertEquals(1f, payload.assistant.repetitionPenalty!!, 0f)
         assertNull(payload.assistant.seed)
         assertEquals("", payload.assistant.openAIVerbosity)
+
+        val importedPreset = payload.toSillyTavernPreset()
+        val applied = Settings(
+            stPresetEnabled = true,
+            stPresets = listOf(importedPreset),
+            selectedStPresetId = importedPreset.id,
+        ).applyActiveStPresetSampling(
+            Assistant(
+                frequencyPenalty = 0.5f,
+                presencePenalty = 0.75f,
+                minP = 0.2f,
+                topA = 0.6f,
+                repetitionPenalty = 1.3f,
+            )
+        )
+
+        assertEquals(0f, applied.frequencyPenalty!!, 0f)
+        assertEquals(0f, applied.presencePenalty!!, 0f)
+        assertEquals(0f, applied.minP!!, 0f)
+        assertEquals(0f, applied.topA!!, 0f)
+        assertEquals(1f, applied.repetitionPenalty!!, 0f)
     }
 
     @Test

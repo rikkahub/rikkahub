@@ -31,22 +31,12 @@ internal fun parsePresetImport(
             temperature = preset.temperature?.toFloat(),
             topP = preset.topP?.toFloat(),
             maxTokens = preset.openAIMaxTokens,
-            frequencyPenalty = preset.frequencyPenalty
-                ?.takeUnless { it == 0.0 }
-                ?.toFloat(),
-            presencePenalty = preset.presencePenalty
-                ?.takeUnless { it == 0.0 }
-                ?.toFloat(),
-            minP = preset.minP
-                ?.takeUnless { it == 0.0 }
-                ?.toFloat(),
+            frequencyPenalty = preset.frequencyPenalty?.toFloat(),
+            presencePenalty = preset.presencePenalty?.toFloat(),
+            minP = preset.minP?.toFloat(),
             topK = preset.topK,
-            topA = preset.topA
-                ?.takeUnless { it == 0.0 }
-                ?.toFloat(),
-            repetitionPenalty = preset.repetitionPenalty
-                ?.takeUnless { it == 1.0 }
-                ?.toFloat(),
+            topA = preset.topA?.toFloat(),
+            repetitionPenalty = preset.repetitionPenalty?.toFloat(),
             seed = preset.seed
                 ?.takeIf { it >= 0L },
             stopSequences = stopSequences,

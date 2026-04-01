@@ -37,38 +37,27 @@ internal fun resolveApplicableLorebooks(
     lorebooks: List<Lorebook>,
     settings: Settings?,
 ): List<ScopedLorebook> {
-    val enabledLorebooks = lorebooks.filter { it.enabled }
-    if (enabledLorebooks.isEmpty()) return emptyList()
-
-    if (settings == null) {
-        return enabledLorebooks
-            .filter { assistant.lorebookIds.contains(it.id) }
-            .map { lorebook ->
-                ScopedLorebook(
-                    lorebook = lorebook,
-                    scope = LorebookScope.CHARACTER,
+    val globalLorebookIds = settings?.globalLorebookIds.orEmpty()
+    return lorebooks
+        .asSequence()
+        .filter { lorebook ->
+            lorebook.enabled &&
+                (
+                    assistant.lorebookIds.contains(lorebook.id) ||
+                        lorebook.id in globalLorebookIds
                 )
-            }
-    }
-
-    val restrictedLorebookIds = settings.assistants
-        .flatMapTo(mutableSetOf()) { it.lorebookIds }
-
-    return enabledLorebooks.mapNotNull { lorebook ->
-        when {
-            assistant.lorebookIds.contains(lorebook.id) -> ScopedLorebook(
-                lorebook = lorebook,
-                scope = LorebookScope.CHARACTER,
-            )
-
-            lorebook.id !in restrictedLorebookIds -> ScopedLorebook(
-                lorebook = lorebook,
-                scope = LorebookScope.GLOBAL,
-            )
-
-            else -> null
         }
-    }
+        .map { lorebook ->
+            ScopedLorebook(
+                lorebook = lorebook,
+                scope = if (assistant.lorebookIds.contains(lorebook.id)) {
+                    LorebookScope.CHARACTER
+                } else {
+                    LorebookScope.GLOBAL
+                },
+            )
+        }
+        .toList()
 }
 
 internal fun selectTriggeredLorebookEntries(

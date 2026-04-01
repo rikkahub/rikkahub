@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.data.ai.transformers
 
 import me.rerere.ai.core.MessageRole
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookTriggerContext
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.StLorebookEntryExtension
@@ -158,6 +161,55 @@ class LorebookRegressionTest {
                     generationType = "continue",
                 ),
             )
+        )
+    }
+
+    @Test
+    fun `resolve applicable lorebooks should ignore enabled lorebooks not linked to assistant`() {
+        val assistant = Assistant(lorebookIds = setOf(Uuid.random()))
+        val otherLorebookId = Uuid.random()
+        val linkedLorebook = Lorebook(id = assistant.lorebookIds.first(), name = "Linked")
+        val otherAssistant = Assistant(lorebookIds = setOf(otherLorebookId))
+        val otherAssistantLorebook = Lorebook(id = otherLorebookId, name = "Other Assistant")
+        val unassignedLorebook = Lorebook(id = Uuid.random(), name = "Draft")
+
+        val applicable = resolveApplicableLorebooks(
+            assistant = assistant,
+            lorebooks = listOf(linkedLorebook, otherAssistantLorebook, unassignedLorebook),
+            settings = Settings(
+                assistants = listOf(assistant, otherAssistant),
+            ),
+        )
+
+        assertEquals(listOf(linkedLorebook.id), applicable.map { it.lorebook.id })
+        assertEquals(listOf(LorebookScope.CHARACTER), applicable.map { it.scope })
+    }
+
+    @Test
+    fun `resolve applicable lorebooks should include explicit global lorebooks`() {
+        val linkedLorebookId = Uuid.random()
+        val globalLorebookId = Uuid.random()
+        val assistant = Assistant(lorebookIds = setOf(linkedLorebookId))
+        val linkedLorebook = Lorebook(id = linkedLorebookId, name = "Linked")
+        val globalLorebook = Lorebook(id = globalLorebookId, name = "Global")
+        val unassignedLorebook = Lorebook(id = Uuid.random(), name = "Draft")
+
+        val applicable = resolveApplicableLorebooks(
+            assistant = assistant,
+            lorebooks = listOf(linkedLorebook, globalLorebook, unassignedLorebook),
+            settings = Settings(
+                assistants = listOf(assistant),
+                globalLorebookIds = setOf(globalLorebookId),
+            ),
+        )
+
+        assertEquals(
+            listOf(linkedLorebook.id, globalLorebook.id),
+            applicable.map { it.lorebook.id },
+        )
+        assertEquals(
+            listOf(LorebookScope.CHARACTER, LorebookScope.GLOBAL),
+            applicable.map { it.scope },
         )
     }
 

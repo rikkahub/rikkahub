@@ -265,6 +265,39 @@ class AssistantRegexTest {
     }
 
     @Test
+    fun `assistant regex should override same shared regex from earlier scopes`() {
+        val globalRegex = AssistantRegex(
+            id = Uuid.random(),
+            enabled = false,
+            findRegex = "foo",
+            replaceString = "bar",
+            affectingScope = setOf(AssistantAffectScope.USER),
+        )
+        val assistantRegex = globalRegex.copy(
+            id = Uuid.random(),
+            enabled = true,
+        )
+        val settings = Settings(
+            globalRegexes = listOf(globalRegex),
+        )
+        val assistant = Assistant(
+            regexEnabled = true,
+            regexes = listOf(assistantRegex),
+        )
+
+        assertEquals(listOf(assistantRegex), settings.effectiveRegexes(assistant))
+        assertEquals(
+            "bar",
+            "foo".replaceRegexes(
+                assistant = assistant,
+                settings = settings,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
+    }
+
+    @Test
     fun `st placement should filter imported regex scripts by target`() {
         val assistant = Assistant(
             regexes = listOf(

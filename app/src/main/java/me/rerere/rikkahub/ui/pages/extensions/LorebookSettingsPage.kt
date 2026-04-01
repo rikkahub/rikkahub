@@ -36,9 +36,11 @@ fun LorebookSettingsPage(vm: PromptVM = koinViewModel()) {
     ) { innerPadding ->
         LorebookTab(
             lorebooks = settings.lorebooks,
+            globalLorebookIds = settings.globalLorebookIds,
             globalSettings = settings.lorebookGlobalSettings,
             assistants = settings.assistants,
             onUpdateLorebooks = { vm.updateSettings(settings.copy(lorebooks = it)) },
+            onUpdateGlobalLorebookIds = { vm.updateSettings(settings.copy(globalLorebookIds = it)) },
             onUpdateGlobalSettings = { vm.updateSettings(settings.copy(lorebookGlobalSettings = it)) },
             onUpdateAssistants = { vm.updateSettings(settings.copy(assistants = it)) },
             modifier = Modifier.padding(innerPadding),

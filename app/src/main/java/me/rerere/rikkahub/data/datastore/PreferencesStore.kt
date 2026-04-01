@@ -165,6 +165,7 @@ class SettingsStore(
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
+        val GLOBAL_LOREBOOK_IDS = stringPreferencesKey("global_lorebook_ids")
         val LOREBOOK_GLOBAL_SETTINGS = stringPreferencesKey("lorebook_global_settings")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
         val GLOBAL_REGEX_ENABLED = booleanPreferencesKey("global_regex_enabled")
@@ -287,6 +288,9 @@ class SettingsStore(
                 lorebooks = preferences[LOREBOOKS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                globalLorebookIds = preferences[GLOBAL_LOREBOOK_IDS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptySet(),
                 lorebookGlobalSettings = preferences[LOREBOOK_GLOBAL_SETTINGS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: LorebookGlobalSettings(),
@@ -459,6 +463,7 @@ class SettingsStore(
                     .map { it.normalizedForSystemPromptSupplement() }
                     .distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
+                globalLorebookIds = settings.globalLorebookIds.filter { it in validLorebookIds }.toSet(),
                 globalRegexes = settings.globalRegexes.distinctBy { it.id },
                 regexes = normalizedStSettings.regexes.distinctBy { it.id },
                 stPresets = normalizedStSettings.stPresets,
@@ -496,10 +501,12 @@ class SettingsStore(
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
+        val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
         val normalizedStSettings = settings.normalizeStPresetState()
         val normalizedSettings = normalizedStSettings.copy(
             modeInjections = settings.modeInjections.map { it.normalizedForSystemPromptSupplement() },
             lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized(),
+            globalLorebookIds = settings.globalLorebookIds.filter { it in validLorebookIds }.toSet(),
             globalRegexes = settings.globalRegexes.distinctBy { it.id },
             stPresets = normalizedStSettings.stPresets,
             selectedStPresetId = normalizedStSettings.selectedStPresetId,
@@ -569,6 +576,7 @@ class SettingsStore(
             preferences[SELECTED_TTS_PROVIDER] = normalizedSettings.selectedTTSProviderId.toString()
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(normalizedSettings.modeInjections)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(normalizedSettings.lorebooks)
+            preferences[GLOBAL_LOREBOOK_IDS] = JsonInstant.encodeToString(normalizedSettings.globalLorebookIds)
             preferences[LOREBOOK_GLOBAL_SETTINGS] = JsonInstant.encodeToString(normalizedSettings.lorebookGlobalSettings)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(normalizedSettings.quickMessages)
             preferences[GLOBAL_REGEX_ENABLED] = normalizedSettings.globalRegexEnabled
@@ -727,6 +735,7 @@ data class Settings(
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
+    val globalLorebookIds: Set<Uuid> = emptySet(),
     val lorebookGlobalSettings: LorebookGlobalSettings = LorebookGlobalSettings(),
     val quickMessages: List<QuickMessage> = emptyList(),
     val globalRegexEnabled: Boolean = true,

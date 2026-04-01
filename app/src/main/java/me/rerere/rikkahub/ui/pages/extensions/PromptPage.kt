@@ -241,9 +241,11 @@ fun LorebooksPage(vm: PromptVM = koinViewModel()) {
         LorebookTab(
             modifier = Modifier.padding(innerPadding),
             lorebooks = settings.lorebooks,
+            globalLorebookIds = settings.globalLorebookIds,
             globalSettings = settings.lorebookGlobalSettings,
             assistants = settings.assistants,
             onUpdateLorebooks = { vm.updateSettings(settings.copy(lorebooks = it)) },
+            onUpdateGlobalLorebookIds = { vm.updateSettings(settings.copy(globalLorebookIds = it)) },
             onUpdateGlobalSettings = { vm.updateSettings(settings.copy(lorebookGlobalSettings = it)) },
             onUpdateAssistants = { vm.updateSettings(settings.copy(assistants = it)) },
         )
@@ -625,9 +627,11 @@ private fun getPositionLabel(position: InjectionPosition): String = when (positi
 fun LorebookTab(
     modifier: Modifier = Modifier,
     lorebooks: List<Lorebook>,
+    globalLorebookIds: Set<kotlin.uuid.Uuid> = emptySet(),
     globalSettings: LorebookGlobalSettings,
     assistants: List<Assistant> = emptyList(),
     onUpdateLorebooks: (List<Lorebook>) -> Unit,
+    onUpdateGlobalLorebookIds: (Set<kotlin.uuid.Uuid>) -> Unit,
     onUpdateGlobalSettings: (LorebookGlobalSettings) -> Unit,
     onUpdateAssistants: (List<Assistant>) -> Unit = {},
 ) {
@@ -676,6 +680,7 @@ fun LorebookTab(
             item {
                 LorebookOverviewCard(
                     lorebooks = lorebooks,
+                    globalLorebookIds = globalLorebookIds,
                     assistants = assistants,
                 )
             }
@@ -715,6 +720,7 @@ fun LorebookTab(
                         LorebookCard(
                             book = book,
                             assistants = assistants,
+                            globalLorebookIds = globalLorebookIds,
                             modifier = Modifier
                                 .longPressDraggableHandle()
                                 .graphicsLayer {
@@ -746,6 +752,15 @@ fun LorebookTab(
                                                 assistant.lorebookIds - book.id
                                             }
                                         )
+                                    }
+                                )
+                            },
+                            onUpdateGlobalBinding = { enabled ->
+                                onUpdateGlobalLorebookIds(
+                                    if (enabled) {
+                                        globalLorebookIds + book.id
+                                    } else {
+                                        globalLorebookIds - book.id
                                     }
                                 )
                             },
@@ -799,6 +814,7 @@ fun LorebookTab(
 @Composable
 private fun LorebookOverviewCard(
     lorebooks: List<Lorebook>,
+    globalLorebookIds: Set<kotlin.uuid.Uuid>,
     assistants: List<Assistant>,
 ) {
     Card(
@@ -827,6 +843,11 @@ private fun LorebookOverviewCard(
                 Tag(type = TagType.SUCCESS) {
                     Text("${assistants.count { it.lorebookIds.isNotEmpty() }} 个助手已绑定")
                 }
+                if (globalLorebookIds.isNotEmpty()) {
+                    Tag(type = TagType.INFO) {
+                        Text("${globalLorebookIds.size} 本全局生效")
+                    }
+                }
                 Tag(type = TagType.WARNING) {
                     Text("按关键词自动触发")
                 }
@@ -837,7 +858,7 @@ private fun LorebookOverviewCard(
             )
             LorebookGuideRow(
                 title = "书本管理",
-                body = "每本书都可以单独启用、导出、删除，并通过链接按钮绑定到指定助手；没绑定的助手不会使用这本书。"
+                body = "每本书都可以单独启用、导出、删除，并通过链接按钮绑定到指定助手，或显式设为全局生效；没绑定且未设为全局的书不会参与聊天。"
             )
             LorebookGuideRow(
                 title = "条目编辑",
@@ -1045,10 +1066,12 @@ private fun getWorldInfoCharacterStrategyLabel(strategy: WorldInfoCharacterStrat
 private fun LorebookCard(
     book: Lorebook,
     assistants: List<Assistant>,
+    globalLorebookIds: Set<kotlin.uuid.Uuid>,
     modifier: Modifier = Modifier,
     onEdit: () -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
     onUpdateAssistantBindings: (Set<kotlin.uuid.Uuid>) -> Unit,
+    onUpdateGlobalBinding: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
     val swipeState = rememberSwipeToDismissBoxState()
@@ -1062,6 +1085,7 @@ private fun LorebookCard(
             .map { assistant -> assistant.id }
             .toSet()
     }
+    val isGlobalBinding = book.id in globalLorebookIds
 
     SwipeToDismissBox(
         state = swipeState,
@@ -1145,6 +1169,11 @@ private fun LorebookCard(
                                 )
                             )
                         }
+                        if (isGlobalBinding) {
+                            Tag(type = TagType.SUCCESS) {
+                                Text("全局生效")
+                            }
+                        }
                         if (book.recursiveScanning) {
                             Tag(type = TagType.SUCCESS) {
                                 Text(stringResource(R.string.prompt_page_lorebook_recursive_badge))
@@ -1185,8 +1214,10 @@ private fun LorebookCard(
         LorebookBindingSheet(
             book = book,
             assistants = assistants,
+            isGlobalBinding = isGlobalBinding,
             boundAssistantIds = boundAssistantIds,
             onDismiss = { showBindingsSheet = false },
+            onUpdateGlobalBinding = onUpdateGlobalBinding,
             onUpdate = onUpdateAssistantBindings,
         )
     }
@@ -1196,8 +1227,10 @@ private fun LorebookCard(
 private fun LorebookBindingSheet(
     book: Lorebook,
     assistants: List<Assistant>,
+    isGlobalBinding: Boolean,
     boundAssistantIds: Set<kotlin.uuid.Uuid>,
     onDismiss: () -> Unit,
+    onUpdateGlobalBinding: (Boolean) -> Unit,
     onUpdate: (Set<kotlin.uuid.Uuid>) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1235,17 +1268,43 @@ private fun LorebookBindingSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (assistants.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.prompt_page_lorebook_binding_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                item("global_binding") {
+                    ListItem(
+                        headlineContent = {
+                            Text("全局生效")
+                        },
+                        supportingContent = {
+                            Text(
+                                "启用后，这本世界书会对所有助手生效；单独绑定仍会保留角色作用域。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = isGlobalBinding,
+                                onCheckedChange = onUpdateGlobalBinding,
+                            )
+                        },
+                        colors = ListItemDefaults.colors(
+                            containerColor = Color.Transparent,
+                        )
+                    )
+                }
+
+                if (assistants.isEmpty()) {
+                    item("empty_assistants") {
+                        Text(
+                            text = stringResource(R.string.prompt_page_lorebook_binding_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
                     items(assistants, key = { it.id }) { assistant ->
                         ListItem(
                             headlineContent = {

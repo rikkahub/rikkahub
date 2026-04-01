@@ -311,14 +311,17 @@ fun String.replaceRegexes(
 }
 
 fun Settings.effectiveRegexes(assistant: Assistant?): List<AssistantRegex> {
-    return (
-        runtimeRegexes() +
-            assistant
-                ?.takeIf { it.regexEnabled }
-                ?.regexes
-                .orEmpty()
-        )
+    val orderedRegexes = runtimeRegexes() +
+        assistant
+            ?.takeIf { it.regexEnabled }
+            ?.regexes
+            .orEmpty()
+
+    // Later scopes should be able to override earlier duplicates with the same runtime behavior.
+    return orderedRegexes
+        .asReversed()
         .distinctBy { it.dedupKey() }
+        .asReversed()
 }
 
 private fun AssistantRegex.matchesPlacement(
