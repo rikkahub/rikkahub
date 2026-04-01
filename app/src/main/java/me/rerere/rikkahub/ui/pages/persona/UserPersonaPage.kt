@@ -167,7 +167,13 @@ fun UserPersonaPage(vm: SettingVM = koinViewModel()) {
                 selectedUserPersonaProfileId = nextSelectedId,
             )
         )
-        if (editorDraft?.id == profileId) {
+        val shouldClearDraft = discardDeletedProfileDraftIfNeeded(
+            profileId = profileId,
+            editorDraftId = editorDraft?.id,
+        ) {
+            discardDraft(editorDraft)
+        }
+        if (shouldClearDraft) {
             editorDraft = null
         }
         pendingDeleteProfileId = null
@@ -575,6 +581,16 @@ private fun disposeAvatarIfNeeded(
     if (previous == original) return
     if (!previous.url.startsWith("file:")) return
     filesManager.deleteChatFiles(listOf(previous.url.toUri()))
+}
+
+internal fun discardDeletedProfileDraftIfNeeded(
+    profileId: Uuid,
+    editorDraftId: Uuid?,
+    discardDraft: () -> Unit,
+): Boolean {
+    if (editorDraftId != profileId) return false
+    discardDraft()
+    return true
 }
 
 private fun nextPersonaProfileName(

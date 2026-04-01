@@ -6,12 +6,14 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -89,6 +91,34 @@ class GoogleProviderMessageTest {
         assertEquals(
             "Late System",
             request["contents"]!!.jsonArray[1]
+                .jsonObject["parts"]!!.jsonArray[0]
+                .jsonObject["text"]!!.jsonPrimitive.content
+        )
+    }
+
+    @Test
+    fun `image request should keep leading system messages in contents`() {
+        val request = invokeBuildRequestBody(
+            messages = listOf(
+                UIMessage.system("Style guide"),
+                UIMessage.user("Draw a cat"),
+            ),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "gemini-image-test",
+                    outputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+                )
+            )
+        )
+
+        assertNull(request["systemInstruction"])
+        assertEquals(
+            listOf("user", "user"),
+            request["contents"]!!.jsonArray.map { it.jsonObject["role"]!!.jsonPrimitive.content }
+        )
+        assertEquals(
+            "Style guide",
+            request["contents"]!!.jsonArray[0]
                 .jsonObject["parts"]!!.jsonArray[0]
                 .jsonObject["text"]!!.jsonPrimitive.content
         )

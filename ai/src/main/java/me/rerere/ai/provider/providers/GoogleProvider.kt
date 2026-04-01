@@ -324,13 +324,18 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): JsonObject {
-        val normalizedMessages = demoteSystemMessages(
-            splitLeadingSystemMessages(messages).remainingMessages
-        )
-        val systemTextParts = collectLeadingSystemTextParts(messages)
+        val leadingSystemMessages = splitLeadingSystemMessages(messages)
+        val isImageRequest = params.model.outputModalities.contains(Modality.IMAGE)
+        val normalizedMessages = if (isImageRequest) {
+            demoteSystemMessages(messages)
+        } else {
+            demoteSystemMessages(leadingSystemMessages.remainingMessages)
+        }
+        val systemTextParts = leadingSystemMessages.systemMessages
+            .flatMap { message -> message.parts.filterIsInstance<UIMessagePart.Text>() }
         return buildJsonObject {
             // System message if available
-            if (systemTextParts.isNotEmpty() && !params.model.outputModalities.contains(Modality.IMAGE)) {
+            if (systemTextParts.isNotEmpty() && !isImageRequest) {
                 put("systemInstruction", buildJsonObject {
                     putJsonArray("parts") {
                         systemTextParts.forEach { part ->
@@ -355,7 +360,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 }
                 params.googleResponseMimeType.normalizedNonBlankOrNull()?.let { put("responseMimeType", it) }
                 if (params.maxTokens != null) put("maxOutputTokens", params.maxTokens)
-                if (params.model.outputModalities.contains(Modality.IMAGE)) {
+                if (isImageRequest) {
                     put("responseModalities", buildJsonArray {
                         add(JsonPrimitive("TEXT"))
                         add(JsonPrimitive("IMAGE"))
