@@ -3,21 +3,28 @@ package me.rerere.rikkahub.data.export
 import android.content.Context
 import android.net.Uri
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
+import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.SillyTavernPreset
+import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImportKind
 import me.rerere.rikkahub.ui.pages.assistant.detail.RIKKAHUB_INLINE_PROMPT_REGEXES_KEY
+import me.rerere.rikkahub.ui.pages.assistant.detail.jsonArrayOrNull
+import me.rerere.rikkahub.ui.pages.assistant.detail.jsonObjectOrNull
 import me.rerere.rikkahub.ui.pages.assistant.detail.parseAssistantImportFromJson
 import me.rerere.rikkahub.ui.pages.assistant.detail.toSillyTavernPreset
 import me.rerere.rikkahub.utils.JsonInstantPretty
+import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 
 object SillyTavernPresetExportSerializer : ExportSerializer<SillyTavernPreset> {
     override val type: String = "st_preset"
@@ -53,103 +60,191 @@ private fun buildPresetJson(data: SillyTavernPreset): JsonObject {
         .groupBy { it.sourceRef }
     val scriptRegexes = data.regexes
         .filterNot { it.shouldExportAsInlinePrompt() }
-    return buildJsonObject {
-        put("name", template.sourceName.ifBlank { data.displayName })
-        put("scenario_format", template.scenarioFormat)
-        put("personality_format", template.personalityFormat)
-        put("wi_format", template.wiFormat)
-        put("new_chat_prompt", template.newChatPrompt)
-        put("new_group_chat_prompt", template.newGroupChatPrompt)
-        put("new_example_chat_prompt", template.newExampleChatPrompt)
-        put("continue_nudge_prompt", template.continueNudgePrompt)
-        put("group_nudge_prompt", template.groupNudgePrompt)
-        put("impersonation_prompt", template.impersonationPrompt)
-        put("assistant_prefill", template.assistantPrefill)
-        put("assistant_impersonation", template.assistantImpersonation)
-        put("continue_prefill", template.continuePrefill)
-        put("continue_postfix", template.continuePostfix)
-        put("send_if_empty", template.sendIfEmpty)
-        data.sampling.temperature?.let { put("temperature", it) }
-        data.sampling.topP?.let { put("top_p", it) }
-        data.sampling.maxTokens?.let { put("openai_max_tokens", it) }
-        data.sampling.frequencyPenalty?.let { put("frequency_penalty", it) }
-        data.sampling.presencePenalty?.let { put("presence_penalty", it) }
-        data.sampling.minP?.let { put("min_p", it) }
-        data.sampling.topK?.let { put("top_k", it) }
-        data.sampling.topA?.let { put("top_a", it) }
-        data.sampling.repetitionPenalty?.let { put("repetition_penalty", it) }
-        data.sampling.seed?.let { put("seed", it) }
-        put("enable_stop_string", data.sampling.stopSequences.isNotEmpty())
-        if (data.sampling.stopSequences.isNotEmpty()) {
-            put("stop_string", data.sampling.stopSequences.first())
-            put("stop_strings", buildJsonArray {
-                data.sampling.stopSequences.forEach { add(JsonPrimitive(it)) }
-            })
+    val root = LinkedHashMap<String, JsonElement>(data.rawPresetJson)
+
+    root["name"] = JsonPrimitive(template.sourceName.ifBlank { data.displayName })
+    root["scenario_format"] = JsonPrimitive(template.scenarioFormat)
+    root["personality_format"] = JsonPrimitive(template.personalityFormat)
+    root["wi_format"] = JsonPrimitive(template.wiFormat)
+    root["new_chat_prompt"] = JsonPrimitive(template.newChatPrompt)
+    root["new_group_chat_prompt"] = JsonPrimitive(template.newGroupChatPrompt)
+    root["new_example_chat_prompt"] = JsonPrimitive(template.newExampleChatPrompt)
+    root["continue_nudge_prompt"] = JsonPrimitive(template.continueNudgePrompt)
+    root["group_nudge_prompt"] = JsonPrimitive(template.groupNudgePrompt)
+    root["impersonation_prompt"] = JsonPrimitive(template.impersonationPrompt)
+    root["assistant_prefill"] = JsonPrimitive(template.assistantPrefill)
+    root["assistant_impersonation"] = JsonPrimitive(template.assistantImpersonation)
+    root["continue_prefill"] = JsonPrimitive(template.continuePrefill)
+    root["continue_postfix"] = JsonPrimitive(template.continuePostfix)
+    root["send_if_empty"] = JsonPrimitive(template.sendIfEmpty)
+    data.sampling.temperature?.let { root["temperature"] = JsonPrimitive(it) }
+    data.sampling.topP?.let { root["top_p"] = JsonPrimitive(it) }
+    data.sampling.maxTokens?.let { root["openai_max_tokens"] = JsonPrimitive(it) }
+    data.sampling.frequencyPenalty?.let { root["frequency_penalty"] = JsonPrimitive(it) }
+    data.sampling.presencePenalty?.let { root["presence_penalty"] = JsonPrimitive(it) }
+    data.sampling.minP?.let { root["min_p"] = JsonPrimitive(it) }
+    data.sampling.topK?.let { root["top_k"] = JsonPrimitive(it) }
+    data.sampling.topA?.let { root["top_a"] = JsonPrimitive(it) }
+    data.sampling.repetitionPenalty?.let { root["repetition_penalty"] = JsonPrimitive(it) }
+    data.sampling.seed?.let { root["seed"] = JsonPrimitive(it) }
+    if (data.sampling.stopSequences.isNotEmpty()) {
+        root["enable_stop_string"] = JsonPrimitive(true)
+        root["stop_string"] = JsonPrimitive(data.sampling.stopSequences.first())
+        root["stop_strings"] = buildJsonArray {
+            data.sampling.stopSequences.forEach { add(JsonPrimitive(it)) }
         }
-        if (data.sampling.openAIReasoningEffort.isNotBlank()) {
-            put("reasoning_effort", data.sampling.openAIReasoningEffort)
-        }
-        if (data.sampling.openAIVerbosity.isNotBlank()) {
-            put("verbosity", data.sampling.openAIVerbosity)
-        }
-        template.namesBehavior?.let { put("names_behavior", it) }
-        put("use_sysprompt", template.useSystemPrompt)
-        put("squash_system_messages", template.squashSystemMessages)
-        putJsonArray("prompts") {
-            template.prompts.forEach { prompt ->
-                add(buildJsonObject {
-                    put("identifier", prompt.identifier)
-                    put("name", prompt.name)
-                    put("role", prompt.role.name.lowercase())
-                    put(
-                        "content",
-                        appendInlinePromptRegexes(
-                            content = prompt.content,
-                            regexes = inlinePromptRegexesByIdentifier[prompt.identifier].orEmpty(),
-                        )
-                    )
-                    put("system_prompt", prompt.systemPrompt)
-                    put("marker", prompt.marker)
-                    put("enabled", prompt.enabled)
-                    put(
-                        "injection_position",
-                        if (prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE) 1 else 0
-                    )
-                    put("injection_depth", prompt.injectionDepth)
-                    put("injection_order", prompt.injectionOrder)
-                    put("injection_trigger", buildJsonArray {
-                        prompt.injectionTriggers.forEach { add(JsonPrimitive(it)) }
-                    })
-                    put("forbid_overrides", prompt.forbidOverrides)
-                })
+    } else if (data.rawPresetJson.isEmpty()) {
+        root["enable_stop_string"] = JsonPrimitive(false)
+    }
+    if (data.sampling.openAIReasoningEffort.isNotBlank()) {
+        root["reasoning_effort"] = JsonPrimitive(data.sampling.openAIReasoningEffort)
+    }
+    if (data.sampling.openAIVerbosity.isNotBlank()) {
+        root["verbosity"] = JsonPrimitive(data.sampling.openAIVerbosity)
+    }
+    template.namesBehavior?.let { root["names_behavior"] = JsonPrimitive(it) }
+    root["use_sysprompt"] = JsonPrimitive(template.useSystemPrompt)
+    root["squash_system_messages"] = JsonPrimitive(template.squashSystemMessages)
+    root["prompts"] = buildPresetPrompts(
+        preset = data,
+        inlinePromptRegexesByIdentifier = inlinePromptRegexesByIdentifier,
+    )
+    root["prompt_order"] = data.rawPresetJson["prompt_order"]?.jsonArrayOrNull()
+        ?: buildCanonicalPromptOrder(template.resolvePromptOrder())
+
+    val extensions = buildPresetExtensions(
+        preset = data,
+        scriptRegexes = scriptRegexes,
+        hasInlinePromptRegexes = inlinePromptRegexesByIdentifier.isNotEmpty(),
+    )
+    if (extensions != null) {
+        root["extensions"] = extensions
+    } else {
+        root.remove("extensions")
+    }
+
+    return JsonObject(root)
+}
+
+private fun buildPresetPrompts(
+    preset: SillyTavernPreset,
+    inlinePromptRegexesByIdentifier: Map<String, List<AssistantRegex>>,
+): JsonArray {
+    val rawPrompts = preset.rawPresetJson["prompts"]
+        ?.jsonArrayOrNull()
+        ?.mapNotNull { it.jsonObjectOrNull() }
+        .orEmpty()
+    val consumedRawPromptIndexes = mutableSetOf<Int>()
+
+    return buildJsonArray {
+        preset.template.prompts.forEach { prompt ->
+            val rawPromptIndex = rawPrompts.indexOfFirstUnusedPrompt(prompt.identifier, consumedRawPromptIndexes)
+            val rawPrompt = rawPrompts.getOrNull(rawPromptIndex)
+            if (rawPromptIndex >= 0) {
+                consumedRawPromptIndexes += rawPromptIndex
             }
+            add(
+                buildPresetPrompt(
+                    prompt = prompt,
+                    rawPrompt = rawPrompt,
+                    inlineRegexes = inlinePromptRegexesByIdentifier[prompt.identifier].orEmpty(),
+                )
+            )
         }
-        putJsonArray("prompt_order") {
-            add(buildJsonObject {
-                put("character_id", 100001)
-                putJsonArray("order") {
-                    template.resolvePromptOrder().forEach { item ->
-                        add(buildJsonObject {
-                            put("identifier", item.identifier)
-                            put("enabled", item.enabled)
-                        })
-                    }
-                }
-            })
-        }
-        if (scriptRegexes.isNotEmpty() || inlinePromptRegexesByIdentifier.isNotEmpty()) {
-            putJsonObject("extensions") {
-                if (scriptRegexes.isNotEmpty()) {
-                    putJsonArray("regex_scripts") {
-                        scriptRegexes.forEach { regex ->
-                            add(buildRegexScript(regex))
-                        }
-                    }
-                }
-                if (inlinePromptRegexesByIdentifier.isNotEmpty()) {
-                    put(RIKKAHUB_INLINE_PROMPT_REGEXES_KEY, true)
-                }
+
+        rawPrompts.forEachIndexed { index, rawPrompt ->
+            if (index !in consumedRawPromptIndexes) {
+                add(rawPrompt)
             }
         }
     }
+}
+
+private fun buildPresetPrompt(
+    prompt: SillyTavernPromptItem,
+    rawPrompt: JsonObject?,
+    inlineRegexes: List<AssistantRegex>,
+): JsonObject {
+    val updated = LinkedHashMap<String, JsonElement>(rawPrompt ?: emptyMap())
+    updated["identifier"] = JsonPrimitive(prompt.identifier)
+    updated["name"] = JsonPrimitive(prompt.name)
+    updated["role"] = JsonPrimitive(prompt.role.name.lowercase())
+    updated["content"] = JsonPrimitive(
+        appendInlinePromptRegexes(
+            content = prompt.content,
+            regexes = inlineRegexes,
+        )
+    )
+    updated["system_prompt"] = JsonPrimitive(prompt.systemPrompt)
+    updated["marker"] = JsonPrimitive(prompt.marker)
+    updated["enabled"] = JsonPrimitive(prompt.enabled)
+    updated["injection_position"] = JsonPrimitive(
+        if (prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE) 1 else 0
+    )
+    updated["injection_depth"] = JsonPrimitive(prompt.injectionDepth)
+    updated["injection_order"] = JsonPrimitive(prompt.injectionOrder)
+    updated["injection_trigger"] = buildJsonArray {
+        prompt.injectionTriggers.forEach { add(JsonPrimitive(it)) }
+    }
+    updated["forbid_overrides"] = JsonPrimitive(prompt.forbidOverrides)
+    return JsonObject(updated)
+}
+
+private fun buildCanonicalPromptOrder(
+    orderItems: List<me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem>,
+): JsonArray {
+    return buildJsonArray {
+        add(buildJsonObject {
+            put("character_id", 100001)
+            putJsonArray("order") {
+                orderItems.forEach { item ->
+                    add(buildJsonObject {
+                        put("identifier", item.identifier)
+                        put("enabled", item.enabled)
+                    })
+                }
+            }
+        })
+    }
+}
+
+private fun buildPresetExtensions(
+    preset: SillyTavernPreset,
+    scriptRegexes: List<AssistantRegex>,
+    hasInlinePromptRegexes: Boolean,
+): JsonObject? {
+    val updated = LinkedHashMap<String, JsonElement>(
+        preset.rawPresetJson["extensions"]?.jsonObjectOrNull() ?: emptyMap()
+    )
+
+    if (scriptRegexes.isNotEmpty()) {
+        updated["regex_scripts"] = buildJsonArray {
+            scriptRegexes.forEach { regex ->
+                add(buildRegexScript(regex))
+            }
+        }
+    }
+    if (hasInlinePromptRegexes) {
+        updated[RIKKAHUB_INLINE_PROMPT_REGEXES_KEY] = JsonPrimitive(true)
+    }
+
+    return updated.takeIf { it.isNotEmpty() }?.let(::JsonObject)
+}
+
+private fun List<JsonObject>.indexOfFirstUnusedPrompt(
+    identifier: String,
+    consumedIndexes: Set<Int>,
+): Int {
+    if (identifier.isBlank()) return -1
+    return indexOfFirst { index, prompt ->
+        index !in consumedIndexes &&
+            prompt["identifier"]?.jsonPrimitiveOrNull?.contentOrNull == identifier
+    }
+}
+
+private inline fun <T> List<T>.indexOfFirst(predicate: (Int, T) -> Boolean): Int {
+    forEachIndexed { index, item ->
+        if (predicate(index, item)) return index
+    }
+    return -1
 }

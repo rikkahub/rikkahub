@@ -6,6 +6,8 @@ import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
@@ -33,6 +35,7 @@ data class AssistantImportPayload(
     val sourceName: String,
     val assistant: Assistant,
     val presetTemplate: me.rerere.rikkahub.data.model.SillyTavernPromptTemplate? = null,
+    val presetRawJson: JsonObject = buildJsonObject { },
     val lorebooks: List<Lorebook> = emptyList(),
     val regexes: List<AssistantRegex> = emptyList(),
     val avatarImportSourceUri: String? = null,
@@ -66,6 +69,7 @@ internal fun AssistantImportPayload.toSillyTavernPreset(): SillyTavernPreset {
             openAIReasoningEffort = assistant.openAIReasoningEffort,
             openAIVerbosity = assistant.openAIVerbosity,
         ),
+        rawPresetJson = presetRawJson,
     )
 }
 

@@ -350,14 +350,14 @@
   <string name="mcp_picker_syncing">Syncing MCP servers...</string>
   <string name="mcp_picker_title">MCP Servers</string>
   <string name="menu">Menu</string>
-  <string name="menu_page_afternoon_greeting">Good afternoon\uD83D\uDC4B</string>
+  <string name="menu_page_afternoon_greeting">Good afternoon</string>
   <string name="menu_page_ai_translator">AI Translator</string>
-  <string name="menu_page_evening_greeting">Good evening\uD83D\uDC4B</string>
+  <string name="menu_page_evening_greeting">Good evening</string>
   <string name="menu_page_image_generation">Image Generation</string>
   <string name="menu_page_knowledge_base">Knowledge Base (WIP)</string>
   <string name="menu_page_llm_leaderboard">LLM Leaderboard</string>
-  <string name="menu_page_morning_greeting">Good morning\uD83D\uDC4B</string>
-  <string name="menu_page_night_greeting">It\'s late, take care\uD83D\uDC4B</string>
+  <string name="menu_page_morning_greeting">Good morning</string>
+  <string name="menu_page_night_greeting">It is late, take care</string>
   <string name="mermaid_export">Export</string>
   <string name="mermaid_export_failed">Export failed</string>
   <string name="mermaid_export_success">Export successful</string>
@@ -2101,13 +2101,13 @@ The app preserves ST compatibility here. The **Content** mode is the one fully m
   <string name="sampling_editor_default_placeholder">Default</string>
   <string name="sampling_editor_one_per_line_placeholder">One per line</string>
   <string name="prompt_page_st_preset_sampling_title">Sampling / runtime params</string>
-  <string name="prompt_page_st_preset_sampling_desc">When an ST preset is active, values configured here override the assistant's own sampling settings.</string>
+  <string name="prompt_page_st_preset_sampling_desc">When an ST preset is active, configured values here override assistant sampling settings.</string>
   <string name="prompt_page_st_preset_sampling_configured_count">Configured %1$d values</string>
   <string name="prompt_page_st_preset_sampling_takeover_active">The active preset overrides request params</string>
   <string name="prompt_page_st_preset_sampling_takeover_inherit">Assistant params stay in effect until this preset is configured</string>
   <string name="prompt_page_st_preset_sampling_guide_title">How it works</string>
   <string name="prompt_page_st_preset_sampling_guide_takeover_title">Takeover rule</string>
-  <string name="prompt_page_st_preset_sampling_guide_takeover_body">Once at least one value is configured here, the active ST preset overrides the assistant's own sampling. Any blank fields are still sent as blank and no longer fall back to assistant defaults.</string>
+  <string name="prompt_page_st_preset_sampling_guide_takeover_body">Once at least one value is configured here, the active ST preset overrides assistant sampling. Blank fields stay blank and no longer fall back to assistant defaults.</string>
   <string name="prompt_page_st_preset_sampling_guide_basic_title">Basic sampling</string>
   <string name="prompt_page_st_preset_sampling_guide_basic_body">Temperature, Top P, Top K, and Max Tokens shape randomness, candidate breadth, and output length. Start from this group first.</string>
   <string name="prompt_page_st_preset_sampling_guide_compat_title">Compatibility params</string>
@@ -2119,4 +2119,3 @@ The app preserves ST compatibility here. The **Content** mode is the one fully m
   <string name="assistant_page_sampling_desc_claude">Sent as Anthropic Messages API fields.</string>
   <string name="assistant_page_sampling_desc_compat">Only fields supported by the selected backend are used.</string>
 </resources>
-

@@ -59,10 +59,13 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowExpandDiagonal01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.event.ChatComposerBridge
+import me.rerere.rikkahub.data.event.ChatHistoryBridge
 import me.rerere.rikkahub.ui.components.webview.WebContent
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.WebViewState
 import me.rerere.rikkahub.utils.toCssHex
+import org.koin.compose.koinInject
 
 private const val MIN_PREVIEW_HEIGHT_DP = 10
 
@@ -90,6 +93,71 @@ private class CodeBlockRenderBridge(
         mainHandler.post {
             onHeightChanged(height)
         }
+    }
+}
+
+private class CodeBlockChatActionBridge(
+    private val composerBridge: ChatComposerBridge,
+    private val historyBridge: ChatHistoryBridge,
+) {
+    @JavascriptInterface
+    fun getDraftText(): String = composerBridge.getDraftText()
+
+    @JavascriptInterface
+    fun setDraftText(text: String?) {
+        composerBridge.setDraftText(text.orEmpty())
+    }
+
+    @JavascriptInterface
+    fun appendDraftText(text: String?) {
+        composerBridge.appendDraftText(text.orEmpty())
+    }
+
+    @JavascriptInterface
+    fun sendCurrentDraft(answer: Boolean) {
+        composerBridge.sendCurrentDraft(answer)
+    }
+
+    @JavascriptInterface
+    fun sendText(text: String?, answer: Boolean) {
+        composerBridge.sendText(
+            text = text.orEmpty(),
+            answer = answer,
+        )
+    }
+
+    @JavascriptInterface
+    fun getHistorySnapshot(): String = historyBridge.getSnapshotJson()
+
+    @JavascriptInterface
+    fun editHistoryMessage(nodeId: String?, text: String?) {
+        historyBridge.editMessage(
+            nodeId = nodeId.orEmpty(),
+            text = text.orEmpty(),
+        )
+    }
+
+    @JavascriptInterface
+    fun deleteHistoryMessage(nodeId: String?) {
+        historyBridge.deleteMessage(nodeId.orEmpty())
+    }
+
+    @JavascriptInterface
+    fun selectHistoryMessageNode(nodeId: String?, selectIndex: Int) {
+        historyBridge.selectMessageNode(nodeId.orEmpty(), selectIndex)
+    }
+
+    @JavascriptInterface
+    fun regenerateHistoryMessage(nodeId: String?, regenerateAssistantMessage: Boolean) {
+        historyBridge.regenerateMessage(
+            nodeId = nodeId.orEmpty(),
+            regenerateAssistantMessage = regenerateAssistantMessage,
+        )
+    }
+
+    @JavascriptInterface
+    fun continueHistoryMessage(nodeId: String?) {
+        historyBridge.continueMessage(nodeId.orEmpty())
     }
 }
 
@@ -333,6 +401,8 @@ internal fun WebRenderedCodeBlock(
     code: String,
     modifier: Modifier = Modifier,
 ) {
+    val composerBridge: ChatComposerBridge = koinInject()
+    val historyBridge: ChatHistoryBridge = koinInject()
     val renderSignature = remember(target, code) {
         "${target.normalizedLanguage}:${target.renderType}:${code.hashCode()}"
     }
@@ -357,8 +427,17 @@ internal fun WebRenderedCodeBlock(
             }
         }
     }
-    val webViewInterfaces = remember(renderBridge) {
-        mapOf(CODE_BLOCK_HEIGHT_BRIDGE_NAME to renderBridge)
+    val chatActionBridge = remember(composerBridge, historyBridge) {
+        CodeBlockChatActionBridge(
+            composerBridge = composerBridge,
+            historyBridge = historyBridge,
+        )
+    }
+    val webViewInterfaces = remember(renderBridge, chatActionBridge) {
+        mapOf(
+            CODE_BLOCK_HEIGHT_BRIDGE_NAME to renderBridge,
+            CODE_BLOCK_ACTION_BRIDGE_NAME to chatActionBridge,
+        )
     }
     val webViewState = rememberRenderedCodeBlockWebViewState(
         initialHtml = inlineHtml,

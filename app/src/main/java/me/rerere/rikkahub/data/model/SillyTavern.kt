@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.model
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
@@ -11,6 +13,7 @@ data class SillyTavernPreset(
     val template: SillyTavernPromptTemplate = defaultSillyTavernPromptTemplate(),
     val regexes: List<AssistantRegex> = emptyList(),
     val sampling: SillyTavernPresetSampling = SillyTavernPresetSampling(),
+    val rawPresetJson: JsonObject = buildJsonObject { },
 ) {
     val displayName: String
         get() = template.sourceName.ifBlank { "SillyTavern Preset" }

@@ -228,6 +228,86 @@ class SillyTavernExportSerializerTest {
     }
 
     @Test
+    fun `preset export should preserve raw preset fields that app does not model`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Raw Preservation Preset",
+                  "stream_openai": false,
+                  "bias_preset_selected": "Mirostat",
+                  "function_calling": true,
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "name": "Main Prompt",
+                      "role": "system",
+                      "content": "Main",
+                      "custom_prompt_field": "keep-me"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100001,
+                      "xiaobai_ext": {
+                        "slot": 7
+                      },
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "tavern_helper": {
+                      "enabled": true
+                    }
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "raw-preservation",
+        )
+
+        val exported = Json.parseToJsonElement(
+            SillyTavernPresetExportSerializer.exportToJson(payload.toSillyTavernPreset())
+        ).jsonObject
+
+        assertEquals("false", exported["stream_openai"]?.jsonPrimitive?.content)
+        assertEquals("Mirostat", exported["bias_preset_selected"]?.jsonPrimitive?.content)
+        assertEquals("true", exported["function_calling"]?.jsonPrimitive?.content)
+        assertEquals(
+            "keep-me",
+            exported["prompts"]
+                ?.jsonArray
+                ?.first()
+                ?.jsonObject
+                ?.get("custom_prompt_field")
+                ?.jsonPrimitive
+                ?.content
+        )
+        assertEquals(
+            "7",
+            exported["prompt_order"]
+                ?.jsonArray
+                ?.first()
+                ?.jsonObject
+                ?.get("xiaobai_ext")
+                ?.jsonObject
+                ?.get("slot")
+                ?.jsonPrimitive
+                ?.content
+        )
+        assertEquals(
+            "true",
+            exported["extensions"]
+                ?.jsonObject
+                ?.get("tavern_helper")
+                ?.jsonObject
+                ?.get("enabled")
+                ?.jsonPrimitive
+                ?.content
+        )
+    }
+
+    @Test
     fun `character card export should embed lorebooks and regexes`() {
         val assistant = Assistant(
             name = "Tester",

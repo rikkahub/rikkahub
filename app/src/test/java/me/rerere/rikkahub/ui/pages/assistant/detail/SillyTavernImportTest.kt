@@ -290,6 +290,48 @@ class SillyTavernImportTest {
     }
 
     @Test
+    fun `preset import should preserve raw preset json for unknown fields`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Raw",
+                  "stream_openai": false,
+                  "bias_preset_selected": "Mirostat",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100001,
+                      "xiaobai_ext": {
+                        "slot": 7
+                      },
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "tavern_helper": {
+                      "enabled": true
+                    }
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "preset-raw",
+        )
+
+        assertEquals("Mirostat", payload.presetRawJson["bias_preset_selected"]?.toString()?.trim('"'))
+        assertEquals("false", payload.presetRawJson["stream_openai"]?.toString())
+        assertNotNull(payload.presetRawJson["extensions"])
+        assertNotNull(payload.presetRawJson["prompt_order"])
+    }
+
+    @Test
     fun `should parse character card with embedded lorebook`() {
         val json = """
             {
