@@ -151,6 +151,45 @@ class SillyTavernPromptTransformerTest {
     }
 
     @Test
+    fun `custom relative system prompts should be preserved in prompt order`() {
+        val template = SillyTavernPromptTemplate(
+            prompts = listOf(
+                SillyTavernPromptItem(identifier = "main", content = "Main Prompt"),
+                SillyTavernPromptItem(
+                    identifier = "customSystem",
+                    role = MessageRole.SYSTEM,
+                    content = "Custom System Prompt",
+                    systemPrompt = true,
+                ),
+                SillyTavernPromptItem(
+                    identifier = "customUser",
+                    role = MessageRole.USER,
+                    content = "Custom User Prompt",
+                    systemPrompt = false,
+                ),
+                SillyTavernPromptItem(identifier = "chatHistory", marker = true),
+            ),
+            orderedPromptIds = listOf("main", "customSystem", "customUser", "chatHistory"),
+        )
+
+        val result = transformSillyTavernPrompt(
+            messages = listOf(UIMessage.user("Hello")),
+            assistant = Assistant(),
+            lorebooks = emptyList(),
+            template = template,
+        )
+
+        assertEquals(
+            listOf("Main Prompt", "Custom System Prompt", "Custom User Prompt", "Hello"),
+            result.map { it.toText() }
+        )
+        assertEquals(
+            listOf(MessageRole.SYSTEM, MessageRole.SYSTEM, MessageRole.USER, MessageRole.USER),
+            result.map { it.role }
+        )
+    }
+
+    @Test
     fun `prompt entries with literal regex tags should remain in rendered prompt`() {
         val template = SillyTavernPromptTemplate(
             prompts = listOf(

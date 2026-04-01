@@ -197,8 +197,7 @@ internal fun orderRelativePromptsLikeSt(
 
     enabledRelativePrompts
         .filter { prompt ->
-            !prompt.systemPrompt &&
-                prompt.identifier !in handledIdentifiers &&
+            prompt.identifier !in handledIdentifiers &&
                 prompt.identifier != stEnhanceDefinitionsIdentifier &&
                 prompt.identifier != stChatHistoryIdentifier &&
                 prompt.identifier != stDialogueExamplesIdentifier

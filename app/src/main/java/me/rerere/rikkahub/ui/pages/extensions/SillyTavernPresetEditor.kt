@@ -919,45 +919,47 @@ private fun StPromptEditSheet(
                     optionToString = { stringResource(stInjectionPositionLabelRes(it)) }
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = depthText,
-                        onValueChange = { value ->
-                            depthText = value
-                            value.toIntOrNull()?.let { depth ->
-                                onEdit(
-                                    state.copy(
-                                        prompt = state.prompt.copy(injectionDepth = depth)
+                if (state.prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = depthText,
+                            onValueChange = { value ->
+                                depthText = value
+                                value.toIntOrNull()?.let { depth ->
+                                    onEdit(
+                                        state.copy(
+                                            prompt = state.prompt.copy(injectionDepth = depth)
+                                        )
                                     )
-                                )
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                        label = { Text(stringResource(R.string.prompt_page_st_preset_editor_depth)) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                    )
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(stringResource(R.string.prompt_page_st_preset_editor_depth)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                        )
 
-                    OutlinedTextField(
-                        value = orderText,
-                        onValueChange = { value ->
-                            orderText = value
-                            value.toIntOrNull()?.let { order ->
-                                onEdit(
-                                    state.copy(
-                                        prompt = state.prompt.copy(injectionOrder = order)
+                        OutlinedTextField(
+                            value = orderText,
+                            onValueChange = { value ->
+                                orderText = value
+                                value.toIntOrNull()?.let { order ->
+                                    onEdit(
+                                        state.copy(
+                                            prompt = state.prompt.copy(injectionOrder = order)
+                                        )
                                     )
-                                )
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                        label = { Text(stringResource(R.string.prompt_page_st_preset_editor_order)) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                    )
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(stringResource(R.string.prompt_page_st_preset_editor_order)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                        )
+                    }
                 }
 
                 Column(
@@ -1302,7 +1304,7 @@ private fun stPromptSummary(prompt: SillyTavernPromptItem): String {
     return buildList {
         add(prompt.identifier)
         add(stringResource(stRoleLabelRes(prompt.role)))
-        if (!prompt.marker) {
+        if (prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE) {
             add(stringResource(R.string.prompt_page_st_preset_editor_depth_value, prompt.injectionDepth))
             add(stringResource(R.string.prompt_page_st_preset_editor_order_value, prompt.injectionOrder))
         }
