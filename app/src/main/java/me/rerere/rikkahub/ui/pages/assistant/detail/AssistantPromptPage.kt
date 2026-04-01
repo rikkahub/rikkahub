@@ -71,12 +71,10 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.SillyTavernPreset
 import me.rerere.rikkahub.data.model.SillyTavernPromptItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.activeStPresetRegexes
-import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.selectedStPreset
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import me.rerere.rikkahub.data.model.effectiveUserPersona
@@ -84,7 +82,6 @@ import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.hasExplicitPromptOrder
 import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.data.model.sourceLabel
-import me.rerere.rikkahub.data.model.upsertStPreset
 import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
 import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -170,6 +167,7 @@ private fun AssistantPromptContent(
     val linkedLorebooks = settings.lorebooks.filter { assistant.lorebookIds.contains(it.id) }
     var showCharacterExportDialog by remember { mutableStateOf(false) }
     var showCharacterPngExportDialog by remember { mutableStateOf(false) }
+    var pendingCharacterCardImport by remember { mutableStateOf<PendingCharacterCardImport?>(null) }
     val characterCardExportData = remember(assistant, linkedLorebooks) {
         SillyTavernCharacterCardExportData(
             assistant = assistant,
@@ -184,6 +182,37 @@ private fun AssistantPromptContent(
         data = characterCardExportData,
         serializer = SillyTavernCharacterCardPngSerializer,
     )
+
+    fun applyCharacterCardImport(
+        pendingImport: PendingCharacterCardImport,
+        enableRuntime: Boolean,
+    ) {
+        val importedLorebooks = pendingImport.application.lorebooks.filter { imported ->
+            latestSettings.lorebooks.none { it.id == imported.id }
+        }
+        val nextAssistant = pendingImport.application.assistant
+        val runtimeSettings = if (enableRuntime) {
+            latestSettings.enableCharacterCardRuntime(pendingImport.runtimeTemplate)
+        } else {
+            latestSettings
+        }
+        pendingCharacterCardImport = null
+        latestOnUpdateSettings(
+            runtimeSettings.copy(
+                lorebooks = runtimeSettings.lorebooks + importedLorebooks,
+                assistants = runtimeSettings.assistants.map { existing ->
+                    if (existing.id == nextAssistant.id) {
+                        nextAssistant
+                    } else {
+                        existing
+                    }
+                },
+                globalRegexes = pendingImport.application.sharedRegexes,
+            ),
+            latestAssistant,
+            nextAssistant,
+        )
+    }
 
     Column(
         modifier = modifier
@@ -227,7 +256,7 @@ private fun AssistantPromptContent(
                     )
                     PromptFeatureGuideRow(
                         title = "自动合并",
-                        body = "导入得到的 lorebook 和 regex 会并入当前助手环境；如果全局还没有 ST 预设，会自动补一份默认模板用于兼容运行时。",
+                        body = "导入得到的 lorebook 和 regex 会并入当前助手环境；若当前 ST 运行时未启用，导入时会先提示你是否要开启，不开启的话角色卡会先保存但不会参与生成。",
                     )
                     PromptFeatureGuideRow(
                         title = "后续编辑",
@@ -237,44 +266,24 @@ private fun AssistantPromptContent(
                 AssistantImporter(
                     allowedKinds = setOf(AssistantImportKind.CHARACTER_CARD),
                     onImport = { payload, includeRegexes ->
-                        val application = applyImportedAssistantToExisting(
-                            currentAssistant = assistant,
-                            payload = payload,
-                            existingLorebooks = settings.lorebooks,
-                            existingSharedRegexes = settings.globalRegexes,
-                            includeRegexes = includeRegexes,
-                        )
-                        val importedLorebooks = application.lorebooks.filter { imported ->
-                            latestSettings.lorebooks.none { it.id == imported.id }
-                        }
-                        val nextAssistant = application.assistant
-                        val seededSettings = if (latestSettings.selectedStPreset() == null) {
-                            latestSettings
-                                .upsertStPreset(
-                                    preset = SillyTavernPreset(
-                                        template = payload.presetTemplate ?: defaultSillyTavernPromptTemplate(),
-                                    ),
-                                    select = true,
-                                )
-                                .copy(stPresetEnabled = true)
-                        } else {
-                            latestSettings
-                        }
-                        latestOnUpdateSettings(
-                            seededSettings.copy(
-                                lorebooks = seededSettings.lorebooks + importedLorebooks,
-                                assistants = seededSettings.assistants.map { existing ->
-                                    if (existing.id == nextAssistant.id) {
-                                        nextAssistant
-                                    } else {
-                                        existing
-                                    }
-                                },
-                                globalRegexes = application.sharedRegexes,
+                        val pendingImport = PendingCharacterCardImport(
+                            application = applyImportedAssistantToExisting(
+                                currentAssistant = assistant,
+                                payload = payload,
+                                existingLorebooks = settings.lorebooks,
+                                existingSharedRegexes = settings.globalRegexes,
+                                includeRegexes = includeRegexes,
                             ),
-                            latestAssistant,
-                            nextAssistant,
+                            runtimeTemplate = payload.characterRuntimeTemplate(),
                         )
+                        if (latestSettings.needsCharacterCardRuntimeActivation()) {
+                            pendingCharacterCardImport = pendingImport
+                        } else {
+                            applyCharacterCardImport(
+                                pendingImport = pendingImport,
+                                enableRuntime = false,
+                            )
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -601,6 +610,23 @@ private fun AssistantPromptContent(
             },
             title = "助手级 Regex",
             description = "仅对当前助手生效。适合角色卡自带的格式化、美化和卡片专属规则。",
+        )
+    }
+
+    pendingCharacterCardImport?.let { pendingImport ->
+        CharacterCardRuntimeActivationDialog(
+            onConfirm = {
+                applyCharacterCardImport(
+                    pendingImport = pendingImport,
+                    enableRuntime = true,
+                )
+            },
+            onDismiss = {
+                applyCharacterCardImport(
+                    pendingImport = pendingImport,
+                    enableRuntime = false,
+                )
+            },
         )
     }
 

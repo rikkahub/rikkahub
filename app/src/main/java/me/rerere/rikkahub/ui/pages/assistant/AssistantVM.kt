@@ -99,9 +99,10 @@ class AssistantVM(
         assistant: Assistant,
         lorebooks: List<Lorebook>,
         sharedRegexes: List<AssistantRegex> = settings.value.globalRegexes,
+        baseSettings: Settings? = null,
     ) {
         viewModelScope.launch {
-            val settings = settings.value
+            val settings = baseSettings ?: settings.value
             settingsStore.update(
                 settings.copy(
                     assistants = settings.assistants.plus(assistant),

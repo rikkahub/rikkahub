@@ -113,6 +113,14 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
 
+internal fun draftSubmissionRequiresModel(
+    isEditing: Boolean,
+    answer: Boolean,
+    isTermuxDirect: Boolean,
+): Boolean {
+    return !isEditing && answer && !isTermuxDirect
+}
+
 @Composable
 private fun ChatStatusBarImmersiveEffect() {
     val context = LocalContext.current
@@ -358,7 +366,13 @@ private fun ChatPageContent(
             )
         }
 
-        if (currentChatModel == null && termuxDirect?.isDirect != true) {
+        if (
+            currentChatModel == null && draftSubmissionRequiresModel(
+                isEditing = inputState.isEditing(),
+                answer = answer,
+                isTermuxDirect = termuxDirect?.isDirect == true,
+            )
+        ) {
             toaster.show(
                 selectModelFirstText,
                 type = ToastType.Error,

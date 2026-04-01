@@ -8,8 +8,10 @@ import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.applyActiveStPresetSampling
+import me.rerere.rikkahub.data.model.defaultSillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.findPromptOrder
+import me.rerere.rikkahub.data.model.selectedStPreset
 import me.rerere.rikkahub.data.model.stExtension
 import me.rerere.rikkahub.utils.base64Encode
 import org.junit.Assert.assertEquals
@@ -437,6 +439,33 @@ class SillyTavernImportTest {
 
         assertEquals(Avatar.Image("file:///tmp/seraphina.png"), materialized.assistant.avatar)
         assertNull(materialized.avatarImportSourceUri)
+    }
+
+    @Test
+    fun `enable character card runtime should seed and enable default preset when missing`() {
+        val template = defaultSillyTavernPromptTemplate().copy(sourceName = "Imported Runtime")
+
+        val updated = Settings().enableCharacterCardRuntime(template)
+
+        assertEquals(true, updated.stPresetEnabled)
+        assertEquals(1, updated.stPresets.size)
+        assertEquals(updated.stPresets.single().id, updated.selectedStPresetId)
+        assertEquals("Imported Runtime", updated.selectedStPreset()?.template?.sourceName)
+    }
+
+    @Test
+    fun `enable character card runtime should preserve existing preset selection`() {
+        val existingPreset = defaultSillyTavernPromptTemplate().copy(sourceName = "Existing Runtime")
+        val existingSettings = Settings()
+            .enableCharacterCardRuntime(existingPreset)
+            .copy(stPresetEnabled = false)
+        val importedTemplate = defaultSillyTavernPromptTemplate().copy(sourceName = "Imported Runtime")
+
+        val updated = existingSettings.enableCharacterCardRuntime(importedTemplate)
+
+        assertEquals(true, updated.stPresetEnabled)
+        assertEquals(1, updated.stPresets.size)
+        assertEquals("Existing Runtime", updated.selectedStPreset()?.template?.sourceName)
     }
 
     @Test
