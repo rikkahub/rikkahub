@@ -61,7 +61,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
 import androidx.compose.ui.res.stringResource
@@ -70,6 +75,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceAtLeast
 import androidx.compose.ui.zIndex
@@ -129,6 +135,7 @@ fun ChatList(
     state: LazyListState,
     loading: Boolean,
     previewMode: Boolean,
+    topBarVisible: Boolean,
     settings: Settings,
     hazeState: HazeState,
     errors: List<ChatError> = emptyList(),
@@ -171,6 +178,7 @@ fun ChatList(
                 conversation = conversation,
                 state = state,
                 loading = loading,
+                topBarVisible = topBarVisible,
                 settings = settings,
                 hazeState = hazeState,
                 errors = errors,
@@ -201,6 +209,7 @@ private fun ChatListNormal(
     conversation: Conversation,
     state: LazyListState,
     loading: Boolean,
+    topBarVisible: Boolean,
     settings: Settings,
     hazeState: HazeState,
     errors: List<ChatError>,
@@ -226,6 +235,8 @@ private fun ChatListNormal(
     val density = LocalDensity.current
     val activity = LocalActivity.current as? me.rerere.rikkahub.RouteActivity
     val enableGlassBlur = settings.displaySetting.enableBlurEffect
+    val topFadeHeight = if (topBarVisible) innerPadding.calculateTopPadding() + 20.dp else 0.dp
+    val bottomFadeHeight = innerPadding.calculateBottomPadding() + 24.dp
     val assistant = remember(settings.assistants, conversation.assistantId) {
         settings.getAssistantById(conversation.assistantId)
     }
@@ -335,6 +346,10 @@ private fun ChatListNormal(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxSize()
+                .chatFadingEdges(
+                    topEdgeHeight = topFadeHeight,
+                    bottomEdgeHeight = bottomFadeHeight,
+                )
                 .then(
                     if (enableGlassBlur) {
                         Modifier.hazeSource(state = hazeState)
@@ -561,6 +576,46 @@ private fun ChatListNormal(
                         .padding(bottom = 8.dp)
                 )
             }
+        }
+    }
+}
+
+private fun Modifier.chatFadingEdges(
+    topEdgeHeight: Dp,
+    bottomEdgeHeight: Dp,
+): Modifier {
+    if (topEdgeHeight == 0.dp && bottomEdgeHeight == 0.dp) {
+        return this
+    }
+
+    return graphicsLayer {
+        compositingStrategy = CompositingStrategy.Offscreen
+    }.drawWithContent {
+        drawContent()
+
+        val topEdgePx = topEdgeHeight.toPx()
+        val bottomEdgePx = bottomEdgeHeight.toPx()
+
+        if (topEdgePx > 0f) {
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, Color.Black),
+                    startY = 0f,
+                    endY = topEdgePx,
+                ),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+
+        if (bottomEdgePx > 0f) {
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color.Black, Color.Transparent),
+                    startY = size.height - bottomEdgePx,
+                    endY = size.height,
+                ),
+                blendMode = BlendMode.DstIn,
+            )
         }
     }
 }

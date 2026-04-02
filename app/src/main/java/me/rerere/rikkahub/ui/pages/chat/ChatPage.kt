@@ -622,6 +622,7 @@ private fun ChatPageContent(
                     state = chatListState,
                     loading = loadingJob != null,
                     previewMode = previewMode,
+                    topBarVisible = topBarVisible,
                     settings = setting,
                     hazeState = hazeState,
                     errors = errors,
