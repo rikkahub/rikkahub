@@ -333,6 +333,33 @@ class GenerationHandler(
 
     }.flowOn(Dispatchers.IO)
 
+    suspend fun previewPreparedMessages(
+        settings: Settings,
+        model: Model,
+        messages: List<UIMessage>,
+        inputTransformers: List<InputMessageTransformer> = emptyList(),
+        assistant: Assistant,
+        memories: List<AssistantMemory>? = null,
+        tools: List<Tool> = emptyList(),
+        stGenerationType: String = "normal",
+        stMacroState: StMacroState? = null,
+        lorebookRuntimeState: LorebookRuntimeState? = null,
+    ): List<UIMessage> {
+        return prepareInternalMessages(
+            assistant = assistant,
+            settings = settings,
+            messages = messages,
+            transformers = inputTransformers,
+            model = model,
+            tools = tools,
+            memories = memories ?: emptyList(),
+            stGenerationType = stGenerationType,
+            stMacroState = stMacroState,
+            lorebookRuntimeState = lorebookRuntimeState,
+            dryRun = true,
+        )
+    }
+
     private suspend fun generateInternal(
         assistant: Assistant,
         settings: Settings,
@@ -349,46 +376,14 @@ class GenerationHandler(
         stMacroState: StMacroState?,
         lorebookRuntimeState: LorebookRuntimeState?,
     ) {
-        val internalMessages = buildList {
-            val system = buildString {
-                // 如果助手有系统提示，则添加到消息中
-                if (assistant.systemPrompt.isNotBlank()) {
-                    append(assistant.systemPrompt)
-                }
-
-                // 记忆
-                if (assistant.enableMemory) {
-                    appendLine()
-                    append(buildMemoryPrompt(memories = memories))
-                }
-                if (assistant.enableRecentChatsReference) {
-                    appendLine()
-                    append(buildRecentChatsPrompt(assistant, conversationRepo))
-                }
-
-                buildSkillsCatalogPrompt(
-                    assistant = assistant,
-                    model = model,
-                    catalog = skillsRepository.state.value,
-                )?.let {
-                    appendLine()
-                    append(it)
-                }
-
-                // 工具prompt
-                tools.forEach { tool ->
-                    appendLine()
-                    append(tool.systemPrompt(model, messages))
-                }
-            }
-            if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(messages.limitContext(assistant.contextMessageSize))
-        }.transforms(
-            transformers = transformers,
-            context = context,
-            model = model,
+        val internalMessages = prepareInternalMessages(
             assistant = assistant,
             settings = settings,
+            messages = messages,
+            transformers = transformers,
+            model = model,
+            tools = tools,
+            memories = memories,
             stGenerationType = stGenerationType,
             stMacroState = stMacroState,
             lorebookRuntimeState = lorebookRuntimeState,
@@ -476,6 +471,63 @@ class GenerationHandler(
             }
             onUpdateMessages(messages)
         }
+    }
+
+    private suspend fun prepareInternalMessages(
+        assistant: Assistant,
+        settings: Settings,
+        messages: List<UIMessage>,
+        transformers: List<MessageTransformer>,
+        model: Model,
+        tools: List<Tool>,
+        memories: List<AssistantMemory>,
+        stGenerationType: String,
+        stMacroState: StMacroState?,
+        lorebookRuntimeState: LorebookRuntimeState?,
+        dryRun: Boolean = false,
+    ): List<UIMessage> {
+        return buildList {
+            val system = buildString {
+                if (assistant.systemPrompt.isNotBlank()) {
+                    append(assistant.systemPrompt)
+                }
+
+                if (assistant.enableMemory) {
+                    appendLine()
+                    append(buildMemoryPrompt(memories = memories))
+                }
+                if (assistant.enableRecentChatsReference) {
+                    appendLine()
+                    append(buildRecentChatsPrompt(assistant, conversationRepo))
+                }
+
+                buildSkillsCatalogPrompt(
+                    assistant = assistant,
+                    model = model,
+                    catalog = skillsRepository.state.value,
+                )?.let {
+                    appendLine()
+                    append(it)
+                }
+
+                tools.forEach { tool ->
+                    appendLine()
+                    append(tool.systemPrompt(model, messages))
+                }
+            }
+            if (system.isNotBlank()) add(UIMessage.system(prompt = system))
+            addAll(messages.limitContext(assistant.contextMessageSize))
+        }.transforms(
+            transformers = transformers,
+            context = context,
+            model = model,
+            assistant = assistant,
+            settings = settings,
+            stGenerationType = stGenerationType,
+            stMacroState = stMacroState,
+            lorebookRuntimeState = lorebookRuntimeState,
+            dryRun = dryRun,
+        )
     }
 
     fun translateText(

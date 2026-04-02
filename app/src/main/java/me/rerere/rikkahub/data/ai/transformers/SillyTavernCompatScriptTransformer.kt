@@ -151,11 +151,13 @@ class SillyTavernCompatScriptTransformer(
             error("SillyTavern compatibility script failed: ${response.error.orEmpty()}")
         }
 
-        persistExtensionSettingsIfNeeded(
-            assistantId = assistant.id.toString(),
-            current = assistant.stCompatExtensionSettings,
-            updated = response.extensionSettings,
-        )
+        if (!ctx.dryRun) {
+            persistExtensionSettingsIfNeeded(
+                assistantId = assistant.id.toString(),
+                current = assistant.stCompatExtensionSettings,
+                updated = response.extensionSettings,
+            )
+        }
 
         return applyCompatMessages(response.messages)
     }

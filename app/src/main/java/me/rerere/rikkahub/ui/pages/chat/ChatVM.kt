@@ -17,9 +17,11 @@ import androidx.paging.map
 import com.google.firebase.analytics.FirebaseAnalytics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -41,6 +43,7 @@ import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.service.ChatRuntimeInspection
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
@@ -183,6 +186,9 @@ class ChatVM(
     // 错误状态
     val errors: StateFlow<List<ChatError>> = chatService.errors
 
+    private val _runtimeInspection = MutableStateFlow<UiState<ChatRuntimeInspection>>(UiState.Idle)
+    val runtimeInspection: StateFlow<UiState<ChatRuntimeInspection>> = _runtimeInspection.asStateFlow()
+
     fun dismissError(id: Uuid) = chatService.dismissError(id)
 
     fun clearAllErrors() = chatService.clearAllErrors()
@@ -197,6 +203,18 @@ class ChatVM(
     fun updateSettings(newSettings: Settings) {
         viewModelScope.launch {
             settingsStore.update(newSettings)
+        }
+    }
+
+    fun refreshRuntimeInspection() {
+        viewModelScope.launch {
+            _runtimeInspection.value = UiState.Loading
+            _runtimeInspection.value = runCatching {
+                chatService.inspectConversationRuntime(_conversationId)
+            }.fold(
+                onSuccess = { UiState.Success(it) },
+                onFailure = { UiState.Error(it) },
+            )
         }
     }
 

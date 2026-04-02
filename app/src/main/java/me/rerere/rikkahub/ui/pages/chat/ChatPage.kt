@@ -334,9 +334,12 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     val chatComposerBridge: ChatComposerBridge = koinInject()
     val chatHistoryBridge: ChatHistoryBridge = koinInject()
+    val runtimeInspection by vm.runtimeInspection.collectAsStateWithLifecycle()
     val selectModelFirstText = stringResource(R.string.chat_page_select_model_first)
     var previewMode by rememberSaveable { mutableStateOf(false) }
     var topBarVisible by rememberSaveable { mutableStateOf(true) }
+    var inspectorVisible by rememberSaveable { mutableStateOf(false) }
+    var inspectorTab by rememberSaveable { mutableStateOf(ChatRuntimeInspectorTab.PROMPTS) }
     val enableGlassBlur = setting.displaySetting.enableBlurEffect
     val hazeState = rememberHazeState()
     val activeHazeState = if (enableGlassBlur) hazeState else null
@@ -528,6 +531,16 @@ private fun ChatPageContent(
                                 },
                                 onHideTopBar = {
                                     topBarVisible = false
+                                },
+                                onOpenPromptInspector = {
+                                    inspectorTab = ChatRuntimeInspectorTab.PROMPTS
+                                    inspectorVisible = true
+                                    vm.refreshRuntimeInspection()
+                                },
+                                onOpenVariableInspector = {
+                                    inspectorTab = ChatRuntimeInspectorTab.VARIABLES
+                                    inspectorVisible = true
+                                    vm.refreshRuntimeInspection()
                                 }
                             )
                         }
@@ -703,6 +716,19 @@ private fun ChatPageContent(
                     )
                 }
             }
+
+            if (inspectorVisible) {
+                ChatRuntimeInspectorSheet(
+                    state = runtimeInspection,
+                    initialTab = inspectorTab,
+                    onDismissRequest = {
+                        inspectorVisible = false
+                    },
+                    onRefresh = {
+                        vm.refreshRuntimeInspection()
+                    },
+                )
+            }
         }
     }
 }
@@ -718,6 +744,8 @@ private fun TopBar(
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit,
     onHideTopBar: () -> Unit,
+    onOpenPromptInspector: () -> Unit,
+    onOpenVariableInspector: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -809,6 +837,20 @@ private fun TopBar(
                     leadingIcon = {
                         Icon(HugeIcons.ArrowUpDouble, null)
                     }
+                )
+                DropdownMenuItem(
+                    text = { Text("提示词查看器") },
+                    onClick = {
+                        showOverflowMenu = false
+                        onOpenPromptInspector()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("变量查看器") },
+                    onClick = {
+                        showOverflowMenu = false
+                        onOpenVariableInspector()
+                    },
                 )
             }
         },

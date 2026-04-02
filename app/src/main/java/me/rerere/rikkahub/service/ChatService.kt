@@ -35,6 +35,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -78,12 +83,16 @@ import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexPromptOnlyTransformer
+import me.rerere.rikkahub.data.ai.transformers.StMacroEnvironment
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernCompatScriptTransformer
 import me.rerere.rikkahub.data.ai.transformers.StMacroState
+import me.rerere.rikkahub.data.ai.transformers.LorebookRuntimeState
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernMacroTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.TransformerContext
+import me.rerere.rikkahub.data.ai.transformers.estimateLorebookTokenCount
 import me.rerere.rikkahub.data.ai.transformers.readLatestAssistantStRuntimeSnapshot
 import me.rerere.rikkahub.data.ai.transformers.readStRuntimeSnapshot
 import me.rerere.rikkahub.data.ai.transformers.withStRuntimeSnapshot
@@ -101,6 +110,7 @@ import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.applyActiveStPresetSampling
+import me.rerere.rikkahub.data.model.activeStPresetTemplate
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.resolveConversationStarterMessages
 import me.rerere.rikkahub.data.model.resolveStSendIfEmptyContent
@@ -494,6 +504,99 @@ class ChatService(
         }
     }
 
+    suspend fun inspectConversationRuntime(conversationId: Uuid): ChatRuntimeInspection {
+        val settings = settingsStore.settingsFlow.first()
+        val conversation = applyPersistentStLocalVariables(
+            conversationId = conversationId,
+            conversation = getConversationFlow(conversationId).value,
+        )
+        val assistant = settings.applyActiveStPresetSampling(
+            settings.getAssistantById(conversation.assistantId) ?: settings.getCurrentAssistant()
+        )
+        val model = assistant.chatModelId?.let { settings.findModelById(it) }
+            ?: settings.getCurrentChatModel()
+            ?: error("No model configured for this conversation")
+        val generationType = resolveConversationStGenerationType(
+            conversationId = conversationId,
+            conversation = conversation,
+        )
+        val currentLocalVariables = conversation.stLocalVariables.toMap()
+        val currentGlobalVariables = stMacroGlobalVariables.toMap()
+        val previewMacroState = StMacroState(
+            localVariables = LinkedHashMap(currentLocalVariables),
+            globalVariables = LinkedHashMap(currentGlobalVariables),
+        )
+        val previewLorebookRuntimeState = LorebookRuntimeState().apply {
+            conversation.currentMessages
+                .readLatestAssistantStRuntimeSnapshot()
+                ?.lorebookRuntimeState
+                ?.let(::restoreFromSnapshot)
+        }
+        val promptPreviewMessages = generationHandler.previewPreparedMessages(
+            settings = settings,
+            model = model,
+            messages = conversation.currentMessages,
+            inputTransformers = buildList {
+                addAll(inputTransformers)
+                add(RegexPromptOnlyTransformer)
+                add(stCompatScriptTransformer)
+            },
+            assistant = assistant,
+            memories = if (assistant.useGlobalMemory) {
+                memoryRepository.getGlobalMemories()
+            } else {
+                memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
+            },
+            tools = buildConversationTools(
+                settings = settings,
+                assistant = assistant,
+            ),
+            stGenerationType = generationType,
+            stMacroState = previewMacroState,
+            lorebookRuntimeState = previewLorebookRuntimeState,
+        ).map(::toPromptPreviewMessage)
+        val activeTemplate = settings.activeStPresetTemplate()
+            ?.takeIf { settings.stPresetEnabled }
+        val macroEnvironment = StMacroEnvironment.from(
+            ctx = TransformerContext(
+                context = context,
+                model = model,
+                assistant = assistant,
+                settings = settings,
+                stGenerationType = generationType,
+                stMacroState = previewMacroState,
+                lorebookRuntimeState = previewLorebookRuntimeState,
+                dryRun = true,
+            ),
+            messages = conversation.currentMessages,
+            template = activeTemplate,
+            characterData = assistant.stCharacterData,
+        )
+        return ChatRuntimeInspection(
+            assistantName = assistant.name.ifBlank { context.getString(R.string.assistant_page_default_assistant) },
+            characterName = assistant.stCharacterData?.name
+                ?.takeIf { it.isNotBlank() }
+                ?: assistant.name.ifBlank { context.getString(R.string.assistant_page_default_assistant) },
+            modelName = model.displayName.ifBlank { model.modelId },
+            presetName = activeTemplate?.sourceName?.takeIf { it.isNotBlank() } ?: "未启用",
+            generationType = generationType,
+            promptMessages = promptPreviewMessages,
+            promptTokenEstimate = promptPreviewMessages.sumOf { it.tokenEstimate },
+            localVariables = currentLocalVariables,
+            globalVariables = currentGlobalVariables,
+            contextVariables = buildRuntimeContextJson(
+                conversation = conversation,
+                assistant = assistant,
+                modelName = model.displayName.ifBlank { model.modelId },
+                presetName = activeTemplate?.sourceName.orEmpty(),
+                generationType = generationType,
+                environment = macroEnvironment,
+                promptMessages = promptPreviewMessages,
+                previewMacroState = previewMacroState,
+            ),
+        )
+    }
+
     // ---- 初始化对话 ----
 
     suspend fun initializeConversation(conversationId: Uuid) {
@@ -514,6 +617,178 @@ class ChatService(
             ).updateCurrentMessages(assistant.resolveConversationStarterMessages())
             updateConversation(conversationId, newConversation)
         }
+    }
+
+    private fun buildConversationTools(
+        settings: me.rerere.rikkahub.data.datastore.Settings,
+        assistant: Assistant,
+    ): List<Tool> {
+        val mcpTools = mcpManager.getAvailableToolsForServers(assistant.mcpServers)
+        return buildList {
+            if (settings.enableWebSearch) {
+                addAll(createSearchTools(settings))
+            }
+            addAll(localTools.getTools(assistant.localTools))
+            mcpTools.forEach { tool ->
+                add(
+                    Tool(
+                        name = "mcp__${tool.name}",
+                        description = tool.description ?: "",
+                        parameters = { tool.inputSchema },
+                        needsApproval = tool.needsApproval,
+                        execute = {
+                            mcpManager.callToolFromServers(
+                                serverIds = assistant.mcpServers,
+                                toolName = tool.name,
+                                args = it.jsonObject,
+                            )
+                        },
+                    )
+                )
+            }
+        }
+    }
+
+    private fun buildRuntimeContextJson(
+        conversation: Conversation,
+        assistant: Assistant,
+        modelName: String,
+        presetName: String,
+        generationType: String,
+        environment: StMacroEnvironment,
+        promptMessages: List<ChatPromptPreviewMessage>,
+        previewMacroState: StMacroState,
+    ): JsonObject {
+        return buildJsonObject {
+            put(
+                "assistant",
+                buildJsonObject {
+                    put("id", assistant.id.toString())
+                    put("name", assistant.name)
+                    put("character_name", assistant.stCharacterData?.name.orEmpty())
+                    put("model", modelName)
+                    put("preset", presetName)
+                }
+            )
+            put(
+                "conversation",
+                buildJsonObject {
+                    put("id", conversation.id.toString())
+                    put("message_count", conversation.currentMessages.size)
+                    put("generation_type", generationType)
+                }
+            )
+            put(
+                "macro_environment",
+                buildJsonObject {
+                    put("user", environment.user)
+                    put("char", environment.char)
+                    put("group", environment.group)
+                    put("group_not_muted", environment.groupNotMuted)
+                    put("not_char", environment.notChar)
+                    put("persona", environment.persona)
+                    put("scenario", environment.scenario)
+                    put("character_description", environment.characterDescription)
+                    put("character_personality", environment.characterPersonality)
+                    put("character_prompt", environment.charPrompt)
+                    put("character_instruction", environment.charInstruction)
+                    put("character_depth_prompt", environment.charDepthPrompt)
+                    put("creator_notes", environment.creatorNotes)
+                    put("example_messages_raw", environment.exampleMessagesRaw)
+                    put("last_chat_message", environment.lastChatMessage)
+                    put("last_user_message", environment.lastUserMessage)
+                    put("last_assistant_message", environment.lastAssistantMessage)
+                    put("model_name", environment.modelName)
+                    put("max_prompt", environment.maxPrompt)
+                    put("default_system_prompt", environment.defaultSystemPrompt)
+                    put("system_prompt", environment.systemPrompt)
+                    put("chat_start", environment.chatStart)
+                    put("example_separator", environment.exampleSeparator)
+                    put("last_message_id", environment.lastMessageId)
+                    put("first_included_message_id", environment.firstIncludedMessageId)
+                    put("first_displayed_message_id", environment.firstDisplayedMessageId)
+                    put("last_swipe_id", environment.lastSwipeId)
+                    put("current_swipe_id", environment.currentSwipeId)
+                    put("is_mobile", environment.isMobile)
+                    put("outlets", environment.outlets.toJsonObject())
+                    put("available_extensions", environment.availableExtensions.toJsonArray())
+                    put("last_user_message_created_at", environment.lastUserMessageCreatedAt?.toString().orEmpty())
+                }
+            )
+            put(
+                "dry_run",
+                buildJsonObject {
+                    put("prompt_message_count", promptMessages.size)
+                    put("prompt_token_estimate", promptMessages.sumOf { it.tokenEstimate })
+                    put("local_variables", previewMacroState.localVariables.toJsonObject())
+                    put("global_variables", previewMacroState.globalVariables.toJsonObject())
+                    put("outlets", previewMacroState.outlets.toJsonObject())
+                }
+            )
+        }
+    }
+
+    private fun toPromptPreviewMessage(message: UIMessage): ChatPromptPreviewMessage {
+        val content = message.parts.toPromptPreviewText()
+        return ChatPromptPreviewMessage(
+            role = message.role,
+            content = content.ifBlank { "[Empty message]" },
+            tokenEstimate = estimateLorebookTokenCount(content),
+        )
+    }
+
+    private fun List<UIMessagePart>.toPromptPreviewText(): String {
+        return buildList<String> {
+            this@toPromptPreviewText.forEach { part ->
+                when (part) {
+                    is UIMessagePart.Text -> add(part.text)
+                    is UIMessagePart.Image -> add("[Image]\n${part.url}")
+                    is UIMessagePart.Video -> add("[Video]\n${part.url}")
+                    is UIMessagePart.Audio -> add("[Audio]\n${part.url}")
+                    is UIMessagePart.Document -> add("[Document] ${part.fileName} (${part.mime})\n${part.url}")
+                    is UIMessagePart.Reasoning -> add("[Reasoning]\n${part.reasoning}")
+                    is UIMessagePart.Tool -> {
+                        add("[Tool:${part.toolName}]\n${part.input}")
+                        if (part.output.isNotEmpty()) {
+                            add("[Tool Output]\n${part.output.toPromptPreviewText()}")
+                        }
+                    }
+
+                    is UIMessagePart.ToolCall -> add("[Tool Call:${part.toolName}]\n${part.arguments}")
+                    is UIMessagePart.ToolResult -> add("[Tool Result:${part.toolName}]\n${part.content}")
+                    is UIMessagePart.Search -> add("[Search]")
+                }
+            }
+        }.map { it.trimEnd() }
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+            .trim()
+    }
+
+    private fun Map<String, String>.toJsonObject(): JsonObject {
+        return JsonObject(entries.associate { (key, value) ->
+            key to JsonPrimitive(value)
+        })
+    }
+
+    private fun Collection<String>.toJsonArray(): JsonArray {
+        return buildJsonArray {
+            this@toJsonArray.forEach { value ->
+                add(JsonPrimitive(value))
+            }
+        }
+    }
+
+    private fun kotlinx.serialization.json.JsonObjectBuilder.put(key: String, value: String) {
+        put(key, JsonPrimitive(value))
+    }
+
+    private fun kotlinx.serialization.json.JsonObjectBuilder.put(key: String, value: Int) {
+        put(key, JsonPrimitive(value))
+    }
+
+    private fun kotlinx.serialization.json.JsonObjectBuilder.put(key: String, value: Boolean) {
+        put(key, JsonPrimitive(value))
     }
 
     // ---- 发送消息 ----
@@ -1092,29 +1367,10 @@ class ChatService(
                     add(stCompatScriptTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = buildList {
-                    if (settings.enableWebSearch) {
-                        addAll(createSearchTools(settings))
-                    }
-                    addAll(localTools.getTools(assistant.localTools))
-                    mcpTools.forEach { tool ->
-                        add(
-                            Tool(
-                                name = "mcp__" + tool.name,
-                                description = tool.description ?: "",
-                                parameters = { tool.inputSchema },
-                                needsApproval = tool.needsApproval,
-                                execute = {
-                                    mcpManager.callToolFromServers(
-                                        serverIds = assistant.mcpServers,
-                                        toolName = tool.name,
-                                        args = it.jsonObject
-                                    )
-                                },
-                            )
-                        )
-                    }
-                },
+                tools = buildConversationTools(
+                    settings = settings,
+                    assistant = assistant,
+                ),
             ).onCompletion { cause ->
                 // 取消 Live Update 通知
                 cancelLiveUpdateNotification(conversationId)

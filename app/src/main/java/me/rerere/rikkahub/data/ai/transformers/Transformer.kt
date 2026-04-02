@@ -16,6 +16,7 @@ class TransformerContext(
     val stGenerationType: String = "normal",
     val stMacroState: StMacroState? = null,
     val lorebookRuntimeState: LorebookRuntimeState? = null,
+    val dryRun: Boolean = false,
 )
 
 interface MessageTransformer {
@@ -69,6 +70,7 @@ suspend fun List<UIMessage>.transforms(
     stGenerationType: String = "normal",
     stMacroState: StMacroState? = null,
     lorebookRuntimeState: LorebookRuntimeState? = null,
+    dryRun: Boolean = false,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -78,6 +80,7 @@ suspend fun List<UIMessage>.transforms(
         stGenerationType = stGenerationType,
         stMacroState = stMacroState,
         lorebookRuntimeState = lorebookRuntimeState,
+        dryRun = dryRun,
     )
     val transformedMessages = transformers.fold(this) { acc, transformer ->
         transformer.transform(ctx, acc)
@@ -107,6 +110,7 @@ suspend fun List<UIMessage>.visualTransforms(
     stGenerationType: String = "normal",
     stMacroState: StMacroState? = null,
     lorebookRuntimeState: LorebookRuntimeState? = null,
+    dryRun: Boolean = false,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -116,6 +120,7 @@ suspend fun List<UIMessage>.visualTransforms(
         stGenerationType = stGenerationType,
         stMacroState = stMacroState,
         lorebookRuntimeState = lorebookRuntimeState,
+        dryRun = dryRun,
     )
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {
@@ -135,6 +140,7 @@ suspend fun List<UIMessage>.onGenerationFinish(
     stGenerationType: String = "normal",
     stMacroState: StMacroState? = null,
     lorebookRuntimeState: LorebookRuntimeState? = null,
+    dryRun: Boolean = false,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -144,6 +150,7 @@ suspend fun List<UIMessage>.onGenerationFinish(
         stGenerationType = stGenerationType,
         stMacroState = stMacroState,
         lorebookRuntimeState = lorebookRuntimeState,
+        dryRun = dryRun,
     )
     return transformers.fold(this) { acc, transformer ->
         if (transformer is OutputMessageTransformer) {
