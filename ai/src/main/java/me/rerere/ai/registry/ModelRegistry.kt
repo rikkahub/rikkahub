@@ -463,12 +463,25 @@ object ModelRegistry {
     /**
      * Returns the effort string for OpenAI reasoning_effort parameter,
      * or null if the parameter should be omitted (e.g. AUTO mode).
+     * Normalizes the requested level to the closest supported level for the model.
      */
     fun reasoningEffortOrNull(modelId: String, level: ReasoningLevel): String? {
         if (level == ReasoningLevel.AUTO) return null
-        // OpenAI does not accept "none"; fall back to "low"
-        if (level == ReasoningLevel.OFF) return "low"
-        return level.effort
+        val supported = supportedReasoningLevels(modelId)
+            .filter { it != ReasoningLevel.AUTO }
+        if (supported.isEmpty()) {
+            // OpenAI does not accept "none"; fall back to "low"
+            return if (level == ReasoningLevel.OFF) "low" else level.effort
+        }
+        // Normalize to closest supported level
+        val normalized = if (level in supported) level
+            else supported.minBy { kotlin.math.abs(it.budgetTokens - level.budgetTokens) }
+        // OpenAI does not accept "none"; fall back to lowest supported
+        if (normalized == ReasoningLevel.OFF) {
+            val lowest = supported.filter { it != ReasoningLevel.OFF }.minByOrNull { it.budgetTokens }
+            return lowest?.effort ?: "low"
+        }
+        return normalized.effort
     }
 
     private fun isGpt51OrLater(modelId: String): Boolean {

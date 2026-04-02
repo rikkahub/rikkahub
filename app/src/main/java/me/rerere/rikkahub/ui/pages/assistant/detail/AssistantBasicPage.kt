@@ -61,6 +61,7 @@ fun AssistantBasicPage(id: String) {
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val providers by vm.providers.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val tags by vm.tags.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -84,6 +85,7 @@ fun AssistantBasicPage(id: String) {
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
             providers = providers,
+            globalChatModelId = settings.chatModelId,
             tags = tags,
             onUpdate = { vm.update(it) },
             vm = vm
@@ -96,6 +98,7 @@ internal fun AssistantBasicContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
     providers: List<me.rerere.ai.provider.ProviderSetting>,
+    globalChatModelId: kotlin.uuid.Uuid?,
     tags: List<DataTag>,
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
@@ -406,7 +409,9 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_thinking_budget))
                 },
             ) {
-                val chatModel = assistant.chatModelId?.let { providers.findModelById(it) }
+                // 优先用助手绑定的模型，fallback 到全局模型
+                val effectiveModelId = assistant.chatModelId ?: globalChatModelId
+                val chatModel = effectiveModelId?.let { providers.findModelById(it) }
                 ReasoningButton(
                     reasoningTokens = assistant.thinkingBudget ?: 0,
                     onUpdateReasoningTokens = { tokens ->

@@ -66,6 +66,43 @@ function isReasoningModel(model: ProviderModel | null): boolean {
   return (model.abilities ?? []).includes("REASONING");
 }
 
+/**
+ * Returns the supported reasoning levels for a given model.
+ * Mirrors the logic in ModelRegistry.supportedReasoningLevels() on the Kotlin side.
+ */
+function getSupportedLevels(model: ProviderModel | null): ReasoningLevel[] {
+  const ALL_LEVELS: ReasoningLevel[] = ["OFF", "AUTO", "MINIMAL", "LOW", "MEDIUM", "HIGH", "XHIGH"];
+  if (!model) return ALL_LEVELS;
+
+  const id = model.modelId.toLowerCase();
+  const tokens = id.split(/[-._]/);
+
+  // O-series (o1, o3, o4, etc.)
+  if (/^o\d+/.test(tokens[0] ?? "")) {
+    return ["OFF", "AUTO", "LOW", "MEDIUM", "HIGH"];
+  }
+
+  const isGpt5Base = tokens.includes("gpt") && tokens.includes("5") && !id.match(/gpt-5\.\d/);
+  const isGpt51Plus = tokens.includes("gpt") && Boolean(id.match(/gpt-5\.\d/));
+  const isPro = id.includes("pro");
+  const isCodexMax = id.includes("codex-max");
+  const isCodex = id.includes("codex");
+  const isOss = tokens.includes("gpt") && tokens.includes("oss");
+
+  if (isGpt5Base && isPro) return ["AUTO", "HIGH"];
+  if (isGpt5Base && isCodex) return ["AUTO", "LOW", "MEDIUM", "HIGH"];
+  if (isGpt5Base) return ["OFF", "AUTO", "MINIMAL", "LOW", "MEDIUM", "HIGH"];
+
+  if (isGpt51Plus && isCodexMax) return ["AUTO", "MEDIUM", "HIGH", "XHIGH"];
+  if (isGpt51Plus && isCodex) return ["AUTO", "LOW", "MEDIUM", "HIGH", "XHIGH"];
+  if (isGpt51Plus && isPro) return ["AUTO", "MEDIUM", "HIGH", "XHIGH"];
+  if (isGpt51Plus) return ["OFF", "AUTO", "LOW", "MEDIUM", "HIGH", "XHIGH"];
+
+  if (isOss) return ["AUTO", "LOW", "MEDIUM", "HIGH"];
+
+  return ALL_LEVELS;
+}
+
 function getReasoningLevel(budget: number | null | undefined): ReasoningLevel {
   const value = budget ?? PRESET_BUDGETS.AUTO;
   let closest = REASONING_PRESET_BUDGETS[0];
@@ -141,10 +178,19 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
     [t],
   );
 
+  const supportedLevels = React.useMemo(
+    () => getSupportedLevels(currentModel),
+    [currentModel],
+  );
+  const filteredPresets = React.useMemo(
+    () => reasoningPresets.filter((preset) => supportedLevels.includes(preset.key)),
+    [reasoningPresets, supportedLevels],
+  );
+
   const currentBudget = currentAssistant?.thinkingBudget ?? PRESET_BUDGETS.AUTO;
   const currentLevel = getReasoningLevel(currentBudget);
   const currentPreset =
-    reasoningPresets.find((preset) => preset.key === currentLevel) ?? reasoningPresets[0];
+    filteredPresets.find((preset) => preset.key === currentLevel) ?? filteredPresets[0];
 
   React.useEffect(() => {
     if (!canUse || !canReasoning) {
@@ -217,7 +263,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
           <PickerErrorAlert error={error} />
 
           <div className="grid grid-cols-3 gap-2">
-            {reasoningPresets.map((preset) => {
+            {filteredPresets.map((preset) => {
               const selected = preset.key === currentLevel;
               const switching =
                 updateThinkingBudgetMutation.isPending &&

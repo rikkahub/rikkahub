@@ -162,13 +162,29 @@ class ModelRegistryTest {
 
     @Test
     fun testReasoningEffortOrNull() {
+        // AUTO always returns null
         assertNull(ModelRegistry.reasoningEffortOrNull("o4-mini", ReasoningLevel.AUTO))
+        assertNull(ModelRegistry.reasoningEffortOrNull("gpt-5-pro", ReasoningLevel.AUTO))
+
+        // OFF normalizes to lowest supported level
         assertEquals("low", ModelRegistry.reasoningEffortOrNull("o4-mini", ReasoningLevel.OFF))
+
+        // Supported levels pass through
         assertEquals("low", ModelRegistry.reasoningEffortOrNull("gpt-5", ReasoningLevel.LOW))
         assertEquals("medium", ModelRegistry.reasoningEffortOrNull("gpt-5", ReasoningLevel.MEDIUM))
         assertEquals("high", ModelRegistry.reasoningEffortOrNull("gpt-5", ReasoningLevel.HIGH))
         assertEquals("minimal", ModelRegistry.reasoningEffortOrNull("gpt-5", ReasoningLevel.MINIMAL))
         assertEquals("xhigh", ModelRegistry.reasoningEffortOrNull("gpt-5.2", ReasoningLevel.XHIGH))
+
+        // Unsupported levels get normalized to closest supported
+        // gpt-5-pro only supports HIGH → XHIGH should normalize to HIGH
+        assertEquals("high", ModelRegistry.reasoningEffortOrNull("gpt-5-pro", ReasoningLevel.XHIGH))
+        // gpt-5-pro only supports HIGH → LOW should normalize to HIGH
+        assertEquals("high", ModelRegistry.reasoningEffortOrNull("gpt-5-pro", ReasoningLevel.LOW))
+        // o4-mini doesn't support MINIMAL → should normalize to LOW
+        assertEquals("low", ModelRegistry.reasoningEffortOrNull("o4-mini", ReasoningLevel.MINIMAL))
+        // o4-mini doesn't support XHIGH → should normalize to HIGH
+        assertEquals("high", ModelRegistry.reasoningEffortOrNull("o4-mini", ReasoningLevel.XHIGH))
     }
 
     // endregion
