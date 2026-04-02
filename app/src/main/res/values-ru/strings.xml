@@ -1800,5 +1800,26 @@
   <string name="assistant_page_sampling_desc_google">Отправляется внутри generationConfig для совместимых с Gemini или Vertex бэкендов.</string>
   <string name="assistant_page_sampling_desc_claude">Отправляется как поля Anthropic Messages API.</string>
   <string name="assistant_page_sampling_desc_compat">Используются только поля, поддерживаемые выбранным бэкендом.</string>
+  <string name="prompt_page_st_preset_editor_builtin_identifier_desc">Встроенные элементы используют предопределённые слоты. Выбирайте их из списка вместо ввода идентификаторов вручную.</string>
+  <string name="prompt_page_st_preset_editor_display_name_desc">Влияет только на отображение в списке, поиск и метаданные экспорта. На способ подстановки этого промпта не влияет.</string>
+  <string name="prompt_page_st_preset_editor_trigger_types_desc">Сейчас приложение использует только `normal` и `continue`. `quiet` сохраняется в основном для совместимости с ST и экспорта. `impersonate` имеет значение только тогда, когда режим совместимости явно использует этот режим.</string>
+  <string name="prompt_page_st_preset_editor_source_preview">Источник содержимого: %1$s</string>
+  <string name="prompt_page_st_preset_editor_source_backed_desc">Содержимое этого встроенного элемента берётся из %1$s. Редактируйте исходную страницу вместо ввода текста промпта здесь.</string>
+  <string name="prompt_page_st_preset_editor_source_character_description">описание персонажа в карточке</string>
+  <string name="prompt_page_st_preset_editor_source_character_personality">характер персонажа в карточке</string>
+  <string name="prompt_page_st_preset_editor_source_character_scenario">сценарий персонажа в карточке</string>
+  <string name="prompt_page_st_preset_editor_source_persona_description">страница пользовательской персоны</string>
+  <string name="prompt_page_st_preset_editor_source_world_info">сработавшие записи lorebook / world info</string>
+  <string name="prompt_page_st_preset_editor_source_dialogue_examples">примеры сообщений из карточки персонажа</string>
+  <string name="prompt_page_st_preset_editor_source_chat_history">текущая история чата</string>
+  <string name="prompt_page_st_preset_editor_role_desc">Поле роли фактически определяет роль сообщения, которое будет подставлено в текущем рантайме приложения.</string>
+  <string name="prompt_page_st_preset_editor_group_runtime_desc">Сейчас приложение не предоставляет отдельный поток генерации для групповых чатов. Эти поля сохраняются в основном для совместимости с ST и экспорта и не влияют на обычные чаты здесь.</string>
+  <string name="prompt_page_st_preset_editor_impersonation_runtime_desc">В обычном чате и режиме `continue` эти поля не используются. Они применяются только тогда, когда путь совместимости явно входит в режим `impersonate`.</string>
+  <string name="prompt_page_st_preset_editor_compat_metadata_title">Метаданные совместимости</string>
+  <string name="prompt_page_st_preset_editor_system_prompt_metadata_label">Системный промпт (метаданные ST)</string>
+  <string name="prompt_page_st_preset_editor_marker_metadata_label">Маркер (метаданные ST)</string>
+  <string name="prompt_page_st_preset_editor_compat_flags_desc">Эти значения сохраняются для совместимости с ST, отображения и экспорта. Здесь они не редактируются как обычные параметры рантайма. В текущем рантайме приложения на поведение реально влияют поля `role`, `identifier` и настройки внедрения.</string>
+  <string name="prompt_page_st_preset_editor_system_prompt_metadata_tag">Сист. мета</string>
+  <string name="prompt_page_st_preset_editor_marker_metadata_tag">Мета маркера</string>
 </resources>
 

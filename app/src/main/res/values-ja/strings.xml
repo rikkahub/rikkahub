@@ -1800,5 +1800,26 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_sampling_desc_google">Gemini または Vertex 対応バックエンドでは、generationConfig 内で送信されます。</string>
   <string name="assistant_page_sampling_desc_claude">Anthropic Messages API のフィールドとして送信されます。</string>
   <string name="assistant_page_sampling_desc_compat">選択したバックエンドでサポートされているフィールドのみ使用されます。</string>
+  <string name="prompt_page_st_preset_editor_builtin_identifier_desc">組み込み項目は定義済みスロットを使います。生の識別子を入力する代わりに一覧から選択してください。</string>
+  <string name="prompt_page_st_preset_editor_display_name_desc">一覧表示、検索、エクスポートメタデータにのみ影響します。このプロンプトの挿入方法自体は変わりません。</string>
+  <string name="prompt_page_st_preset_editor_trigger_types_desc">現在のアプリは `normal` と `continue` を出力します。`quiet` は主に ST 互換性とエクスポートのために保持されます。`impersonate` は互換パスがそのモードを明示的に使う場合にのみ意味を持ちます。</string>
+  <string name="prompt_page_st_preset_editor_source_preview">内容の取得元: %1$s</string>
+  <string name="prompt_page_st_preset_editor_source_backed_desc">この組み込み項目の内容は %1$s から取得されます。ここでプロンプト文を入力する代わりに、元のページを編集してください。</string>
+  <string name="prompt_page_st_preset_editor_source_character_description">カード内のキャラクター説明</string>
+  <string name="prompt_page_st_preset_editor_source_character_personality">カード内のキャラクターの性格</string>
+  <string name="prompt_page_st_preset_editor_source_character_scenario">カード内のキャラクターシナリオ</string>
+  <string name="prompt_page_st_preset_editor_source_persona_description">ユーザーペルソナページ</string>
+  <string name="prompt_page_st_preset_editor_source_world_info">トリガーされた lorebook / world info エントリ</string>
+  <string name="prompt_page_st_preset_editor_source_dialogue_examples">キャラクターカードの会話例メッセージ</string>
+  <string name="prompt_page_st_preset_editor_source_chat_history">現在のチャット履歴</string>
+  <string name="prompt_page_st_preset_editor_role_desc">ロールは、現在のアプリ実行時に挿入されるメッセージの役割を実際に制御する項目です。</string>
+  <string name="prompt_page_st_preset_editor_group_runtime_desc">現在のアプリではグループチャット生成フローは公開されていません。これらの項目は主に ST 互換性とエクスポートのために保持されており、ここでの通常チャットには影響しません。</string>
+  <string name="prompt_page_st_preset_editor_impersonation_runtime_desc">通常チャットと「続行」ではこれらの項目は使われません。互換パスが明示的に `impersonate` モードに入った場合にのみ適用されます。</string>
+  <string name="prompt_page_st_preset_editor_compat_metadata_title">互換メタデータ</string>
+  <string name="prompt_page_st_preset_editor_system_prompt_metadata_label">システムプロンプト（ST メタデータ）</string>
+  <string name="prompt_page_st_preset_editor_marker_metadata_label">マーカー（ST メタデータ）</string>
+  <string name="prompt_page_st_preset_editor_compat_flags_desc">これらの値は ST 互換性、表示、エクスポートのために保持されます。ここでは通常の実行時コントロールとして編集されません。現在のアプリ実行時で実際に挙動へ影響するのは、`role`、`identifier`、および注入設定です。</string>
+  <string name="prompt_page_st_preset_editor_system_prompt_metadata_tag">システムメタ</string>
+  <string name="prompt_page_st_preset_editor_marker_metadata_tag">マーカーメタ</string>
 </resources>
 
