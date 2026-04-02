@@ -107,6 +107,60 @@ class SillyTavernExportSerializerTest {
     }
 
     @Test
+    fun `preset export should preserve raw slash regex source from imports`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Slash Regex Preset",
+                  "prompts": [
+                    {
+                      "identifier": "main",
+                      "role": "system",
+                      "content": "Main"
+                    }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "regex_scripts": [
+                      {
+                        "scriptName": "Global Regex",
+                        "findRegex": "/foo/gi",
+                        "replaceString": "bar",
+                        "placement": [2]
+                      }
+                    ]
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "slash-regex-preset",
+        )
+
+        val exported = Json.parseToJsonElement(
+            SillyTavernPresetExportSerializer.exportToJson(payload.toSillyTavernPreset())
+        ).jsonObject
+
+        assertEquals(
+            "/foo/gi",
+            exported["extensions"]
+                ?.jsonObject
+                ?.get("regex_scripts")
+                ?.jsonArray
+                ?.first()
+                ?.jsonObject
+                ?.get("findRegex")
+                ?.jsonPrimitive
+                ?.content,
+        )
+    }
+
+    @Test
     fun `preset export should preserve literal regex tags from normal preset imports`() {
         val payload = parseAssistantImportFromJson(
             jsonString = """

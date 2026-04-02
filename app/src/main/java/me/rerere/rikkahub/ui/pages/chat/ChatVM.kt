@@ -31,6 +31,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.model.resolveStSendIfEmptyContent
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.model.Assistant
@@ -232,12 +233,20 @@ class ChatVM(
         answer: Boolean = true,
         forceTermuxCommandMode: Boolean = false,
     ) {
-        if (content.isEmptyInputMessage()) return
+        val resolvedContent = if (forceTermuxCommandMode) {
+            if (content.isEmptyInputMessage()) return
+            content
+        } else {
+            settingsStore.settingsFlow.value.resolveStSendIfEmptyContent(
+                content = content,
+                answer = answer,
+            ) ?: return
+        }
         analytics.logEvent("ai_send_message", null)
 
         chatService.sendMessage(
             conversationId = _conversationId,
-            content = content,
+            content = resolvedContent,
             answer = answer,
             forceTermuxCommandMode = forceTermuxCommandMode
         )

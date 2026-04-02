@@ -26,6 +26,7 @@ import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.exportFindRegex
 import java.io.ByteArrayOutputStream
 
 internal val RESERVED_LOREBOOK_EXTENSION_KEYS = setOf(
@@ -53,7 +54,7 @@ internal val RESERVED_LOREBOOK_EXTENSION_KEYS = setOf(
 internal fun buildRegexScript(regex: AssistantRegex): JsonObject {
     return buildJsonObject {
         put("scriptName", regex.name)
-        put("findRegex", regex.findRegex)
+        put("findRegex", regex.exportFindRegex())
         put("replaceString", regex.replaceString)
         put("placement", buildJsonArray {
             regex.exportPlacements().forEach { add(JsonPrimitive(it)) }

@@ -45,7 +45,9 @@ import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.AssistantRegexSubstituteStrategy
+import me.rerere.rikkahub.data.model.editableFindRegex
 import me.rerere.rikkahub.data.model.sourceLabel
+import me.rerere.rikkahub.data.model.withFindRegexInput
 import me.rerere.rikkahub.ui.components.ui.EditorGuideAction
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
@@ -225,7 +227,9 @@ private fun RegexEditorCard(
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Text(
-                        text = regex.findRegex.ifBlank { stringResource(R.string.assistant_page_regex_summary_placeholder) },
+                        text = regex.editableFindRegex().ifBlank {
+                            stringResource(R.string.assistant_page_regex_summary_placeholder)
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
@@ -272,9 +276,9 @@ private fun RegexEditorCard(
             )
 
             OutlinedTextField(
-                value = regex.findRegex,
+                value = regex.editableFindRegex(),
                 onValueChange = { findRegex ->
-                    updateRegex { it.copy(findRegex = findRegex.trim()) }
+                    updateRegex { it.withFindRegexInput(findRegex) }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.assistant_page_regex_find_regex)) },

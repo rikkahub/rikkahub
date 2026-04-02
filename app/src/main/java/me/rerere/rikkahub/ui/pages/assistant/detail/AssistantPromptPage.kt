@@ -78,11 +78,13 @@ import me.rerere.rikkahub.data.model.activeStPresetRegexes
 import me.rerere.rikkahub.data.model.selectedStPreset
 import me.rerere.rikkahub.data.model.StPromptInjectionPosition
 import me.rerere.rikkahub.data.model.effectiveUserPersona
+import me.rerere.rikkahub.data.model.editableFindRegex
 import me.rerere.rikkahub.data.model.findPrompt
 import me.rerere.rikkahub.data.model.hasExplicitPromptOrder
 import me.rerere.rikkahub.data.model.resolvePromptOrder
 import me.rerere.rikkahub.data.model.sourceLabel
 import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
+import me.rerere.rikkahub.data.model.withFindRegexInput
 import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
@@ -741,13 +743,13 @@ private fun AssistantRegexCard(
                 )
 
                 OutlinedTextField(
-                    value = regex.findRegex,
+                    value = regex.editableFindRegex(),
                     onValueChange = { findRegex ->
                         onUpdate(
                             assistant.copy(
                                 regexes = assistant.regexes.mapIndexed { i, reg ->
                                     if (i == index) {
-                                        reg.copy(findRegex = findRegex.trim())
+                                        reg.withFindRegexInput(findRegex)
                                     } else {
                                         reg
                                     }

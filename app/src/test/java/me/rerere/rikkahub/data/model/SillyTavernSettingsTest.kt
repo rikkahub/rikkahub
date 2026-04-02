@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.model
 
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -224,5 +225,58 @@ class SillyTavernSettingsTest {
 
         assertEquals(listOf(globalRegex, legacyRegex), settings.runtimeRegexes())
         assertEquals(emptyList<AssistantRegex>(), settings.activeStPresetRegexes())
+    }
+
+    @Test
+    fun `resolve st send_if_empty content should only substitute empty normal sends`() {
+        val preset = SillyTavernPreset(
+            template = defaultSillyTavernPromptTemplate().copy(sendIfEmpty = "[Keep going]"),
+        )
+        val settings = Settings(
+            stPresetEnabled = true,
+            stPresets = listOf(preset),
+            selectedStPresetId = preset.id,
+        )
+
+        assertEquals(
+            listOf(UIMessagePart.Text("[Keep going]")),
+            settings.resolveStSendIfEmptyContent(
+                content = listOf(UIMessagePart.Text("   ")),
+                answer = true,
+                stGenerationType = "normal",
+            )
+        )
+        assertEquals(
+            listOf(UIMessagePart.Text("Hello")),
+            settings.resolveStSendIfEmptyContent(
+                content = listOf(UIMessagePart.Text("Hello")),
+                answer = true,
+                stGenerationType = "normal",
+            )
+        )
+        assertEquals(
+            null,
+            settings.resolveStSendIfEmptyContent(
+                content = listOf(UIMessagePart.Text(" ")),
+                answer = false,
+                stGenerationType = "normal",
+            )
+        )
+        assertEquals(
+            null,
+            settings.resolveStSendIfEmptyContent(
+                content = listOf(UIMessagePart.Text(" ")),
+                answer = true,
+                stGenerationType = "continue",
+            )
+        )
+        assertEquals(
+            null,
+            settings.copy(stPresetEnabled = false).resolveStSendIfEmptyContent(
+                content = listOf(UIMessagePart.Text(" ")),
+                answer = true,
+                stGenerationType = "normal",
+            )
+        )
     }
 }

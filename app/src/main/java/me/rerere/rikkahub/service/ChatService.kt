@@ -104,6 +104,7 @@ import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.applyActiveStPresetSampling
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.resolveConversationStarterMessages
+import me.rerere.rikkahub.data.model.resolveStSendIfEmptyContent
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -499,13 +500,21 @@ class ChatService(
         forceTermuxCommandMode: Boolean = false,
         stGenerationType: String = "normal",
     ) {
-        if (content.isEmptyInputMessage()) return
-
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
-        val commandModeEnabled = forceTermuxCommandMode || settingsStore.settingsFlow.value.termuxCommandModeEnabled
+        val currentSettings = settingsStore.settingsFlow.value
+        val normalizedGenerationType = stGenerationType.trim().lowercase().ifBlank { "normal" }
+        val resolvedContent = when {
+            forceTermuxCommandMode && content.isEmptyInputMessage() -> return
+            else -> currentSettings.resolveStSendIfEmptyContent(
+                content = content,
+                answer = answer,
+                stGenerationType = normalizedGenerationType,
+            ) ?: return
+        }
+        val commandModeEnabled = forceTermuxCommandMode || currentSettings.termuxCommandModeEnabled
         val directCommand = TermuxDirectCommandParser.parse(
-            parts = content,
+            parts = resolvedContent,
             commandModeEnabled = commandModeEnabled
         )
         val processedContent = if (directCommand.isDirect) {
@@ -515,7 +524,7 @@ class ChatService(
                 placement = AssistantRegexPlacement.SLASH_COMMAND,
             )
         } else {
-            preprocessUserInputParts(content, messageDepthFromEnd = 1)
+            preprocessUserInputParts(resolvedContent, messageDepthFromEnd = 1)
         }
 
         val job = appScope.launch {
@@ -540,7 +549,7 @@ class ChatService(
                     // 开始补全
                     handleMessageComplete(
                         conversationId = conversationId,
-                        stGenerationType = stGenerationType,
+                        stGenerationType = normalizedGenerationType,
                     )
                 }
 

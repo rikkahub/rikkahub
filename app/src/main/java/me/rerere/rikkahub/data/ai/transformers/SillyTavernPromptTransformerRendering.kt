@@ -125,19 +125,6 @@ internal fun resolveRelativePromptMessages(
     }
 }
 
-internal fun applySendIfEmpty(
-    chatHistoryMessages: List<UIMessage>,
-    template: SillyTavernPromptTemplate,
-): List<UIMessage> {
-    val sendIfEmpty = template.sendIfEmpty.trim()
-    val lastChatMessage = chatHistoryMessages.lastOrNull()
-    if (sendIfEmpty.isBlank() || lastChatMessage?.role != MessageRole.ASSISTANT) {
-        return chatHistoryMessages
-    }
-
-    return chatHistoryMessages + UIMessage.user(sendIfEmpty)
-}
-
 internal fun appendResolvedMessages(
     resolvedMessages: List<UIMessage>,
     result: MutableList<UIMessage>,

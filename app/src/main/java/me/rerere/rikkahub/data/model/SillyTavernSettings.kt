@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.model
 
+import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.data.datastore.Settings
 import kotlin.uuid.Uuid
 
@@ -86,6 +88,24 @@ fun Settings.activeStPresetRegexes(): List<AssistantRegex> {
 
 fun Settings.activeGlobalRegexes(): List<AssistantRegex> {
     return if (globalRegexEnabled) globalRegexes else emptyList()
+}
+
+fun Settings.resolveStSendIfEmptyContent(
+    content: List<UIMessagePart>,
+    answer: Boolean,
+    stGenerationType: String = "normal",
+): List<UIMessagePart>? {
+    if (!content.isEmptyInputMessage()) return content
+    val normalizedGenerationType = stGenerationType.trim().lowercase().ifBlank { "normal" }
+    if (!answer || normalizedGenerationType != "normal" || !stPresetEnabled) {
+        return null
+    }
+    val sendIfEmpty = activeStPresetTemplate()
+        ?.sendIfEmpty
+        ?.trim()
+        .orEmpty()
+    if (sendIfEmpty.isBlank()) return null
+    return listOf(UIMessagePart.Text(sendIfEmpty))
 }
 
 private fun Settings.legacyRuntimeRegexes(): List<AssistantRegex> {

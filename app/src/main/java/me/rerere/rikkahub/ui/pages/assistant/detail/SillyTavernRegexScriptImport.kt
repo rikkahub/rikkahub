@@ -8,6 +8,7 @@ import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.AssistantRegexSourceKind
 import me.rerere.rikkahub.data.model.dedupKey
+import me.rerere.rikkahub.data.model.normalizeAssistantRegexPattern
 import kotlin.uuid.Uuid
 
 internal fun parseRegexScripts(
@@ -61,7 +62,7 @@ internal fun mapRegexScript(
     sourceKind: AssistantRegexSourceKind = AssistantRegexSourceKind.ST_SCRIPT,
     sourceRef: String = "",
 ): AssistantRegex? {
-    val normalizedPattern = normalizeImportedRegexPattern(findRegex) ?: return null
+    val normalizedPattern = normalizeAssistantRegexPattern(findRegex) ?: return null
     val normalizedPlacement = placement.ifEmpty { listOf(AssistantRegexPlacement.AI_OUTPUT) }
     val affectingScope = affectingScopeOverride ?: buildSet {
         if (normalizedPlacement.contains(AssistantRegexPlacement.USER_INPUT)) add(AssistantAffectScope.USER)
@@ -80,6 +81,7 @@ internal fun mapRegexScript(
         name = name.ifBlank { sourceName },
         enabled = !disabled,
         findRegex = normalizedPattern,
+        rawFindRegex = findRegex,
         replaceString = replaceString,
         affectingScope = affectingScope,
         visualOnly = markdownOnly,
@@ -110,19 +112,3 @@ internal data class StRegexScriptImport(
     val runOnEdit: Boolean = true,
     val substituteRegex: Int = 0,
 )
-
-private fun normalizeImportedRegexPattern(findRegex: String): String? {
-    if (findRegex.isBlank()) return null
-    val match = Regex("""^/(.*?)(?<!\\)/([a-zA-Z]*)$""", setOf(RegexOption.DOT_MATCHES_ALL))
-        .matchEntire(findRegex)
-        ?: return findRegex
-
-    val pattern = match.groupValues[1]
-    val flags = match.groupValues[2]
-    val inlineFlags = buildString {
-        if ('i' in flags) append('i')
-        if ('m' in flags) append('m')
-        if ('s' in flags) append('s')
-    }
-    return if (inlineFlags.isEmpty()) pattern else "(?$inlineFlags)$pattern"
-}

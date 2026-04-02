@@ -429,4 +429,84 @@ class AssistantRegexTest {
             )
         )
     }
+
+    @Test
+    fun `manual regex should keep legacy replace all behavior`() {
+        val assistant = Assistant(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "foo",
+                    replaceString = "bar",
+                    affectingScope = setOf(AssistantAffectScope.USER),
+                )
+            )
+        )
+
+        assertEquals(
+            "bar bar",
+            "foo foo".replaceRegexes(
+                assistant = assistant,
+                scope = AssistantAffectScope.USER,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+            )
+        )
+    }
+
+    @Test
+    fun `st regex without global flag should replace first match only`() {
+        val assistant = Assistant(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "foo",
+                    rawFindRegex = "foo",
+                    replaceString = "bar",
+                    affectingScope = setOf(AssistantAffectScope.ASSISTANT),
+                    stPlacements = setOf(AssistantRegexPlacement.AI_OUTPUT),
+                    sourceKind = AssistantRegexSourceKind.ST_SCRIPT,
+                )
+            )
+        )
+
+        assertEquals(
+            "bar foo",
+            "foo foo".replaceRegexes(
+                assistant = assistant,
+                scope = AssistantAffectScope.ASSISTANT,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+                placement = AssistantRegexPlacement.AI_OUTPUT,
+            )
+        )
+    }
+
+    @Test
+    fun `st regex should preserve global and case insensitive flags`() {
+        val assistant = Assistant(
+            regexes = listOf(
+                AssistantRegex(
+                    id = Uuid.random(),
+                    enabled = true,
+                    findRegex = "foo",
+                    rawFindRegex = "/foo/gi",
+                    replaceString = "bar",
+                    affectingScope = setOf(AssistantAffectScope.ASSISTANT),
+                    stPlacements = setOf(AssistantRegexPlacement.AI_OUTPUT),
+                    sourceKind = AssistantRegexSourceKind.ST_SCRIPT,
+                )
+            )
+        )
+
+        assertEquals(
+            "bar bar",
+            "FOO foo".replaceRegexes(
+                assistant = assistant,
+                scope = AssistantAffectScope.ASSISTANT,
+                phase = AssistantRegexApplyPhase.ACTUAL_MESSAGE,
+                placement = AssistantRegexPlacement.AI_OUTPUT,
+            )
+        )
+    }
 }

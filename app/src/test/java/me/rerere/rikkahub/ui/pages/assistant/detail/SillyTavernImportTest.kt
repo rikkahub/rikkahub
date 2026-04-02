@@ -701,6 +701,43 @@ class SillyTavernImportTest {
     }
 
     @Test
+    fun `preset regex import should preserve raw slash regex source`() {
+        val payload = parseAssistantImportFromJson(
+            jsonString = """
+                {
+                  "name": "Preset Regex Raw Source",
+                  "prompts": [
+                    { "identifier": "main", "role": "system", "content": "Main" }
+                  ],
+                  "prompt_order": [
+                    {
+                      "character_id": 100000,
+                      "order": [
+                        { "identifier": "main", "enabled": true }
+                      ]
+                    }
+                  ],
+                  "extensions": {
+                    "regex_scripts": [
+                      {
+                        "scriptName": "Global Regex",
+                        "findRegex": "/foo/gi",
+                        "replaceString": "bar",
+                        "placement": [2]
+                      }
+                    ]
+                  }
+                }
+            """.trimIndent(),
+            sourceName = "preset-raw-source",
+        )
+
+        val regex = payload.regexes.single()
+        assertEquals("foo", regex.findRegex)
+        assertEquals("/foo/gi", regex.rawFindRegex)
+    }
+
+    @Test
     fun `preset regex import should preserve markdown and prompt phases together`() {
         val payload = parseAssistantImportFromJson(
             jsonString = """

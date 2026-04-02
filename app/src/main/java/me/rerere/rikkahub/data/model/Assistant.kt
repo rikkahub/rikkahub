@@ -178,6 +178,7 @@ data class AssistantRegex(
     val name: String = "",
     val enabled: Boolean = true,
     val findRegex: String = "", // 正则表达式
+    val rawFindRegex: String = "",
     val replaceString: String = "", // 替换字符串
     val affectingScope: Set<AssistantAffectScope> = setOf(),
     val visualOnly: Boolean = false, // 是否仅在视觉上影响
@@ -195,7 +196,7 @@ data class AssistantRegex(
 fun AssistantRegex.dedupKey(): String {
     return listOf(
         name,
-        findRegex,
+        exportFindRegex(),
         replaceString,
         affectingScope.sortedBy { scope -> scope.name }.joinToString(","),
         visualOnly.toString(),
@@ -277,26 +278,41 @@ fun String.replaceRegexes(
             regex.matchesDepth(messageDepthFromEnd)
         ) {
             try {
-                val pattern = regex.resolveFindRegex(
+                val patternSpec = regex.resolveFindRegexPattern(
                     assistant = assistant,
                     settings = settings,
                     characterOverride = characterOverride,
-                )
-                val compiledRegex = Regex(pattern)
+                ) ?: return@fold acc
+                val compiledRegex = Regex(patternSpec.pattern, patternSpec.options)
                 val result = if (regex.requiresCustomReplacement()) {
-                    compiledRegex.replace(acc) { matchResult ->
-                        regex.buildReplacement(
-                            matchResult = matchResult,
-                            assistant = assistant,
-                            settings = settings,
-                            characterOverride = characterOverride,
-                        )
+                    if (patternSpec.replaceAll) {
+                        compiledRegex.replace(acc) { matchResult ->
+                            regex.buildReplacement(
+                                matchResult = matchResult,
+                                assistant = assistant,
+                                settings = settings,
+                                characterOverride = characterOverride,
+                            )
+                        }
+                    } else {
+                        compiledRegex.replaceFirst(acc) { matchResult ->
+                            regex.buildReplacement(
+                                matchResult = matchResult,
+                                assistant = assistant,
+                                settings = settings,
+                                characterOverride = characterOverride,
+                            )
+                        }
                     }
                 } else {
-                    acc.replace(
-                        regex = compiledRegex,
-                        replacement = regex.replaceString,
-                    )
+                    if (patternSpec.replaceAll) {
+                        acc.replace(
+                            regex = compiledRegex,
+                            replacement = regex.replaceString,
+                        )
+                    } else {
+                        compiledRegex.replaceFirst(acc, regex.replaceString)
+                    }
                 }
                 result
             } catch (e: Exception) {
@@ -356,15 +372,15 @@ private fun AssistantRegex.matchesDepth(messageDepthFromEnd: Int?): Boolean {
     return true
 }
 
-private fun AssistantRegex.resolveFindRegex(
+private fun AssistantRegex.resolveFindRegexPattern(
     assistant: Assistant?,
     settings: Settings?,
     characterOverride: String?,
-): String {
-    return when (substituteRegex) {
+): AssistantRegexPatternSpec? {
+    val resolvedSource = when (substituteRegex) {
         AssistantRegexSubstituteStrategy.RAW -> {
             substituteRegexMacros(
-                text = findRegex,
+                text = exportFindRegex(),
                 assistant = assistant,
                 settings = settings,
                 characterOverride = characterOverride,
@@ -374,7 +390,7 @@ private fun AssistantRegex.resolveFindRegex(
 
         AssistantRegexSubstituteStrategy.ESCAPED -> {
             substituteRegexMacros(
-                text = findRegex,
+                text = exportFindRegex(),
                 assistant = assistant,
                 settings = settings,
                 characterOverride = characterOverride,
@@ -382,8 +398,12 @@ private fun AssistantRegex.resolveFindRegex(
             )
         }
 
-        else -> findRegex
+        else -> exportFindRegex()
     }
+    return resolveAssistantRegexPatternSpec(
+        source = resolvedSource,
+        stCompatible = shouldUseStRegexCompatibility(),
+    )
 }
 
 private fun AssistantRegex.requiresCustomReplacement(): Boolean {
@@ -501,6 +521,14 @@ private fun AssistantRegex.filterTrimStrings(
             acc.replace(resolvedTrim, "")
         }
     }
+}
+
+private fun Regex.replaceFirst(
+    input: String,
+    transform: (MatchResult) -> String,
+): String {
+    val match = find(input) ?: return input
+    return input.replaceRange(match.range, transform(match))
 }
 
 private fun substituteRegexMacros(

@@ -146,8 +146,6 @@ internal fun transformSillyTavernPrompt(
                 .groupBy { it.position }
         )
     }
-    processedHistoryMessages = applySendIfEmpty(processedHistoryMessages, template)
-
     val result = leadingSystemMessages.toMutableList()
 
     orderRelativePromptsLikeSt(
