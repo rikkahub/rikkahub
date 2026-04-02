@@ -1471,6 +1471,7 @@
   <string name="prompt_page_st_preset_editor_enabled_desc">If disabled, the definition is kept but excluded from prompt order.</string>
   <string name="prompt_page_st_preset_editor_identifier">Identifier</string>
   <string name="prompt_page_st_preset_editor_identifier_duplicate_hint">If the identifier is empty or duplicates an existing item, the original value is kept.</string>
+  <string name="prompt_page_st_preset_editor_builtin_identifier_desc">Built-in items use predefined slots. Choose from the list instead of typing raw identifiers.</string>
   <string name="prompt_page_st_preset_editor_display_name">Display name</string>
   <string name="prompt_page_st_preset_editor_display_name_desc">Only affects list display, search, and export metadata. It does not change how this prompt is injected.</string>
   <string name="prompt_page_st_preset_editor_depth">Depth</string>
@@ -1481,6 +1482,15 @@
   <string name="prompt_page_st_preset_editor_delete_item">Delete this item</string>
   <string name="prompt_page_st_preset_editor_marker_preview">Marker node. No prompt text is injected directly.</string>
   <string name="prompt_page_st_preset_editor_empty_content_preview">Tap to edit and fill in this prompt content.</string>
+  <string name="prompt_page_st_preset_editor_source_preview">Content comes from: %1$s</string>
+  <string name="prompt_page_st_preset_editor_source_backed_desc">This built-in item pulls its content from %1$s. Edit the source page instead of typing prompt text here.</string>
+  <string name="prompt_page_st_preset_editor_source_character_description">character description in the card</string>
+  <string name="prompt_page_st_preset_editor_source_character_personality">character personality in the card</string>
+  <string name="prompt_page_st_preset_editor_source_character_scenario">character scenario in the card</string>
+  <string name="prompt_page_st_preset_editor_source_persona_description">the user persona page</string>
+  <string name="prompt_page_st_preset_editor_source_world_info">triggered lorebook / world info entries</string>
+  <string name="prompt_page_st_preset_editor_source_dialogue_examples">example messages from the character card</string>
+  <string name="prompt_page_st_preset_editor_source_chat_history">the current chat history</string>
   <string name="prompt_page_st_preset_editor_custom_prompt_name">Custom Prompt %1$d</string>
   <string name="prompt_page_st_preset_editor_depth_value">Depth %1$d</string>
   <string name="prompt_page_st_preset_editor_order_value">Order %1$d</string>

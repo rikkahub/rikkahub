@@ -82,6 +82,138 @@ import sh.calvin.reorderable.ReorderableColumn
 private val stPromptGenerationTypes = listOf("normal", "continue", "quiet", "impersonate")
 private val stNamesBehaviorOptions = listOf<Int?>(null, -1, 0, 1, 2)
 
+private enum class StBuiltInPromptSourceKind {
+    CHARACTER_DESCRIPTION,
+    CHARACTER_PERSONALITY,
+    SCENARIO,
+    PERSONA_DESCRIPTION,
+    WORLD_INFO,
+    DIALOGUE_EXAMPLES,
+    CHAT_HISTORY,
+}
+
+private data class StBuiltInPromptDefinition(
+    val prompt: SillyTavernPromptItem,
+    val sourceKind: StBuiltInPromptSourceKind? = null,
+)
+
+private val stBuiltInPromptDefinitions = run {
+    val defaultTemplate = defaultSillyTavernPromptTemplate()
+    listOf(
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("main")
+                ?: SillyTavernPromptItem(
+                    identifier = "main",
+                    name = "Main Prompt",
+                    role = MessageRole.SYSTEM,
+                    content = "Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}.",
+                    systemPrompt = true,
+                ),
+        ),
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("worldInfoBefore")
+                ?: SillyTavernPromptItem(
+                    identifier = "worldInfoBefore",
+                    name = "World Info (before)",
+                    marker = true,
+                ),
+            sourceKind = StBuiltInPromptSourceKind.WORLD_INFO,
+        ),
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("personaDescription")
+                ?: SillyTavernPromptItem(
+                    identifier = "personaDescription",
+                    name = "Persona Description",
+                    marker = true,
+                ),
+            sourceKind = StBuiltInPromptSourceKind.PERSONA_DESCRIPTION,
+        ),
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("charDescription")
+                ?: SillyTavernPromptItem(
+                    identifier = "charDescription",
+                    name = "Char Description",
+                    marker = true,
+                ),
+            sourceKind = StBuiltInPromptSourceKind.CHARACTER_DESCRIPTION,
+        ),
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("charPersonality")
+                ?: SillyTavernPromptItem(
+                    identifier = "charPersonality",
+                    name = "Char Personality",
+                    marker = true,
+                ),
+            sourceKind = StBuiltInPromptSourceKind.CHARACTER_PERSONALITY,
+        ),
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("scenario")
+                ?: SillyTavernPromptItem(
+                    identifier = "scenario",
+                    name = "Scenario",
+                    marker = true,
+                ),
+            sourceKind = StBuiltInPromptSourceKind.SCENARIO,
+        ),
+        StBuiltInPromptDefinition(
+            prompt = SillyTavernPromptItem(
+                identifier = "enhanceDefinitions",
+                name = "Enhance Definitions",
+                role = MessageRole.SYSTEM,
+                content = "If you have more knowledge of {{char}}, add to the character's lore and personality to enhance them but keep the Character Sheet's definitions absolute.",
+                systemPrompt = true,
+            ),
+        ),
+        StBuiltInPromptDefinition(
+            prompt = SillyTavernPromptItem(
+                identifier = "nsfw",
+                name = "Auxiliary Prompt",
+                role = MessageRole.SYSTEM,
+                content = "",
+                systemPrompt = true,
+            ),
+        ),
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("worldInfoAfter")
+                ?: SillyTavernPromptItem(
+                    identifier = "worldInfoAfter",
+                    name = "World Info (after)",
+                    marker = true,
+                ),
+            sourceKind = StBuiltInPromptSourceKind.WORLD_INFO,
+        ),
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("dialogueExamples")
+                ?: SillyTavernPromptItem(
+                    identifier = "dialogueExamples",
+                    name = "Chat Examples",
+                    marker = true,
+                ),
+            sourceKind = StBuiltInPromptSourceKind.DIALOGUE_EXAMPLES,
+        ),
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("chatHistory")
+                ?: SillyTavernPromptItem(
+                    identifier = "chatHistory",
+                    name = "Chat History",
+                    marker = true,
+                ),
+            sourceKind = StBuiltInPromptSourceKind.CHAT_HISTORY,
+        ),
+        StBuiltInPromptDefinition(
+            prompt = defaultTemplate.findPrompt("jailbreak")
+                ?: SillyTavernPromptItem(
+                    identifier = "jailbreak",
+                    name = "Post-History Instructions",
+                    role = MessageRole.SYSTEM,
+                    content = "",
+                    systemPrompt = true,
+                ),
+        ),
+    )
+}
+private val stBuiltInPromptDefinitionMap = stBuiltInPromptDefinitions.associateBy { it.prompt.identifier }
+
 private data class StPromptEditorState(
     val originalIdentifier: String,
     val prompt: SillyTavernPromptItem,
@@ -109,7 +241,7 @@ fun SillyTavernPresetEditorCard(
     val promptOrder = editorTemplate.resolvePromptOrder()
     val enabledPromptCount = promptOrder.count { it.enabled }
     val missingDefaultPrompts = remember(editorTemplate) {
-        defaultSillyTavernPromptTemplate().prompts.filter { prompt ->
+        stBuiltInPromptDefinitions.map { it.prompt }.filter { prompt ->
             editorTemplate.findPrompt(prompt.identifier) == null
         }
     }
@@ -561,6 +693,7 @@ fun SillyTavernPresetEditorCard(
         promptEditState.currentState?.let { editorState ->
             StPromptEditSheet(
                 state = editorState,
+                usedIdentifiers = editorTemplate.prompts.map { it.identifier }.toSet(),
                 onDismiss = { promptEditState.dismiss() },
                 onConfirm = { promptEditState.confirm() },
                 onDelete = {
@@ -800,6 +933,7 @@ private fun StPromptListItem(
 @Composable
 private fun StPromptEditSheet(
     state: StPromptEditorState,
+    usedIdentifiers: Set<String>,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     onDelete: () -> Unit,
@@ -812,6 +946,22 @@ private fun StPromptEditSheet(
     }
     var orderText by remember(state.originalIdentifier) {
         mutableStateOf(state.prompt.injectionOrder.toString())
+    }
+    val builtInDefinition = remember(state.prompt.identifier, state.originalIdentifier) {
+        stBuiltInPromptDefinition(state.originalIdentifier)?.let { originalDefinition ->
+            stBuiltInPromptDefinition(state.prompt.identifier) ?: originalDefinition
+        }
+    }
+    val builtInIdentifierOptions = remember(state.originalIdentifier, usedIdentifiers) {
+        stBuiltInPromptDefinitions.filter { definition ->
+            definition.prompt.identifier == state.originalIdentifier || definition.prompt.identifier !in usedIdentifiers
+        }
+    }
+    val isSourceBackedPrompt = remember(state.prompt.identifier) {
+        stIsSourceBackedPrompt(state.prompt.identifier)
+    }
+    val canEditPromptContent = remember(state.prompt.identifier, state.prompt.marker) {
+        stCanEditPromptContent(state.prompt)
     }
 
     ModalBottomSheet(
@@ -875,25 +1025,57 @@ private fun StPromptEditSheet(
                     }
                 )
 
-                OutlinedTextField(
-                    value = state.prompt.identifier,
-                    onValueChange = { value ->
-                        onEdit(
-                            state.copy(
-                                prompt = state.prompt.copy(identifier = value)
-                            )
+                if (builtInDefinition != null) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.prompt_page_st_preset_editor_identifier),
+                            style = MaterialTheme.typography.labelMedium
                         )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_identifier)) },
-                    singleLine = true,
-                )
+                        Select(
+                            options = builtInIdentifierOptions,
+                            selectedOption = builtInDefinition,
+                            onOptionSelected = { selected ->
+                                onEdit(
+                                    state.copy(
+                                        prompt = stApplyBuiltInPromptDefinition(
+                                            current = state.prompt,
+                                            selected = selected,
+                                        )
+                                    )
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            optionToString = { option ->
+                                stPromptDisplayName(option.prompt)
+                            }
+                        )
+                        StEditorHint(
+                            text = stringResource(R.string.prompt_page_st_preset_editor_builtin_identifier_desc)
+                        )
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = state.prompt.identifier,
+                        onValueChange = { value ->
+                            onEdit(
+                                state.copy(
+                                    prompt = state.prompt.copy(identifier = value)
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.prompt_page_st_preset_editor_identifier)) },
+                        singleLine = true,
+                    )
 
-                Text(
-                    text = stringResource(R.string.prompt_page_st_preset_editor_identifier_duplicate_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    Text(
+                        text = stringResource(R.string.prompt_page_st_preset_editor_identifier_duplicate_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 OutlinedTextField(
                     value = state.prompt.name,
@@ -1069,21 +1251,42 @@ private fun StPromptEditSheet(
                     )
                 }
 
-                OutlinedTextField(
-                    value = state.prompt.content,
-                    onValueChange = { value ->
-                        onEdit(
-                            state.copy(
-                                prompt = state.prompt.copy(content = value)
+                if (canEditPromptContent) {
+                    OutlinedTextField(
+                        value = state.prompt.content,
+                        onValueChange = { value ->
+                            onEdit(
+                                state.copy(
+                                    prompt = state.prompt.copy(content = value)
+                                )
                             )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 220.dp),
+                        label = { Text(stringResource(R.string.prompt_page_st_preset_editor_prompt_content)) },
+                        minLines = 6,
+                    )
+                } else {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.prompt_page_st_preset_editor_prompt_content),
+                            style = MaterialTheme.typography.labelMedium
                         )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 220.dp),
-                    label = { Text(stringResource(R.string.prompt_page_st_preset_editor_prompt_content)) },
-                    minLines = 6,
-                )
+                        StEditorHint(
+                            text = when {
+                                isSourceBackedPrompt -> stringResource(
+                                    R.string.prompt_page_st_preset_editor_source_backed_desc,
+                                    stringResource(stPromptSourceLabelRes(state.prompt.identifier))
+                                )
+                                state.prompt.marker -> stringResource(R.string.prompt_page_st_preset_editor_marker_preview)
+                                else -> stringResource(R.string.prompt_page_st_preset_editor_empty_content_preview)
+                            }
+                        )
+                    }
+                }
             }
 
             TextButton(
@@ -1320,7 +1523,8 @@ private fun buildCustomStPrompt(
 }
 
 private fun defaultStPromptDefinition(identifier: String): SillyTavernPromptItem {
-    return defaultSillyTavernPromptTemplate().findPrompt(identifier)
+    return stBuiltInPromptDefinition(identifier)?.prompt
+        ?: defaultSillyTavernPromptTemplate().findPrompt(identifier)
         ?: SillyTavernPromptItem(
             identifier = identifier,
             name = identifier.replaceFirstChar { it.uppercase() },
@@ -1348,6 +1552,10 @@ private fun stPromptSummary(prompt: SillyTavernPromptItem): String {
 @Composable
 private fun stPromptPreview(prompt: SillyTavernPromptItem): String {
     return when {
+        stIsSourceBackedPrompt(prompt.identifier) -> stringResource(
+            R.string.prompt_page_st_preset_editor_source_preview,
+            stringResource(stPromptSourceLabelRes(prompt.identifier))
+        )
         prompt.content.isNotBlank() -> prompt.content
         prompt.marker -> stringResource(R.string.prompt_page_st_preset_editor_marker_preview)
         else -> stringResource(R.string.prompt_page_st_preset_editor_empty_content_preview)
@@ -1363,6 +1571,50 @@ private fun stPromptTriggerLabels(triggers: List<String>): String {
     return labels.joinToString(" / ")
 }
 
+private fun stBuiltInPromptDefinition(identifier: String): StBuiltInPromptDefinition? {
+    return stBuiltInPromptDefinitionMap[identifier]
+}
+
+private fun stIsSourceBackedPrompt(identifier: String): Boolean {
+    return stBuiltInPromptDefinition(identifier)?.sourceKind != null
+}
+
+private fun stCanEditPromptContent(prompt: SillyTavernPromptItem): Boolean {
+    return !prompt.marker && !stIsSourceBackedPrompt(prompt.identifier)
+}
+
+private fun stApplyBuiltInPromptDefinition(
+    current: SillyTavernPromptItem,
+    selected: StBuiltInPromptDefinition,
+): SillyTavernPromptItem {
+    val currentDefaultName = stBuiltInPromptDefinition(current.identifier)?.prompt?.name.orEmpty()
+    val resolvedName = when {
+        current.name.isBlank() -> selected.prompt.name
+        current.name == currentDefaultName -> selected.prompt.name
+        else -> current.name
+    }
+    val resolvedContent = when {
+        selected.prompt.marker || selected.sourceKind != null -> ""
+        current.identifier == selected.prompt.identifier -> current.content
+        current.content.isBlank() -> selected.prompt.content
+        else -> current.content
+    }
+    val resolvedForbidOverrides = if (selected.prompt.identifier == "main" || selected.prompt.identifier == "jailbreak") {
+        current.forbidOverrides
+    } else {
+        false
+    }
+
+    return current.copy(
+        identifier = selected.prompt.identifier,
+        name = resolvedName,
+        content = resolvedContent,
+        systemPrompt = selected.prompt.systemPrompt,
+        marker = selected.prompt.marker,
+        forbidOverrides = resolvedForbidOverrides,
+    )
+}
+
 @StringRes
 private fun stRoleLabelRes(role: MessageRole): Int {
     return when (role) {
@@ -1370,6 +1622,20 @@ private fun stRoleLabelRes(role: MessageRole): Int {
         MessageRole.USER -> R.string.prompt_page_st_preset_editor_role_user
         MessageRole.ASSISTANT -> R.string.prompt_page_st_preset_editor_role_assistant
         else -> R.string.prompt_page_st_preset_editor_role_system
+    }
+}
+
+@StringRes
+private fun stPromptSourceLabelRes(identifier: String): Int {
+    return when (stBuiltInPromptDefinition(identifier)?.sourceKind) {
+        StBuiltInPromptSourceKind.CHARACTER_DESCRIPTION -> R.string.prompt_page_st_preset_editor_source_character_description
+        StBuiltInPromptSourceKind.CHARACTER_PERSONALITY -> R.string.prompt_page_st_preset_editor_source_character_personality
+        StBuiltInPromptSourceKind.SCENARIO -> R.string.prompt_page_st_preset_editor_source_character_scenario
+        StBuiltInPromptSourceKind.PERSONA_DESCRIPTION -> R.string.prompt_page_st_preset_editor_source_persona_description
+        StBuiltInPromptSourceKind.WORLD_INFO -> R.string.prompt_page_st_preset_editor_source_world_info
+        StBuiltInPromptSourceKind.DIALOGUE_EXAMPLES -> R.string.prompt_page_st_preset_editor_source_dialogue_examples
+        StBuiltInPromptSourceKind.CHAT_HISTORY -> R.string.prompt_page_st_preset_editor_source_chat_history
+        null -> R.string.prompt_page_st_preset_editor_prompt_content
     }
 }
 
