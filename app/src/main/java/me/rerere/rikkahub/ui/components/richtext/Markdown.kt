@@ -204,6 +204,9 @@ internal fun extractCodeFenceContent(
     node: ASTNode,
     content: String,
 ): String? {
+    val openingFenceLineStart = content.lastIndexOf('\n', startIndex = node.startOffset - 1)
+        .let { if (it == -1) 0 else it + 1 }
+    val linePrefix = content.substring(openingFenceLineStart, node.startOffset)
     val openingFenceLineEnd = node.children.firstOrNull { it.type == MarkdownTokenTypes.EOL } ?: return null
     val contentStartOffset = openingFenceLineEnd.endOffset
     val closingFence = node.children.findLast { it.type == MarkdownTokenTypes.CODE_FENCE_END }
@@ -213,7 +216,7 @@ internal fun extractCodeFenceContent(
         val lineStartOffset = content.lastIndexOf('\n', startIndex = closingFence.startOffset - 1)
             .let { if (it == -1) 0 else it + 1 }
         val closingFenceIndent = content.substring(lineStartOffset, closingFence.startOffset)
-        if (closingFenceIndent.all { it == ' ' || it == '\t' }) {
+        if (stripCodeFenceLinePrefix(closingFenceIndent, linePrefix).isBlank()) {
             contentEndOffset = lineStartOffset
         }
     }
@@ -221,7 +224,73 @@ internal fun extractCodeFenceContent(
     if (contentEndOffset < contentStartOffset) {
         return ""
     }
-    return content.substring(contentStartOffset, contentEndOffset)
+    val rawContent = content.substring(contentStartOffset, contentEndOffset)
+    return stripCodeFenceLinePrefixFromContent(rawContent, linePrefix)
+}
+
+private fun stripCodeFenceLinePrefixFromContent(
+    content: String,
+    linePrefix: String,
+): String {
+    if (content.isEmpty() || linePrefix.isEmpty()) {
+        return content
+    }
+
+    val result = StringBuilder(content.length)
+    var index = 0
+    while (index < content.length) {
+        val lineStart = index
+        while (index < content.length && content[index] != '\n' && content[index] != '\r') {
+            index++
+        }
+        result.append(
+            stripCodeFenceLinePrefix(
+                line = content.substring(lineStart, index),
+                linePrefix = linePrefix,
+            )
+        )
+        if (index >= content.length) {
+            break
+        }
+        if (content[index] == '\r' && index + 1 < content.length && content[index + 1] == '\n') {
+            result.append("\r\n")
+            index += 2
+        } else {
+            result.append(content[index])
+            index++
+        }
+    }
+    return result.toString()
+}
+
+private fun stripCodeFenceLinePrefix(
+    line: String,
+    linePrefix: String,
+): String {
+    if (line.isEmpty() || linePrefix.isEmpty()) {
+        return line
+    }
+
+    var lineIndex = 0
+    linePrefix.forEach { prefixChar ->
+        when {
+            prefixChar == ' ' || prefixChar == '\t' -> {
+                if (lineIndex < line.length && (line[lineIndex] == ' ' || line[lineIndex] == '\t')) {
+                    lineIndex++
+                }
+            }
+
+            lineIndex < line.length && line[lineIndex] == prefixChar -> {
+                lineIndex++
+            }
+
+            else -> {
+                return line
+            }
+        }
+    }
+
+    return line.substring(lineIndex)
 }
 
 @Preview(showBackground = true)

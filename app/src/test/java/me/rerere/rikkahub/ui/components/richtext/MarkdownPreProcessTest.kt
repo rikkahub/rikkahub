@@ -80,6 +80,82 @@ class MarkdownPreProcessTest {
     }
 
     @Test
+    fun extract_code_fence_content_strips_list_container_indentation() {
+        val markdown = """
+            1. Example
+
+               ```kotlin
+               fun main() {
+                   println("hi")
+               }
+               ```
+        """.trimIndent()
+        val codeFence = findFirstCodeFence(parser.buildMarkdownTreeFromString(markdown))
+
+        val code = extractCodeFenceContent(codeFence, markdown)
+
+        assertEquals(
+            "fun main() {\n    println(\"hi\")\n}\n",
+            code
+        )
+    }
+
+    @Test
+    fun extract_code_fence_content_strips_block_quote_prefix_and_preserves_extra_indent() {
+        val markdown = """
+            > ```text
+            > quoted
+            >   keep
+            > ```
+        """.trimIndent()
+        val codeFence = findFirstCodeFence(parser.buildMarkdownTreeFromString(markdown))
+
+        val code = extractCodeFenceContent(codeFence, markdown)
+
+        assertEquals(
+            "quoted\n  keep\n",
+            code
+        )
+    }
+
+    @Test
+    fun extract_code_fence_content_dedents_list_item_container_indentation() {
+        val markdown = """
+            |1. item
+            |   ```kotlin
+            |   println("hi")
+            |     println("nested")
+            |   ```
+        """.trimMargin()
+        val codeFence = findFirstCodeFence(parser.buildMarkdownTreeFromString(markdown))
+
+        val code = extractCodeFenceContent(codeFence, markdown)
+
+        assertEquals(
+            "println(\"hi\")\n  println(\"nested\")\n",
+            code
+        )
+    }
+
+    @Test
+    fun extract_code_fence_content_dedents_block_quote_prefix() {
+        val markdown = """
+            |> ```text
+            |> foo
+            |>   bar
+            |> ```
+        """.trimMargin()
+        val codeFence = findFirstCodeFence(parser.buildMarkdownTreeFromString(markdown))
+
+        val code = extractCodeFenceContent(codeFence, markdown)
+
+        assertEquals(
+            "foo\n  bar\n",
+            code
+        )
+    }
+
+    @Test
     fun normalize_code_fence_content_for_display_trims_fence_newline_only() {
         val markdown = """
             ```kotlin
