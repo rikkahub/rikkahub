@@ -42,6 +42,31 @@ class StRuntimeSnapshotTest {
     }
 
     @Test
+    fun `latest assistant runtime snapshot should ignore later assistant messages without snapshots`() {
+        val snapshot = StRuntimeSnapshot(
+            generationType = "continue",
+            localVariables = mapOf("turn" to "2"),
+        )
+        val messages = listOf(
+            UIMessage.user("hello"),
+            UIMessage.assistant("generated").withStRuntimeSnapshot(snapshot),
+            UIMessage.assistant("imported greeting"),
+        )
+
+        assertEquals(snapshot, messages.readLatestAssistantStRuntimeSnapshot())
+    }
+
+    @Test
+    fun `latest assistant runtime snapshot should be null when no assistant snapshot exists`() {
+        val messages = listOf(
+            UIMessage.user("hello"),
+            UIMessage.assistant("preset greeting"),
+        )
+
+        assertNull(messages.readLatestAssistantStRuntimeSnapshot())
+    }
+
+    @Test
     fun `lorebook runtime state should restore from persistence snapshot`() {
         val snapshot = LorebookRuntimeStateSnapshot(
             stickyEffects = mapOf(

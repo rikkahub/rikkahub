@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.encodeToJsonElement
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.utils.JsonInstant
@@ -40,6 +41,14 @@ internal fun UIMessage.readStRuntimeSnapshot(): StRuntimeSnapshot? {
             }.getOrNull()
         }
         .firstOrNull()
+}
+
+internal fun List<UIMessage>.readLatestAssistantStRuntimeSnapshot(): StRuntimeSnapshot? {
+    return asReversed()
+        .firstOrNull { message ->
+            message.role == MessageRole.ASSISTANT && message.readStRuntimeSnapshot() != null
+        }
+        ?.readStRuntimeSnapshot()
 }
 
 internal fun UIMessage.withStRuntimeSnapshot(snapshot: StRuntimeSnapshot?): UIMessage {

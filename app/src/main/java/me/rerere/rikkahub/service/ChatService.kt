@@ -47,7 +47,6 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
-import me.rerere.ai.ui.limitContext
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
@@ -84,10 +83,9 @@ import me.rerere.rikkahub.data.ai.transformers.SillyTavernPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.SillyTavernMacroTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.readLatestAssistantStRuntimeSnapshot
 import me.rerere.rikkahub.data.ai.transformers.readStRuntimeSnapshot
-import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.withStRuntimeSnapshot
-import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -279,9 +277,7 @@ class ChatService(
         conversation: Conversation,
     ): String {
         val persisted = conversation.currentMessages
-            .asReversed()
-            .firstOrNull { it.role == MessageRole.ASSISTANT }
-            ?.readStRuntimeSnapshot()
+            .readLatestAssistantStRuntimeSnapshot()
             ?.generationType
             .orEmpty()
             .trim()
@@ -295,82 +291,11 @@ class ChatService(
     private suspend fun restoreConversationStRuntimeState(
         conversationId: Uuid,
         visibleMessages: List<UIMessage>,
-        assistant: Assistant,
-        settings: Settings,
-        model: me.rerere.ai.provider.Model,
     ) {
         val session = getOrCreateSession(conversationId)
-        session.restoreStRuntimeState(null)
-
-        val latestSnapshotIndex = visibleMessages.indexOfLast { message ->
-            message.role == MessageRole.ASSISTANT && message.readStRuntimeSnapshot() != null
-        }
-        val replayStartIndex = if (latestSnapshotIndex >= 0) {
-            session.restoreStRuntimeState(visibleMessages[latestSnapshotIndex].readStRuntimeSnapshot())
-            latestSnapshotIndex + 1
-        } else {
-            0
-        }
-
-        replayConversationStRuntimeState(
-            conversationId = conversationId,
-            visibleMessages = visibleMessages,
-            assistant = assistant,
-            settings = settings,
-            model = model,
-            startIndex = replayStartIndex,
-        )
-    }
-
-    private suspend fun replayConversationStRuntimeState(
-        conversationId: Uuid,
-        visibleMessages: List<UIMessage>,
-        assistant: Assistant,
-        settings: Settings,
-        model: me.rerere.ai.provider.Model,
-        startIndex: Int,
-    ) {
-        if (startIndex >= visibleMessages.size) return
-
-        val session = getOrCreateSession(conversationId)
-        visibleMessages.forEachIndexed { index, message ->
-            if (index < startIndex || message.role != MessageRole.ASSISTANT) {
-                return@forEachIndexed
-            }
-
-            buildReplayGenerationMessages(
-                assistant = assistant,
-                visibleMessages = visibleMessages.take(index),
-            ).transforms(
-                transformers = buildList {
-                    add(TimeReminderTransformer)
-                    add(SillyTavernPromptTransformer)
-                    add(PromptInjectionTransformer)
-                    add(SillyTavernMacroTransformer)
-                    add(PlaceholderTransformer)
-                    add(RegexPromptOnlyTransformer)
-                },
-                context = context,
-                model = model,
-                assistant = assistant,
-                settings = settings,
-                stGenerationType = "normal",
-                stMacroState = getConversationStMacroState(conversationId),
-                lorebookRuntimeState = session.getLorebookRuntimeState(),
-            )
-        }
-    }
-
-    private fun buildReplayGenerationMessages(
-        assistant: Assistant,
-        visibleMessages: List<UIMessage>,
-    ): List<UIMessage> {
-        return buildList {
-            assistant.systemPrompt
-                .takeIf { it.isNotBlank() }
-                ?.let { add(UIMessage.system(it)) }
-            addAll(visibleMessages.limitContext(assistant.contextMessageSize))
-        }
+        // Unsnapshotted assistant turns may come from imported history, greeting presets,
+        // or legacy branches, so treating them as prior generations corrupts ST state.
+        session.restoreStRuntimeState(visibleMessages.readLatestAssistantStRuntimeSnapshot())
     }
 
     private fun selectMessagesForGeneration(
@@ -1040,9 +965,6 @@ class ChatService(
             restoreConversationStRuntimeState(
                 conversationId = conversationId,
                 visibleMessages = messagesForStateRestore,
-                assistant = assistant,
-                settings = settings,
-                model = model,
             )
             setConversationStGenerationType(conversationId, stGenerationType)
 
