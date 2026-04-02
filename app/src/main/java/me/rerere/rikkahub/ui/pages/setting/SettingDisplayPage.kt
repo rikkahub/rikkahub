@@ -731,6 +731,45 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 )
                             },
                         )
+                        if (displaySetting.pasteLongTextAsFile) {
+                            item(
+                                headlineContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_threshold_title)) },
+                                supportingContent = {
+                                    Row(
+                                        modifier = Modifier
+                                            .padding(top = 12.dp)
+                                            .fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        val pasteThresholdSliderState = rememberCommitOnFinishSliderState(
+                                            displaySetting.pasteLongTextThreshold.toFloat()
+                                        )
+                                        Slider(
+                                            value = pasteThresholdSliderState.value,
+                                            onValueChange = pasteThresholdSliderState::onValueChange,
+                                            onValueChangeFinished = {
+                                                pasteThresholdSliderState.onValueChangeFinished(
+                                                    externalValue = displaySetting.pasteLongTextThreshold.toFloat(),
+                                                    onValueCommitted = {
+                                                        updateDisplaySetting(
+                                                            displaySetting.copy(pasteLongTextThreshold = it.toInt())
+                                                        )
+                                                    },
+                                                    normalize = {
+                                                        it.roundToInt().coerceIn(100, 10000).toFloat()
+                                                    }
+                                                )
+                                            },
+                                            valueRange = 100f..10000f,
+                                            steps = 98,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(text = "${pasteThresholdSliderState.value.toInt()}")
+                                    }
+                                },
+                            )
+                        }
                         item(
                             headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_title)) },
                             supportingContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_desc)) },
@@ -743,86 +782,30 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                                 )
                             },
                         )
-                    }
-
-                    if (displaySetting.pasteLongTextAsFile) {
-                        Column(
-                            modifier = Modifier
-                                .padding(horizontal = 8.dp)
-                                .fillMaxWidth()
-                                .clip(settingsPanelShape)
-                                .background(MaterialTheme.colorScheme.surfaceBright)
-                        ) {
-                            ListItem(
-                                headlineContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_threshold_title)) },
-                                colors = CustomColors.listItemColors,
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                val pasteThresholdSliderState = rememberCommitOnFinishSliderState(
-                                    displaySetting.pasteLongTextThreshold.toFloat()
-                                )
-                                Slider(
-                                    value = pasteThresholdSliderState.value,
-                                    onValueChange = pasteThresholdSliderState::onValueChange,
-                                    onValueChangeFinished = {
-                                        pasteThresholdSliderState.onValueChangeFinished(
-                                            externalValue = displaySetting.pasteLongTextThreshold.toFloat(),
-                                            onValueCommitted = {
-                                                updateDisplaySetting(
-                                                    displaySetting.copy(pasteLongTextThreshold = it.toInt())
-                                                )
-                                            },
-                                            normalize = {
-                                                it.roundToInt().coerceIn(100, 10000).toFloat()
-                                            }
-                                        )
-                                    },
-                                    valueRange = 100f..10000f,
-                                    steps = 98,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = "${pasteThresholdSliderState.value.toInt()}",
-                                )
-                            }
-                        }
-                    }
-                    if (displaySetting.enableVolumeKeyScroll) {
-                        Column(
-                            modifier = Modifier
-                                .padding(horizontal = 8.dp)
-                                .fillMaxWidth()
-                                .clip(settingsPanelShape)
-                                .background(MaterialTheme.colorScheme.surfaceBright)
-                        ) {
-                            ListItem(
+                        if (displaySetting.enableVolumeKeyScroll) {
+                            item(
                                 headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_ratio)) },
-                                colors = CustomColors.listItemColors,
+                                supportingContent = {
+                                    Row(
+                                        modifier = Modifier
+                                            .padding(top = 12.dp)
+                                            .fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Slider(
+                                            value = displaySetting.volumeKeyScrollRatio,
+                                            onValueChange = {
+                                                updateDisplaySetting(displaySetting.copy(volumeKeyScrollRatio = it))
+                                            },
+                                            valueRange = 0.25f..1.0f,
+                                            steps = 2,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(text = "${(displaySetting.volumeKeyScrollRatio * 100).toInt()}%")
+                                    }
+                                },
                             )
-                            Row(
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Slider(
-                                    value = displaySetting.volumeKeyScrollRatio,
-                                    onValueChange = {
-                                        updateDisplaySetting(displaySetting.copy(volumeKeyScrollRatio = it))
-                                    },
-                                    valueRange = 0.25f..1.0f,
-                                    steps = 2,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(text = "${(displaySetting.volumeKeyScrollRatio * 100).toInt()}%")
-                            }
                         }
                     }
                 }
