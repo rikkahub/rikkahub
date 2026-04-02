@@ -78,6 +78,7 @@ import me.rerere.hugeicons.stroke.ArrowDownDouble
 import me.rerere.hugeicons.stroke.ArrowUpDouble
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
+import me.rerere.hugeicons.stroke.MaskTheater01
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.MoreVertical
@@ -523,6 +524,9 @@ private fun ChatPageContent(
                                 onNewChat = {
                                     navigateToChatPage(navController)
                                 },
+                                onEnableTemporaryConversation = {
+                                    vm.enableTemporaryConversation()
+                                },
                                 onClickMenu = {
                                     previewMode = !previewMode
                                 },
@@ -742,6 +746,7 @@ private fun TopBar(
     previewMode: Boolean,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
+    onEnableTemporaryConversation: () -> Unit,
     onUpdateTitle: (String) -> Unit,
     onHideTopBar: () -> Unit,
     onOpenPromptInspector: () -> Unit,
@@ -752,6 +757,12 @@ private fun TopBar(
     val titleState = useEditState<String> {
         onUpdateTitle(it)
     }
+    val showTemporaryConversationAction = conversation.newConversation && conversation.messageNodes.isEmpty()
+    val temporaryConversationEnabled = conversation.isTemporaryConversation
+    val newChatText = stringResource(R.string.chat_page_new_chat)
+    val temporaryConversationText = stringResource(R.string.chat_page_temporary_chat)
+    val temporaryConversationEnabledText = stringResource(R.string.chat_page_temporary_chat_enabled)
+    val temporaryConversationAlreadyEnabledText = stringResource(R.string.chat_page_temporary_chat_already_enabled)
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
@@ -783,7 +794,13 @@ private fun TopBar(
                 color = Color.Transparent,
             ) {
                 Text(
-                    text = conversation.title.ifBlank { stringResource(R.string.chat_page_new_chat) },
+                    text = conversation.title.ifBlank {
+                        if (temporaryConversationEnabled) {
+                            temporaryConversationText
+                        } else {
+                            newChatText
+                        }
+                    },
                     maxLines = 1,
                     style = MaterialTheme.typography.titleMedium,
                     overflow = TextOverflow.Ellipsis,
@@ -793,10 +810,35 @@ private fun TopBar(
         actions = {
             IconButton(
                 onClick = {
-                    onNewChat()
+                    if (showTemporaryConversationAction) {
+                        if (temporaryConversationEnabled) {
+                            toaster.show(temporaryConversationAlreadyEnabledText, type = ToastType.Info)
+                        } else {
+                            onEnableTemporaryConversation()
+                            toaster.show(temporaryConversationEnabledText, type = ToastType.Success)
+                        }
+                    } else {
+                        onNewChat()
+                    }
                 }
             ) {
-                Icon(HugeIcons.MessageAdd01, stringResource(R.string.chat_page_new_chat))
+                Icon(
+                    imageVector = if (showTemporaryConversationAction) {
+                        HugeIcons.MaskTheater01
+                    } else {
+                        HugeIcons.MessageAdd01
+                    },
+                    contentDescription = if (showTemporaryConversationAction) {
+                        temporaryConversationText
+                    } else {
+                        newChatText
+                    },
+                    tint = if (temporaryConversationEnabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        LocalContentColor.current
+                    }
+                )
             }
 
             var showOverflowMenu by rememberSaveable { mutableStateOf(false) }

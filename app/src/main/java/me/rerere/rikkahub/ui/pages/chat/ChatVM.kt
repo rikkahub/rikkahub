@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -93,8 +94,21 @@ class ChatVM(
             chatService.initializeConversation(_conversationId)
         }
 
-        // 记住对话ID, 方便下次启动恢复
-        context.writeStringPreference("lastConversationId", _conversationId.toString())
+        // 临时对话不应作为下次启动时恢复的目标。
+        viewModelScope.launch {
+            conversation
+                .map { current ->
+                    if (current.isTemporaryConversation) {
+                        null
+                    } else {
+                        _conversationId.toString()
+                    }
+                }
+                .distinctUntilChanged()
+                .collect { conversationId ->
+                    context.writeStringPreference("lastConversationId", conversationId)
+                }
+        }
     }
 
     override fun onCleared() {
@@ -422,6 +436,16 @@ class ChatVM(
     fun updateConversation(newConversation: Conversation) {
         chatService.updateConversationState(_conversationId) {
             newConversation
+        }
+    }
+
+    fun enableTemporaryConversation() {
+        chatService.updateConversationState(_conversationId) { currentConversation ->
+            if (currentConversation.newConversation && currentConversation.messageNodes.isEmpty()) {
+                currentConversation.copy(isTemporaryConversation = true)
+            } else {
+                currentConversation
+            }
         }
     }
 

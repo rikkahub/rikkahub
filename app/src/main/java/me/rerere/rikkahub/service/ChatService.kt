@@ -132,6 +132,16 @@ import kotlin.uuid.Uuid
 private const val TAG = "ChatService"
 private const val TERMUX_BASH_PATH = "/data/data/com.termux/files/usr/bin/bash"
 
+internal fun shouldSkipConversationPersistence(
+    exists: Boolean,
+    conversation: Conversation,
+): Boolean {
+    if (conversation.isTemporaryConversation) {
+        return true
+    }
+    return !exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()
+}
+
 data class ChatError(
     val id: Uuid = Uuid.random(),
     val error: Throwable,
@@ -236,7 +246,10 @@ class ChatService(
         persistGlobalVariablesJob?.cancel()
         persistConversationLocalVariablesJobs.values.forEach { it.cancel() }
         persistConversationLocalVariablesJobs.clear()
-        sessions.values.forEach { it.cleanup() }
+        sessions.values.forEach { session ->
+            cleanupUnsavedConversationFiles(session.id, session.state.value)
+            session.cleanup()
+        }
         sessions.clear()
     }
 
@@ -267,9 +280,24 @@ class ChatService(
             return
         }
         if (sessions.remove(conversationId, session)) {
+            cleanupUnsavedConversationFiles(conversationId, session.state.value)
             session.cleanup()
             _sessionsVersion.value++
             Log.i(TAG, "removeSession: $conversationId (remaining: ${sessions.size})")
+        }
+    }
+
+    private fun cleanupUnsavedConversationFiles(
+        conversationId: Uuid,
+        conversation: Conversation,
+    ) {
+        val files = conversation.files
+        if (files.isEmpty()) return
+        appScope.launch {
+            if (!conversationRepo.existsConversationById(conversationId)) {
+                filesManager.deleteChatFiles(files)
+                Log.i(TAG, "cleanupUnsavedConversationFiles: $conversationId")
+            }
         }
     }
 
@@ -1944,20 +1972,28 @@ class ChatService(
 
     suspend fun saveConversation(conversationId: Uuid, conversation: Conversation) {
         val exists = conversationRepo.existsConversationById(conversation.id)
-        if (!exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
-            return // 新会话且为空时不保存
-        }
-
         val updatedConversation = applyPersistentStLocalVariables(
             conversationId = conversationId,
             conversation = conversation.copy(),
         )
-        updateConversation(conversationId, updatedConversation)
+        val normalizedConversation = if (updatedConversation.messageNodes.isEmpty()) {
+            updatedConversation
+        } else {
+            updatedConversation.copy(newConversation = false)
+        }
+
+        if (shouldSkipConversationPersistence(exists, normalizedConversation)) {
+            updateConversation(conversationId, normalizedConversation)
+            persistConversationLocalVariablesJobs.remove(conversationId)?.cancel()
+            return
+        }
+
+        updateConversation(conversationId, normalizedConversation)
 
         if (!exists) {
-            conversationRepo.insertConversation(updatedConversation)
+            conversationRepo.insertConversation(normalizedConversation)
         } else {
-            conversationRepo.updateConversation(updatedConversation)
+            conversationRepo.updateConversation(normalizedConversation)
         }
 
         persistConversationLocalVariablesJobs.remove(conversationId)?.cancel()
