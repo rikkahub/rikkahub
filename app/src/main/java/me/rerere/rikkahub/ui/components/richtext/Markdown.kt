@@ -276,6 +276,7 @@ fun MarkdownBlock(
     content: String,
     modifier: Modifier = Modifier,
     style: TextStyle = LocalTextStyle.current,
+    headerLevelOffset: Int = 0,
     messageDepthFromEnd: Int? = null,
     onClickCitation: (String) -> Unit = {}
 ) {
@@ -313,6 +314,7 @@ fun MarkdownBlock(
                 MarkdownNode(
                     node = child,
                     content = preprocessed,
+                    headerLevelOffset = headerLevelOffset,
                     onClickCitation = onClickCitation,
                     messageDepthFromEnd = messageDepthFromEnd,
                 )
@@ -374,11 +376,38 @@ private fun markdownHeaderStyle(type: IElementType): TextStyle {
     return themeTokens.applyThemeTokenTextScale(baseStyle, scaleGroup)
 }
 
+private fun demotedHeaderType(
+    type: IElementType,
+    levelOffset: Int,
+): IElementType {
+    if (levelOffset <= 0) return type
+
+    val originalLevel = when (type) {
+        MarkdownElementTypes.ATX_1 -> 1
+        MarkdownElementTypes.ATX_2 -> 2
+        MarkdownElementTypes.ATX_3 -> 3
+        MarkdownElementTypes.ATX_4 -> 4
+        MarkdownElementTypes.ATX_5 -> 5
+        MarkdownElementTypes.ATX_6 -> 6
+        else -> return type
+    }
+
+    return when ((originalLevel + levelOffset).coerceAtMost(6)) {
+        1 -> MarkdownElementTypes.ATX_1
+        2 -> MarkdownElementTypes.ATX_2
+        3 -> MarkdownElementTypes.ATX_3
+        4 -> MarkdownElementTypes.ATX_4
+        5 -> MarkdownElementTypes.ATX_5
+        else -> MarkdownElementTypes.ATX_6
+    }
+}
+
 @Composable
 private fun MarkdownNode(
     node: ASTNode,
     content: String,
     modifier: Modifier = Modifier,
+    headerLevelOffset: Int = 0,
     onClickCitation: (String) -> Unit = {},
     listLevel: Int = 0,
     messageDepthFromEnd: Int? = null,
@@ -391,6 +420,7 @@ private fun MarkdownNode(
                     node = child,
                     content = content,
                     modifier = modifier,
+                    headerLevelOffset = headerLevelOffset,
                     onClickCitation = onClickCitation,
                     messageDepthFromEnd = messageDepthFromEnd,
                 )
@@ -403,6 +433,7 @@ private fun MarkdownNode(
                 node = node,
                 content = content,
                 modifier = modifier,
+                headerLevelOffset = headerLevelOffset,
                 onClickCitation = onClickCitation,
                 messageDepthFromEnd = messageDepthFromEnd,
             )
@@ -410,8 +441,9 @@ private fun MarkdownNode(
 
         // 标题
         MarkdownElementTypes.ATX_1, MarkdownElementTypes.ATX_2, MarkdownElementTypes.ATX_3, MarkdownElementTypes.ATX_4, MarkdownElementTypes.ATX_5, MarkdownElementTypes.ATX_6 -> {
-            val style = markdownHeaderStyle(node.type)
-            val headingPadding = when (node.type) {
+            val effectiveHeaderType = demotedHeaderType(node.type, headerLevelOffset)
+            val style = markdownHeaderStyle(effectiveHeaderType)
+            val headingPadding = when (effectiveHeaderType) {
                 MarkdownElementTypes.ATX_1 -> 16.dp
                 MarkdownElementTypes.ATX_2 -> 14.dp
                 MarkdownElementTypes.ATX_3 -> 12.dp
@@ -427,6 +459,7 @@ private fun MarkdownNode(
                             Paragraph(
                                 node = node,
                                 content = content,
+                                headerLevelOffset = headerLevelOffset,
                                 onClickCitation = onClickCitation,
                                 modifier = modifier.padding(vertical = headingPadding),
                                 trim = true,
@@ -444,6 +477,7 @@ private fun MarkdownNode(
                 node = node,
                 content = content,
                 modifier = modifier.padding(vertical = 4.dp),
+                headerLevelOffset = headerLevelOffset,
                 onClickCitation = onClickCitation,
                 level = listLevel,
                 messageDepthFromEnd = messageDepthFromEnd,
@@ -455,6 +489,7 @@ private fun MarkdownNode(
                 node = node,
                 content = content,
                 modifier = modifier.padding(vertical = 4.dp),
+                headerLevelOffset = headerLevelOffset,
                 onClickCitation = onClickCitation,
                 level = listLevel,
                 messageDepthFromEnd = messageDepthFromEnd,
@@ -507,6 +542,7 @@ private fun MarkdownNode(
                         MarkdownNode(
                             node = child,
                             content = content,
+                            headerLevelOffset = headerLevelOffset,
                             onClickCitation = onClickCitation,
                             messageDepthFromEnd = messageDepthFromEnd,
                         )
@@ -541,6 +577,7 @@ private fun MarkdownNode(
                         node = child,
                         content = content,
                         modifier = modifier,
+                        headerLevelOffset = headerLevelOffset,
                         onClickCitation = onClickCitation,
                         messageDepthFromEnd = messageDepthFromEnd,
                     )
@@ -555,6 +592,7 @@ private fun MarkdownNode(
                         node = child,
                         content = content,
                         modifier = modifier,
+                        headerLevelOffset = headerLevelOffset,
                         onClickCitation = onClickCitation,
                         messageDepthFromEnd = messageDepthFromEnd,
                     )
@@ -732,6 +770,7 @@ private fun MarkdownNode(
                     node = child,
                     content = content,
                     modifier = modifier,
+                    headerLevelOffset = headerLevelOffset,
                     onClickCitation = onClickCitation,
                     messageDepthFromEnd = messageDepthFromEnd,
                 )
@@ -745,6 +784,7 @@ private fun UnorderedListNode(
     node: ASTNode,
     content: String,
     modifier: Modifier = Modifier,
+    headerLevelOffset: Int = 0,
     onClickCitation: (String) -> Unit = {},
     level: Int = 0,
     messageDepthFromEnd: Int? = null,
@@ -764,6 +804,7 @@ private fun UnorderedListNode(
                     node = child,
                     content = content,
                     bulletText = bulletStyle,
+                    headerLevelOffset = headerLevelOffset,
                     onClickCitation = onClickCitation,
                     level = level,
                     messageDepthFromEnd = messageDepthFromEnd,
@@ -778,6 +819,7 @@ private fun OrderedListNode(
     node: ASTNode,
     content: String,
     modifier: Modifier = Modifier,
+    headerLevelOffset: Int = 0,
     onClickCitation: (String) -> Unit = {},
     level: Int = 0,
     messageDepthFromEnd: Int? = null,
@@ -792,6 +834,7 @@ private fun OrderedListNode(
                     node = child,
                     content = content,
                     bulletText = numberText,
+                    headerLevelOffset = headerLevelOffset,
                     onClickCitation = onClickCitation,
                     level = level,
                     messageDepthFromEnd = messageDepthFromEnd,
@@ -807,6 +850,7 @@ private fun ListItemNode(
     node: ASTNode,
     content: String,
     bulletText: String,
+    headerLevelOffset: Int = 0,
     onClickCitation: (String) -> Unit = {},
     level: Int,
     messageDepthFromEnd: Int? = null,
@@ -830,6 +874,7 @@ private fun ListItemNode(
                         MarkdownNode(
                             node = contentChild,
                             content = content,
+                            headerLevelOffset = headerLevelOffset,
                             onClickCitation = onClickCitation,
                             listLevel = level,
                             messageDepthFromEnd = messageDepthFromEnd,
@@ -843,6 +888,7 @@ private fun ListItemNode(
             MarkdownNode(
                 node = nestedList,
                 content = content,
+                headerLevelOffset = headerLevelOffset,
                 onClickCitation = onClickCitation,
                 listLevel = level + 1,
                 messageDepthFromEnd = messageDepthFromEnd,
@@ -874,6 +920,7 @@ private fun Paragraph(
     node: ASTNode,
     content: String,
     trim: Boolean = false,
+    headerLevelOffset: Int = 0,
     onClickCitation: (String) -> Unit = {},
     modifier: Modifier,
     messageDepthFromEnd: Int? = null,
@@ -885,6 +932,7 @@ private fun Paragraph(
                 MarkdownNode(
                     node = child,
                     content = content,
+                    headerLevelOffset = headerLevelOffset,
                     onClickCitation = onClickCitation,
                     messageDepthFromEnd = messageDepthFromEnd,
                 )

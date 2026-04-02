@@ -8,7 +8,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.ai.transformers.LorebookRuntimeState
+import me.rerere.rikkahub.data.ai.transformers.StRuntimeSnapshot
+import me.rerere.rikkahub.data.ai.transformers.StMacroState
 import me.rerere.rikkahub.data.model.Conversation
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
@@ -26,6 +30,12 @@ class ConversationSession(
 
     // 原子引用计数
     private val refCount = AtomicInteger(0)
+
+    // ST 宏局部变量按会话保存，避免每轮生成都重新归零
+    private val stMacroLocalVariables = ConcurrentHashMap<String, String>()
+    private val lorebookRuntimeState = LorebookRuntimeState()
+
+    var stGenerationType: String = "normal"
 
     // 生成任务（内聚在 session 中）
     private val _generationJob = MutableStateFlow<Job?>(null)
@@ -79,6 +89,44 @@ class ConversationSession(
 
     fun getJob(): Job? = _generationJob.value
 
+    fun getStMacroState(globalVariables: MutableMap<String, String>): StMacroState {
+        return StMacroState(
+            localVariables = stMacroLocalVariables,
+            globalVariables = globalVariables,
+        )
+    }
+
+    fun getLorebookRuntimeState(): LorebookRuntimeState = lorebookRuntimeState
+
+    fun resetStMacroLocalVariables() {
+        stMacroLocalVariables.clear()
+    }
+
+    fun resetLorebookRuntimeState() {
+        lorebookRuntimeState.clear()
+    }
+
+    fun snapshotStRuntimeState(): StRuntimeSnapshot {
+        return StRuntimeSnapshot(
+            generationType = stGenerationType,
+            localVariables = stMacroLocalVariables.toMap(),
+            lorebookRuntimeState = lorebookRuntimeState.snapshotForPersistence(),
+        )
+    }
+
+    fun restoreStRuntimeState(snapshot: StRuntimeSnapshot?) {
+        stMacroLocalVariables.clear()
+        lorebookRuntimeState.clear()
+        stGenerationType = snapshot?.generationType
+            ?.trim()
+            ?.lowercase()
+            .orEmpty()
+            .ifBlank { "normal" }
+
+        snapshot?.localVariables?.let { stMacroLocalVariables.putAll(it) }
+        snapshot?.lorebookRuntimeState?.let { lorebookRuntimeState.restoreFromSnapshot(it) }
+    }
+
     private fun scheduleIdleCheck() {
         idleCheckJob?.cancel()
         idleCheckJob = scope.launch {
@@ -99,5 +147,6 @@ class ConversationSession(
         _generationJob.value = null
         idleCheckJob?.cancel()
         idleCheckJob = null
+        lorebookRuntimeState.clear()
     }
 }

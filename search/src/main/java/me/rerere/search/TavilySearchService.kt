@@ -21,6 +21,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
 import me.rerere.search.SearchService.Companion.json
+import me.rerere.search.SearchService.Companion.keyRoulette
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -93,11 +94,12 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
                 put("topic", topic)
                 put("include_answer", "advanced")
             }
+            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
             val request = Request.Builder()
                 .url("https://api.tavily.com/search")
                 .post(body.toString().toRequestBody())
-                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .addHeader("Authorization", "Bearer $apiKey")
                 .build()
             val response = httpClient.newCall(request).await()
             if (response.isSuccessful) {
@@ -134,10 +136,11 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
                     add(url)
                 })
             }
+            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
             val request = Request.Builder()
                 .url("https://api.tavily.com/extract")
                 .post(body.toString().toRequestBody())
-                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .addHeader("Authorization", "Bearer $apiKey")
                 .build()
             val response = httpClient.newCall(request).await()
             if (response.isSuccessful) {

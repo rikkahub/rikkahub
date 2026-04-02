@@ -189,7 +189,7 @@ fun BackgroundPicker(
                     onValueChange = { urlInput = it },
                     label = { Text(stringResource(R.string.assistant_page_image_url)) },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("https://example.com/background.gif") },
+                    placeholder = { Text(stringResource(R.string.assistant_page_background_url_placeholder)) },
                     singleLine = true
                 )
             },

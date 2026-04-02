@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -27,18 +25,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.sampling.SamplingRequestFieldGroups
 import me.rerere.rikkahub.ui.components.ui.FormItem
-import me.rerere.rikkahub.ui.components.ui.Tag
-import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.hooks.rememberCommitOnFinishSliderState
@@ -48,6 +46,7 @@ import me.rerere.rikkahub.utils.toFixed
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.math.roundToInt
+import kotlin.uuid.Uuid
 import me.rerere.rikkahub.data.model.Tag as DataTag
 
 @Composable
@@ -58,6 +57,7 @@ fun AssistantBasicPage(id: String) {
         }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val providers by vm.providers.collectAsStateWithLifecycle()
     val tags by vm.tags.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -83,6 +83,7 @@ fun AssistantBasicPage(id: String) {
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
             providers = providers,
+            globalChatModelId = settings.chatModelId,
             tags = tags,
             onUpdate = { vm.update(it) },
             vm = vm
@@ -94,11 +95,50 @@ fun AssistantBasicPage(id: String) {
 internal fun AssistantBasicContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
-    providers: List<me.rerere.ai.provider.ProviderSetting>,
+    providers: List<ProviderSetting>,
+    globalChatModelId: Uuid?,
     tags: List<DataTag>,
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    val currentModelId = assistant.chatModelId ?: globalChatModelId
+    val currentModel = providers
+        .asSequence()
+        .flatMap { it.models.asSequence() }
+        .firstOrNull { it.id == currentModelId }
+    val currentProvider = currentModel?.findProvider(providers)
+    val openAIProvider = currentProvider as? ProviderSetting.OpenAI
+    val hasProviderSpecificRequestParams = assistant.hasProviderSpecificRequestParams()
+    val isGoogleProvider = currentProvider is ProviderSetting.Google
+    val isClaudeProvider = currentProvider is ProviderSetting.Claude
+    val showPresencePenaltyField = openAIProvider != null || isGoogleProvider || assistant.presencePenalty != null
+    val showFrequencyPenaltyField = openAIProvider != null || isGoogleProvider || assistant.frequencyPenalty != null
+    val showMinPField = openAIProvider != null || assistant.minP != null
+    val showTopKField = openAIProvider != null || isGoogleProvider || isClaudeProvider || assistant.topK != null
+    val showTopAField = openAIProvider != null || assistant.topA != null
+    val showRepetitionPenaltyField = openAIProvider != null || assistant.repetitionPenalty != null
+    val showStopSequencesField = (openAIProvider != null && !openAIProvider.useResponseApi) ||
+        isGoogleProvider ||
+        isClaudeProvider ||
+        assistant.stopSequences.isNotEmpty()
+    val showSeedField = openAIProvider != null || isGoogleProvider || assistant.seed != null
+    val showGoogleResponseMimeTypeField = isGoogleProvider || assistant.googleResponseMimeType.isNotBlank()
+    val showVerbosityField = openAIProvider != null || assistant.openAIVerbosity.isNotBlank()
+    val requestParamsDescription = when {
+        openAIProvider != null && openAIProvider.useResponseApi ->
+            stringResource(R.string.assistant_page_sampling_desc_responses_api)
+        openAIProvider != null ->
+            stringResource(R.string.assistant_page_sampling_desc_openai)
+        isGoogleProvider ->
+            stringResource(R.string.assistant_page_sampling_desc_google)
+        isClaudeProvider ->
+            stringResource(R.string.assistant_page_sampling_desc_claude)
+        hasProviderSpecificRequestParams ->
+            stringResource(R.string.assistant_page_sampling_desc_compat)
+        else ->
+            stringResource(R.string.assistant_page_sampling_desc_compat)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -225,146 +265,6 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
-                    Text(stringResource(R.string.assistant_page_temperature))
-                },
-                tail = {
-                    Switch(
-                        checked = assistant.temperature != null,
-                        onCheckedChange = { enabled ->
-                            onUpdate(
-                                assistant.copy(
-                                    temperature = if (enabled) 1.0f else null
-                                )
-                            )
-                        }
-                    )
-                }
-            ) {
-                if (assistant.temperature != null) {
-                    val temperatureSliderState = rememberCommitOnFinishSliderState(assistant.temperature)
-                    Slider(
-                        value = temperatureSliderState.value,
-                        onValueChange = temperatureSliderState::onValueChange,
-                        onValueChangeFinished = {
-                            temperatureSliderState.onValueChangeFinished(
-                                externalValue = assistant.temperature,
-                                onValueCommitted = {
-                                    onUpdate(
-                                        assistant.copy(
-                                            temperature = it
-                                        )
-                                    )
-                                },
-                                normalize = {
-                                    it.toFixed(2).toFloatOrNull() ?: 0.6f
-                                }
-                            )
-                        },
-                        valueRange = 0f..2f,
-                        steps = 19,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        val currentTemperature = temperatureSliderState.value
-                        val tagType = when (currentTemperature) {
-                            in 0.0f..0.3f -> TagType.INFO
-                            in 0.3f..1.0f -> TagType.SUCCESS
-                            in 1.0f..1.5f -> TagType.WARNING
-                            in 1.5f..2.0f -> TagType.ERROR
-                            else -> TagType.ERROR
-                        }
-                        Tag(
-                            type = TagType.INFO
-                        ) {
-                            Text(
-                                text = currentTemperature.toFixed(2)
-                            )
-                        }
-
-                        Tag(
-                            type = tagType
-                        ) {
-                            Text(
-                                text = when (currentTemperature) {
-                                    in 0.0f..0.3f -> stringResource(R.string.assistant_page_strict)
-                                    in 0.3f..1.0f -> stringResource(R.string.assistant_page_balanced)
-                                    in 1.0f..1.5f -> stringResource(R.string.assistant_page_creative)
-                                    in 1.5f..2.0f -> stringResource(R.string.assistant_page_chaotic)
-                                    else -> "?"
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-            HorizontalDivider()
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_top_p))
-                },
-                description = {
-                    Text(
-                        text = buildAnnotatedString {
-                            append(stringResource(R.string.assistant_page_top_p_warning))
-                        }
-                    )
-                },
-                tail = {
-                    Switch(
-                        checked = assistant.topP != null,
-                        onCheckedChange = { enabled ->
-                            onUpdate(
-                                assistant.copy(
-                                    topP = if (enabled) 1.0f else null
-                                )
-                            )
-                        }
-                    )
-                }
-            ) {
-                assistant.topP?.let { topP ->
-                    val topPSliderState = rememberCommitOnFinishSliderState(topP)
-                    Slider(
-                        value = topPSliderState.value,
-                        onValueChange = topPSliderState::onValueChange,
-                        onValueChangeFinished = {
-                            topPSliderState.onValueChangeFinished(
-                                externalValue = topP,
-                                onValueCommitted = {
-                                    onUpdate(
-                                        assistant.copy(
-                                            topP = it
-                                        )
-                                    )
-                                },
-                                normalize = {
-                                    it.toFixed(2).toFloatOrNull() ?: 1.0f
-                                }
-                            )
-                        },
-                        valueRange = 0f..1f,
-                        steps = 0,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.assistant_page_top_p_value,
-                            topPSliderState.value.toFixed(2)
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
-                    )
-                }
-            }
-            HorizontalDivider()
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
                     Text(stringResource(R.string.assistant_page_context_message_size))
                 },
                 description = {
@@ -457,41 +357,70 @@ internal fun AssistantBasicContent(
                     },
                 )
             }
-            HorizontalDivider()
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_max_tokens))
-                },
-                description = {
-                    Text(stringResource(R.string.assistant_page_max_tokens_desc))
-                }
+        }
+
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                OutlinedTextField(
-                    value = assistant.maxTokens?.toString() ?: "",
-                    onValueChange = { text ->
-                        val tokens = if (text.isBlank()) {
-                            null
-                        } else {
-                            text.toIntOrNull()?.takeIf { it > 0 }
-                        }
-                        onUpdate(
-                            assistant.copy(
-                                maxTokens = tokens
-                            )
-                        )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_sampling_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = requestParamsDescription,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                SamplingRequestFieldGroups(
+                    temperature = assistant.temperature,
+                    onTemperatureChange = { onUpdate(assistant.copy(temperature = it)) },
+                    topP = assistant.topP,
+                    onTopPChange = { onUpdate(assistant.copy(topP = it)) },
+                    showTopK = showTopKField,
+                    topK = assistant.topK,
+                    onTopKChange = { onUpdate(assistant.copy(topK = it)) },
+                    maxTokens = assistant.maxTokens,
+                    onMaxTokensChange = { value ->
+                        onUpdate(assistant.copy(maxTokens = value?.takeIf { it > 0 }))
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = {
-                        Text(stringResource(R.string.assistant_page_max_tokens_no_limit))
-                    },
-                    supportingText = {
-                        if (assistant.maxTokens != null) {
-                            Text(stringResource(R.string.assistant_page_max_tokens_limit, assistant.maxTokens))
-                        } else {
-                            Text(stringResource(R.string.assistant_page_max_tokens_no_token_limit))
-                        }
-                    }
+                    showPresencePenalty = showPresencePenaltyField,
+                    presencePenalty = assistant.presencePenalty,
+                    onPresencePenaltyChange = { onUpdate(assistant.copy(presencePenalty = it)) },
+                    showFrequencyPenalty = showFrequencyPenaltyField,
+                    frequencyPenalty = assistant.frequencyPenalty,
+                    onFrequencyPenaltyChange = { onUpdate(assistant.copy(frequencyPenalty = it)) },
+                    showRepetitionPenalty = showRepetitionPenaltyField,
+                    repetitionPenalty = assistant.repetitionPenalty,
+                    onRepetitionPenaltyChange = { onUpdate(assistant.copy(repetitionPenalty = it)) },
+                    showMinP = showMinPField,
+                    minP = assistant.minP,
+                    onMinPChange = { onUpdate(assistant.copy(minP = it)) },
+                    showTopA = showTopAField,
+                    topA = assistant.topA,
+                    onTopAChange = { onUpdate(assistant.copy(topA = it)) },
+                    showStopSequences = showStopSequencesField,
+                    stopSequences = assistant.stopSequences,
+                    onStopSequencesChange = { onUpdate(assistant.copy(stopSequences = it)) },
+                    showSeed = showSeedField,
+                    seed = assistant.seed,
+                    onSeedChange = { onUpdate(assistant.copy(seed = it)) },
+                    showGoogleResponseMimeType = showGoogleResponseMimeTypeField,
+                    googleResponseMimeType = assistant.googleResponseMimeType,
+                    onGoogleResponseMimeTypeChange = { onUpdate(assistant.copy(googleResponseMimeType = it)) },
+                    showVerbosity = showVerbosityField,
+                    verbosity = assistant.openAIVerbosity,
+                    onVerbosityChange = { onUpdate(assistant.copy(openAIVerbosity = it)) },
                 )
             }
         }
@@ -604,4 +533,17 @@ internal fun AssistantBasicContent(
             }
         }
     }
+}
+
+private fun Assistant.hasProviderSpecificRequestParams(): Boolean {
+    return frequencyPenalty != null ||
+        presencePenalty != null ||
+        minP != null ||
+        topK != null ||
+        topA != null ||
+        repetitionPenalty != null ||
+        seed != null ||
+        stopSequences.isNotEmpty() ||
+        googleResponseMimeType.isNotBlank() ||
+        openAIVerbosity.isNotBlank()
 }

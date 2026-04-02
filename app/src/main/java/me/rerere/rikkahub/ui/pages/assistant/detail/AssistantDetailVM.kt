@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.skills.SkillsRepository
@@ -139,10 +140,32 @@ class AssistantDetailVM(
     }
 
     fun update(assistant: Assistant) {
+        updateWithLorebooks(assistant = assistant, lorebooks = emptyList())
+    }
+
+    fun updateSettings(
+        settings: Settings,
+        oldAssistant: Assistant? = null,
+        newAssistant: Assistant? = null,
+    ) {
+        viewModelScope.launch {
+            if (oldAssistant != null && newAssistant != null) {
+                checkAvatarDelete(old = oldAssistant, new = newAssistant)
+                checkBackgroundDelete(old = oldAssistant, new = newAssistant)
+            }
+            settingsStore.update(settings)
+        }
+    }
+
+    fun updateWithLorebooks(
+        assistant: Assistant,
+        lorebooks: List<Lorebook>,
+    ) {
         viewModelScope.launch {
             val settings = settings.value
             settingsStore.update(
                 settings = settings.copy(
+                    lorebooks = settings.lorebooks + lorebooks,
                     assistants = settings.assistants.map {
                         if (it.id == assistant.id) {
                             checkAvatarDelete(old = it, new = assistant) // 删除旧头像

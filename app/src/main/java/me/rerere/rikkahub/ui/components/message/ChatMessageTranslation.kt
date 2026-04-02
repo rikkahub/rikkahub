@@ -52,6 +52,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LanguageCircle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.theme.CustomColors
 import java.util.Locale
 
 @Composable
@@ -239,8 +240,9 @@ fun CollapsibleTranslationText(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                colors = CustomColors.cardColorsForContainer(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    preferredContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ),
                 shape = MaterialTheme.shapes.medium
             ) {

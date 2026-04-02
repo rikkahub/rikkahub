@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.extensions
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Book01
+import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.hugeicons.stroke.FileDownload
@@ -9,6 +10,7 @@ import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Share03
+import me.rerere.hugeicons.stroke.Link01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.MagicWand01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -16,7 +18,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -37,7 +38,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,8 +47,9 @@ import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVertica
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
@@ -72,6 +73,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -82,21 +84,29 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.export.LorebookSerializer
 import me.rerere.rikkahub.data.export.ModeInjectionSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
+import me.rerere.rikkahub.data.model.normalizeForModeInjection
+import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.EditorGuideAction
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
@@ -104,11 +114,14 @@ import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
+private val modeInjectionPositions = listOf(
+    InjectionPosition.BEFORE_SYSTEM_PROMPT,
+    InjectionPosition.AFTER_SYSTEM_PROMPT,
+)
+
 @Composable
 fun PromptPage(vm: PromptVM = koinViewModel()) {
-    val settings by vm.settings.collectAsStateWithLifecycle()
-    val pagerState = rememberPagerState { 3 }
-    val scope = rememberCoroutineScope()
+    val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -116,84 +129,132 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
             LargeFlexibleTopAppBar(
                 navigationIcon = { BackButton() },
                 title = { Text(stringResource(R.string.prompt_page_title)) },
+                actions = {
+                    EditorGuideAction(
+                        title = stringResource(R.string.prompt_page_help_title),
+                        bodyResId = R.raw.prompt_page_help_body_markdown,
+                    )
+                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
         },
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = pagerState.currentPage == 0,
-                    label = { Text(stringResource(R.string.prompt_page_message_template_tab)) },
-                    icon = { Icon(HugeIcons.MagicWand01, null) },
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(0) }
-                    }
-                )
-                NavigationBarItem(
-                    selected = pagerState.currentPage == 1,
-                    label = { Text(stringResource(R.string.prompt_page_mode_injection_tab)) },
-                    icon = { Icon(HugeIcons.Tools, null) },
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(1) }
-                    }
-                )
-                NavigationBarItem(
-                    selected = pagerState.currentPage == 2,
-                    label = { Text(stringResource(R.string.prompt_page_lorebook_tab)) },
-                    icon = { Icon(HugeIcons.Book01, null) },
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(2) }
-                    }
-                )
-            }
-        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) { innerPadding ->
-        HorizontalPager(
-            state = pagerState,
+        LazyColumn(
             modifier = Modifier
                 .padding(innerPadding)
-                .fillMaxSize()
-        ) { page ->
-            when (page) {
-                0 -> {
-                    val currentAssistant = settings.getCurrentAssistant()
-                    MessageTemplateEditorTab(
-                        template = currentAssistant.messageInjectionTemplate,
-                        onUpdate = { template ->
-                            vm.updateSettings(
-                                settings.copy(
-                                    assistants = settings.assistants.map { assistant ->
-                                        if (assistant.id == currentAssistant.id) {
-                                            assistant.copy(messageInjectionTemplate = template)
-                                        } else {
-                                            assistant
-                                        }
-                                    }
-                                )
-                            )
-                        }
+                .fillMaxSize(),
+            contentPadding = PaddingValues(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text(stringResource(R.string.prompt_page_overview_title)) },
+                ) {
+                    item(
+                        onClick = { navController.navigate(Screen.StPresets) },
+                        leadingContent = { Icon(HugeIcons.MagicWand01, null) },
+                        headlineContent = { Text(stringResource(R.string.prompt_page_overview_st_preset_title)) },
+                        supportingContent = { Text(stringResource(R.string.prompt_page_overview_st_preset_desc)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.ModeInjections) },
+                        leadingContent = { Icon(HugeIcons.Tools, null) },
+                        headlineContent = { Text(stringResource(R.string.prompt_page_overview_mode_injection_title)) },
+                        supportingContent = { Text(stringResource(R.string.prompt_page_overview_mode_injection_desc)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.Lorebooks) },
+                        leadingContent = { Icon(HugeIcons.Book01, null) },
+                        headlineContent = { Text(stringResource(R.string.prompt_page_overview_lorebook_title)) },
+                        supportingContent = { Text(stringResource(R.string.prompt_page_overview_lorebook_desc)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }
-
-                1 -> ModeInjectionTab(
-                    modeInjections = settings.modeInjections,
-                    onUpdate = { vm.updateSettings(settings.copy(modeInjections = it)) }
-                )
-
-                2 -> LorebookTab(
-                    lorebooks = settings.lorebooks,
-                    onUpdate = { vm.updateSettings(settings.copy(lorebooks = it)) }
-                )
             }
         }
     }
 }
 
 @Composable
-private fun ModeInjectionTab(
+fun ModeInjectionsPage(vm: PromptVM = koinViewModel()) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    Scaffold(
+        topBar = {
+            LargeFlexibleTopAppBar(
+                navigationIcon = { BackButton() },
+                title = { Text(stringResource(R.string.prompt_page_mode_injection_title)) },
+                actions = {
+                    EditorGuideAction(
+                        title = stringResource(R.string.prompt_page_mode_injection_help_title),
+                        bodyResId = R.raw.prompt_page_mode_injection_help_body_markdown,
+                    )
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
+            )
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) { innerPadding ->
+        ModeInjectionTab(
+            modifier = Modifier.padding(innerPadding),
+            modeInjections = settings.modeInjections,
+            onUpdate = { vm.updateSettings(settings.copy(modeInjections = it)) },
+        )
+    }
+}
+
+@Composable
+fun LorebooksPage(vm: PromptVM = koinViewModel()) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    Scaffold(
+        topBar = {
+            LargeFlexibleTopAppBar(
+                navigationIcon = { BackButton() },
+                title = { Text(stringResource(R.string.prompt_page_lorebook_title)) },
+                actions = {
+                    EditorGuideAction(
+                        title = stringResource(R.string.prompt_page_lorebook_help_title),
+                        bodyResId = R.raw.prompt_page_lorebook_help_body_markdown,
+                    )
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
+            )
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) { innerPadding ->
+        LorebookTab(
+            modifier = Modifier.padding(innerPadding),
+            lorebooks = settings.lorebooks,
+            globalLorebookIds = settings.globalLorebookIds,
+            globalSettings = settings.lorebookGlobalSettings,
+            assistants = settings.assistants,
+            onUpdateLorebooks = { vm.updateSettings(settings.copy(lorebooks = it)) },
+            onUpdateGlobalLorebookIds = { vm.updateSettings(settings.copy(globalLorebookIds = it)) },
+            onUpdateGlobalSettings = { vm.updateSettings(settings.copy(lorebookGlobalSettings = it)) },
+            onUpdateAssistants = { vm.updateSettings(settings.copy(assistants = it)) },
+        )
+    }
+}
+
+@Composable
+fun ModeInjectionTab(
+    modifier: Modifier = Modifier,
     modeInjections: List<PromptInjection.ModeInjection>,
     onUpdate: (List<PromptInjection.ModeInjection>) -> Unit
 ) {
@@ -219,14 +280,14 @@ private fun ModeInjectionTab(
     val importFailedMsg = stringResource(R.string.export_import_failed)
     val importer = rememberImporter(ModeInjectionSerializer) { result ->
         result.onSuccess { imported ->
-            onUpdate(currentModeInjections + imported)
+            onUpdate(currentModeInjections + imported.normalizedForSystemPromptSupplement())
             toaster.show(importSuccessMsg)
         }.onFailure { error ->
             toaster.show(importFailedMsg.format(error.message))
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -276,7 +337,7 @@ private fun ModeInjectionTab(
                                         scaleY = 1.05f
                                     }
                                 },
-                            onEdit = { editState.open(injection) },
+                            onEdit = { editState.open(injection.normalizedForSystemPromptSupplement()) },
                             onDelete = { onUpdate(modeInjections - injection) }
                         )
                     }
@@ -295,7 +356,7 @@ private fun ModeInjectionTab(
                 }
             },
         ) {
-            Button(onClick = { editState.open(PromptInjection.ModeInjection()) }) {
+            Button(onClick = { editState.open(PromptInjection.ModeInjection().normalizedForSystemPromptSupplement()) }) {
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
@@ -331,10 +392,11 @@ private fun ModeInjectionCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val normalizedInjection = injection.normalizedForSystemPromptSupplement()
     val swipeState = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
     var showExportDialog by remember { mutableStateOf(false) }
-    val exporter = rememberExporter(injection, ModeInjectionSerializer)
+    val exporter = rememberExporter(normalizedInjection, ModeInjectionSerializer)
 
     SwipeToDismissBox(
         state = swipeState,
@@ -380,7 +442,7 @@ private fun ModeInjectionCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = injection.name.ifEmpty { stringResource(R.string.prompt_page_unnamed) },
+                        text = normalizedInjection.name.ifEmpty { stringResource(R.string.prompt_page_unnamed) },
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -389,12 +451,12 @@ private fun ModeInjectionCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Tag(type = TagType.INFO) {
-                            Text(getPositionLabel(injection.position))
+                            Text(getPositionLabel(normalizedInjection.position))
                         }
                         Tag(type = TagType.DEFAULT) {
-                            Text(stringResource(R.string.prompt_page_priority_format, injection.priority))
+                            Text(stringResource(R.string.prompt_page_priority_format, normalizedInjection.priority))
                         }
-                        if (!injection.enabled) {
+                        if (!normalizedInjection.enabled) {
                             Tag(type = TagType.WARNING) {
                                 Text(stringResource(R.string.prompt_page_disabled))
                             }
@@ -426,6 +488,10 @@ private fun ModeInjectionEditSheet(
     onConfirm: () -> Unit,
     onEdit: (PromptInjection.ModeInjection) -> Unit
 ) {
+    val normalizedInjection = injection.normalizedForSystemPromptSupplement()
+    val updateInjection: (PromptInjection.ModeInjection) -> Unit = { edited ->
+        onEdit(edited.normalizedForSystemPromptSupplement())
+    }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
@@ -464,8 +530,8 @@ private fun ModeInjectionEditSheet(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 OutlinedTextField(
-                    value = injection.name,
-                    onValueChange = { onEdit(injection.copy(name = it)) },
+                    value = normalizedInjection.name,
+                    onValueChange = { updateInjection(normalizedInjection.copy(name = it)) },
                     label = { Text(stringResource(R.string.prompt_page_name)) },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -474,16 +540,16 @@ private fun ModeInjectionEditSheet(
                     label = { Text(stringResource(R.string.prompt_page_enabled)) },
                     tail = {
                         Switch(
-                            checked = injection.enabled,
-                            onCheckedChange = { onEdit(injection.copy(enabled = it)) }
+                            checked = normalizedInjection.enabled,
+                            onCheckedChange = { updateInjection(normalizedInjection.copy(enabled = it)) }
                         )
                     }
                 )
 
                 OutlinedTextField(
-                    value = injection.priority.toString(),
+                    value = normalizedInjection.priority.toString(),
                     onValueChange = {
-                        it.toIntOrNull()?.let { p -> onEdit(injection.copy(priority = p)) }
+                        it.toIntOrNull()?.let { p -> updateInjection(normalizedInjection.copy(priority = p)) }
                     },
                     label = { Text(stringResource(R.string.prompt_page_priority_label)) },
                     modifier = Modifier.fillMaxWidth(),
@@ -495,34 +561,14 @@ private fun ModeInjectionEditSheet(
                     style = MaterialTheme.typography.titleSmall
                 )
                 InjectionPositionSelector(
-                    position = injection.position,
-                    onSelect = { onEdit(injection.copy(position = it)) }
-                )
-
-                AnimatedVisibility(visible = injection.position == InjectionPosition.AT_DEPTH) {
-                    OutlinedTextField(
-                        value = injection.injectDepth.toString(),
-                        onValueChange = {
-                            it.toIntOrNull()?.let { d -> onEdit(injection.copy(injectDepth = d)) }
-                        },
-                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                }
-
-                Text(
-                    stringResource(R.string.prompt_page_injection_role),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                InjectionRoleSelector(
-                    role = injection.role,
-                    onSelect = { onEdit(injection.copy(role = it)) }
+                    position = normalizedInjection.position.normalizeForModeInjection(),
+                    options = modeInjectionPositions,
+                    onSelect = { updateInjection(normalizedInjection.copy(position = it)) }
                 )
 
                 OutlinedTextField(
-                    value = injection.content,
-                    onValueChange = { onEdit(injection.copy(content = it)) },
+                    value = normalizedInjection.content,
+                    onValueChange = { updateInjection(normalizedInjection.copy(content = it)) },
                     label = { Text(stringResource(R.string.prompt_page_injection_content)) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -549,10 +595,11 @@ private fun ModeInjectionEditSheet(
 @Composable
 private fun InjectionPositionSelector(
     position: InjectionPosition,
-    onSelect: (InjectionPosition) -> Unit
+    onSelect: (InjectionPosition) -> Unit,
+    options: List<InjectionPosition> = InjectionPosition.entries.toList(),
 ) {
     Select(
-        options = InjectionPosition.entries,
+        options = options,
         selectedOption = position,
         onOptionSelected = onSelect,
         optionToString = { getPositionLabel(it) },
@@ -564,38 +611,29 @@ private fun InjectionPositionSelector(
 private fun getPositionLabel(position: InjectionPosition): String = when (position) {
     InjectionPosition.BEFORE_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_before_system)
     InjectionPosition.AFTER_SYSTEM_PROMPT -> stringResource(R.string.prompt_page_position_after_system)
+    InjectionPosition.AUTHOR_NOTE_TOP -> stringResource(R.string.prompt_page_position_author_note_top)
+    InjectionPosition.AUTHOR_NOTE_BOTTOM -> stringResource(R.string.prompt_page_position_author_note_bottom)
     InjectionPosition.TOP_OF_CHAT -> stringResource(R.string.prompt_page_position_top_of_chat)
     InjectionPosition.BOTTOM_OF_CHAT -> stringResource(R.string.prompt_page_position_bottom_of_chat)
     InjectionPosition.AT_DEPTH -> stringResource(R.string.prompt_page_position_at_depth)
-}
-
-@Composable
-private fun InjectionRoleSelector(
-    role: MessageRole,
-    onSelect: (MessageRole) -> Unit
-) {
-    Select(
-        options = listOf(MessageRole.USER, MessageRole.ASSISTANT),
-        selectedOption = role,
-        onOptionSelected = onSelect,
-        optionToString = { getRoleLabel(it) },
-        modifier = Modifier.fillMaxWidth()
-    )
-}
-
-@Composable
-private fun getRoleLabel(role: MessageRole): String = when (role) {
-    MessageRole.USER -> stringResource(R.string.prompt_page_role_user)
-    MessageRole.ASSISTANT -> stringResource(R.string.prompt_page_role_assistant)
-    else -> role.name
+    InjectionPosition.EXAMPLE_MESSAGES_TOP -> stringResource(R.string.prompt_page_position_example_messages_top)
+    InjectionPosition.EXAMPLE_MESSAGES_BOTTOM -> stringResource(R.string.prompt_page_position_example_messages_bottom)
+    InjectionPosition.OUTLET -> stringResource(R.string.prompt_page_position_outlet)
 }
 
 // ==================== Lorebook Tab ====================
 
 @Composable
-private fun LorebookTab(
+fun LorebookTab(
+    modifier: Modifier = Modifier,
     lorebooks: List<Lorebook>,
-    onUpdate: (List<Lorebook>) -> Unit
+    globalLorebookIds: Set<kotlin.uuid.Uuid> = emptySet(),
+    globalSettings: LorebookGlobalSettings,
+    assistants: List<Assistant> = emptyList(),
+    onUpdateLorebooks: (List<Lorebook>) -> Unit,
+    onUpdateGlobalLorebookIds: (Set<kotlin.uuid.Uuid>) -> Unit,
+    onUpdateGlobalSettings: (LorebookGlobalSettings) -> Unit,
+    onUpdateAssistants: (List<Assistant>) -> Unit = {},
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
     val lazyListState = rememberLazyListState()
@@ -605,28 +643,28 @@ private fun LorebookTab(
         val newList = lorebooks.toMutableList()
         val item = newList.removeAt(from.index)
         newList.add(to.index, item)
-        onUpdate(newList)
+        onUpdateLorebooks(newList)
     }
     val editState = useEditState<Lorebook> { edited ->
         val index = lorebooks.indexOfFirst { it.id == edited.id }
         if (index >= 0) {
-            onUpdate(lorebooks.toMutableList().apply { set(index, edited) })
+            onUpdateLorebooks(lorebooks.toMutableList().apply { set(index, edited) })
         } else {
-            onUpdate(lorebooks + edited)
+            onUpdateLorebooks(lorebooks + edited)
         }
     }
     val importSuccessMsg = stringResource(R.string.export_import_success)
     val importFailedMsg = stringResource(R.string.export_import_failed)
     val importer = rememberImporter(LorebookSerializer) { result ->
         result.onSuccess { imported ->
-            onUpdate(currentLorebooks + imported)
+            onUpdateLorebooks(currentLorebooks + imported)
             toaster.show(importSuccessMsg)
         }.onFailure { error ->
             toaster.show(importFailedMsg.format(error.message))
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -639,6 +677,19 @@ private fun LorebookTab(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             state = lazyListState
         ) {
+            item {
+                LorebookOverviewCard(
+                    lorebooks = lorebooks,
+                    globalLorebookIds = globalLorebookIds,
+                    assistants = assistants,
+                )
+            }
+            item {
+                LorebookGlobalSettingsCard(
+                    settings = globalSettings,
+                    onEdit = onUpdateGlobalSettings,
+                )
+            }
             if (lorebooks.isEmpty()) {
                 item {
                     Column(
@@ -668,6 +719,8 @@ private fun LorebookTab(
                     ) { isDragging ->
                         LorebookCard(
                             book = book,
+                            assistants = assistants,
+                            globalLorebookIds = globalLorebookIds,
                             modifier = Modifier
                                 .longPressDraggableHandle()
                                 .graphicsLayer {
@@ -677,7 +730,41 @@ private fun LorebookTab(
                                     }
                                 },
                             onEdit = { editState.open(book) },
-                            onDelete = { onUpdate(lorebooks - book) }
+                            onToggleEnabled = { enabled ->
+                                onUpdateLorebooks(
+                                    lorebooks.map { candidate ->
+                                        if (candidate.id == book.id) {
+                                            candidate.copy(enabled = enabled)
+                                        } else {
+                                            candidate
+                                        }
+                                    }
+                                )
+                            },
+                            onUpdateAssistantBindings = { assistantIds ->
+                                onUpdateAssistants(
+                                    assistants.map { assistant ->
+                                        val enabledForAssistant = assistant.id in assistantIds
+                                        assistant.copy(
+                                            lorebookIds = if (enabledForAssistant) {
+                                                assistant.lorebookIds + book.id
+                                            } else {
+                                                assistant.lorebookIds - book.id
+                                            }
+                                        )
+                                    }
+                                )
+                            },
+                            onUpdateGlobalBinding = { enabled ->
+                                onUpdateGlobalLorebookIds(
+                                    if (enabled) {
+                                        globalLorebookIds + book.id
+                                    } else {
+                                        globalLorebookIds - book.id
+                                    }
+                                )
+                            },
+                            onDelete = { onUpdateLorebooks(lorebooks - book) }
                         )
                     }
                 }
@@ -725,16 +812,280 @@ private fun LorebookTab(
 }
 
 @Composable
+private fun LorebookOverviewCard(
+    lorebooks: List<Lorebook>,
+    globalLorebookIds: Set<kotlin.uuid.Uuid>,
+    assistants: List<Assistant>,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "使用说明",
+                style = MaterialTheme.typography.titleMedium
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Tag(type = TagType.INFO) {
+                    Text("${lorebooks.size} 本")
+                }
+                Tag(type = TagType.SUCCESS) {
+                    Text("${assistants.count { it.lorebookIds.isNotEmpty() }} 个助手已绑定")
+                }
+                if (globalLorebookIds.isNotEmpty()) {
+                    Tag(type = TagType.INFO) {
+                        Text("${globalLorebookIds.size} 本全局生效")
+                    }
+                }
+                Tag(type = TagType.WARNING) {
+                    Text("按关键词自动触发")
+                }
+            }
+            LorebookGuideRow(
+                title = "全局设置",
+                body = "控制默认扫描深度、预算、递归和匹配策略，决定整个 lorebook 系统在聊天时如何搜索可触发条目。"
+            )
+            LorebookGuideRow(
+                title = "书本管理",
+                body = "每本书都可以单独启用、导出、删除，并通过链接按钮绑定到指定助手，或显式设为全局生效；没绑定且未设为全局的书不会参与聊天。"
+            )
+            LorebookGuideRow(
+                title = "条目编辑",
+                body = "条目负责定义关键词、注入位置和高级 ST 兼容字段。建议先把基础触发跑通，再逐步加概率、分组、sticky 或 recursion。"
+            )
+        }
+    }
+}
+
+@Composable
+private fun LorebookGuideRow(
+    title: String,
+    body: String,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun LorebookGlobalSettingsCard(
+    settings: LorebookGlobalSettings,
+    onEdit: (LorebookGlobalSettings) -> Unit,
+) {
+    fun updateMinActivations(value: Int) {
+        onEdit(
+            settings.copy(
+                minActivations = value,
+                maxRecursionSteps = if (value > 0) 0 else settings.maxRecursionSteps,
+            )
+        )
+    }
+
+    fun updateMaxRecursionSteps(value: Int) {
+        onEdit(
+            settings.copy(
+                maxRecursionSteps = value,
+                minActivations = if (value > 0) 0 else settings.minActivations,
+            )
+        )
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.prompt_page_lorebook_global_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = stringResource(R.string.prompt_page_lorebook_global_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_scan_depth),
+                value = settings.scanDepth,
+                onValueChange = { onEdit(settings.copy(scanDepth = it)) }
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_min_activations),
+                value = settings.minActivations,
+                onValueChange = ::updateMinActivations
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_min_activations_depth_max),
+                value = settings.minActivationsDepthMax,
+                onValueChange = { onEdit(settings.copy(minActivationsDepthMax = it)) }
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_budget_percent),
+                value = settings.budgetPercent,
+                onValueChange = { onEdit(settings.copy(budgetPercent = it.coerceIn(0, 100))) }
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_budget_cap),
+                value = settings.budgetCap,
+                onValueChange = { onEdit(settings.copy(budgetCap = it)) }
+            )
+            LorebookGlobalNumberField(
+                label = stringResource(R.string.prompt_page_lorebook_global_max_recursion_steps),
+                value = settings.maxRecursionSteps,
+                onValueChange = ::updateMaxRecursionSteps
+            )
+
+            Text(
+                text = stringResource(R.string.prompt_page_lorebook_global_character_strategy),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Select(
+                options = WorldInfoCharacterStrategy.entries,
+                selectedOption = settings.characterStrategy,
+                onOptionSelected = { onEdit(settings.copy(characterStrategy = it)) },
+                optionToString = { getWorldInfoCharacterStrategyLabel(it) },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_include_names)) },
+                description = { Text(stringResource(R.string.prompt_page_lorebook_global_include_names_desc)) },
+                tail = {
+                    Switch(
+                        checked = settings.includeNames,
+                        onCheckedChange = { onEdit(settings.copy(includeNames = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_recursive)) },
+                description = { Text(stringResource(R.string.prompt_page_lorebook_global_recursive_desc)) },
+                tail = {
+                    Switch(
+                        checked = settings.recursiveScanning,
+                        onCheckedChange = { onEdit(settings.copy(recursiveScanning = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_case_sensitive)) },
+                tail = {
+                    Switch(
+                        checked = settings.caseSensitive,
+                        onCheckedChange = { onEdit(settings.copy(caseSensitive = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_match_whole_words)) },
+                tail = {
+                    Switch(
+                        checked = settings.matchWholeWords,
+                        onCheckedChange = { onEdit(settings.copy(matchWholeWords = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_group_scoring)) },
+                tail = {
+                    Switch(
+                        checked = settings.useGroupScoring,
+                        onCheckedChange = { onEdit(settings.copy(useGroupScoring = it)) }
+                    )
+                }
+            )
+            FormItem(
+                label = { Text(stringResource(R.string.prompt_page_lorebook_global_overflow_alert)) },
+                tail = {
+                    Switch(
+                        checked = settings.overflowAlert,
+                        onCheckedChange = { onEdit(settings.copy(overflowAlert = it)) }
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LorebookGlobalNumberField(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+) {
+    OutlinedTextField(
+        value = value.toString(),
+        onValueChange = { input ->
+            input.toIntOrNull()?.let(onValueChange)
+            if (input.isBlank()) onValueChange(0)
+        },
+        label = { Text(label) },
+        modifier = Modifier.fillMaxWidth(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true,
+    )
+}
+
+@Composable
+private fun getWorldInfoCharacterStrategyLabel(strategy: WorldInfoCharacterStrategy): String = when (strategy) {
+    WorldInfoCharacterStrategy.EVENLY -> stringResource(R.string.prompt_page_lorebook_global_character_strategy_evenly)
+    WorldInfoCharacterStrategy.CHARACTER_FIRST -> stringResource(R.string.prompt_page_lorebook_global_character_strategy_character_first)
+    WorldInfoCharacterStrategy.GLOBAL_FIRST -> stringResource(R.string.prompt_page_lorebook_global_character_strategy_global_first)
+}
+
+@Composable
 private fun LorebookCard(
     book: Lorebook,
+    assistants: List<Assistant>,
+    globalLorebookIds: Set<kotlin.uuid.Uuid>,
     modifier: Modifier = Modifier,
     onEdit: () -> Unit,
+    onToggleEnabled: (Boolean) -> Unit,
+    onUpdateAssistantBindings: (Set<kotlin.uuid.Uuid>) -> Unit,
+    onUpdateGlobalBinding: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
     val swipeState = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
     var showExportDialog by remember { mutableStateOf(false) }
+    var showBindingsSheet by remember { mutableStateOf(false) }
     val exporter = rememberExporter(book, LorebookSerializer)
+    val boundAssistantIds = remember(book.id, assistants) {
+        assistants
+            .filter { assistant -> book.id in assistant.lorebookIds }
+            .map { assistant -> assistant.id }
+            .toSet()
+    }
+    val isGlobalBinding = book.id in globalLorebookIds
 
     SwipeToDismissBox(
         state = swipeState,
@@ -810,7 +1161,37 @@ private fun LorebookCard(
                                 Text(stringResource(R.string.prompt_page_disabled))
                             }
                         }
+                        Tag(type = TagType.DEFAULT) {
+                            Text(
+                                stringResource(
+                                    R.string.prompt_page_lorebook_assistant_count,
+                                    boundAssistantIds.size,
+                                )
+                            )
+                        }
+                        if (isGlobalBinding) {
+                            Tag(type = TagType.SUCCESS) {
+                                Text("全局生效")
+                            }
+                        }
+                        if (book.recursiveScanning) {
+                            Tag(type = TagType.SUCCESS) {
+                                Text(stringResource(R.string.prompt_page_lorebook_recursive_badge))
+                            }
+                        }
+                        book.tokenBudget?.let { budget ->
+                            Tag(type = TagType.INFO) {
+                                Text(stringResource(R.string.prompt_page_lorebook_budget_badge, budget))
+                            }
+                        }
                     }
+                }
+                Switch(
+                    checked = book.enabled,
+                    onCheckedChange = onToggleEnabled,
+                )
+                IconButton(onClick = { showBindingsSheet = true }) {
+                    Icon(HugeIcons.Link01, stringResource(R.string.prompt_page_lorebook_manage_bindings))
                 }
                 IconButton(onClick = { showExportDialog = true }) {
                     Icon(HugeIcons.Share03, stringResource(R.string.export_title))
@@ -827,6 +1208,129 @@ private fun LorebookCard(
             exporter = exporter,
             onDismiss = { showExportDialog = false }
         )
+    }
+
+    if (showBindingsSheet) {
+        LorebookBindingSheet(
+            book = book,
+            assistants = assistants,
+            isGlobalBinding = isGlobalBinding,
+            boundAssistantIds = boundAssistantIds,
+            onDismiss = { showBindingsSheet = false },
+            onUpdateGlobalBinding = onUpdateGlobalBinding,
+            onUpdate = onUpdateAssistantBindings,
+        )
+    }
+}
+
+@Composable
+private fun LorebookBindingSheet(
+    book: Lorebook,
+    assistants: List<Assistant>,
+    isGlobalBinding: Boolean,
+    boundAssistantIds: Set<kotlin.uuid.Uuid>,
+    onDismiss: () -> Unit,
+    onUpdateGlobalBinding: (Boolean) -> Unit,
+    onUpdate: (Set<kotlin.uuid.Uuid>) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        sheetGesturesEnabled = false,
+        dragHandle = {
+            IconButton(onClick = {
+                scope.launch {
+                    sheetState.hide()
+                    onDismiss()
+                }
+            }) {
+                Icon(HugeIcons.ArrowDown01, null)
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.8f)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.prompt_page_lorebook_binding_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Text(
+                text = book.name.ifBlank { stringResource(R.string.prompt_page_unnamed_lorebook) },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                item("global_binding") {
+                    ListItem(
+                        headlineContent = {
+                            Text("全局生效")
+                        },
+                        supportingContent = {
+                            Text(
+                                "启用后，这本世界书会对所有助手生效；单独绑定仍会保留角色作用域。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = isGlobalBinding,
+                                onCheckedChange = onUpdateGlobalBinding,
+                            )
+                        },
+                        colors = ListItemDefaults.colors(
+                            containerColor = Color.Transparent,
+                        )
+                    )
+                }
+
+                if (assistants.isEmpty()) {
+                    item("empty_assistants") {
+                        Text(
+                            text = stringResource(R.string.prompt_page_lorebook_binding_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    items(assistants, key = { it.id }) { assistant ->
+                        ListItem(
+                            headlineContent = {
+                                Text(assistant.name.ifBlank { stringResource(R.string.prompt_page_lorebook_binding_unnamed_assistant) })
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = assistant.id in boundAssistantIds,
+                                    onCheckedChange = { checked ->
+                                        val updatedIds = if (checked) {
+                                            boundAssistantIds + assistant.id
+                                        } else {
+                                            boundAssistantIds - assistant.id
+                                        }
+                                        onUpdate(updatedIds)
+                                    }
+                                )
+                            },
+                            colors = ListItemDefaults.colors(
+                                containerColor = Color.Transparent,
+                            )
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -870,11 +1374,20 @@ private fun LorebookEditSheet(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = stringResource(R.string.prompt_page_edit_lorebook),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.prompt_page_edit_lorebook),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                EditorGuideAction(
+                    title = stringResource(R.string.prompt_page_lorebook_editor_help_title),
+                    bodyResId = R.raw.prompt_page_lorebook_editor_help_body_markdown,
+                )
+            }
 
             Column(
                 modifier = Modifier
@@ -904,6 +1417,34 @@ private fun LorebookEditSheet(
                             onCheckedChange = { onEdit(book.copy(enabled = it)) }
                         )
                     }
+                )
+
+                FormItem(
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_book_recursive)) },
+                    description = { Text(stringResource(R.string.prompt_page_lorebook_book_recursive_desc)) },
+                    tail = {
+                        Switch(
+                            checked = book.recursiveScanning,
+                            onCheckedChange = { onEdit(book.copy(recursiveScanning = it)) }
+                        )
+                    }
+                )
+
+                OutlinedTextField(
+                    value = book.tokenBudget?.toString().orEmpty(),
+                    onValueChange = { value ->
+                        val normalized = value.trim()
+                        if (normalized.isEmpty()) {
+                            onEdit(book.copy(tokenBudget = null))
+                        } else {
+                            normalized.toIntOrNull()?.let { budget ->
+                                onEdit(book.copy(tokenBudget = budget))
+                            }
+                        }
+                    },
+                    label = { Text(stringResource(R.string.prompt_page_lorebook_book_token_budget)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
 
                 // 条目列表
@@ -999,6 +1540,31 @@ private fun RegexInjectionEntryCard(
                             Text(stringResource(R.string.prompt_page_disabled))
                         }
                     }
+                    if (entry.constantActive) {
+                        Tag(type = TagType.INFO) {
+                            Text(stringResource(R.string.prompt_page_constant_active))
+                        }
+                    }
+                    if (entry.secondaryKeywords.isNotEmpty()) {
+                        Tag(type = TagType.DEFAULT) {
+                            Text(
+                                stringResource(
+                                    R.string.prompt_page_lorebook_secondary_keywords_badge,
+                                    entry.secondaryKeywords.size,
+                                )
+                            )
+                        }
+                    }
+                    entry.probability?.let { probability ->
+                        Tag(type = TagType.SUCCESS) {
+                            Text(
+                                stringResource(
+                                    R.string.prompt_page_lorebook_probability_badge,
+                                    probability,
+                                )
+                            )
+                        }
+                    }
                 }
             }
             IconButton(onClick = onEdit) {
@@ -1009,199 +1575,4 @@ private fun RegexInjectionEntryCard(
             }
         }
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun RegexInjectionEditDialog(
-    entry: PromptInjection.RegexInjection,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-    onEdit: (PromptInjection.RegexInjection) -> Unit
-) {
-    var newKeyword by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.prompt_page_edit_entry)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = entry.name,
-                    onValueChange = { onEdit(entry.copy(name = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_name)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                FormItem(
-                    label = { Text(stringResource(R.string.prompt_page_enabled)) },
-                    tail = {
-                        Switch(
-                            checked = entry.enabled,
-                            onCheckedChange = { onEdit(entry.copy(enabled = it)) }
-                        )
-                    }
-                )
-
-                OutlinedTextField(
-                    value = entry.priority.toString(),
-                    onValueChange = {
-                        it.toIntOrNull()?.let { p -> onEdit(entry.copy(priority = p)) }
-                    },
-                    label = { Text(stringResource(R.string.prompt_page_priority_label)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-
-                Text(
-                    stringResource(R.string.prompt_page_injection_position),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                InjectionPositionSelector(
-                    position = entry.position,
-                    onSelect = { onEdit(entry.copy(position = it)) }
-                )
-
-                AnimatedVisibility(visible = entry.position == InjectionPosition.AT_DEPTH) {
-                    OutlinedTextField(
-                        value = entry.injectDepth.toString(),
-                        onValueChange = {
-                            it.toIntOrNull()?.let { d -> onEdit(entry.copy(injectDepth = d)) }
-                        },
-                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                }
-
-                // 关键词
-                Text(stringResource(R.string.prompt_page_keywords_label), style = MaterialTheme.typography.titleSmall)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    entry.keywords.forEach { keyword ->
-                        InputChip(
-                            selected = false,
-                            onClick = {},
-                            label = { Text(keyword) },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = {
-                                        onEdit(entry.copy(keywords = entry.keywords - keyword))
-                                    },
-                                    modifier = Modifier.size(16.dp)
-                                ) {
-                                    Icon(HugeIcons.Cancel01, null, modifier = Modifier.size(12.dp))
-                                }
-                            }
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newKeyword,
-                        onValueChange = { newKeyword = it },
-                        label = { Text(stringResource(R.string.prompt_page_new_keyword)) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    IconButton(
-                        onClick = {
-                            if (newKeyword.isNotBlank()) {
-                                onEdit(entry.copy(keywords = entry.keywords + newKeyword.trim()))
-                                newKeyword = ""
-                            }
-                        }
-                    ) {
-                        Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add))
-                    }
-                }
-
-                FormItem(
-                    label = { Text(stringResource(R.string.prompt_page_use_regex)) },
-                    tail = {
-                        Switch(
-                            checked = entry.useRegex,
-                            onCheckedChange = { onEdit(entry.copy(useRegex = it)) }
-                        )
-                    }
-                )
-
-                FormItem(
-                    label = { Text(stringResource(R.string.prompt_page_case_sensitive)) },
-                    tail = {
-                        Switch(
-                            checked = entry.caseSensitive,
-                            onCheckedChange = { onEdit(entry.copy(caseSensitive = it)) }
-                        )
-                    }
-                )
-
-                FormItem(
-                    label = { Text(stringResource(R.string.prompt_page_constant_active)) },
-                    description = { Text(stringResource(R.string.prompt_page_constant_active_desc)) },
-                    tail = {
-                        Switch(
-                            checked = entry.constantActive,
-                            onCheckedChange = { onEdit(entry.copy(constantActive = it)) }
-                        )
-                    }
-                )
-
-                OutlinedTextField(
-                    value = entry.scanDepth.toString(),
-                    onValueChange = {
-                        it.toIntOrNull()?.let { d -> onEdit(entry.copy(scanDepth = d)) }
-                    },
-                    label = { Text(stringResource(R.string.prompt_page_scan_depth)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-
-                Text(
-                    stringResource(R.string.prompt_page_injection_role),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                InjectionRoleSelector(
-                    role = entry.role,
-                    onSelect = { onEdit(entry.copy(role = it)) }
-                )
-
-                OutlinedTextField(
-                    value = entry.content,
-                    onValueChange = { onEdit(entry.copy(content = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_injection_content)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp),
-                    minLines = 4
-                )
-            }
-        },
-        confirmButton = {
-            val canSave = entry.keywords.isNotEmpty() || entry.constantActive
-            TextButton(
-                onClick = onConfirm,
-                enabled = canSave
-            ) {
-                Text(stringResource(R.string.prompt_page_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.prompt_page_cancel))
-            }
-        }
-    )
 }

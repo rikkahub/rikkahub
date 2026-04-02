@@ -167,7 +167,7 @@ fun Mermaid(
                 ) {
                     Icon(
                         HugeIcons.View,
-                        contentDescription = "Prewview"
+                        contentDescription = stringResource(R.string.code_block_preview)
                     )
                 }
                 IconButton(
@@ -213,7 +213,7 @@ fun Mermaid(
                     ) {
                         Icon(
                             HugeIcons.Cancel01,
-                            contentDescription = "Close"
+                            contentDescription = stringResource(R.string.close)
                         )
                     }
                 }

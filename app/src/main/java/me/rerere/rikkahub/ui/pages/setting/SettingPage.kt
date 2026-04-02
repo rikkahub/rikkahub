@@ -23,6 +23,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -591,7 +592,7 @@ private fun SettingsSearchBar(
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp, vertical = 4.dp),
             singleLine = true,
-            placeholder = { Text("搜索设置") },
+            placeholder = { Text(stringResource(R.string.search_picker_title)) },
             leadingIcon = {
                 Icon(HugeIcons.GlobalSearch, contentDescription = null)
             },
@@ -602,6 +603,12 @@ private fun SettingsSearchBar(
                     }
                 }
             },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
+                disabledBorderColor = Color.Transparent,
+                errorBorderColor = Color.Transparent,
+            ),
         )
     }
 }

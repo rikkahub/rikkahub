@@ -128,7 +128,7 @@ fun WorkdirBrowserPage(relativePath: String) {
             } catch (error: Throwable) {
                 if (listing == null || showBlocking) {
                     listing = null
-                    errorMessage = error.message ?: "Failed to browse workdir"
+                    errorMessage = error.message ?: browseErrorTitle
                 } else {
                     toaster.show(
                         error.message ?: browseErrorTitle,
@@ -492,8 +492,9 @@ private fun WorkspaceHeader(
     listing: WorkdirBrowserListing,
     onNavigateTo: (String) -> Unit,
 ) {
-    val breadcrumbs = remember(listing.currentRelativePath) {
-        buildBreadcrumbs(listing.currentRelativePath)
+    val rootLabel = stringResource(R.string.assistant_page_skills_workdir_root)
+    val breadcrumbs = remember(listing.currentRelativePath, rootLabel) {
+        buildBreadcrumbs(listing.currentRelativePath, rootLabel)
     }
 
     Surface(
@@ -966,15 +967,15 @@ private data class WorkdirBreadcrumb(
     val path: String,
 )
 
-private fun buildBreadcrumbs(relativePath: String): List<WorkdirBreadcrumb> {
+private fun buildBreadcrumbs(relativePath: String, rootLabel: String): List<WorkdirBreadcrumb> {
     if (relativePath.isBlank()) {
         return listOf(
-            WorkdirBreadcrumb(label = "workdir", path = ""),
+            WorkdirBreadcrumb(label = rootLabel, path = ""),
         )
     }
 
     val breadcrumbs = mutableListOf<WorkdirBreadcrumb>()
-    breadcrumbs += WorkdirBreadcrumb(label = "workdir", path = "")
+    breadcrumbs += WorkdirBreadcrumb(label = rootLabel, path = "")
     val segments = relativePath.split('/').filter { it.isNotBlank() }
     segments.indices.forEach { index ->
         breadcrumbs += WorkdirBreadcrumb(
@@ -989,17 +990,19 @@ private fun parentRelativePathOf(relativePath: String): String {
     return relativePath.substringBeforeLast('/', "")
 }
 
+@Composable
 private fun buildEntrySubtitle(entry: WorkdirBrowserEntry): String {
-    val modified = formatWorkdirTime(entry.modifiedAtEpochSeconds)
+    val unknownTime = stringResource(R.string.assistant_page_skills_workdir_unknown_time)
+    val modified = formatWorkdirTime(entry.modifiedAtEpochSeconds, unknownTime)
     return if (entry.isDirectory) {
-        "Folder · $modified"
+        "${stringResource(R.string.assistant_page_skills_workdir_folder)} · $modified"
     } else {
         "${entry.sizeBytes.fileSizeToString()} · $modified"
     }
 }
 
-private fun formatWorkdirTime(epochSeconds: Long): String {
-    if (epochSeconds <= 0L) return "Unknown"
+private fun formatWorkdirTime(epochSeconds: Long, unknownTime: String): String {
+    if (epochSeconds <= 0L) return unknownTime
     val formatter = DateTimeFormatter.ofPattern("MMM d, HH:mm", Locale.getDefault())
     return formatter.format(
         Instant.ofEpochSecond(epochSeconds).atZone(ZoneId.systemDefault())

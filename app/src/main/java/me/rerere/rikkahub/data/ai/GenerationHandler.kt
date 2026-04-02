@@ -32,6 +32,8 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxApprovalBlacklistMatcher
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
+import me.rerere.rikkahub.data.ai.transformers.LorebookRuntimeState
+import me.rerere.rikkahub.data.ai.transformers.StMacroState
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
@@ -82,6 +84,9 @@ class GenerationHandler(
         memories: List<AssistantMemory>? = null,
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 256,
+        stGenerationType: String = "normal",
+        stMacroState: StMacroState? = null,
+        lorebookRuntimeState: LorebookRuntimeState? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -134,7 +139,10 @@ class GenerationHandler(
                             context = context,
                             model = model,
                             assistant = assistant,
-                            settings = settings
+                            settings = settings,
+                            stGenerationType = stGenerationType,
+                            stMacroState = stMacroState,
+                            lorebookRuntimeState = lorebookRuntimeState,
                         )
                         emit(
                             GenerationChunk.Messages(
@@ -143,7 +151,10 @@ class GenerationHandler(
                                     context = context,
                                     model = model,
                                     assistant = assistant,
-                                    settings = settings
+                                    settings = settings,
+                                    stGenerationType = stGenerationType,
+                                    stMacroState = stMacroState,
+                                    lorebookRuntimeState = lorebookRuntimeState,
                                 )
                             )
                         )
@@ -154,21 +165,20 @@ class GenerationHandler(
                     provider = provider,
                     tools = toolsInternal,
                     memories = memories ?: emptyList(),
-                    stream = assistant.streamOutput
-                )
-                messages = messages.visualTransforms(
-                    transformers = outputTransformers,
-                    context = context,
-                    model = model,
-                    assistant = assistant,
-                    settings = settings
+                    stream = assistant.streamOutput,
+                    stGenerationType = stGenerationType,
+                    stMacroState = stMacroState,
+                    lorebookRuntimeState = lorebookRuntimeState,
                 )
                 messages = messages.onGenerationFinish(
                     transformers = outputTransformers,
                     context = context,
                     model = model,
                     assistant = assistant,
-                    settings = settings
+                    settings = settings,
+                    stGenerationType = stGenerationType,
+                    stMacroState = stMacroState,
+                    lorebookRuntimeState = lorebookRuntimeState,
                 )
                 messages = messages.slice(0 until messages.lastIndex) + messages.last().copy(
                     finishedAt = Clock.System.now()
@@ -312,7 +322,10 @@ class GenerationHandler(
                         context = context,
                         model = model,
                         assistant = assistant,
-                        settings = settings
+                        settings = settings,
+                        stGenerationType = stGenerationType,
+                        stMacroState = stMacroState,
+                        lorebookRuntimeState = lorebookRuntimeState,
                     )
                 )
             )
@@ -331,7 +344,10 @@ class GenerationHandler(
         provider: ProviderSetting,
         tools: List<Tool>,
         memories: List<AssistantMemory>,
-        stream: Boolean
+        stream: Boolean,
+        stGenerationType: String,
+        stMacroState: StMacroState?,
+        lorebookRuntimeState: LorebookRuntimeState?,
     ) {
         val internalMessages = buildList {
             val system = buildString {
@@ -372,7 +388,10 @@ class GenerationHandler(
             context = context,
             model = model,
             assistant = assistant,
-            settings = settings
+            settings = settings,
+            stGenerationType = stGenerationType,
+            stMacroState = stMacroState,
+            lorebookRuntimeState = lorebookRuntimeState,
         )
 
         var messages: List<UIMessage> = messages
@@ -381,9 +400,19 @@ class GenerationHandler(
             temperature = assistant.temperature,
             topP = assistant.topP,
             maxTokens = assistant.maxTokens,
+            frequencyPenalty = assistant.frequencyPenalty,
+            presencePenalty = assistant.presencePenalty,
+            minP = assistant.minP,
+            topK = assistant.topK,
+            topA = assistant.topA,
+            repetitionPenalty = assistant.repetitionPenalty,
+            seed = assistant.seed,
+            stopSequences = assistant.stopSequences,
+            googleResponseMimeType = assistant.googleResponseMimeType,
             tools = tools,
             thinkingBudget = assistant.thinkingBudget,
             openAIReasoningEffort = assistant.openAIReasoningEffort,
+            openAIVerbosity = assistant.openAIVerbosity,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
                 addAll(model.customHeaders)

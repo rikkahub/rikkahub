@@ -22,7 +22,10 @@ class AITranslator:
     def __init__(self, config: "Config"):
         self.config = config
         self.client = AsyncOpenAI(
-            api_key=config.openai_api_key, base_url=config.openai_base_url
+            api_key=config.openai_api_key,
+            base_url=config.openai_base_url,
+            # Some reverse proxies/WAF rules block the SDK default OpenAI/Python UA.
+            default_headers={"User-Agent": "locale-tui/1.0"},
         )
 
     async def translate_batch(

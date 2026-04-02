@@ -7,7 +7,6 @@ import android.content.Context
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.http.HttpHeaders
-import io.pebbletemplates.pebble.PebbleEngine
 import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 import io.requery.android.database.sqlite.SQLiteCustomExtension
 import kotlinx.serialization.json.Json
@@ -16,9 +15,7 @@ import me.rerere.common.http.AcceptLanguageBuilder
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
-import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
-import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -47,7 +44,6 @@ import okhttp3.logging.HttpLoggingInterceptor
 import org.koin.dsl.module
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 val dataSourceModule = module {
@@ -103,20 +99,6 @@ val dataSourceModule = module {
             )))
             .build()
     }
-
-    single {
-        AssistantTemplateLoader(settingsStore = get())
-    }
-
-    single {
-        PebbleEngine.Builder()
-            .loader(get<AssistantTemplateLoader>())
-            .defaultLocale(Locale.getDefault())
-            .autoEscaping(false)
-            .build()
-    }
-
-    single { TemplateTransformer(engine = get(), settingsStore = get()) }
 
     single {
         get<AppDatabase>().conversationDao()
@@ -203,7 +185,7 @@ val dataSourceModule = module {
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.HEADERS
             })
-            .build().also { SearchService.init(it) }
+            .build().also { SearchService.init(it, get()) }
     }
 
     single {
@@ -211,7 +193,7 @@ val dataSourceModule = module {
     }
 
     single {
-        ProviderManager(client = get())
+        ProviderManager(client = get(), context = get())
     }
 
     single {

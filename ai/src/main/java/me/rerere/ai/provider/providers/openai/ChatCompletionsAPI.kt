@@ -32,6 +32,7 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
+import me.rerere.ai.provider.providers.normalizedStopSequencesOrNull
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
@@ -84,7 +85,7 @@ class ChatCompletionsAPI(
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey)}")
+            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
@@ -141,7 +142,7 @@ class ChatCompletionsAPI(
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey)}")
+            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -253,6 +254,7 @@ class ChatCompletionsAPI(
         stream: Boolean = false,
     ): JsonObject {
         val host = providerSetting.baseUrl.toHttpUrl().host
+        val capabilities = resolveChatCompletionsProviderCapabilities(host)
         return buildJsonObject {
             put("model", params.model.modelId)
             put("messages", buildMessages(messages))
@@ -262,6 +264,18 @@ class ChatCompletionsAPI(
                 if (params.topP != null) put("top_p", params.topP)
             }
             if (params.maxTokens != null) put("max_tokens", params.maxTokens)
+            if (params.presencePenalty != null) put("presence_penalty", params.presencePenalty)
+            if (params.frequencyPenalty != null) put("frequency_penalty", params.frequencyPenalty)
+            params.seed.normalizedSeedOrNull()?.let { put("seed", it) }
+            if (capabilities.supportsTopK) params.topK.normalizedTopKOrNull()?.let { put("top_k", it) }
+            if (capabilities.supportsTopA) params.topA.normalizedNonNegativeOrNull()?.let { put("top_a", it) }
+            if (capabilities.supportsMinP) params.minP.normalizedNonNegativeOrNull()?.let { put("min_p", it) }
+            if (capabilities.supportsRepetitionPenalty) {
+                params.repetitionPenalty.normalizedNonNegativeOrNull()?.let { put("repetition_penalty", it) }
+            }
+            params.stopSequences.normalizedStopSequencesOrNull()?.let { stopSequences ->
+                put("stop", json.encodeToJsonElement(stopSequences))
+            }
 
             put("stream", stream)
             if (stream) {
@@ -690,5 +704,32 @@ class ChatCompletionsAPI(
         val gonnaSend = filter { it is UIMessagePart.Text || it is UIMessagePart.Image }.size
         val texts = filter { it is UIMessagePart.Text }.size
         return gonnaSend == texts && texts == 1
+    }
+}
+
+internal data class ChatCompletionsProviderCapabilities(
+    val supportsTopK: Boolean = false,
+    val supportsTopA: Boolean = false,
+    val supportsMinP: Boolean = false,
+    val supportsRepetitionPenalty: Boolean = false,
+)
+
+internal fun resolveChatCompletionsProviderCapabilities(host: String): ChatCompletionsProviderCapabilities {
+    return when (host) {
+        "openrouter.ai" -> ChatCompletionsProviderCapabilities(
+            supportsTopK = true,
+            supportsTopA = true,
+            supportsMinP = true,
+            supportsRepetitionPenalty = true,
+        )
+
+        "dashscope.aliyuncs.com",
+        "dashscope-intl.aliyuncs.com",
+        "dashscope-us.aliyuncs.com",
+        -> ChatCompletionsProviderCapabilities(
+            supportsTopK = true,
+        )
+
+        else -> ChatCompletionsProviderCapabilities()
     }
 }

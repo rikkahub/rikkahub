@@ -37,7 +37,6 @@ import me.rerere.rikkahub.data.ai.tools.termux.toToolResponse
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
-import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import java.time.ZonedDateTime
@@ -345,10 +344,9 @@ class LocalTools(
         settingsStore: SettingsStore,
         termuxCommandManager: TermuxCommandManager,
         termuxPtySessionManager: TermuxPtySessionManager,
-        assistant: Assistant,
     ): Tool {
         val workdir = settingsStore.settingsFlow.value.termuxWorkdir
-        val baseDescription = if (ptyInteractiveEnabled) {
+        val description = if (ptyInteractiveEnabled) {
             """
                 Run a shell command in local Termux. Current workspace path: $workdir.
                 Use default mode for one-shot commands. Non-tty responses are JSON with output and status fields.
@@ -365,11 +363,7 @@ class LocalTools(
         }
         return Tool(
             name = "termux_exec",
-            description = buildToolDescription(
-                baseDescription = baseDescription,
-                assistant = assistant,
-                toolName = "termux_exec",
-            ),
+            description = description,
             needsApproval = needsApproval,
             parameters = {
                 InputSchema.Obj(
@@ -489,19 +483,14 @@ class LocalTools(
     private fun termuxWriteStdinTool(
         needsApproval: Boolean,
         settingsStore: SettingsStore,
-        assistant: Assistant,
     ): Tool {
         return Tool(
             name = "write_stdin",
-            description = buildToolDescription(
-                baseDescription = """
-                    Send input to a PTY session started by termux_exec.
-                    Use chars="" to poll for more output.
-                    Optional overrides: yield_time_ms, max_output_chars.
-                """.trimIndent().replace("\n", " "),
-                assistant = assistant,
-                toolName = "write_stdin",
-            ),
+            description = """
+                Send input to a PTY session started by termux_exec.
+                Use chars="" to poll for more output.
+                Optional overrides: yield_time_ms, max_output_chars.
+            """.trimIndent().replace("\n", " "),
             needsApproval = needsApproval,
             parameters = {
                 InputSchema.Obj(
@@ -557,19 +546,13 @@ class LocalTools(
         )
     }
 
-    private fun termuxListPtySessionsTool(
-        assistant: Assistant,
-    ): Tool {
+    private fun termuxListPtySessionsTool(): Tool {
         return Tool(
             name = "list_pty_sessions",
-            description = buildToolDescription(
-                baseDescription = """
-                    List active PTY sessions created by termux_exec with tty=true.
-                    Returns JSON with session metadata, buffered output size, and running state.
-                """.trimIndent().replace("\n", " "),
-                assistant = assistant,
-                toolName = "list_pty_sessions",
-            ),
+            description = """
+                List active PTY sessions created by termux_exec with tty=true.
+                Returns JSON with session metadata, buffered output size, and running state.
+            """.trimIndent().replace("\n", " "),
             needsApproval = false,
             parameters = {
                 InputSchema.Obj(properties = buildJsonObject { })
@@ -595,18 +578,13 @@ class LocalTools(
 
     private fun termuxClosePtySessionTool(
         needsApproval: Boolean,
-        assistant: Assistant,
     ): Tool {
         return Tool(
             name = "close_pty_session",
-            description = buildToolDescription(
-                baseDescription = """
-                    Close one PTY session created by termux_exec with tty=true.
-                    Set close_all=true to close every active PTY session managed by the app.
-                """.trimIndent().replace("\n", " "),
-                assistant = assistant,
-                toolName = "close_pty_session",
-            ),
+            description = """
+                Close one PTY session created by termux_exec with tty=true.
+                Set close_all=true to close every active PTY session managed by the app.
+            """.trimIndent().replace("\n", " "),
             needsApproval = needsApproval,
             parameters = {
                 InputSchema.Obj(
@@ -653,18 +631,13 @@ class LocalTools(
         needsApproval: Boolean,
         settingsStore: SettingsStore,
         termuxCommandManager: TermuxCommandManager,
-        assistant: Assistant,
     ): Tool {
         return Tool(
             name = "termux_python",
-            description = buildToolDescription(
-                baseDescription = """
-                    Run Python code in local Termux and return JSON with output and execution status.
-                    Optional overrides: timeout_ms.
-                """.trimIndent().replace("\n", " "),
-                assistant = assistant,
-                toolName = "termux_python",
-            ),
+            description = """
+                Run Python code in local Termux and return JSON with output and execution status.
+                Optional overrides: timeout_ms.
+            """.trimIndent().replace("\n", " "),
             needsApproval = needsApproval,
             parameters = {
                 InputSchema.Obj(
@@ -715,7 +688,6 @@ class LocalTools(
 
     fun getTools(
         options: List<LocalToolOption>,
-        assistant: Assistant,
         overrideTermuxNeedsApproval: Boolean? = null,
     ): List<Tool> {
         val settings = settingsStore.settingsFlow.value
@@ -726,9 +698,9 @@ class LocalTools(
             LocalToolCatalog.options.forEach { option ->
                 if (!enabled.contains(option)) return@forEach
                 when (option) {
-                    LocalToolOption.JavascriptEngine -> add(javascriptTool.withAssistantPrompt(assistant))
-                    LocalToolOption.TimeInfo -> add(timeTool.withAssistantPrompt(assistant))
-                    LocalToolOption.Clipboard -> add(clipboardTool.withAssistantPrompt(assistant))
+                    LocalToolOption.JavascriptEngine -> add(javascriptTool)
+                    LocalToolOption.TimeInfo -> add(timeTool)
+                    LocalToolOption.Clipboard -> add(clipboardTool)
                     LocalToolOption.TermuxExec -> {
                         add(
                             termuxExecTool(
@@ -737,7 +709,6 @@ class LocalTools(
                                 settingsStore = settingsStore,
                                 termuxCommandManager = termuxCommandManager,
                                 termuxPtySessionManager = termuxPtySessionManager,
-                                assistant = assistant,
                             )
                         )
                         if (termuxPtyInteractiveEnabled) {
@@ -745,18 +716,14 @@ class LocalTools(
                                 termuxWriteStdinTool(
                                     needsApproval = termuxNeedsApproval,
                                     settingsStore = settingsStore,
-                                    assistant = assistant,
                                 )
                             )
                             add(
-                                termuxListPtySessionsTool(
-                                    assistant = assistant,
-                                )
+                                termuxListPtySessionsTool()
                             )
                             add(
                                 termuxClosePtySessionTool(
                                     needsApproval = termuxNeedsApproval,
-                                    assistant = assistant,
                                 )
                             )
                         }
@@ -768,37 +735,15 @@ class LocalTools(
                                 needsApproval = termuxNeedsApproval,
                                 settingsStore = settingsStore,
                                 termuxCommandManager = termuxCommandManager,
-                                assistant = assistant,
                             )
                         )
                     }
 
-                    LocalToolOption.Tts -> add(ttsTool.withAssistantPrompt(assistant))
-                    LocalToolOption.AskUser -> add(askUserTool.withAssistantPrompt(assistant))
+                    LocalToolOption.Tts -> add(ttsTool)
+                    LocalToolOption.AskUser -> add(askUserTool)
                 }
             }
         }
-    }
-
-    private fun Tool.withAssistantPrompt(assistant: Assistant): Tool {
-        val description = buildToolDescription(
-            baseDescription = description,
-            assistant = assistant,
-            toolName = name,
-        )
-        return if (description == this.description) this else copy(description = description)
-    }
-
-    private fun buildToolDescription(
-        baseDescription: String,
-        assistant: Assistant,
-        toolName: String,
-    ): String {
-        val customPrompt = assistant.localToolPrompts[toolName]?.trim()
-        return listOfNotNull(
-            baseDescription.trim(),
-            customPrompt?.takeIf { it.isNotBlank() }
-        ).joinToString(separator = "\n")
     }
 
     private fun JsonObject.optionalInt(name: String): Int? {

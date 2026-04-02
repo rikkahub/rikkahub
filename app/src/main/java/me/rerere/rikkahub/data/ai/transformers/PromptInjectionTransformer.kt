@@ -3,12 +3,17 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
-import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
-import me.rerere.rikkahub.data.model.extractContextForMatching
-import me.rerere.rikkahub.data.model.isTriggered
+import me.rerere.rikkahub.data.model.LorebookTriggerContext
+import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.data.model.activeStPresetTemplate
+import me.rerere.rikkahub.data.model.effectiveUserPersona
+import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
+
+internal const val DEFAULT_ST_AUTHOR_NOTE_DEPTH = 4
 
 /**
  * 提示词注入转换器
@@ -23,8 +28,13 @@ object PromptInjectionTransformer : InputMessageTransformer {
         return transformMessages(
             messages = messages,
             assistant = ctx.assistant,
+            settings = ctx.settings,
             modeInjections = ctx.settings.modeInjections,
-            lorebooks = ctx.settings.lorebooks
+            lorebooks = ctx.settings.lorebooks,
+            personaDescription = ctx.settings.effectiveUserPersona(ctx.assistant),
+            stPromptTemplateActive = ctx.settings.stPresetEnabled && ctx.settings.activeStPresetTemplate() != null,
+            generationType = ctx.stGenerationType,
+            runtimeState = ctx.lorebookRuntimeState,
         )
     }
 }
@@ -35,15 +45,25 @@ object PromptInjectionTransformer : InputMessageTransformer {
 internal fun transformMessages(
     messages: List<UIMessage>,
     assistant: Assistant,
+    settings: Settings? = null,
     modeInjections: List<PromptInjection.ModeInjection>,
-    lorebooks: List<Lorebook>
+    lorebooks: List<Lorebook>,
+    personaDescription: String = assistant.userPersona,
+    stPromptTemplateActive: Boolean = false,
+    generationType: String = "normal",
+    runtimeState: LorebookRuntimeState? = null,
 ): List<UIMessage> {
     // 收集所有需要注入的内容
     val injections = collectInjections(
         messages = messages,
         assistant = assistant,
+        settings = settings,
         modeInjections = modeInjections,
-        lorebooks = lorebooks
+        lorebooks = lorebooks,
+        personaDescription = personaDescription,
+        stPromptTemplateActive = stPromptTemplateActive,
+        generationType = generationType,
+        runtimeState = runtimeState,
     )
 
     if (injections.isEmpty()) {
@@ -65,32 +85,41 @@ internal fun transformMessages(
 internal fun collectInjections(
     messages: List<UIMessage>,
     assistant: Assistant,
+    settings: Settings? = null,
     modeInjections: List<PromptInjection.ModeInjection>,
-    lorebooks: List<Lorebook>
+    lorebooks: List<Lorebook>,
+    personaDescription: String = assistant.userPersona,
+    stPromptTemplateActive: Boolean = false,
+    generationType: String = "normal",
+    runtimeState: LorebookRuntimeState? = null,
 ): List<PromptInjection> {
     val injections = mutableListOf<PromptInjection>()
+    val characterData = assistant.stCharacterData
 
     // 1. 获取关联的 ModeInjection
     modeInjections
         .filter { it.enabled && assistant.modeInjectionIds.contains(it.id) }
+        .map { it.normalizedForSystemPromptSupplement() }
         .forEach { injections.add(it) }
 
     // 2. 获取关联的 Lorebook 中被触发的 RegexInjection
-    val enabledLorebooks = lorebooks.filter {
-        it.enabled && assistant.lorebookIds.contains(it.id)
-    }
-    if (enabledLorebooks.isNotEmpty()) {
-        // 提取上下文用于匹配（只取非 SYSTEM 消息）
-        val nonSystemMessages = messages.filter { it.role != MessageRole.SYSTEM }
-
-        enabledLorebooks.forEach { lorebook ->
-            lorebook.entries
-                .filter { entry ->
-                    val context = extractContextForMatching(nonSystemMessages, entry.scanDepth)
-                    entry.isTriggered(context)
-                }
-                .forEach { injections.add(it) }
-        }
+    if (lorebooks.any { it.enabled } && !stPromptTemplateActive) {
+        injections += collectTriggeredLorebookEntries(
+            historyMessages = messages,
+            assistant = assistant,
+            lorebooks = lorebooks,
+            triggerContext = LorebookTriggerContext(
+                characterDescription = characterData?.description.orEmpty(),
+                characterPersonality = characterData?.personality.orEmpty(),
+                personaDescription = personaDescription,
+                scenario = characterData?.scenario.orEmpty(),
+                creatorNotes = characterData?.creatorNotes.orEmpty(),
+                characterDepthPrompt = characterData?.depthPrompt?.prompt.orEmpty(),
+                generationType = generationType,
+            ),
+            settings = settings,
+            runtimeState = runtimeState,
+        )
     }
 
     return injections
@@ -108,7 +137,8 @@ internal fun applyInjections(
     // 找到系统消息的索引（通常是第一条）
     val systemIndex = result.indexOfFirst { it.role == MessageRole.SYSTEM }
 
-    // 处理 BEFORE_SYSTEM_PROMPT 和 AFTER_SYSTEM_PROMPT
+    // 处理兼容命名的 BEFORE/AFTER_SYSTEM_PROMPT。
+    // 在 ST 语义下它们更接近角色定义区块前/后，而不是全局系统提示词前/后。
     if (systemIndex >= 0) {
         val beforeContent = byPosition[InjectionPosition.BEFORE_SYSTEM_PROMPT]
             ?.joinToString("\n") { it.content } ?: ""
@@ -159,8 +189,16 @@ internal fun applyInjections(
         }
     }
 
-    // 处理 TOP_OF_CHAT：在第一条用户消息之前插入
-    val topInjections = byPosition[InjectionPosition.TOP_OF_CHAT]
+    applyAuthorNoteInjection(result, byPosition)
+
+    // 通用消息模式下没有 ST 的 EM 锚点，这里退化成顶部 / 底部插入。
+    val topInjections = collectFallbackFloatingInjections(
+        byPosition = byPosition,
+        positions = listOf(
+            InjectionPosition.EXAMPLE_MESSAGES_TOP,
+            InjectionPosition.TOP_OF_CHAT,
+        )
+    )
     if (!topInjections.isNullOrEmpty()) {
         // 重新计算索引（因为可能插入了系统消息）
         var insertIndex = result.indexOfFirst { it.role == MessageRole.USER }
@@ -172,8 +210,13 @@ internal fun applyInjections(
         }
     }
 
-    // 处理 BOTTOM_OF_CHAT：在最后一条消息之前插入
-    val bottomInjections = byPosition[InjectionPosition.BOTTOM_OF_CHAT]
+    val bottomInjections = collectFallbackFloatingInjections(
+        byPosition = byPosition,
+        positions = listOf(
+            InjectionPosition.EXAMPLE_MESSAGES_BOTTOM,
+            InjectionPosition.BOTTOM_OF_CHAT,
+        )
+    )
     if (!bottomInjections.isNullOrEmpty()) {
         var insertIndex = (result.size - 1).coerceAtLeast(0)
         insertIndex = findSafeInsertIndex(result, insertIndex)
@@ -204,6 +247,68 @@ internal fun applyInjections(
     return result
 }
 
+private fun collectFallbackFloatingInjections(
+    byPosition: Map<InjectionPosition, List<PromptInjection>>,
+    positions: List<InjectionPosition>,
+): List<PromptInjection> {
+    return positions
+        .flatMap { byPosition[it].orEmpty() }
+        .sortedByDescending { it.priority }
+}
+
+private fun applyAuthorNoteInjection(
+    result: MutableList<UIMessage>,
+    byPosition: Map<InjectionPosition, List<PromptInjection>>,
+) {
+    val topEntries = byPosition[InjectionPosition.AUTHOR_NOTE_TOP].orEmpty()
+    val bottomEntries = byPosition[InjectionPosition.AUTHOR_NOTE_BOTTOM].orEmpty()
+    val authorNoteContent = buildAuthorNoteContent(topEntries, bottomEntries)
+    if (authorNoteContent.isBlank()) return
+
+    val authorNoteDepth = resolveAuthorNoteDepth(topEntries + bottomEntries)
+    var insertIndex = findChatDepthInsertIndex(
+        messages = result,
+        depth = authorNoteDepth,
+    )
+    insertIndex = findSafeInsertIndex(result, insertIndex)
+    result.add(insertIndex, UIMessage.system(authorNoteContent))
+}
+
+internal fun resolveAuthorNoteDepth(entries: List<PromptInjection>): Int {
+    return entries
+        .maxOfOrNull { it.injectDepth.coerceAtLeast(0) }
+        ?: DEFAULT_ST_AUTHOR_NOTE_DEPTH
+}
+
+internal fun buildAuthorNoteContent(
+    topEntries: List<PromptInjection>,
+    bottomEntries: List<PromptInjection>,
+): String {
+    val top = topEntries
+        .joinToString("\n") { it.content.trim() }
+        .trim()
+    val bottom = bottomEntries
+        .joinToString("\n") { it.content.trim() }
+        .trim()
+    return listOf(top, bottom)
+        .filter { it.isNotBlank() }
+        .joinToString("\n")
+}
+
+private fun findChatDepthInsertIndex(
+    messages: List<UIMessage>,
+    depth: Int,
+): Int {
+    val leadingSystemCount = messages.takeWhile { it.role == MessageRole.SYSTEM }.size
+    val chatIndices = messages.indices.filter { index ->
+        index >= leadingSystemCount && messages[index].role != MessageRole.TOOL
+    }
+    if (chatIndices.isEmpty()) return leadingSystemCount
+
+    val relativeIndex = (chatIndices.size - depth.coerceAtLeast(1)).coerceIn(0, chatIndices.lastIndex)
+    return chatIndices[relativeIndex]
+}
+
 /**
  * 将同一 role 的注入合并成消息列表
  * 按 role 分组后合并内容，返回合并后的消息列表
@@ -214,6 +319,7 @@ private fun createMergedInjectionMessages(injections: List<PromptInjection>): Li
         .map { (role, grouped) ->
             val mergedContent = grouped.joinToString("\n") { it.content }
             when (role) {
+                MessageRole.SYSTEM -> UIMessage.system(mergedContent)
                 MessageRole.ASSISTANT -> UIMessage.assistant(mergedContent)
                 else -> UIMessage.user(mergedContent)
             }
@@ -221,10 +327,15 @@ private fun createMergedInjectionMessages(injections: List<PromptInjection>): Li
 }
 
 /**
- * 查找安全的插入位置，避免注入到 USER → ASSISTANT(含Tool) 之间
+ * 查找安全的插入位置，避免打断工具调用链。
  *
- * 某些提供商（如 deepseek）要求 USER 之后紧跟带工具的 ASSISTANT，
- * 在两者之间插入消息会导致报错或破坏推理连续性。
+ * 需要保护的边界：
+ * - USER -> ASSISTANT(tool_calls)
+ * - ASSISTANT(tool_calls) -> TOOL
+ * - TOOL -> TOOL
+ *
+ * 这样既不会破坏某些提供商对 tool call 邻接关系的要求，也能兼容旧版
+ * `TOOL` role 历史消息。
  */
 internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): Int {
     var index = targetIndex.coerceIn(0, messages.size)
@@ -234,12 +345,7 @@ internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): I
         val prevMessage = messages.getOrNull(index - 1)
         val currentMessage = messages.getOrNull(index)
 
-        // 不能插入到 USER → ASSISTANT(含Tool) 之间
-        val isPrevUser = prevMessage?.role == MessageRole.USER
-        val isCurrentAssistantWithTools = currentMessage?.role == MessageRole.ASSISTANT
-            && currentMessage.getTools().isNotEmpty()
-
-        if (isPrevUser && isCurrentAssistantWithTools) {
+        if (isUnsafeToolBoundary(prevMessage, currentMessage)) {
             index--
         } else {
             break
@@ -247,4 +353,23 @@ internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): I
     }
 
     return index
+}
+
+private fun isUnsafeToolBoundary(
+    previousMessage: UIMessage?,
+    currentMessage: UIMessage?,
+): Boolean {
+    val isPreviousUser = previousMessage?.role == MessageRole.USER
+    val isPreviousAssistantWithTools = previousMessage.isAssistantWithTools()
+    val isPreviousTool = previousMessage?.role == MessageRole.TOOL
+    val isCurrentAssistantWithTools = currentMessage.isAssistantWithTools()
+    val isCurrentTool = currentMessage?.role == MessageRole.TOOL
+
+    return (isPreviousUser && isCurrentAssistantWithTools) ||
+        (isPreviousAssistantWithTools && isCurrentTool) ||
+        (isPreviousTool && isCurrentTool)
+}
+
+private fun UIMessage?.isAssistantWithTools(): Boolean {
+    return this?.role == MessageRole.ASSISTANT && this.getTools().isNotEmpty()
 }

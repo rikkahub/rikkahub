@@ -80,11 +80,17 @@ import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
+import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.effectiveUserAvatar
+import me.rerere.rikkahub.data.model.effectiveUserName
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.model.runtimeRegexes
+import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
@@ -107,6 +113,9 @@ internal fun UIMessage.shouldShowPrimaryActions(loading: Boolean): Boolean {
     return !loading && !parts.isEmptyUIMessage()
 }
 
+internal fun userRegexRenderCacheKey(settings: Settings) =
+    settings.selectedUserPersonaProfile() to settings.displaySetting.userNickname.trim()
+
 @Composable
 fun ChatMessage(
     node: MessageNode,
@@ -118,6 +127,7 @@ fun ChatMessage(
     showMetadata: Boolean = false,
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
+    onContinue: () -> Unit,
     onEdit: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
@@ -131,7 +141,8 @@ fun ChatMessage(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
-    val settings = LocalSettings.current.displaySetting
+    val allSettings = LocalSettings.current
+    val settings = allSettings.displaySetting
     val baseFontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio
     val scaledLineHeight = if (LocalTextStyle.current.lineHeight.isSpecified) {
         LocalTextStyle.current.lineHeight * settings.fontSizeRatio
@@ -215,6 +226,7 @@ fun ChatMessage(
                             ChatMessageActionButtons(
                                 message = message,
                                 onRegenerate = onRegenerate,
+                                onContinue = onContinue,
                                 node = node,
                                 onUpdate = onUpdate,
                                 onOpenActionSheet = {
@@ -276,8 +288,8 @@ fun ChatMessage(
                         Spacer(modifier = Modifier.width(avatarGap))
                         if (showIdentity) {
                             ChatMessageUserAvatar(
-                                avatar = settings.userAvatar,
-                                nickname = settings.userNickname,
+                                avatar = allSettings.effectiveUserAvatar(),
+                                nickname = allSettings.effectiveUserName(),
                             )
                         } else {
                             Spacer(modifier = Modifier.width(userAvatarSlotWidth))
@@ -356,6 +368,8 @@ private fun MessagePartsBlock(
     // 消息输出HapticFeedback
     val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
+    val runtimeRegexes = remember(settings) { settings.runtimeRegexes() }
+    val regexRenderCacheKey = userRegexRenderCacheKey(settings)
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
             latestParts.forEach { part ->
@@ -440,12 +454,20 @@ private fun MessagePartsBlock(
                                     modifier = Modifier
                                 )
                             } else {
-                                val renderedText = remember(part.text, assistant, messageDepthFromEnd) {
+                                val renderedText = remember(
+                                    part.text,
+                                    assistant,
+                                    runtimeRegexes,
+                                    messageDepthFromEnd,
+                                    regexRenderCacheKey,
+                                ) {
                                     part.text.replaceRegexes(
                                         assistant = assistant,
+                                        settings = settings,
                                         scope = AssistantAffectScope.USER,
                                         phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                         messageDepthFromEnd = messageDepthFromEnd,
+                                        placement = AssistantRegexPlacement.USER_INPUT,
                                     )
                                 }
                                 Surface(
@@ -469,12 +491,20 @@ private fun MessagePartsBlock(
                                 }
                             }
                         } else {
-                            val renderedText = remember(part.text, assistant, messageDepthFromEnd) {
+                            val renderedText = remember(
+                                part.text,
+                                assistant,
+                                runtimeRegexes,
+                                messageDepthFromEnd,
+                                regexRenderCacheKey,
+                            ) {
                                 part.text.replaceRegexes(
                                     assistant = assistant,
+                                    settings = settings,
                                     scope = AssistantAffectScope.ASSISTANT,
                                     phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                     messageDepthFromEnd = messageDepthFromEnd,
+                                    placement = AssistantRegexPlacement.AI_OUTPUT,
                                 )
                             }
                             if (settings.displaySetting.showAssistantBubble) {

@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.datastore
 
 import android.content.Context
 import android.util.Log
+import androidx.core.net.toUri
 import androidx.datastore.core.IOException
 import androidx.datastore.preferences.SharedPreferencesMigration
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -11,11 +12,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
@@ -36,16 +35,24 @@ import me.rerere.rikkahub.data.ai.tools.termux.TERMUX_PTY_DEFAULT_YIELD_TIME_MS
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.DEFAULT_TEXT_SELECTION_ACTIONS
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
+import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.ScheduledPromptTask
+import me.rerere.rikkahub.data.model.SillyTavernPreset
+import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.model.TextSelectionConfig
+import me.rerere.rikkahub.data.model.UserPersonaProfile
+import me.rerere.rikkahub.data.model.normalizeStPresetState
+import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.PresetThemes
 import me.rerere.rikkahub.utils.JsonInstant
@@ -158,7 +165,18 @@ class SettingsStore(
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
         val LOREBOOKS = stringPreferencesKey("lorebooks")
+        val GLOBAL_LOREBOOK_IDS = stringPreferencesKey("global_lorebook_ids")
+        val LOREBOOK_GLOBAL_SETTINGS = stringPreferencesKey("lorebook_global_settings")
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
+        val GLOBAL_REGEX_ENABLED = booleanPreferencesKey("global_regex_enabled")
+        val GLOBAL_REGEXES = stringPreferencesKey("global_regexes")
+        val REGEXES = stringPreferencesKey("regexes")
+        val ST_PRESET_ENABLED = booleanPreferencesKey("st_preset_enabled")
+        val ST_PRESET_TEMPLATE = stringPreferencesKey("st_preset_template")
+        val ST_PRESETS = stringPreferencesKey("st_presets")
+        val SELECTED_ST_PRESET = stringPreferencesKey("selected_st_preset")
+        val USER_PERSONA_PROFILES = stringPreferencesKey("user_persona_profiles")
+        val SELECTED_USER_PERSONA_PROFILE = stringPreferencesKey("selected_user_persona_profile")
 
         // 备份提醒
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
@@ -270,9 +288,45 @@ class SettingsStore(
                 lorebooks = preferences[LOREBOOKS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                globalLorebookIds = preferences[GLOBAL_LOREBOOK_IDS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptySet(),
+                lorebookGlobalSettings = preferences[LOREBOOK_GLOBAL_SETTINGS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: LorebookGlobalSettings(),
                 quickMessages = preferences[QUICK_MESSAGES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                globalRegexEnabled = preferences[GLOBAL_REGEX_ENABLED] != false,
+                globalRegexes = preferences[GLOBAL_REGEXES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: run {
+                    val hasStoredPresetLibrary =
+                        preferences[ST_PRESET_TEMPLATE] != null ||
+                            preferences[ST_PRESETS]
+                                ?.let { JsonInstant.decodeFromString<List<SillyTavernPreset>>(it) }
+                                ?.isNotEmpty() == true
+                    if (!hasStoredPresetLibrary) {
+                        preferences[REGEXES]?.let { JsonInstant.decodeFromString(it) } ?: emptyList()
+                    } else {
+                        emptyList()
+                    }
+                },
+                regexes = preferences[REGEXES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                stPresetEnabled = preferences[ST_PRESET_ENABLED] == true,
+                stPresetTemplate = preferences[ST_PRESET_TEMPLATE]?.let {
+                    JsonInstant.decodeFromString(it)
+                },
+                stPresets = preferences[ST_PRESETS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                selectedStPresetId = preferences[SELECTED_ST_PRESET]?.let { Uuid.parse(it) },
+                userPersonaProfiles = preferences[USER_PERSONA_PROFILES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                selectedUserPersonaProfileId = preferences[SELECTED_USER_PERSONA_PROFILE]?.let { Uuid.parse(it) },
                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
@@ -334,12 +388,13 @@ class SettingsStore(
                     ttsProviders.add(defaultTTSProvider.copyProvider())
                 }
             }
-            it.copy(
+            var normalizedSettings = it.copy(
                 providers = providers,
                 assistants = assistants,
                 ttsProviders = ttsProviders,
                 scheduledTasks = scheduledTasks,
             )
+            normalizedSettings
         }
         .map { settings ->
             // 去重并清理无效引用
@@ -350,6 +405,11 @@ class SettingsStore(
             val fallbackAssistantId = settings.assistants.firstOrNull()?.id ?: DEFAULT_ASSISTANT_ID
             val maxSearchIndex = (settings.searchServices.size - 1).coerceAtLeast(0)
             val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
+            val userPersonaProfiles = settings.userPersonaProfiles.distinctBy { it.id }
+            val selectedUserPersonaProfileId = userPersonaProfiles
+                .firstOrNull { it.id == settings.selectedUserPersonaProfileId }
+                ?.id
+                ?: userPersonaProfiles.firstOrNull()?.id
             val textSelectionConfig = settings.textSelectionConfig.let { config ->
                 config.copy(
                     assistantId = config.assistantId?.takeIf { it in validAssistantIds },
@@ -358,7 +418,8 @@ class SettingsStore(
                         .distinctBy { it.id }
                 )
             }
-            settings.copy(
+            val normalizedStSettings = settings.normalizeStPresetState()
+            normalizedStSettings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
                         is ProviderSetting.OpenAI -> provider.copy(
@@ -398,8 +459,18 @@ class SettingsStore(
                 favoriteModels = settings.favoriteModels.filter { uuid ->
                     settings.providers.flatMap { it.models }.any { it.id == uuid }
                 },
-                modeInjections = settings.modeInjections.distinctBy { it.id },
+                modeInjections = settings.modeInjections
+                    .map { it.normalizedForSystemPromptSupplement() }
+                    .distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
+                globalLorebookIds = settings.globalLorebookIds.filter { it in validLorebookIds }.toSet(),
+                globalRegexes = settings.globalRegexes.distinctBy { it.id },
+                regexes = normalizedStSettings.regexes.distinctBy { it.id },
+                stPresets = normalizedStSettings.stPresets,
+                selectedStPresetId = normalizedStSettings.selectedStPresetId,
+                stPresetTemplate = normalizedStSettings.stPresetTemplate,
+                userPersonaProfiles = userPersonaProfiles,
+                selectedUserPersonaProfileId = selectedUserPersonaProfileId,
                 scheduledTasks = settings.scheduledTasks
                     .distinctBy { it.id }
                     .map { task ->
@@ -417,10 +488,8 @@ class SettingsStore(
                     },
                 textSelectionConfig = textSelectionConfig,
                 quickMessages = settings.quickMessages.distinctBy { it.id },
+                lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized(),
             )
-        }
-        .onEach {
-            get<PebbleEngine>().templateCache.invalidateAll()
         }
 
     val settingsFlow = settingsFlowRaw
@@ -428,78 +497,112 @@ class SettingsStore(
         .toMutableStateFlow(scope, Settings.dummy())
 
     suspend fun update(settings: Settings) {
-        if(settings.init) {
+        if (settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
-        settingsFlow.value = settings
+        val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
+        val normalizedStSettings = settings.normalizeStPresetState()
+        val normalizedSettings = normalizedStSettings.copy(
+            modeInjections = settings.modeInjections.map { it.normalizedForSystemPromptSupplement() },
+            lorebookGlobalSettings = settings.lorebookGlobalSettings.normalized(),
+            globalLorebookIds = settings.globalLorebookIds.filter { it in validLorebookIds }.toSet(),
+            globalRegexes = settings.globalRegexes.distinctBy { it.id },
+            stPresets = normalizedStSettings.stPresets,
+            selectedStPresetId = normalizedStSettings.selectedStPresetId,
+            stPresetTemplate = normalizedStSettings.stPresetTemplate,
+            regexes = normalizedStSettings.regexes.distinctBy { it.id },
+        )
+        val previousSettings = settingsFlow.value
+        if (!previousSettings.init) {
+            val removedAvatarUris = previousSettings.referencedLocalUserAvatarUris() - normalizedSettings.referencedLocalUserAvatarUris()
+            if (removedAvatarUris.isNotEmpty()) {
+                get<FilesManager>().deleteChatFiles(removedAvatarUris.map { it.toUri() })
+            }
+        }
+        settingsFlow.value = normalizedSettings
         dataStore.edit { preferences ->
-            preferences[DYNAMIC_COLOR] = settings.dynamicColor
-            preferences[THEME_ID] = settings.themeId
-            preferences[CUSTOM_THEME_SETTING] = JsonInstant.encodeToString(settings.customThemeSetting)
-            preferences[DEVELOPER_MODE] = settings.developerMode
-            preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
+            preferences[DYNAMIC_COLOR] = normalizedSettings.dynamicColor
+            preferences[THEME_ID] = normalizedSettings.themeId
+            preferences[CUSTOM_THEME_SETTING] = JsonInstant.encodeToString(normalizedSettings.customThemeSetting)
+            preferences[DEVELOPER_MODE] = normalizedSettings.developerMode
+            preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(normalizedSettings.displaySetting)
 
-            preferences[ENABLE_WEB_SEARCH] = settings.enableWebSearch
-            preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
-            preferences[SELECT_MODEL] = settings.chatModelId.toString()
-            preferences[TITLE_MODEL] = settings.titleModelId.toString()
-            preferences[TRANSLATE_MODEL] = settings.translateModeId.toString()
-            preferences[SUGGESTION_MODEL] = settings.suggestionModelId.toString()
-            preferences[IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
-            preferences[TITLE_PROMPT] = settings.titlePrompt
-            preferences[TRANSLATION_PROMPT] = settings.translatePrompt
-            preferences[TRANSLATE_THINKING_BUDGET] = settings.translateThinkingBudget
-            preferences[SUGGESTION_PROMPT] = settings.suggestionPrompt
-            preferences[OCR_MODEL] = settings.ocrModelId.toString()
-            preferences[OCR_PROMPT] = settings.ocrPrompt
-            preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
-            preferences[COMPRESS_PROMPT] = settings.compressPrompt
-            preferences[COMPRESS_TARGET_TOKENS] = settings.compressTargetTokens.coerceAtLeast(1)
-            preferences[COMPRESS_KEEP_RECENT_MESSAGES] = settings.compressKeepRecentMessages.coerceAtLeast(0)
+            preferences[ENABLE_WEB_SEARCH] = normalizedSettings.enableWebSearch
+            preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(normalizedSettings.favoriteModels)
+            preferences[SELECT_MODEL] = normalizedSettings.chatModelId.toString()
+            preferences[TITLE_MODEL] = normalizedSettings.titleModelId.toString()
+            preferences[TRANSLATE_MODEL] = normalizedSettings.translateModeId.toString()
+            preferences[SUGGESTION_MODEL] = normalizedSettings.suggestionModelId.toString()
+            preferences[IMAGE_GENERATION_MODEL] = normalizedSettings.imageGenerationModelId.toString()
+            preferences[TITLE_PROMPT] = normalizedSettings.titlePrompt
+            preferences[TRANSLATION_PROMPT] = normalizedSettings.translatePrompt
+            preferences[TRANSLATE_THINKING_BUDGET] = normalizedSettings.translateThinkingBudget
+            preferences[SUGGESTION_PROMPT] = normalizedSettings.suggestionPrompt
+            preferences[OCR_MODEL] = normalizedSettings.ocrModelId.toString()
+            preferences[OCR_PROMPT] = normalizedSettings.ocrPrompt
+            preferences[COMPRESS_MODEL] = normalizedSettings.compressModelId.toString()
+            preferences[COMPRESS_PROMPT] = normalizedSettings.compressPrompt
+            preferences[COMPRESS_TARGET_TOKENS] = normalizedSettings.compressTargetTokens.coerceAtLeast(1)
+            preferences[COMPRESS_KEEP_RECENT_MESSAGES] = normalizedSettings.compressKeepRecentMessages.coerceAtLeast(0)
 
-            preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
+            preferences[PROVIDERS] = JsonInstant.encodeToString(normalizedSettings.providers)
 
-            preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
-            preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
-            preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
-            preferences[SCHEDULED_TASKS] = JsonInstant.encodeToString(settings.scheduledTasks)
-            preferences[SCHEDULED_TASK_KEEP_ALIVE_ENABLED] = settings.scheduledTaskKeepAliveEnabled
+            preferences[ASSISTANTS] = JsonInstant.encodeToString(normalizedSettings.assistants)
+            preferences[SELECT_ASSISTANT] = normalizedSettings.assistantId.toString()
+            preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(normalizedSettings.assistantTags)
+            preferences[SCHEDULED_TASKS] = JsonInstant.encodeToString(normalizedSettings.scheduledTasks)
+            preferences[SCHEDULED_TASK_KEEP_ALIVE_ENABLED] = normalizedSettings.scheduledTaskKeepAliveEnabled
 
-            preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
-            preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
-            preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
+            preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(normalizedSettings.searchServices)
+            preferences[SEARCH_COMMON] = JsonInstant.encodeToString(normalizedSettings.searchCommonOptions)
+            preferences[SEARCH_SELECTED] = normalizedSettings.searchServiceSelected.coerceIn(0, normalizedSettings.searchServices.size - 1)
 
-            preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
-            preferences[TERMUX_WORKDIR] = settings.termuxWorkdir
-            preferences[TERMUX_NEEDS_APPROVAL] = settings.termuxNeedsApproval
-            preferences[TERMUX_APPROVAL_BLACKLIST] = settings.termuxApprovalBlacklist
-            preferences[TERMUX_TIMEOUT_MS] = settings.termuxTimeoutMs.coerceAtLeast(1_000L)
-            preferences[TERMUX_WORKDIR_SERVER_ENABLED] = settings.termuxWorkdirServerEnabled
-            preferences[TERMUX_WORKDIR_SERVER_PORT] = settings.termuxWorkdirServerPort
-            preferences[TERMUX_COMMAND_MODE_ENABLED] = settings.termuxCommandModeEnabled
-            preferences[TERMUX_PTY_INTERACTIVE_ENABLED] = settings.termuxPtyInteractiveEnabled
-            preferences[TERMUX_PTY_SERVER_PORT] = settings.termuxPtyServerPort.coerceIn(1024, 65535)
-            preferences[TERMUX_PTY_YIELD_TIME_MS] = settings.termuxPtyYieldTimeMs.coerceAtLeast(0L)
-            preferences[TERMUX_PTY_MAX_OUTPUT_CHARS] = settings.termuxPtyMaxOutputChars.coerceAtLeast(256)
-            preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
-            preferences[S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
-            preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
-            settings.selectedTTSProviderId?.let {
-                preferences[SELECTED_TTS_PROVIDER] = it.toString()
-            } ?: preferences.remove(SELECTED_TTS_PROVIDER)
-            preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
-            preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
-            preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
-            preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
-            preferences[WEB_SERVER_PORT] = settings.webServerPort
-            preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
-            preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
-            preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
-            preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
-            preferences[LAUNCH_COUNT] = settings.launchCount
-            preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
-            preferences[TEXT_SELECTION_CONFIG] = JsonInstant.encodeToString(settings.textSelectionConfig)
+            preferences[MCP_SERVERS] = JsonInstant.encodeToString(normalizedSettings.mcpServers)
+            preferences[TERMUX_WORKDIR] = normalizedSettings.termuxWorkdir
+            preferences[TERMUX_NEEDS_APPROVAL] = normalizedSettings.termuxNeedsApproval
+            preferences[TERMUX_APPROVAL_BLACKLIST] = normalizedSettings.termuxApprovalBlacklist
+            preferences[TERMUX_TIMEOUT_MS] = normalizedSettings.termuxTimeoutMs.coerceAtLeast(1_000L)
+            preferences[TERMUX_WORKDIR_SERVER_ENABLED] = normalizedSettings.termuxWorkdirServerEnabled
+            preferences[TERMUX_WORKDIR_SERVER_PORT] = normalizedSettings.termuxWorkdirServerPort
+            preferences[TERMUX_COMMAND_MODE_ENABLED] = normalizedSettings.termuxCommandModeEnabled
+            preferences[TERMUX_PTY_INTERACTIVE_ENABLED] = normalizedSettings.termuxPtyInteractiveEnabled
+            preferences[TERMUX_PTY_SERVER_PORT] = normalizedSettings.termuxPtyServerPort.coerceIn(1024, 65535)
+            preferences[TERMUX_PTY_YIELD_TIME_MS] = normalizedSettings.termuxPtyYieldTimeMs.coerceAtLeast(0L)
+            preferences[TERMUX_PTY_MAX_OUTPUT_CHARS] = normalizedSettings.termuxPtyMaxOutputChars.coerceAtLeast(256)
+            preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(normalizedSettings.webDavConfig)
+            preferences[S3_CONFIG] = JsonInstant.encodeToString(normalizedSettings.s3Config)
+            preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(normalizedSettings.ttsProviders)
+            preferences[SELECTED_TTS_PROVIDER] = normalizedSettings.selectedTTSProviderId.toString()
+            preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(normalizedSettings.modeInjections)
+            preferences[LOREBOOKS] = JsonInstant.encodeToString(normalizedSettings.lorebooks)
+            preferences[GLOBAL_LOREBOOK_IDS] = JsonInstant.encodeToString(normalizedSettings.globalLorebookIds)
+            preferences[LOREBOOK_GLOBAL_SETTINGS] = JsonInstant.encodeToString(normalizedSettings.lorebookGlobalSettings)
+            preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(normalizedSettings.quickMessages)
+            preferences[GLOBAL_REGEX_ENABLED] = normalizedSettings.globalRegexEnabled
+            preferences[GLOBAL_REGEXES] = JsonInstant.encodeToString(normalizedSettings.globalRegexes)
+            preferences[REGEXES] = JsonInstant.encodeToString(normalizedSettings.regexes)
+            preferences[ST_PRESET_ENABLED] = normalizedSettings.stPresetEnabled
+            normalizedSettings.stPresetTemplate?.let {
+                preferences[ST_PRESET_TEMPLATE] = JsonInstant.encodeToString(it)
+            } ?: preferences.remove(ST_PRESET_TEMPLATE)
+            preferences[ST_PRESETS] = JsonInstant.encodeToString(normalizedSettings.stPresets)
+            normalizedSettings.selectedStPresetId?.let {
+                preferences[SELECTED_ST_PRESET] = it.toString()
+            } ?: preferences.remove(SELECTED_ST_PRESET)
+            preferences[USER_PERSONA_PROFILES] = JsonInstant.encodeToString(normalizedSettings.userPersonaProfiles)
+            normalizedSettings.selectedUserPersonaProfileId?.let {
+                preferences[SELECTED_USER_PERSONA_PROFILE] = it.toString()
+            } ?: preferences.remove(SELECTED_USER_PERSONA_PROFILE)
+            preferences[WEB_SERVER_ENABLED] = normalizedSettings.webServerEnabled
+            preferences[WEB_SERVER_PORT] = normalizedSettings.webServerPort
+            preferences[WEB_SERVER_JWT_ENABLED] = normalizedSettings.webServerJwtEnabled
+            preferences[WEB_SERVER_ACCESS_PASSWORD] = normalizedSettings.webServerAccessPassword
+            preferences[WEB_SERVER_LOCALHOST_ONLY] = normalizedSettings.webServerLocalhostOnly
+            preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(normalizedSettings.backupReminderConfig)
+            preferences[LAUNCH_COUNT] = normalizedSettings.launchCount
+            preferences[SPONSOR_ALERT_DISMISSED_AT] = normalizedSettings.sponsorAlertDismissedAt
+            preferences[TEXT_SELECTION_CONFIG] = JsonInstant.encodeToString(normalizedSettings.textSelectionConfig)
         }
     }
 
@@ -632,7 +735,19 @@ data class Settings(
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
+    val globalLorebookIds: Set<Uuid> = emptySet(),
+    val lorebookGlobalSettings: LorebookGlobalSettings = LorebookGlobalSettings(),
     val quickMessages: List<QuickMessage> = emptyList(),
+    val globalRegexEnabled: Boolean = true,
+    val globalRegexes: List<AssistantRegex> = emptyList(),
+    // Legacy cache for older builds. Active preset regexes are mirrored here during persistence.
+    val regexes: List<AssistantRegex> = emptyList(),
+    val stPresetEnabled: Boolean = false,
+    val stPresetTemplate: SillyTavernPromptTemplate? = null,
+    val stPresets: List<SillyTavernPreset> = emptyList(),
+    val selectedStPresetId: Uuid? = null,
+    val userPersonaProfiles: List<UserPersonaProfile> = emptyList(),
+    val selectedUserPersonaProfileId: Uuid? = null,
     val webServerEnabled: Boolean = false,
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,
@@ -646,6 +761,19 @@ data class Settings(
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
         fun dummy() = Settings(init = true)
+    }
+}
+
+private fun Settings.referencedLocalUserAvatarUris(): Set<String> = buildSet {
+    fun addAvatar(avatar: Avatar) {
+        if (avatar is Avatar.Image && avatar.url.startsWith("file:")) {
+            add(avatar.url)
+        }
+    }
+
+    addAvatar(displaySetting.userAvatar)
+    userPersonaProfiles.forEach { profile ->
+        addAvatar(profile.avatar)
     }
 }
 
@@ -696,6 +824,8 @@ data class DisplaySetting(
     val enableLatexRendering: Boolean = true,
     val enableBlurEffect: Boolean = false,
     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
+    val enableVolumeKeyScroll: Boolean = false,
+    val volumeKeyScrollRatio: Float = 1.0f,
 )
 
 fun DisplaySetting.shouldRenderCodeBlock(messageDepthFromEnd: Int?): Boolean {
@@ -762,9 +892,7 @@ fun Settings.getQuickMessagesOfAssistant(assistant: Assistant) =
     quickMessages.filter { it.id in assistant.quickMessageIds }
 
 fun Settings.getSelectedTTSProvider(): TTSProviderSetting? {
-    return selectedTTSProviderId?.let { id ->
-        ttsProviders.find { it.id == id }
-    } ?: ttsProviders.firstOrNull()
+    return ttsProviders.find { it.id == selectedTTSProviderId } ?: ttsProviders.firstOrNull()
 }
 
 fun Model.findProvider(providers: List<ProviderSetting>, checkOverwrite: Boolean = true): ProviderSetting? {

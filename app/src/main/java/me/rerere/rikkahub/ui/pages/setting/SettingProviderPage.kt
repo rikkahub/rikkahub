@@ -345,9 +345,7 @@ private fun ProviderEmptyState(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor,
-        ),
+        colors = CustomColors.listItemCardColors,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
     ) {
         Column(

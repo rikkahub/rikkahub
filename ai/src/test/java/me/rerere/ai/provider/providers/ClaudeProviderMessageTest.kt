@@ -1,14 +1,19 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -41,6 +46,73 @@ class ClaudeProviderMessageTest {
         )
         method.isAccessible = true
         return method.invoke(provider, messages, false) as JsonArray
+    }
+
+    private fun invokeBuildRequestBody(params: TextGenerationParams): JsonObject {
+        val method = ClaudeProvider::class.java.getDeclaredMethod(
+            "buildMessageRequest",
+            ProviderSetting.Claude::class.java,
+            List::class.java,
+            TextGenerationParams::class.java,
+            java.lang.Boolean.TYPE
+        )
+        method.isAccessible = true
+        return method.invoke(
+            provider,
+            ProviderSetting.Claude(),
+            listOf(UIMessage.user("hello")),
+            params,
+            false
+        ) as JsonObject
+    }
+
+    private fun invokeBuildRequestBody(messages: List<UIMessage>, params: TextGenerationParams): JsonObject {
+        val method = ClaudeProvider::class.java.getDeclaredMethod(
+            "buildMessageRequest",
+            ProviderSetting.Claude::class.java,
+            List::class.java,
+            TextGenerationParams::class.java,
+            java.lang.Boolean.TYPE
+        )
+        method.isAccessible = true
+        return method.invoke(
+            provider,
+            ProviderSetting.Claude(),
+            messages,
+            params,
+            false
+        ) as JsonObject
+    }
+
+    @Test
+    fun `request should keep late system messages as user content after native system prompt`() {
+        val request = invokeBuildRequestBody(
+            messages = listOf(
+                UIMessage.system("Prelude"),
+                UIMessage.user("Hello"),
+                UIMessage.system("Late System"),
+                UIMessage.assistant("Reply"),
+            ),
+            params = TextGenerationParams(model = Model(modelId = "claude-test"))
+        )
+
+        assertEquals(
+            listOf("Prelude"),
+            request["system"]!!.jsonArray.map { it.jsonObject["text"]!!.jsonPrimitive.content }
+        )
+        assertEquals(
+            listOf("user", "user", "assistant"),
+            request["messages"]!!.jsonArray.map { it.jsonObject["role"]!!.jsonPrimitive.content }
+        )
+        assertEquals(
+            "Late System",
+            request["messages"]!!.jsonArray[1]
+                .jsonObject["content"]!!.jsonArray[0]
+                .jsonObject["text"]!!.jsonPrimitive.content
+        )
+        assertFalse(
+            request["messages"]!!.jsonArray.any { it.jsonObject["role"]!!.jsonPrimitive.content == "system" }
+        )
     }
 
     @Test
@@ -346,6 +418,23 @@ class ClaudeProviderMessageTest {
             it.jsonObject["type"]?.jsonPrimitive?.content == "text"
         }?.jsonObject
         assertEquals("Hello, how are you?", textBlock?.get("text")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `claude request body should include top k when configured`() {
+        val requestBody = invokeBuildRequestBody(
+            TextGenerationParams(
+                model = Model(
+                    modelId = "claude-test",
+                    displayName = "claude-test",
+                ),
+                topK = 32,
+                stopSequences = listOf("User:", "System:"),
+            )
+        )
+
+        assertEquals("32", requestBody["top_k"]?.jsonPrimitive?.content)
+        assertEquals(listOf("User:", "System:"), requestBody["stop_sequences"]?.jsonArray?.map { it.jsonPrimitive.content })
     }
 
     // ==================== Helper Functions ====================

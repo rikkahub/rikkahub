@@ -28,12 +28,16 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
+import me.rerere.ai.provider.providers.collectLeadingSystemTextParts
+import me.rerere.ai.provider.providers.demoteSystemMessages
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
+import me.rerere.ai.provider.providers.splitLeadingSystemMessages
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -57,7 +61,10 @@ import kotlin.time.Clock
 
 private const val TAG = "ResponseAPI"
 
-class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
+class ResponseAPI(
+    private val client: OkHttpClient,
+    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
@@ -73,7 +80,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -108,7 +115,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
@@ -180,6 +187,10 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
     ): JsonObject {
         val host = providerSetting.baseUrl.toHttpUrl().host
         val capabilities = resolveResponseProviderCapabilities(host)
+        val normalizedMessages = demoteSystemMessages(
+            splitLeadingSystemMessages(messages).remainingMessages
+        )
+        val systemTextParts = collectLeadingSystemTextParts(messages)
         return buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)
@@ -190,17 +201,21 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
                 if (params.topP != null) put("top_p", params.topP)
             }
             if (params.maxTokens != null) put("max_output_tokens", params.maxTokens)
+            params.openAIVerbosity.normalizedOpenAIVerbosityOrNull()?.let { verbosity ->
+                put("text", buildJsonObject {
+                    put("verbosity", verbosity)
+                })
+            }
 
             // system instructions
-            if (messages.any { it.role == MessageRole.SYSTEM }) {
-                val parts = messages.first { it.role == MessageRole.SYSTEM }.parts
+            if (systemTextParts.isNotEmpty()) {
                 put(
                     "instructions",
-                    parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                    systemTextParts.joinToString("\n") { it.text })
             }
 
             // messages
-            put("input", buildMessages(messages))
+            put("input", buildMessages(normalizedMessages))
 
             // reasoning
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
@@ -261,7 +276,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
 
     internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
         messages
-            .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
+            .filter { it.isValidToUpload() }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
                     addAssistantItems(message)
@@ -349,7 +364,7 @@ class ResponseAPI(private val client: OkHttpClient) : OpenAIImpl {
     private fun JsonArrayBuilder.addUserItems(message: UIMessage) {
         val contentParts = message.parts.filter { it is UIMessagePart.Text || it is UIMessagePart.Image }
         if (contentParts.isNotEmpty()) {
-            addContentItem(message.role, contentParts)
+            addContentItem(MessageRole.USER, contentParts)
         }
     }
 

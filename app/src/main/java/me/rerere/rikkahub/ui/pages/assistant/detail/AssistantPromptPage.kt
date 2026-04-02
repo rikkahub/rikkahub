@@ -43,60 +43,60 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.transformers.DefaultPlaceholderProvider
-import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
-import me.rerere.rikkahub.data.ai.transformers.TransformerContext
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.export.SillyTavernCharacterCardExportData
+import me.rerere.rikkahub.data.export.SillyTavernCharacterCardPngSerializer
+import me.rerere.rikkahub.data.export.SillyTavernCharacterCardSerializer
+import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegex
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.toMessageNode
-import me.rerere.rikkahub.ui.components.message.ChatMessage
+import me.rerere.rikkahub.data.model.SillyTavernPromptItem
+import me.rerere.rikkahub.data.model.SillyTavernPromptOrderItem
+import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
+import me.rerere.rikkahub.data.model.activeStPresetRegexes
+import me.rerere.rikkahub.data.model.selectedStPreset
+import me.rerere.rikkahub.data.model.StPromptInjectionPosition
+import me.rerere.rikkahub.data.model.effectiveUserPersona
+import me.rerere.rikkahub.data.model.editableFindRegex
+import me.rerere.rikkahub.data.model.findPrompt
+import me.rerere.rikkahub.data.model.hasExplicitPromptOrder
+import me.rerere.rikkahub.data.model.resolvePromptOrder
+import me.rerere.rikkahub.data.model.sourceLabel
+import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
+import me.rerere.rikkahub.data.model.withFindRegexInput
+import me.rerere.rikkahub.data.model.withPromptOrder
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
+import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.TextArea
-import me.rerere.rikkahub.ui.hooks.rememberDebouncedTextState
+import me.rerere.rikkahub.ui.pages.extensions.RegexEditorSection
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.ui.theme.JetbrainsMono
-import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
-import me.rerere.rikkahub.ui.theme.ThemeTokenTextScaleGroup
-import me.rerere.rikkahub.ui.theme.applyThemeTokenTextScale
-import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.insertAtCursor
-import me.rerere.rikkahub.utils.onError
-import me.rerere.rikkahub.utils.onSuccess
 import org.koin.androidx.compose.koinViewModel
-import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlinx.coroutines.delay
 import kotlin.uuid.Uuid
@@ -133,7 +133,17 @@ fun AssistantPromptPage(id: String) {
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
             settings = settings,
-            onUpdate = { vm.update(it) }
+            onUpdate = { vm.update(it) },
+            onUpdateSettings = { updatedSettings, oldAssistant, newAssistant ->
+                vm.updateSettings(
+                    settings = updatedSettings,
+                    oldAssistant = oldAssistant,
+                    newAssistant = newAssistant,
+                )
+            },
+            onUpdateWithLorebooks = { updatedAssistant, lorebooks ->
+                vm.updateWithLorebooks(updatedAssistant, lorebooks)
+            },
         )
     }
 }
@@ -143,13 +153,68 @@ private fun AssistantPromptContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
     settings: Settings,
-    onUpdate: (Assistant) -> Unit
+    onUpdate: (Assistant) -> Unit,
+    onUpdateSettings: (Settings, Assistant?, Assistant?) -> Unit,
+    onUpdateWithLorebooks: (Assistant, List<me.rerere.rikkahub.data.model.Lorebook>) -> Unit,
 ) {
     val context = LocalContext.current
-    val templateTransformer = koinInject<TemplateTransformer>()
-    val themeTokens = LocalThemeTokenOverrides.current
     val latestAssistant by rememberUpdatedState(assistant)
     val latestOnUpdate by rememberUpdatedState(onUpdate)
+    val latestSettings by rememberUpdatedState(settings)
+    val latestOnUpdateSettings by rememberUpdatedState(onUpdateSettings)
+    val latestOnUpdateWithLorebooks by rememberUpdatedState(onUpdateWithLorebooks)
+    val selectedPersonaProfile = settings.selectedUserPersonaProfile()
+    val effectiveUserPersona = settings.effectiveUserPersona(assistant)
+    val activePreset = settings.selectedStPreset()
+    val linkedLorebooks = settings.lorebooks.filter { assistant.lorebookIds.contains(it.id) }
+    var showCharacterExportDialog by remember { mutableStateOf(false) }
+    var showCharacterPngExportDialog by remember { mutableStateOf(false) }
+    var pendingCharacterCardImport by remember { mutableStateOf<PendingCharacterCardImport?>(null) }
+    val characterCardExportData = remember(assistant, linkedLorebooks) {
+        SillyTavernCharacterCardExportData(
+            assistant = assistant,
+            lorebooks = linkedLorebooks,
+        )
+    }
+    val characterCardExporter = rememberExporter(
+        data = characterCardExportData,
+        serializer = SillyTavernCharacterCardSerializer,
+    )
+    val characterCardPngExporter = rememberExporter(
+        data = characterCardExportData,
+        serializer = SillyTavernCharacterCardPngSerializer,
+    )
+
+    fun applyCharacterCardImport(
+        pendingImport: PendingCharacterCardImport,
+        enableRuntime: Boolean,
+    ) {
+        val importedLorebooks = pendingImport.application.lorebooks.filter { imported ->
+            latestSettings.lorebooks.none { it.id == imported.id }
+        }
+        val nextAssistant = pendingImport.application.assistant
+        val runtimeSettings = if (enableRuntime) {
+            latestSettings.enableCharacterCardRuntime(pendingImport.runtimeTemplate)
+        } else {
+            latestSettings
+        }
+        pendingCharacterCardImport = null
+        latestOnUpdateSettings(
+            runtimeSettings.copy(
+                lorebooks = runtimeSettings.lorebooks + importedLorebooks,
+                assistants = runtimeSettings.assistants.map { existing ->
+                    if (existing.id == nextAssistant.id) {
+                        nextAssistant
+                    } else {
+                        existing
+                    }
+                },
+                globalRegexes = pendingImport.application.sharedRegexes,
+            ),
+            latestAssistant,
+            nextAssistant,
+        )
+    }
 
     Column(
         modifier = modifier
@@ -159,6 +224,147 @@ private fun AssistantPromptContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "SillyTavern 角色卡导入",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Tag(type = TagType.INFO) {
+                        Text("PNG / JSON")
+                    }
+                    Tag(type = TagType.SUCCESS) {
+                        Text("角色卡 + 世界书")
+                    }
+                    Tag(type = TagType.WARNING) {
+                        Text("可合并 Regex / 预设")
+                    }
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    PromptFeatureGuideRow(
+                        title = "导入内容",
+                        body = "支持 Tavern 角色卡 PNG / JSON，也会读取卡片里内嵌的世界书条目。",
+                    )
+                    PromptFeatureGuideRow(
+                        title = "自动合并",
+                        body = "导入得到的 lorebook 和 regex 会并入当前助手环境；若当前 ST 运行时未启用，导入时会先提示你是否要开启，不开启的话角色卡会先保存但不会参与生成。",
+                    )
+                    PromptFeatureGuideRow(
+                        title = "后续编辑",
+                        body = "角色卡基础信息留在当前助手下维护；共享 ST 预设与通用 Lorebook 仍在扩展页集中管理，角色卡 regex 则继续归当前助手维护。",
+                    )
+                }
+                AssistantImporter(
+                    allowedKinds = setOf(AssistantImportKind.CHARACTER_CARD),
+                    onImport = { payload, includeRegexes ->
+                        val pendingImport = PendingCharacterCardImport(
+                            application = applyImportedAssistantToExisting(
+                                currentAssistant = assistant,
+                                payload = payload,
+                                existingLorebooks = settings.lorebooks,
+                                existingSharedRegexes = settings.globalRegexes,
+                                includeRegexes = includeRegexes,
+                            ),
+                            runtimeTemplate = payload.characterRuntimeTemplate(),
+                        )
+                        if (latestSettings.needsCharacterCardRuntimeActivation()) {
+                            pendingCharacterCardImport = pendingImport
+                        } else {
+                            applyCharacterCardImport(
+                                pendingImport = pendingImport,
+                                enableRuntime = false,
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (
+                    activePreset != null ||
+                    assistant.stCharacterData != null ||
+                    assistant.name.isNotBlank() ||
+                    assistant.systemPrompt.isNotBlank() ||
+                    linkedLorebooks.isNotEmpty() ||
+                    assistant.regexes.isNotEmpty()
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "当前运行时映射",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        activePreset?.let { preset ->
+                            Text(
+                                text = "活动预设: ${preset.template.sourceName.ifBlank { "SillyTavern" }}${if (settings.stPresetEnabled) "" else "（提示词模板已关闭）"}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        assistant.stCharacterData?.let { character ->
+                            Text(
+                                text = "角色卡: ${character.sourceName.ifBlank { character.name.ifBlank { "SillyTavern" } }}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        if (selectedPersonaProfile != null) {
+                            Text(
+                                text = "全局 Persona: ${selectedPersonaProfile.name.ifBlank { "未命名 Persona" }}${if (effectiveUserPersona.isBlank()) "（内容为空）" else ""}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else if (effectiveUserPersona.isNotBlank()) {
+                            Text(
+                                text = "全局 Persona: 兼容回退旧助手 Persona",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Text(
+                            text = "全局 Regex ${settings.globalRegexes.size} 条，当前预设 Regex ${settings.activeStPresetRegexes().size} 条，助手 Regex ${assistant.regexes.size} 条，关联世界书 ${linkedLorebooks.size} 本。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (assistant.stCharacterData != null) {
+                                TextButton(
+                                    onClick = {
+                                        latestOnUpdate(
+                                            latestAssistant.copy(
+                                                stCharacterData = null
+                                            )
+                                        )
+                                    }
+                                ) {
+                                    Text("清除角色卡信息")
+                                }
+                            }
+                            TextButton(
+                                onClick = { showCharacterExportDialog = true }
+                            ) {
+                                Text("导出角色卡 JSON")
+                            }
+                            TextButton(
+                                onClick = { showCharacterPngExportDialog = true }
+                            ) {
+                                Text("导出角色卡 PNG")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
@@ -255,132 +461,6 @@ private fun AssistantPromptContent(
                                 Text(": {{$k}}")
                             }
                         }
-                    }
-                }
-            }
-        }
-
-        Card(
-            colors = CustomColors.cardColorsOnSurfaceContainer
-        ) {
-            val messageTemplateState = rememberDebouncedTextState(
-                value = assistant.messageTemplate,
-                onDebouncedValueChange = { value ->
-                    latestOnUpdate(
-                        latestAssistant.copy(
-                            messageTemplate = value
-                        )
-                    )
-                }
-            )
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_message_template))
-                },
-                content = {
-                    OutlinedTextField(
-                        value = messageTemplateState.value,
-                        onValueChange = { messageTemplateState.value = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 5,
-                        maxLines = 15,
-                        textStyle = themeTokens.applyThemeTokenTextScale(
-                            style = TextStyle(
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                fontFamily = JetbrainsMono,
-                            ),
-                            group = ThemeTokenTextScaleGroup.BODY,
-                        ).copy(
-                            fontFamily = JetbrainsMono,
-                        )
-                    )
-                },
-                description = {
-                    Text(stringResource(R.string.assistant_page_message_template_desc))
-                    Text(buildAnnotatedString {
-                        append(stringResource(R.string.assistant_page_template_variables_label))
-                        append(" ")
-                        append(stringResource(R.string.assistant_page_template_variable_role))
-                        append(": ")
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                            append("{{ role }}")
-                        }
-                        append(", ")
-                        append(stringResource(R.string.assistant_page_template_variable_message))
-                        append(": ")
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                            append("{{ message }}")
-                        }
-                        append(", ")
-                        append(stringResource(R.string.assistant_page_template_variable_time))
-                        append(": ")
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                            append("{{ time }}")
-                        }
-                        append(", ")
-                        append(stringResource(R.string.assistant_page_template_variable_date))
-                        append(": ")
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                            append("{{ date }}")
-                        }
-                    })
-                }
-            )
-            Column(
-                modifier = Modifier
-                    .padding(8.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(8.dp)
-                    .fillMaxWidth()
-            ) {
-                Text(
-                    text = stringResource(R.string.assistant_page_template_preview),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                val rawMessages = listOf(
-                    UIMessage.user("你好啊"),
-                    UIMessage.assistant("你好，有什么我可以帮你的吗？"),
-                )
-                val preview by produceState<UiState<List<UIMessage>>>(
-                    UiState.Success(rawMessages),
-                    assistant
-                ) {
-                    value = runCatching {
-                        UiState.Success(
-                            templateTransformer.transform(
-                                ctx = TransformerContext(
-                                    context = context,
-                                    model = Model(modelId = "gpt-4o", displayName = "GPT-4o"),
-                                    assistant = assistant,
-                                    settings = settings
-                                ),
-                                messages = rawMessages
-                            )
-                        )
-                    }.getOrElse {
-                        UiState.Error(it)
-                    }
-                }
-                preview.onError {
-                    Text(
-                        text = it.message ?: it.javaClass.name,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                preview.onSuccess {
-                    it.fastForEach { message ->
-                        ChatMessage(
-                            node = message.toMessageNode(),
-                            onFork = {},
-                            onRegenerate = {},
-                            onEdit = {},
-                            onShare = {},
-                            onDelete = {},
-                            onUpdate = {},
-                        )
                     }
                 }
             }
@@ -488,46 +568,84 @@ private fun AssistantPromptContent(
             }
         }
 
-        Card(
-            colors = CustomColors.cardColorsOnSurfaceContainer
-        ) {
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_regex_title))
-                },
-                description = {
-                    Text(stringResource(R.string.assistant_page_regex_desc))
-                }
-            )
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(horizontal = 8.dp)
+        Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                assistant.regexes.fastForEachIndexed { index, regex ->
-                    AssistantRegexCard(
-                        regex = regex,
-                        onUpdate = onUpdate,
-                        assistant = assistant,
-                        index = index
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "角色 Regex 开关",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = if (assistant.regexEnabled) {
+                            "当前助手的 ${assistant.regexes.size} 条 Regex 会参与运行时处理。"
+                        } else {
+                            "当前助手的 Regex 已整体停用，列表会保留但不会参与匹配。"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Button(
-                    onClick = {
-                        onUpdate(
-                            assistant.copy(
-                                regexes = assistant.regexes + AssistantRegex(
-                                    id = Uuid.random()
-                                )
-                            )
-                        )
+                Switch(
+                    checked = assistant.regexEnabled,
+                    onCheckedChange = { enabled ->
+                        onUpdate(assistant.copy(regexEnabled = enabled))
                     },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(HugeIcons.Add01, null)
-                }
+                )
             }
         }
+
+        RegexEditorSection(
+            regexes = assistant.regexes,
+            onUpdate = { regexes ->
+                onUpdate(
+                    assistant.copy(regexes = regexes)
+                )
+            },
+            title = "助手级 Regex",
+            description = "仅对当前助手生效。适合角色卡自带的格式化、美化和卡片专属规则。",
+        )
+    }
+
+    pendingCharacterCardImport?.let { pendingImport ->
+        CharacterCardRuntimeActivationDialog(
+            onConfirm = {
+                applyCharacterCardImport(
+                    pendingImport = pendingImport,
+                    enableRuntime = true,
+                )
+            },
+            onDismiss = {
+                applyCharacterCardImport(
+                    pendingImport = pendingImport,
+                    enableRuntime = false,
+                )
+            },
+        )
+    }
+
+    if (showCharacterExportDialog) {
+        ExportDialog(
+            exporter = characterCardExporter,
+            title = "导出 ST 角色卡",
+            onDismiss = { showCharacterExportDialog = false }
+        )
+    }
+
+    if (showCharacterPngExportDialog) {
+        ExportDialog(
+            exporter = characterCardPngExporter,
+            title = "导出 ST PNG 角色卡",
+            onDismiss = { showCharacterPngExportDialog = false }
+        )
     }
 }
 
@@ -553,14 +671,27 @@ private fun AssistantRegexCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = regex.name,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .widthIn(max = 200.dp)
-                )
+                        .widthIn(max = 200.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = regex.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    regex.sourceLabel()?.let { sourceLabel ->
+                        Text(
+                            text = sourceLabel,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
                 Switch(
                     checked = regex.enabled,
                     onCheckedChange = { enabled ->
@@ -612,13 +743,13 @@ private fun AssistantRegexCard(
                 )
 
                 OutlinedTextField(
-                    value = regex.findRegex,
+                    value = regex.editableFindRegex(),
                     onValueChange = { findRegex ->
                         onUpdate(
                             assistant.copy(
                                 regexes = assistant.regexes.mapIndexed { i, reg ->
                                     if (i == index) {
-                                        reg.copy(findRegex = findRegex.trim())
+                                        reg.withFindRegexInput(findRegex)
                                     } else {
                                         reg
                                     }
@@ -829,5 +960,26 @@ private fun AssistantRegexCard(
                 }
             }
         }
+    }
+
+}
+
+@Composable
+private fun PromptFeatureGuideRow(
+    title: String,
+    body: String,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

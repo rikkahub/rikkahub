@@ -1,14 +1,6 @@
 package me.rerere.rikkahub.ui.pages.chat
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Tick01
-import me.rerere.hugeicons.stroke.ArrowDown01
-import me.rerere.hugeicons.stroke.ArrowUp01
-import me.rerere.hugeicons.stroke.ArrowDownDouble
-import me.rerere.hugeicons.stroke.ArrowUpDouble
-import me.rerere.hugeicons.stroke.CursorPointer01
-import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Cancel01
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -22,6 +14,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -55,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -86,6 +80,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowDownDouble
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.ArrowUpDouble
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.CursorPointer01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxUserShellCommandCodec
 import me.rerere.rikkahub.data.datastore.Settings
@@ -132,6 +135,7 @@ fun ChatList(
     onDismissError: (Uuid) -> Unit = {},
     onClearAllErrors: () -> Unit = {},
     onRegenerate: (UIMessage) -> Unit = {},
+    onContinue: (UIMessage) -> Unit = {},
     onEdit: (UIMessage) -> Unit = {},
     onForkMessage: (UIMessage) -> Unit = {},
     onDelete: (UIMessage) -> Unit = {},
@@ -173,6 +177,7 @@ fun ChatList(
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
                 onRegenerate = onRegenerate,
+                onContinue = onContinue,
                 onEdit = onEdit,
                 onForkMessage = onForkMessage,
                 onDelete = onDelete,
@@ -202,6 +207,7 @@ private fun ChatListNormal(
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
     onRegenerate: (UIMessage) -> Unit,
+    onContinue: (UIMessage) -> Unit,
     onEdit: (UIMessage) -> Unit,
     onForkMessage: (UIMessage) -> Unit,
     onDelete: (UIMessage) -> Unit,
@@ -218,6 +224,7 @@ private fun ChatListNormal(
     val scope = rememberCoroutineScope()
     var isRecentScroll by remember { mutableStateOf(false) }
     val density = LocalDensity.current
+    val activity = LocalActivity.current as? me.rerere.rikkahub.RouteActivity
     val enableGlassBlur = settings.displaySetting.enableBlurEffect
     val assistant = remember(settings.assistants, conversation.assistantId) {
         settings.getAssistantById(conversation.assistantId)
@@ -238,6 +245,34 @@ private fun ChatListNormal(
             val lastPos = lastItem.offset + lastItem.size
             val inputPos = state.layoutInfo.viewportEndOffset - inputBarHeight.roundToInt()
             lastPos <= inputPos - 8
+        }
+    }
+    DisposableEffect(
+        activity,
+        state,
+        density,
+        innerPadding,
+        settings.displaySetting.enableVolumeKeyScroll,
+        settings.displaySetting.volumeKeyScrollRatio,
+    ) {
+        val listener: (Boolean) -> Boolean = { isVolumeUp ->
+            if (settings.displaySetting.enableVolumeKeyScroll) {
+                val bottomPaddingPx = with(density) {
+                    (32.dp + innerPadding.calculateBottomPadding()).toPx()
+                }
+                val scrollAmount = (state.layoutInfo.viewportSize.height - bottomPaddingPx) *
+                    settings.displaySetting.volumeKeyScrollRatio
+                scope.launch {
+                    state.scrollBy(if (isVolumeUp) -scrollAmount else scrollAmount)
+                }
+                true
+            } else {
+                false
+            }
+        }
+        activity?.volumeKeyListeners?.add(listener)
+        onDispose {
+            activity?.volumeKeyListeners?.remove(listener)
         }
     }
 
@@ -349,6 +384,9 @@ private fun ChatListNormal(
                             loading = loading && index == conversation.messageNodes.lastIndex,
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)
+                            },
+                            onContinue = {
+                                onContinue(node.currentMessage)
                             },
                             onEdit = {
                                 onEdit(node.currentMessage)

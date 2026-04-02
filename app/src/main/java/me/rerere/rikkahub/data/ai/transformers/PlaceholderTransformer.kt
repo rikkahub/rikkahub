@@ -13,6 +13,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.effectiveUserName
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import java.time.LocalDate
@@ -101,7 +102,7 @@ object DefaultPlaceholderProvider : PlaceholderProvider {
         }
 
         placeholder("nickname", { Text(stringResource(R.string.placeholder_nickname)) }) {
-            it.settingsStore.settingsFlow.value.displaySetting.userNickname.ifBlank { "user" }
+            it.settingsStore.settingsFlow.value.effectiveUserName().ifBlank { "user" }
         }
 
         placeholder("char", { Text(stringResource(R.string.placeholder_char)) }) {
@@ -109,7 +110,7 @@ object DefaultPlaceholderProvider : PlaceholderProvider {
         }
 
         placeholder("user", { Text(stringResource(R.string.placeholder_user)) }) {
-            it.settingsStore.settingsFlow.value.displaySetting.userNickname.ifBlank { "user" }
+            it.settingsStore.settingsFlow.value.effectiveUserName().ifBlank { "user" }
         }
     }
 

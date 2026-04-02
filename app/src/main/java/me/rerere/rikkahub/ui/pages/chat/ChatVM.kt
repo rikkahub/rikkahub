@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
@@ -32,11 +31,10 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.model.resolveStSendIfEmptyContent
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
-import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
@@ -64,7 +62,6 @@ class ChatVM(
     private val chatService: ChatService,
     val updateChecker: UpdateChecker,
     private val analytics: FirebaseAnalytics,
-    private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
@@ -199,20 +196,7 @@ class ChatVM(
     // 更新设置
     fun updateSettings(newSettings: Settings) {
         viewModelScope.launch {
-            val oldSettings = settings.value
-            // 检查用户头像是否有变化，如果有则删除旧头像
-            checkUserAvatarDelete(oldSettings, newSettings)
             settingsStore.update(newSettings)
-        }
-    }
-
-    // 检查用户头像删除
-    private fun checkUserAvatarDelete(oldSettings: Settings, newSettings: Settings) {
-        val oldAvatar = oldSettings.displaySetting.userAvatar
-        val newAvatar = newSettings.displaySetting.userAvatar
-
-        if (oldAvatar is Avatar.Image && oldAvatar != newAvatar) {
-            filesManager.deleteChatFiles(listOf(oldAvatar.url.toUri()))
         }
     }
 
@@ -249,12 +233,20 @@ class ChatVM(
         answer: Boolean = true,
         forceTermuxCommandMode: Boolean = false,
     ) {
-        if (content.isEmptyInputMessage()) return
+        val resolvedContent = if (forceTermuxCommandMode) {
+            if (content.isEmptyInputMessage()) return
+            content
+        } else {
+            settingsStore.settingsFlow.value.resolveStSendIfEmptyContent(
+                content = content,
+                answer = answer,
+            ) ?: return
+        }
         analytics.logEvent("ai_send_message", null)
 
         chatService.sendMessage(
             conversationId = _conversationId,
-            content = content,
+            content = resolvedContent,
             answer = answer,
             forceTermuxCommandMode = forceTermuxCommandMode
         )
@@ -299,9 +291,23 @@ class ChatVM(
         }
     }
 
+    fun selectMessageNode(nodeId: Uuid, selectIndex: Int) {
+        viewModelScope.launch {
+            chatService.selectMessageNode(_conversationId, nodeId, selectIndex)
+        }
+    }
+
+    fun showEditBlockedWhileGeneratingError() {
+        showHistoryMutationBlockedWhileGeneratingError("请先停止生成再编辑消息")
+    }
+
     fun showDeleteBlockedWhileGeneratingError() {
+        showHistoryMutationBlockedWhileGeneratingError("请先停止生成再删除消息")
+    }
+
+    private fun showHistoryMutationBlockedWhileGeneratingError(message: String) {
         chatService.addError(
-            error = IllegalStateException("请先停止生成再删除消息"),
+            error = IllegalStateException(message),
             conversationId = _conversationId
         )
     }
@@ -312,6 +318,11 @@ class ChatVM(
     ) {
         analytics.logEvent("ai_regenerate_at_message", null)
         chatService.regenerateAtMessage(_conversationId, message, regenerateAssistantMsg)
+    }
+
+    fun continueAssistantMessage(message: UIMessage) {
+        analytics.logEvent("ai_continue_at_message", null)
+        chatService.continueAssistantMessage(_conversationId, message)
     }
 
     fun handleToolApproval(

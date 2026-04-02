@@ -1,5 +1,6 @@
 package me.rerere.ai.provider.providers
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -34,6 +35,10 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.openai.normalizedSeedOrNull
+import me.rerere.ai.provider.providers.openai.normalizedTopKOrNull
+import me.rerere.ai.provider.providers.normalizedNonBlankOrNull
+import me.rerere.ai.provider.providers.normalizedStopSequencesOrNull
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.ImageAspectRatio
@@ -70,8 +75,8 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
 
-class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSetting.Google> {
-    private val keyRoulette = KeyRoulette.default()
+class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
+    private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
     }
@@ -97,7 +102,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 .addHeader("Authorization", "Bearer $accessToken")
                 .build()
         } else {
-            val key = keyRoulette.next(providerSetting.apiKey)
+            val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
             request.newBuilder()
                 .addHeader("x-goog-api-key", key)
                 .build()
@@ -318,154 +323,172 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
     private fun buildCompletionRequestBody(
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): JsonObject = buildJsonObject {
-        // System message if available
-        val systemMessage = messages.firstOrNull { it.role == MessageRole.SYSTEM }
-        if (systemMessage != null && !params.model.outputModalities.contains(Modality.IMAGE)) {
-            put("systemInstruction", buildJsonObject {
-                putJsonArray("parts") {
-                    add(buildJsonObject {
-                        put(
-                            "text",
-                            systemMessage.parts.filterIsInstance<UIMessagePart.Text>()
-                                .joinToString { it.text })
-                    })
-                }
-            })
+    ): JsonObject {
+        val leadingSystemMessages = splitLeadingSystemMessages(messages)
+        val isImageRequest = params.model.outputModalities.contains(Modality.IMAGE)
+        val normalizedMessages = if (isImageRequest) {
+            demoteSystemMessages(messages)
+        } else {
+            demoteSystemMessages(leadingSystemMessages.remainingMessages)
         }
-
-        // Generation config
-        put("generationConfig", buildJsonObject {
-            if (params.temperature != null) put("temperature", params.temperature)
-            if (params.topP != null) put("topP", params.topP)
-            if (params.maxTokens != null) put("maxOutputTokens", params.maxTokens)
-            if (params.model.outputModalities.contains(Modality.IMAGE)) {
-                put("responseModalities", buildJsonArray {
-                    add(JsonPrimitive("TEXT"))
-                    add(JsonPrimitive("IMAGE"))
+        val systemTextParts = leadingSystemMessages.systemMessages
+            .flatMap { message -> message.parts.filterIsInstance<UIMessagePart.Text>() }
+        return buildJsonObject {
+            // System message if available
+            if (systemTextParts.isNotEmpty() && !isImageRequest) {
+                put("systemInstruction", buildJsonObject {
+                    putJsonArray("parts") {
+                        systemTextParts.forEach { part ->
+                            add(buildJsonObject {
+                                put("text", part.text)
+                            })
+                        }
+                    }
                 })
             }
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
-                put("thinkingConfig", buildJsonObject {
-                    put("includeThoughts", true)
 
-                    val isGeminiPro =
-                        params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
+            // Generation config
+            put("generationConfig", buildJsonObject {
+                if (params.temperature != null) put("temperature", params.temperature)
+                if (params.topP != null) put("topP", params.topP)
+                params.topK.normalizedTopKOrNull()?.let { put("topK", it) }
+                if (params.presencePenalty != null) put("presencePenalty", params.presencePenalty)
+                if (params.frequencyPenalty != null) put("frequencyPenalty", params.frequencyPenalty)
+                params.seed.normalizedSeedOrNull()?.let { put("seed", it) }
+                params.stopSequences.normalizedStopSequencesOrNull()?.let { stopSequences ->
+                    put("stopSequences", json.encodeToJsonElement(stopSequences))
+                }
+                params.googleResponseMimeType.normalizedNonBlankOrNull()?.let { put("responseMimeType", it) }
+                if (params.maxTokens != null) put("maxOutputTokens", params.maxTokens)
+                if (isImageRequest) {
+                    put("responseModalities", buildJsonArray {
+                        add(JsonPrimitive("TEXT"))
+                        add(JsonPrimitive("IMAGE"))
+                    })
+                }
+                if (params.model.abilities.contains(ModelAbility.REASONING)) {
+                    put("thinkingConfig", buildJsonObject {
+                        put("includeThoughts", true)
 
-                    when (params.thinkingBudget) {
-                        null, -1 -> {} // 如果是自动，不设置thinkingBudget参数
+                        val isGeminiPro =
+                            params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
 
-                        0 -> {
-                            // disable thinking if not gemini pro
-                            if (!isGeminiPro) {
-                                put("thinkingBudget", 0)
-                                put("includeThoughts", false)
-                            }
-                        }
+                        when (params.thinkingBudget) {
+                            null, -1 -> {} // 如果是自动，不设置thinkingBudget参数
 
-                        else -> {
-                            if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
-                                when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
-                                    ReasoningLevel.HIGH -> put("thinkingLevel", "high")
-                                    ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
-                                    ReasoningLevel.LOW -> put("thinkingLevel", "low")
-                                    else -> error("Unknown reasoning level: $level")
+                            0 -> {
+                                // disable thinking if not gemini pro
+                                if (!isGeminiPro) {
+                                    put("thinkingBudget", 0)
+                                    put("includeThoughts", false)
                                 }
-                            } else {
-                                put("thinkingBudget", params.thinkingBudget)
+                            }
+
+                            else -> {
+                                if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
+                                    when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
+                                        ReasoningLevel.HIGH -> put("thinkingLevel", "high")
+                                        ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
+                                        ReasoningLevel.LOW -> put("thinkingLevel", "low")
+                                        else -> error("Unknown reasoning level: $level")
+                                    }
+                                } else {
+                                    put("thinkingBudget", params.thinkingBudget)
+                                }
+                            }
+                        }
+                    })
+                }
+            })
+
+            // Contents (user messages)
+            put(
+                "contents",
+                buildContents(normalizedMessages)
+            )
+
+            // Tools
+            if (params.tools.isNotEmpty() && params.model.abilities.contains(ModelAbility.TOOL)) {
+                put("tools", buildJsonArray {
+                    add(buildJsonObject {
+                        put("functionDeclarations", buildJsonArray {
+                            params.tools.forEach { tool ->
+                                add(buildJsonObject {
+                                    put("name", JsonPrimitive(tool.name))
+                                    put("description", JsonPrimitive(tool.description))
+                                    put(
+                                        key = "parameters",
+                                        element = json.encodeToJsonElement(tool.parameters())
+                                            .removeElements(
+                                                listOf(
+                                                    "const",
+                                                    "exclusiveMaximum",
+                                                    "exclusiveMinimum",
+                                                    "format",
+                                                    "additionalProperties",
+                                                    "enum",
+                                                )
+                                            )
+                                    )
+                                })
+                            }
+                        })
+                    })
+                })
+            }
+            // Model BuiltIn Tools
+            // 目前不能和工具调用兼容
+            if (params.model.tools.isNotEmpty()) {
+                put("tools", buildJsonArray {
+                    params.model.tools.forEach { builtInTool ->
+                        when (builtInTool) {
+                            BuiltInTools.Search -> {
+                                add(buildJsonObject {
+                                    put("googleSearch", buildJsonObject {})
+                                })
+                            }
+
+                            BuiltInTools.UrlContext -> {
+                                add(buildJsonObject {
+                                    put("urlContext", buildJsonObject {})
+                                })
                             }
                         }
                     }
                 })
             }
-        })
 
-        // Contents (user messages)
-        put(
-            "contents",
-            buildContents(messages)
-        )
-
-        // Tools
-        if (params.tools.isNotEmpty() && params.model.abilities.contains(ModelAbility.TOOL)) {
-            put("tools", buildJsonArray {
+            // Safety Settings
+            putJsonArray("safetySettings") {
                 add(buildJsonObject {
-                    put("functionDeclarations", buildJsonArray {
-                        params.tools.forEach { tool ->
-                            add(buildJsonObject {
-                                put("name", JsonPrimitive(tool.name))
-                                put("description", JsonPrimitive(tool.description))
-                                put(
-                                    key = "parameters",
-                                    element = json.encodeToJsonElement(tool.parameters())
-                                        .removeElements(
-                                            listOf(
-                                                "const",
-                                                "exclusiveMaximum",
-                                                "exclusiveMinimum",
-                                                "format",
-                                                "additionalProperties",
-                                                "enum",
-                                            )
-                                        )
-                                )
-                            })
-                        }
-                    })
+                    put("category", "HARM_CATEGORY_HARASSMENT")
+                    put("threshold", "OFF")
                 })
-            })
+                add(buildJsonObject {
+                    put("category", "HARM_CATEGORY_HATE_SPEECH")
+                    put("threshold", "OFF")
+                })
+                add(buildJsonObject {
+                    put("category", "HARM_CATEGORY_SEXUALLY_EXPLICIT")
+                    put("threshold", "OFF")
+                })
+                add(buildJsonObject {
+                    put("category", "HARM_CATEGORY_DANGEROUS_CONTENT")
+                    put("threshold", "OFF")
+                })
+                add(buildJsonObject {
+                    put("category", "HARM_CATEGORY_CIVIC_INTEGRITY")
+                    put("threshold", "OFF")
+                })
+            }
         }
-        // Model BuiltIn Tools
-        // 目前不能和工具调用兼容
-        if (params.model.tools.isNotEmpty()) {
-            put("tools", buildJsonArray {
-                params.model.tools.forEach { builtInTool ->
-                    when (builtInTool) {
-                        BuiltInTools.Search -> {
-                            add(buildJsonObject {
-                                put("googleSearch", buildJsonObject {})
-                            })
-                        }
-
-                        BuiltInTools.UrlContext -> {
-                            add(buildJsonObject {
-                                put("urlContext", buildJsonObject {})
-                            })
-                        }
-                    }
-                }
-            })
-        }
-
-        // Safety Settings
-        putJsonArray("safetySettings") {
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_HARASSMENT")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_HATE_SPEECH")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_SEXUALLY_EXPLICIT")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_DANGEROUS_CONTENT")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_CIVIC_INTEGRITY")
-                put("threshold", "OFF")
-            })
-        }
-    }.mergeCustomBody(params.customBody)
+            .mergeCustomBody(params.customBody)
+    }
 
     private fun commonRoleToGoogleRole(role: MessageRole): String {
         return when (role) {
             MessageRole.USER -> "user"
-            MessageRole.SYSTEM -> "system"
+            MessageRole.SYSTEM -> "user"
             MessageRole.ASSISTANT -> "model"
             MessageRole.TOOL -> "user" // google api中, tool结果是用户role发送的
         }
@@ -572,7 +595,7 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
     private fun buildContents(messages: List<UIMessage>): JsonArray {
         return buildJsonArray {
             messages
-                .filter { it.role != MessageRole.SYSTEM && it.isValidToUpload() }
+                .filter { it.isValidToUpload() }
                 .forEach { message ->
                     if (message.role == MessageRole.ASSISTANT) {
                         addModelMessage(message)

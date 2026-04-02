@@ -26,6 +26,7 @@ private val JS_SET_PROPERTY_MIN_HEIGHT_REGEX =
 private val VH_VALUE_REGEX = Regex("""(\d+(?:\.\d+)?)vh\b""", RegexOption.IGNORE_CASE)
 
 internal const val CODE_BLOCK_HEIGHT_BRIDGE_NAME = "RikkaHubCodeBlockBridge"
+internal const val CODE_BLOCK_ACTION_BRIDGE_NAME = "RikkaHubChatActionBridge"
 
 internal enum class CodeBlockRenderScrollMode {
     AUTO_HEIGHT,
@@ -330,6 +331,1188 @@ internal object CodeBlockRenderResolver {
         return """
             <script>
             (function() {
+              function getActionBridge() {
+                return window.$CODE_BLOCK_ACTION_BRIDGE_NAME;
+              }
+
+              function getDraftText() {
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.getDraftText === 'function') {
+                    return String(bridge.getDraftText() || '');
+                  }
+                } catch (_err) {}
+                return window.__RH_CHAT_DRAFT__ || '';
+              }
+
+              function setDraftText(value) {
+                var nextValue = String(value || '');
+                window.__RH_CHAT_DRAFT__ = nextValue;
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.setDraftText === 'function') {
+                    bridge.setDraftText(nextValue);
+                  }
+                } catch (_err) {}
+                return nextValue;
+              }
+
+              function appendDraftText(value) {
+                var text = String(value || '');
+                if (!text) return getDraftText();
+                var nextValue = getDraftText() + text;
+                window.__RH_CHAT_DRAFT__ = nextValue;
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.appendDraftText === 'function') {
+                    bridge.appendDraftText(text);
+                    return nextValue;
+                  }
+                } catch (_err) {}
+                return setDraftText(nextValue);
+              }
+
+              function sendCurrentDraft(answer) {
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.sendCurrentDraft === 'function') {
+                    bridge.sendCurrentDraft(answer !== false);
+                  }
+                } catch (_err) {}
+              }
+
+              function sendTextNow(text, answer) {
+                var nextValue = String(text || '');
+                window.__RH_CHAT_DRAFT__ = nextValue;
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.sendText === 'function') {
+                    bridge.sendText(nextValue, answer !== false);
+                    return;
+                  }
+                } catch (_err) {}
+                setDraftText(nextValue);
+                sendCurrentDraft(answer);
+              }
+
+              function getHistorySnapshotRaw() {
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.getHistorySnapshot === 'function') {
+                    return String(bridge.getHistorySnapshot() || '');
+                  }
+                } catch (_err) {}
+                return window.__RH_HISTORY_SNAPSHOT_RAW__ || '';
+              }
+
+              function normalizeHistoryMessage(message, index, userName, assistantName) {
+                var role = String(message && message.role || '').toLowerCase();
+                var swipes = Array.isArray(message && message.swipes)
+                  ? message.swipes.map(function(item) { return String(item || ''); })
+                  : [];
+                var swipeIndex = Number(message && message.swipeIndex);
+                if (!Number.isFinite(swipeIndex) || swipeIndex < 0) {
+                  swipeIndex = 0;
+                }
+                var fallbackText = String(message && message.text || '');
+                if (!swipes.length) {
+                  swipes = [fallbackText];
+                }
+                if (swipeIndex >= swipes.length) {
+                  swipeIndex = swipes.length - 1;
+                }
+                if (swipeIndex < 0) {
+                  swipeIndex = 0;
+                }
+                var text = String(message && message.text != null ? message.text : swipes[swipeIndex] || '');
+                if (!text && swipes.length) {
+                  text = swipes[swipeIndex] || '';
+                }
+                var name = String(message && message.name || '');
+                if (!name) {
+                  if (role === 'assistant') {
+                    name = assistantName;
+                  } else if (role === 'user') {
+                    name = userName;
+                  } else if (role === 'system') {
+                    name = 'System';
+                  } else {
+                    name = 'Tool';
+                  }
+                }
+                return {
+                  index: index,
+                  nodeId: String(message && message.nodeId || ''),
+                  messageId: String(message && message.messageId || ''),
+                  role: role || 'user',
+                  name: name,
+                  text: text,
+                  swipeIndex: swipeIndex,
+                  swipes: swipes.slice(),
+                };
+              }
+
+              function reindexHistoryMessages(messages) {
+                messages.forEach(function(message, index) {
+                  message.index = index;
+                });
+                return messages;
+              }
+
+              function loadHistorySnapshot(force) {
+                if (!force && window.__RH_HISTORY_SNAPSHOT__) {
+                  return window.__RH_HISTORY_SNAPSHOT__;
+                }
+                var parsed = null;
+                try {
+                  parsed = JSON.parse(getHistorySnapshotRaw() || '{}');
+                } catch (_err) {}
+                if (!parsed || typeof parsed !== 'object') {
+                  parsed = {};
+                }
+                var userName = String(parsed.userName || 'User');
+                var assistantName = String(parsed.assistantName || 'Assistant');
+                var rawMessages = Array.isArray(parsed.messages) ? parsed.messages : [];
+                var normalizedMessages = rawMessages.map(function(message, index) {
+                  return normalizeHistoryMessage(message, index, userName, assistantName);
+                });
+                var snapshot = {
+                  conversationId: String(parsed.conversationId || ''),
+                  userName: userName,
+                  assistantName: assistantName,
+                  messages: reindexHistoryMessages(normalizedMessages),
+                };
+                window.__RH_HISTORY_SNAPSHOT__ = snapshot;
+                if (!window.__RH_HISTORY_EDIT_BUFFERS__) {
+                  window.__RH_HISTORY_EDIT_BUFFERS__ = {};
+                }
+                return snapshot;
+              }
+
+              function findHistoryMessageByNodeId(nodeId) {
+                var key = String(nodeId || '');
+                if (!key) return null;
+                var messages = loadHistorySnapshot(false).messages;
+                for (var i = 0; i < messages.length; i++) {
+                  if (messages[i].nodeId === key) {
+                    return messages[i];
+                  }
+                }
+                return null;
+              }
+
+              function findHistoryMessageByMesId(mesId) {
+                var index = Number(mesId);
+                if (!Number.isFinite(index)) return null;
+                var messages = loadHistorySnapshot(false).messages;
+                return messages[index] || null;
+              }
+
+              function getHistoryEditBuffers() {
+                if (!window.__RH_HISTORY_EDIT_BUFFERS__) {
+                  window.__RH_HISTORY_EDIT_BUFFERS__ = {};
+                }
+                return window.__RH_HISTORY_EDIT_BUFFERS__;
+              }
+
+              function isHistoryEditing(entry) {
+                if (!entry || !entry.nodeId) return false;
+                return !!getHistoryEditBuffers()[entry.nodeId];
+              }
+
+              function beginHistoryEdit(entry) {
+                if (!entry || !entry.nodeId) return null;
+                getHistoryEditBuffers()[entry.nodeId] = {
+                  text: entry.text,
+                };
+                return entry;
+              }
+
+              function clearHistoryEdit(entry) {
+                if (!entry || !entry.nodeId) return;
+                delete getHistoryEditBuffers()[entry.nodeId];
+              }
+
+              function getHistoryEditableText(entry) {
+                if (!entry) return '';
+                var buffer = entry.nodeId ? getHistoryEditBuffers()[entry.nodeId] : null;
+                return String(buffer && buffer.text != null ? buffer.text : entry.text || '');
+              }
+
+              function setHistoryEditableText(entry, value) {
+                if (!entry || !entry.nodeId) return '';
+                getHistoryEditBuffers()[entry.nodeId] = {
+                  text: String(value == null ? '' : value),
+                };
+                return getHistoryEditableText(entry);
+              }
+
+              function editHistoryMessage(nodeId, text) {
+                var entry = findHistoryMessageByNodeId(nodeId);
+                if (!entry) return false;
+                var nextText = String(text == null ? '' : text);
+                entry.text = nextText;
+                if (!Array.isArray(entry.swipes) || !entry.swipes.length) {
+                  entry.swipes = [nextText];
+                }
+                entry.swipes[entry.swipeIndex] = nextText;
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.editHistoryMessage === 'function') {
+                    bridge.editHistoryMessage(entry.nodeId, nextText);
+                  }
+                } catch (_err) {}
+                syncCompatContextFromHistory();
+                return true;
+              }
+
+              function commitHistoryEdit(entry) {
+                if (!entry) return false;
+                var nextText = getHistoryEditableText(entry);
+                clearHistoryEdit(entry);
+                return editHistoryMessage(entry.nodeId, nextText);
+              }
+
+              function deleteHistoryMessage(nodeId) {
+                var state = loadHistorySnapshot(false);
+                var nextMessages = state.messages.filter(function(message) {
+                  return message.nodeId !== String(nodeId || '');
+                });
+                if (nextMessages.length === state.messages.length) {
+                  return false;
+                }
+                state.messages = reindexHistoryMessages(nextMessages);
+                clearHistoryEdit({ nodeId: String(nodeId || '') });
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.deleteHistoryMessage === 'function') {
+                    bridge.deleteHistoryMessage(String(nodeId || ''));
+                  }
+                } catch (_err) {}
+                syncCompatContextFromHistory();
+                return true;
+              }
+
+              function selectHistoryMessageNode(nodeId, selectIndex) {
+                var entry = findHistoryMessageByNodeId(nodeId);
+                if (!entry) return false;
+                var nextIndex = Number(selectIndex);
+                if (!Number.isFinite(nextIndex)) return false;
+                nextIndex = Math.max(0, Math.min(entry.swipes.length - 1, nextIndex));
+                entry.swipeIndex = nextIndex;
+                entry.text = entry.swipes[nextIndex] || '';
+                clearHistoryEdit(entry);
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.selectHistoryMessageNode === 'function') {
+                    bridge.selectHistoryMessageNode(entry.nodeId, nextIndex);
+                  }
+                } catch (_err) {}
+                syncCompatContextFromHistory();
+                return true;
+              }
+
+              function regenerateHistoryMessage(nodeId, regenerateAssistantMessage) {
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.regenerateHistoryMessage === 'function') {
+                    bridge.regenerateHistoryMessage(
+                      String(nodeId || ''),
+                      regenerateAssistantMessage !== false
+                    );
+                    return true;
+                  }
+                } catch (_err) {}
+                return false;
+              }
+
+              function continueHistoryMessage(nodeId) {
+                try {
+                  var bridge = getActionBridge();
+                  if (bridge && typeof bridge.continueHistoryMessage === 'function') {
+                    bridge.continueHistoryMessage(String(nodeId || ''));
+                    return true;
+                  }
+                } catch (_err) {}
+                return false;
+              }
+
+              function stripHtml(value) {
+                return String(value || '')
+                  .replace(/<br\s*\/?>/gi, '\n')
+                  .replace(/<[^>]+>/g, '');
+              }
+
+              function escapeHtml(value) {
+                return String(value || '')
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&#39;');
+              }
+
+              function toNodeList(items) {
+                var list = (Array.isArray(items) ? items : []).filter(Boolean);
+                list.item = function(index) {
+                  return list[index] || null;
+                };
+                return list;
+              }
+
+              function getHistoryClasses(entry, kind) {
+                var classes = [];
+                if (kind === 'chat') {
+                  classes.push('chat');
+                  return classes;
+                }
+                if (kind === 'mes') {
+                  classes.push('mes');
+                  classes.push(entry.role + '_mes');
+                  classes.push('mes_' + entry.role);
+                  if (entry.index === loadHistorySnapshot(false).messages.length - 1) {
+                    classes.push('last_mes');
+                  }
+                  if (isHistoryEditing(entry)) {
+                    classes.push('editing');
+                  }
+                  return classes;
+                }
+                if (kind === 'mes_text') return ['mes_text'];
+                if (kind === 'mes_edit') return ['mes_edit'];
+                if (kind === 'mes_edit_done') return ['mes_edit_done'];
+                return classes;
+              }
+
+              function createClassList(entry, kind) {
+                return {
+                  contains: function(name) {
+                    return getHistoryClasses(entry, kind).indexOf(String(name || '')) >= 0;
+                  },
+                  toString: function() {
+                    return getHistoryClasses(entry, kind).join(' ');
+                  },
+                };
+              }
+
+              function createHistoryDataset(entry) {
+                return {
+                  mesid: String(entry.index),
+                  messageId: entry.messageId,
+                  nodeId: entry.nodeId,
+                  swipeId: String(entry.swipeIndex),
+                };
+              }
+
+              function getHistoryAttribute(entry, name) {
+                var key = String(name || '').toLowerCase();
+                if (key === 'mesid' || key === 'data-mesid') return String(entry.index);
+                if (key === 'messageid' || key === 'data-message-id') return entry.messageId;
+                if (key === 'nodeid' || key === 'data-node-id') return entry.nodeId;
+                if (key === 'swipe_id' || key === 'data-swipe-id') return String(entry.swipeIndex);
+                if (key === 'is_user' || key === 'data-is-user') return entry.role === 'user' ? 'true' : 'false';
+                if (key === 'is_system' || key === 'data-is-system') return entry.role === 'system' ? 'true' : 'false';
+                return null;
+              }
+
+              function setHistoryAttribute(entry, name, value) {
+                var key = String(name || '').toLowerCase();
+                if (key === 'swipe_id' || key === 'data-swipe-id') {
+                  selectHistoryMessageNode(entry.nodeId, Number(value));
+                }
+              }
+
+              function isHistorySelector(selector) {
+                var raw = String(selector || '').trim();
+                if (!raw) return false;
+                return (
+                  raw === '#chat' ||
+                  raw.indexOf('.mes') >= 0 ||
+                  raw.indexOf('last_mes') >= 0 ||
+                  raw.indexOf('mes_text') >= 0 ||
+                  raw.indexOf('mes_edit_done') >= 0 ||
+                  raw.indexOf('mes_edit') >= 0 ||
+                  raw.indexOf('mesid') >= 0 ||
+                  raw.indexOf('data-message-id') >= 0 ||
+                  raw.indexOf('data-node-id') >= 0 ||
+                  raw.indexOf('textarea') >= 0
+                );
+              }
+
+              function createHistoryTextNode(entry) {
+                return {
+                  __rhType: 'mes_text',
+                  __rhNodeId: entry.nodeId,
+                  nodeType: 1,
+                  tagName: 'TEXTAREA',
+                  contentEditable: true,
+                  classList: createClassList(entry, 'mes_text'),
+                  dataset: createHistoryDataset(entry),
+                  focus: function() {},
+                  blur: function() {},
+                  click: function() {
+                    beginHistoryEdit(entry);
+                    return true;
+                  },
+                  dispatchEvent: function(event) {
+                    if (event && event.type === 'input') {
+                      setHistoryEditableText(entry, this.value);
+                    }
+                    return true;
+                  },
+                  getAttribute: function(name) {
+                    return getHistoryAttribute(entry, name);
+                  },
+                  setAttribute: function(name, value) {
+                    setHistoryAttribute(entry, name, value);
+                  },
+                  hasAttribute: function(name) {
+                    return this.getAttribute(name) !== null;
+                  },
+                  querySelector: function() { return null; },
+                  querySelectorAll: function() { return toNodeList([]); },
+                  closest: function(selector) {
+                    if (String(selector || '').indexOf('mes_text') >= 0 || String(selector || '').indexOf('textarea') >= 0) {
+                      return this;
+                    }
+                    return createHistoryMessageNode(entry);
+                  },
+                  get value() {
+                    return getHistoryEditableText(entry);
+                  },
+                  set value(nextValue) {
+                    setHistoryEditableText(entry, nextValue);
+                  },
+                  get textContent() {
+                    return getHistoryEditableText(entry);
+                  },
+                  set textContent(nextValue) {
+                    setHistoryEditableText(entry, nextValue);
+                  },
+                  get innerText() {
+                    return getHistoryEditableText(entry);
+                  },
+                  set innerText(nextValue) {
+                    setHistoryEditableText(entry, nextValue);
+                  },
+                  get innerHTML() {
+                    return escapeHtml(getHistoryEditableText(entry)).replace(/\n/g, '<br>');
+                  },
+                  set innerHTML(nextValue) {
+                    setHistoryEditableText(entry, stripHtml(nextValue));
+                  },
+                };
+              }
+
+              function createHistoryEditButton(entry) {
+                return {
+                  __rhType: 'mes_edit',
+                  __rhNodeId: entry.nodeId,
+                  nodeType: 1,
+                  tagName: 'BUTTON',
+                  classList: createClassList(entry, 'mes_edit'),
+                  dataset: createHistoryDataset(entry),
+                  click: function() {
+                    beginHistoryEdit(entry);
+                    return true;
+                  },
+                  dispatchEvent: function(event) {
+                    if (event && event.type === 'click') {
+                      beginHistoryEdit(entry);
+                    }
+                    return true;
+                  },
+                  querySelector: function() { return null; },
+                  querySelectorAll: function() { return toNodeList([]); },
+                  closest: function() {
+                    return createHistoryMessageNode(entry);
+                  },
+                  getAttribute: function(name) {
+                    return getHistoryAttribute(entry, name);
+                  },
+                  setAttribute: function(name, value) {
+                    setHistoryAttribute(entry, name, value);
+                  },
+                  hasAttribute: function(name) {
+                    return this.getAttribute(name) !== null;
+                  },
+                };
+              }
+
+              function createHistoryEditDoneButton(entry) {
+                return {
+                  __rhType: 'mes_edit_done',
+                  __rhNodeId: entry.nodeId,
+                  nodeType: 1,
+                  tagName: 'BUTTON',
+                  classList: createClassList(entry, 'mes_edit_done'),
+                  dataset: createHistoryDataset(entry),
+                  click: function() {
+                    commitHistoryEdit(entry);
+                    return true;
+                  },
+                  dispatchEvent: function(event) {
+                    if (event && event.type === 'click') {
+                      commitHistoryEdit(entry);
+                    }
+                    return true;
+                  },
+                  querySelector: function() { return null; },
+                  querySelectorAll: function() { return toNodeList([]); },
+                  closest: function() {
+                    return createHistoryMessageNode(entry);
+                  },
+                  getAttribute: function(name) {
+                    return getHistoryAttribute(entry, name);
+                  },
+                  setAttribute: function(name, value) {
+                    setHistoryAttribute(entry, name, value);
+                  },
+                  hasAttribute: function(name) {
+                    return this.getAttribute(name) !== null;
+                  },
+                };
+              }
+
+              function createHistoryMessageNode(entry) {
+                return {
+                  __rhType: 'mes',
+                  __rhNodeId: entry.nodeId,
+                  nodeType: 1,
+                  tagName: 'DIV',
+                  classList: createClassList(entry, 'mes'),
+                  dataset: createHistoryDataset(entry),
+                  click: function() {
+                    return true;
+                  },
+                  dispatchEvent: function() {
+                    return true;
+                  },
+                  getAttribute: function(name) {
+                    return getHistoryAttribute(entry, name);
+                  },
+                  setAttribute: function(name, value) {
+                    setHistoryAttribute(entry, name, value);
+                  },
+                  hasAttribute: function(name) {
+                    return this.getAttribute(name) !== null;
+                  },
+                  querySelector: function(selector) {
+                    return queryHistorySelectorAll(selector, entry).item(0);
+                  },
+                  querySelectorAll: function(selector) {
+                    return queryHistorySelectorAll(selector, entry);
+                  },
+                  closest: function(selector) {
+                    if (String(selector || '').indexOf('mes') >= 0) {
+                      return this;
+                    }
+                    return null;
+                  },
+                  get textContent() {
+                    return getHistoryEditableText(entry);
+                  },
+                  set textContent(nextValue) {
+                    setHistoryEditableText(entry, nextValue);
+                  },
+                  get innerText() {
+                    return getHistoryEditableText(entry);
+                  },
+                  set innerText(nextValue) {
+                    setHistoryEditableText(entry, nextValue);
+                  },
+                  get innerHTML() {
+                    return escapeHtml(getHistoryEditableText(entry)).replace(/\n/g, '<br>');
+                  },
+                  set innerHTML(nextValue) {
+                    setHistoryEditableText(entry, stripHtml(nextValue));
+                  },
+                };
+              }
+
+              function createHistoryChatNode() {
+                return {
+                  __rhType: 'chat',
+                  nodeType: 1,
+                  tagName: 'DIV',
+                  classList: createClassList(null, 'chat'),
+                  dataset: {},
+                  querySelector: function(selector) {
+                    return queryHistorySelectorAll(selector).item(0);
+                  },
+                  querySelectorAll: function(selector) {
+                    return queryHistorySelectorAll(selector);
+                  },
+                  getAttribute: function(name) {
+                    return String(name || '').toLowerCase() === 'id' ? 'chat' : null;
+                  },
+                  hasAttribute: function(name) {
+                    return String(name || '').toLowerCase() === 'id';
+                  },
+                };
+              }
+
+              function queryHistorySelectorAll(selector, scopeEntry) {
+                var raw = String(selector || '').trim();
+                if (!raw) return toNodeList([]);
+                var normalized = raw.replace(/:last(?!-child)/g, ':last-child');
+                var targetScope = scopeEntry ? [scopeEntry] : loadHistorySnapshot(false).messages.slice();
+
+                if (normalized === '#chat') {
+                  return toNodeList([createHistoryChatNode()]);
+                }
+
+                var mesIdMatch = normalized.match(/\[(?:data-)?mesid\s*=\s*["']?(\d+)["']?\]/i);
+                if (mesIdMatch) {
+                  var scoped = findHistoryMessageByMesId(Number(mesIdMatch[1]));
+                  targetScope = scoped ? [scoped] : [];
+                }
+
+                var nodeIdMatch = normalized.match(/\[data-node-id\s*=\s*["']?([^"' \]]+)["']?\]/i);
+                if (nodeIdMatch) {
+                  var scopedByNode = findHistoryMessageByNodeId(nodeIdMatch[1]);
+                  targetScope = scopedByNode ? [scopedByNode] : [];
+                }
+
+                if (normalized.indexOf('.assistant_mes') >= 0 || normalized.indexOf('.mes_assistant') >= 0) {
+                  targetScope = targetScope.filter(function(entry) { return entry.role === 'assistant'; });
+                }
+                if (normalized.indexOf('.user_mes') >= 0 || normalized.indexOf('.mes_user') >= 0) {
+                  targetScope = targetScope.filter(function(entry) { return entry.role === 'user'; });
+                }
+                if (normalized.indexOf('.system_mes') >= 0 || normalized.indexOf('.mes_system') >= 0) {
+                  targetScope = targetScope.filter(function(entry) { return entry.role === 'system'; });
+                }
+                if (normalized.indexOf('.last_mes') >= 0 || normalized.indexOf(':last-child') >= 0) {
+                  targetScope = targetScope.length ? [targetScope[targetScope.length - 1]] : [];
+                }
+
+                if (normalized.indexOf('.mes_edit_done') >= 0) {
+                  return toNodeList(targetScope.map(createHistoryEditDoneButton));
+                }
+                if (normalized.indexOf('.mes_edit') >= 0) {
+                  return toNodeList(targetScope.map(createHistoryEditButton));
+                }
+                if (normalized.indexOf('.mes_text') >= 0 || normalized.indexOf('textarea') >= 0) {
+                  return toNodeList(targetScope.map(createHistoryTextNode));
+                }
+                if (
+                  normalized.indexOf('.mes') >= 0 ||
+                  mesIdMatch ||
+                  nodeIdMatch ||
+                  normalized.indexOf('last_mes') >= 0
+                ) {
+                  return toNodeList(targetScope.map(createHistoryMessageNode));
+                }
+                return toNodeList([]);
+              }
+
+              function createCompatChatEntry(entry) {
+                return {
+                  __nodeId: entry.nodeId,
+                  __messageId: entry.messageId,
+                  name: entry.name,
+                  is_user: entry.role === 'user',
+                  is_system: entry.role === 'system',
+                  mes: entry.text,
+                  extra: {},
+                  swipes: Array.isArray(entry.swipes) ? entry.swipes.slice() : [entry.text],
+                  swipe_id: Number(entry.swipeIndex || 0),
+                };
+              }
+
+              function syncCompatContextFromHistory() {
+                if (!window.__RH_ST_CONTEXT__) return;
+                var snapshot = loadHistorySnapshot(false);
+                window.__RH_ST_CONTEXT__.__conversationId = snapshot.conversationId;
+                window.__RH_ST_CONTEXT__.name1 = snapshot.userName;
+                window.__RH_ST_CONTEXT__.name2 = snapshot.assistantName;
+                window.__RH_ST_CONTEXT__.userName = snapshot.userName;
+                window.__RH_ST_CONTEXT__.charName = snapshot.assistantName;
+                window.__RH_ST_CONTEXT__.chat = snapshot.messages.map(createCompatChatEntry);
+                window.__RH_ST_CONTEXT__.__sourceChat = window.__RH_ST_CONTEXT__.chat.map(function(item) {
+                  return JSON.parse(JSON.stringify(item));
+                });
+              }
+
+              function saveCompatChatContext(context) {
+                if (!context || !Array.isArray(context.chat)) return;
+                var baseline = Array.isArray(context.__sourceChat) ? context.__sourceChat : [];
+                var baselineMap = {};
+                baseline.forEach(function(item) {
+                  if (item && item.__nodeId) {
+                    baselineMap[item.__nodeId] = item;
+                  }
+                });
+
+                var nextNodeIds = {};
+                context.chat.forEach(function(item) {
+                  if (!item || !item.__nodeId) return;
+                  nextNodeIds[item.__nodeId] = true;
+                  var previous = baselineMap[item.__nodeId];
+                  if (!previous) return;
+                  if (Number(item.swipe_id) !== Number(previous.swipe_id)) {
+                    selectHistoryMessageNode(item.__nodeId, Number(item.swipe_id));
+                  }
+                  if (String(item.mes || '') !== String(previous.mes || '')) {
+                    editHistoryMessage(item.__nodeId, String(item.mes || ''));
+                  }
+                });
+
+                Object.keys(baselineMap).forEach(function(nodeId) {
+                  if (!nextNodeIds[nodeId]) {
+                    deleteHistoryMessage(nodeId);
+                  }
+                });
+
+                context.__sourceChat = context.chat.map(function(item) {
+                  return JSON.parse(JSON.stringify(item));
+                });
+                syncCompatContextFromHistory();
+              }
+
+              function getSillyTavernContext(forceRefresh) {
+                var currentSnapshot = loadHistorySnapshot(forceRefresh === true);
+                if (
+                  !window.__RH_ST_CONTEXT__ ||
+                  forceRefresh === true ||
+                  window.__RH_ST_CONTEXT__.__conversationId !== currentSnapshot.conversationId
+                ) {
+                  var snapshot = currentSnapshot;
+                  var chatEntries = snapshot.messages.map(createCompatChatEntry);
+                  window.__RH_ST_CONTEXT__ = {
+                    __conversationId: snapshot.conversationId,
+                    name1: snapshot.userName,
+                    name2: snapshot.assistantName,
+                    userName: snapshot.userName,
+                    charName: snapshot.assistantName,
+                    chat: chatEntries,
+                    chatMetadata: {},
+                    saveChat: async function() {
+                      saveCompatChatContext(window.__RH_ST_CONTEXT__);
+                    },
+                    reloadCurrentChat: function() {
+                      var nextSnapshot = loadHistorySnapshot(true);
+                      window.__RH_ST_CONTEXT__.chat = nextSnapshot.messages.map(createCompatChatEntry);
+                      window.__RH_ST_CONTEXT__.__sourceChat = window.__RH_ST_CONTEXT__.chat.map(function(item) {
+                        return JSON.parse(JSON.stringify(item));
+                      });
+                    },
+                  };
+                  window.__RH_ST_CONTEXT__.__sourceChat = window.__RH_ST_CONTEXT__.chat.map(function(item) {
+                    return JSON.parse(JSON.stringify(item));
+                  });
+                }
+                return window.__RH_ST_CONTEXT__;
+              }
+
+              function stripWrappingQuotes(value) {
+                if (value.length < 2) return value;
+                var first = value.charAt(0);
+                var last = value.charAt(value.length - 1);
+                if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+                  return decodeSlashEscapes(value.substring(1, value.length - 1));
+                }
+                return value;
+              }
+
+              function decodeSlashEscapes(value) {
+                return String(value || '')
+                  .replace(/\\\\/g, '\\')
+                  .replace(/\\n/g, '\n')
+                  .replace(/\\r/g, '\r')
+                  .replace(/\\t/g, '\t')
+                  .replace(/\\"/g, '"')
+                  .replace(/\\'/g, "'");
+              }
+
+              function splitCommandChain(raw) {
+                var segments = [];
+                var current = '';
+                var quote = null;
+                var escaped = false;
+
+                for (var i = 0; i < raw.length; i++) {
+                  var ch = raw.charAt(i);
+                  if (escaped) {
+                    current += ch;
+                    escaped = false;
+                    continue;
+                  }
+                  if (ch === '\\') {
+                    current += ch;
+                    escaped = true;
+                    continue;
+                  }
+                  if (quote) {
+                    if (ch === quote) {
+                      quote = null;
+                    }
+                    current += ch;
+                    continue;
+                  }
+                  if (ch === '"' || ch === "'") {
+                    quote = ch;
+                    current += ch;
+                    continue;
+                  }
+                  if (ch === '|') {
+                    var segment = current.trim();
+                    if (segment) segments.push(segment);
+                    current = '';
+                    continue;
+                  }
+                  current += ch;
+                }
+
+                var lastSegment = current.trim();
+                if (lastSegment) segments.push(lastSegment);
+                return segments;
+              }
+
+              function readCommandPayload(segment, commandName) {
+                return stripWrappingQuotes(segment.substring(commandName.length + 1).trim());
+              }
+
+              function readSendAsPayload(segment) {
+                var rest = segment.substring('/sendas'.length).trim();
+                if (!rest) return '';
+                var match = rest.match(/^(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\S+)(?:\s+([\s\S]*))?$/);
+                if (!match) return '';
+                return stripWrappingQuotes((match[1] || '').trim());
+              }
+
+              function handleSlashCommand(command) {
+                var raw = String(command || '').trim();
+                if (!raw) return;
+                var segments = splitCommandChain(raw);
+                if (!segments.length) return;
+
+                var pendingSend = null;
+                var shouldAnswer = true;
+                var triggerSeen = false;
+
+                segments.forEach(function(segment) {
+                  var normalized = segment.toLowerCase();
+
+                  if (normalized.indexOf('/setinput ') === 0) {
+                    setDraftText(readCommandPayload(segment, 'setinput'));
+                    return;
+                  }
+                  if (normalized === '/setinput') {
+                    setDraftText('');
+                    return;
+                  }
+                  if (normalized.indexOf('/input ') === 0) {
+                    setDraftText(readCommandPayload(segment, 'input'));
+                    return;
+                  }
+                  if (normalized === '/input') {
+                    setDraftText('');
+                    return;
+                  }
+                  if (normalized.indexOf('/addinput ') === 0) {
+                    appendDraftText(readCommandPayload(segment, 'addinput'));
+                    return;
+                  }
+                  if (normalized.indexOf('/append ') === 0) {
+                    appendDraftText(readCommandPayload(segment, 'append'));
+                    return;
+                  }
+                  if (normalized.indexOf('/comment ') === 0) {
+                    appendDraftText(readCommandPayload(segment, 'comment'));
+                    return;
+                  }
+                  if (normalized === '/clearinput' || normalized === '/delinput') {
+                    setDraftText('');
+                    return;
+                  }
+                  if (normalized.indexOf('/sendas ') === 0) {
+                    pendingSend = readSendAsPayload(segment);
+                    return;
+                  }
+                  if (normalized.indexOf('/send ') === 0) {
+                    pendingSend = readCommandPayload(segment, 'send');
+                    return;
+                  }
+                  if (normalized === '/send') {
+                    pendingSend = '';
+                    return;
+                  }
+                  if (normalized.indexOf('/trigger') === 0) {
+                    triggerSeen = true;
+                    shouldAnswer = !/await\s*=\s*false/i.test(segment);
+                  }
+                });
+
+                if (pendingSend !== null) {
+                  sendTextNow(pendingSend, triggerSeen ? shouldAnswer : true);
+                  return;
+                }
+                if (triggerSeen) {
+                  sendCurrentDraft(shouldAnswer);
+                }
+              }
+
+              function installChatComposerShim() {
+                if (window.__RH_CHAT_COMPOSER_SHIM__) return;
+                window.__RH_CHAT_COMPOSER_SHIM__ = true;
+
+                var composerTextarea = {
+                  focus: function() {},
+                  blur: function() {},
+                  dispatchEvent: function(event) {
+                    if (event && event.type === 'input') {
+                      setDraftText(this.value);
+                    }
+                    return true;
+                  }
+                };
+                Object.defineProperty(composerTextarea, 'value', {
+                  get: function() { return getDraftText(); },
+                  set: function(nextValue) { setDraftText(nextValue); },
+                  configurable: true,
+                });
+
+                var composerSendButton = {
+                  click: function() {
+                    sendCurrentDraft(true);
+                    return true;
+                  }
+                };
+
+                var originalQuerySelector = document.querySelector ? document.querySelector.bind(document) : null;
+                var originalQuerySelectorAll = document.querySelectorAll ? document.querySelectorAll.bind(document) : null;
+                var originalGetElementById = document.getElementById ? document.getElementById.bind(document) : null;
+                var originalGetElementsByClassName = document.getElementsByClassName
+                  ? document.getElementsByClassName.bind(document)
+                  : null;
+                var originalGetElementsByTagName = document.getElementsByTagName
+                  ? document.getElementsByTagName.bind(document)
+                  : null;
+                if (originalQuerySelector) {
+                  document.querySelector = function(selector) {
+                    if (selector === '#send_textarea') return composerTextarea;
+                    if (selector === '#send_butt') return composerSendButton;
+                    if (isHistorySelector(selector)) {
+                      return queryHistorySelectorAll(selector).item(0);
+                    }
+                    return originalQuerySelector(selector);
+                  };
+                }
+                if (originalQuerySelectorAll) {
+                  document.querySelectorAll = function(selector) {
+                    if (isHistorySelector(selector)) {
+                      return queryHistorySelectorAll(selector);
+                    }
+                    return originalQuerySelectorAll(selector);
+                  };
+                }
+                if (originalGetElementById) {
+                  document.getElementById = function(id) {
+                    if (id === 'send_textarea') return composerTextarea;
+                    if (id === 'send_butt') return composerSendButton;
+                    if (id === 'chat') return createHistoryChatNode();
+                    return originalGetElementById(id);
+                  };
+                }
+                if (originalGetElementsByClassName) {
+                  document.getElementsByClassName = function(className) {
+                    var key = String(className || '').trim();
+                    if (key === 'mes' || key === 'mes_text' || key === 'mes_edit' || key === 'mes_edit_done' || key === 'last_mes') {
+                      return queryHistorySelectorAll('.' + key);
+                    }
+                    return originalGetElementsByClassName(className);
+                  };
+                }
+                if (originalGetElementsByTagName) {
+                  document.getElementsByTagName = function(tagName) {
+                    var key = String(tagName || '').toLowerCase();
+                    if (key === 'textarea') {
+                      var textareas = queryHistorySelectorAll('textarea');
+                      if (textareas.length) {
+                        return textareas;
+                      }
+                    }
+                    return originalGetElementsByTagName(tagName);
+                  };
+                }
+
+                function makeCollection(items) {
+                  var api = Array.isArray(items) ? items.slice() : [];
+                  api.get = function(index) {
+                    return api[index];
+                  };
+                  api.eq = function(index) {
+                    var target = index < 0 ? api[api.length + index] : api[index];
+                    return makeCollection(target ? [target] : []);
+                  };
+                  api.first = function() {
+                    return api.eq(0);
+                  };
+                  api.last = function() {
+                    return api.eq(-1);
+                  };
+                  api.find = function(selector) {
+                    var found = [];
+                    api.forEach(function(item) {
+                      if (item && typeof item.querySelectorAll === 'function') {
+                        found = found.concat(Array.prototype.slice.call(item.querySelectorAll(selector)));
+                      }
+                    });
+                    return makeCollection(found);
+                  };
+                  api.click = function() {
+                    api.forEach(function(item) {
+                      if (item && typeof item.click === 'function') {
+                        item.click();
+                      }
+                    });
+                    return api;
+                  };
+                  api.trigger = function(eventName) {
+                    api.forEach(function(item) {
+                      if (!item) return;
+                      if (eventName === 'click' && typeof item.click === 'function') {
+                        item.click();
+                        return;
+                      }
+                      if (typeof item.dispatchEvent === 'function') {
+                        item.dispatchEvent({ type: eventName });
+                      }
+                    });
+                    return api;
+                  };
+                  api.attr = function(name, value) {
+                    if (typeof value === 'undefined') {
+                      return api[0] && typeof api[0].getAttribute === 'function'
+                        ? api[0].getAttribute(name)
+                        : undefined;
+                    }
+                    api.forEach(function(item) {
+                      if (item && typeof item.setAttribute === 'function') {
+                        item.setAttribute(name, value);
+                      }
+                    });
+                    return api;
+                  };
+                  api.text = function(value) {
+                    if (typeof value === 'undefined') {
+                      return api.map(function(item) {
+                        return item && item.textContent != null ? item.textContent : '';
+                      }).join('');
+                    }
+                    api.forEach(function(item) {
+                      if (item) {
+                        item.textContent = String(value);
+                      }
+                    });
+                    return api;
+                  };
+                  api.html = function(value) {
+                    if (typeof value === 'undefined') {
+                      return api[0] && api[0].innerHTML != null ? api[0].innerHTML : '';
+                    }
+                    api.forEach(function(item) {
+                      if (item) {
+                        item.innerHTML = String(value);
+                      }
+                    });
+                    return api;
+                  };
+                  api.val = function(value) {
+                    if (typeof value === 'undefined') {
+                      return api[0] && api[0].value != null ? api[0].value : '';
+                    }
+                    api.forEach(function(item) {
+                      if (item) {
+                        item.value = String(value);
+                      }
+                    });
+                    return api;
+                  };
+                  api.each = function(callback) {
+                    api.forEach(function(item, index) {
+                      callback.call(item, index, item);
+                    });
+                    return api;
+                  };
+                  api.toArray = function() {
+                    return api.slice();
+                  };
+                  return api;
+                }
+
+                function compatDollar(value) {
+                  if (typeof value === 'function') {
+                    value();
+                    return makeCollection([]);
+                  }
+                  if (typeof value === 'string') {
+                    if (isHistorySelector(value)) {
+                      return makeCollection(Array.prototype.slice.call(queryHistorySelectorAll(value)));
+                    }
+                    if (originalQuerySelectorAll) {
+                      return makeCollection(Array.prototype.slice.call(originalQuerySelectorAll(value)));
+                    }
+                    return makeCollection([]);
+                  }
+                  if (Array.isArray(value)) {
+                    return makeCollection(value);
+                  }
+                  if (value == null) {
+                    return makeCollection([]);
+                  }
+                  return makeCollection([value]);
+                }
+
+                var jqueryKey = String.fromCharCode(36);
+                if (typeof window[jqueryKey] !== 'function') {
+                  window[jqueryKey] = compatDollar;
+                }
+                if (window.parent && typeof window.parent[jqueryKey] !== 'function') {
+                  window.parent[jqueryKey] = compatDollar;
+                }
+
+                var sillyTavernCompat = {
+                  getContext: function() {
+                    return getSillyTavernContext(false);
+                  },
+                };
+                if (!window.SillyTavern) {
+                  window.SillyTavern = sillyTavernCompat;
+                } else if (typeof window.SillyTavern.getContext !== 'function') {
+                  window.SillyTavern.getContext = sillyTavernCompat.getContext;
+                }
+                if (typeof window.getContext !== 'function') {
+                  window.getContext = function() {
+                    return window.SillyTavern.getContext();
+                  };
+                }
+                try {
+                  if (window.top && window.top.window && !window.top.window.SillyTavern) {
+                    window.top.window.SillyTavern = window.SillyTavern;
+                  }
+                } catch (_err) {}
+                if (window.parent && window.parent !== window) {
+                  if (!window.parent.SillyTavern) {
+                    window.parent.SillyTavern = window.SillyTavern;
+                  } else if (typeof window.parent.SillyTavern.getContext !== 'function') {
+                    window.parent.SillyTavern.getContext = window.SillyTavern.getContext;
+                  }
+                }
+
+                if (typeof window.triggerSlash !== 'function') {
+                  window.triggerSlash = handleSlashCommand;
+                }
+                if (window.parent && typeof window.parent.triggerSlash !== 'function') {
+                  window.parent.triggerSlash = handleSlashCommand;
+                }
+                if (typeof window.postMessage !== 'function') {
+                  window.postMessage = function() {};
+                }
+              }
+
               function updateViewportHeight() {
                 document.documentElement.style.setProperty('--TH-viewport-height', window.innerHeight + 'px');
               }
@@ -371,11 +1554,13 @@ internal object CodeBlockRenderResolver {
               }
 
               if (window.__RH_CODE_BLOCK_OBSERVER_ATTACHED__) {
+                installChatComposerShim();
                 updateViewportHeight();
                 scheduleReportHeight();
                 return;
               }
               window.__RH_CODE_BLOCK_OBSERVER_ATTACHED__ = true;
+              installChatComposerShim();
 
               function observeHeightChanges() {
                 if (typeof ResizeObserver === 'function') {

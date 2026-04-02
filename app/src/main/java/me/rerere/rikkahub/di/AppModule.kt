@@ -6,6 +6,7 @@ import com.google.firebase.crashlytics.crashlytics
 import com.google.firebase.remoteconfig.remoteConfig
 import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
+import me.rerere.rikkahub.data.ai.transformers.SillyTavernCompatScriptTransformer
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -13,6 +14,8 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtySessionManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxWorkdirServerManager
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.event.ChatComposerBridge
+import me.rerere.rikkahub.data.event.ChatHistoryBridge
 import me.rerere.rikkahub.data.skills.SkillsRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.ScheduledPromptManager
@@ -59,7 +62,23 @@ val appModule = module {
     }
 
     single {
+        ChatComposerBridge()
+    }
+
+    single {
+        ChatHistoryBridge()
+    }
+
+    single {
         LocalTools(get(), get(), get(), get(), get(), get())
+    }
+
+    single {
+        SillyTavernCompatScriptTransformer(
+            json = get(),
+            settingsStore = get(),
+            termuxCommandManager = get(),
+        )
     }
 
     single {
@@ -111,9 +130,9 @@ val appModule = module {
             conversationRepo = get(),
             memoryRepository = get(),
             generationHandler = get(),
-            templateTransformer = get(),
             providerManager = get(),
             localTools = get(),
+            stCompatScriptTransformer = get(),
             termuxCommandManager = get(),
             termuxPtySessionManager = get(),
             mcpManager = get(),
