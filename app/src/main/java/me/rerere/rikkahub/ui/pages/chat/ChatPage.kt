@@ -76,9 +76,9 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDownDouble
 import me.rerere.hugeicons.stroke.ArrowUpDouble
+import me.rerere.hugeicons.stroke.BubbleChatTemporary
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
-import me.rerere.hugeicons.stroke.MaskTheater01
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.MoreVertical
@@ -524,8 +524,8 @@ private fun ChatPageContent(
                                 onNewChat = {
                                     navigateToChatPage(navController)
                                 },
-                                onEnableTemporaryConversation = {
-                                    vm.enableTemporaryConversation()
+                                onToggleTemporaryConversation = {
+                                    vm.toggleTemporaryConversation()
                                 },
                                 onClickMenu = {
                                     previewMode = !previewMode
@@ -747,7 +747,7 @@ private fun TopBar(
     previewMode: Boolean,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
-    onEnableTemporaryConversation: () -> Unit,
+    onToggleTemporaryConversation: () -> Unit,
     onUpdateTitle: (String) -> Unit,
     onHideTopBar: () -> Unit,
     onOpenPromptInspector: () -> Unit,
@@ -763,7 +763,7 @@ private fun TopBar(
     val newChatText = stringResource(R.string.chat_page_new_chat)
     val temporaryConversationText = stringResource(R.string.chat_page_temporary_chat)
     val temporaryConversationEnabledText = stringResource(R.string.chat_page_temporary_chat_enabled)
-    val temporaryConversationAlreadyEnabledText = stringResource(R.string.chat_page_temporary_chat_already_enabled)
+    val temporaryConversationDisabledText = stringResource(R.string.chat_page_temporary_chat_disabled)
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
@@ -812,12 +812,19 @@ private fun TopBar(
             IconButton(
                 onClick = {
                     if (showTemporaryConversationAction) {
-                        if (temporaryConversationEnabled) {
-                            toaster.show(temporaryConversationAlreadyEnabledText, type = ToastType.Info)
-                        } else {
-                            onEnableTemporaryConversation()
-                            toaster.show(temporaryConversationEnabledText, type = ToastType.Success)
-                        }
+                        onToggleTemporaryConversation()
+                        toaster.show(
+                            if (temporaryConversationEnabled) {
+                                temporaryConversationDisabledText
+                            } else {
+                                temporaryConversationEnabledText
+                            },
+                            type = if (temporaryConversationEnabled) {
+                                ToastType.Info
+                            } else {
+                                ToastType.Success
+                            }
+                        )
                     } else {
                         onNewChat()
                     }
@@ -825,7 +832,7 @@ private fun TopBar(
             ) {
                 Icon(
                     imageVector = if (showTemporaryConversationAction) {
-                        HugeIcons.MaskTheater01
+                        HugeIcons.BubbleChatTemporary
                     } else {
                         HugeIcons.MessageAdd01
                     },

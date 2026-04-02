@@ -439,10 +439,12 @@ class ChatVM(
         }
     }
 
-    fun enableTemporaryConversation() {
+    fun toggleTemporaryConversation() {
         chatService.updateConversationState(_conversationId) { currentConversation ->
             if (currentConversation.newConversation && currentConversation.messageNodes.isEmpty()) {
-                currentConversation.copy(isTemporaryConversation = true)
+                currentConversation.copy(
+                    isTemporaryConversation = !currentConversation.isTemporaryConversation
+                )
             } else {
                 currentConversation
             }

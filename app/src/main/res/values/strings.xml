@@ -266,7 +266,7 @@
   <string name="chat_page_new_chat">New Chat</string>
   <string name="chat_page_temporary_chat">Temporary Chat</string>
   <string name="chat_page_temporary_chat_enabled">Temporary chat enabled. This conversation will not appear in history.</string>
-  <string name="chat_page_temporary_chat_already_enabled">This conversation is already temporary.</string>
+  <string name="chat_page_temporary_chat_disabled">Temporary chat disabled. This conversation will appear in history.</string>
   <string name="chat_page_back_to_conversation">Back to conversation</string>
   <string name="chat_page_hide_top_bar">Hide top bar</string>
   <string name="chat_page_new_message">New message</string>

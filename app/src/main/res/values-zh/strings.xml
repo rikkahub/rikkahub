@@ -219,7 +219,7 @@
   <string name="chat_page_new_chat">新聊天</string>
   <string name="chat_page_temporary_chat">临时对话</string>
   <string name="chat_page_temporary_chat_enabled">已切换为临时对话，该会话不会出现在历史记录中</string>
-  <string name="chat_page_temporary_chat_already_enabled">当前对话已经是临时对话</string>
+  <string name="chat_page_temporary_chat_disabled">已关闭临时对话，该会话会出现在历史记录中</string>
   <string name="chat_page_new_message">新消息</string>
   <string name="chat_page_nickname_placeholder">请输入昵称</string>
   <string name="chat_page_no_conversations">没有对话记录</string>
