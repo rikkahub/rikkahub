@@ -14,6 +14,8 @@ data class ConversationEntity(
     val title: String,
     @ColumnInfo("nodes")
     val nodes: String,
+    @ColumnInfo("st_local_variables", defaultValue = "{}")
+    val stLocalVariables: String = "{}",
     @ColumnInfo("create_at")
     val createAt: Long,
     @ColumnInfo("update_at")

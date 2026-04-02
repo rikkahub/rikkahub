@@ -17,6 +17,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -173,6 +174,8 @@ class ChatService(
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val stMacroGlobalVariables = ConcurrentHashMap<String, String>()
+    private val persistConversationLocalVariablesJobs = ConcurrentHashMap<Uuid, Job>()
+    private var persistGlobalVariablesJob: Job? = null
     private val _sessionsVersion = MutableStateFlow(0L)
 
     // 错误状态
@@ -211,10 +214,18 @@ class ChatService(
     init {
         // 添加生命周期观察者
         ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
+        appScope.launch {
+            val persistedSettings = settingsStore.settingsFlowRaw.first()
+            stMacroGlobalVariables.clear()
+            stMacroGlobalVariables.putAll(persistedSettings.stGlobalVariables)
+        }
     }
 
     fun cleanup() = runCatching {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
+        persistGlobalVariablesJob?.cancel()
+        persistConversationLocalVariablesJobs.values.forEach { it.cancel() }
+        persistConversationLocalVariablesJobs.clear()
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
     }
@@ -253,14 +264,90 @@ class ChatService(
     }
 
     private fun getConversationStMacroState(conversationId: Uuid): StMacroState {
-        return getOrCreateSession(conversationId).getStMacroState(stMacroGlobalVariables)
+        val session = getOrCreateSession(conversationId)
+        return session.getStMacroState(
+            globalVariables = stMacroGlobalVariables,
+            onLocalVariablesChanged = {
+                syncConversationLocalVariables(
+                    conversationId = conversationId,
+                    localVariables = session.getPersistentLocalVariablesSnapshot(),
+                )
+            },
+            onGlobalVariablesChanged = {
+                schedulePersistGlobalVariables()
+            },
+        )
     }
 
-    private fun resetConversationStMacroState(conversationId: Uuid) {
+    private fun resetConversationStRuntimeState(
+        conversationId: Uuid,
+        clearLocalVariables: Boolean = false,
+    ) {
         sessions[conversationId]?.let { session ->
-            session.resetStMacroLocalVariables()
+            if (clearLocalVariables) {
+                session.resetStMacroLocalVariables()
+                syncConversationLocalVariables(conversationId = conversationId, localVariables = emptyMap())
+            }
             session.resetLorebookRuntimeState()
             session.stGenerationType = "normal"
+        }
+    }
+
+    private fun syncConversationLocalVariables(
+        conversationId: Uuid,
+        localVariables: Map<String, String>,
+    ) {
+        val session = sessions[conversationId] ?: return
+        val conversation = session.state.value
+        if (conversation.stLocalVariables == localVariables) return
+        updateConversation(
+            conversationId = conversationId,
+            conversation = conversation.copy(stLocalVariables = localVariables),
+        )
+        schedulePersistConversationLocalVariables(conversationId, localVariables)
+    }
+
+    private fun schedulePersistGlobalVariables() {
+        val snapshot = stMacroGlobalVariables.toMap()
+        persistGlobalVariablesJob?.cancel()
+        persistGlobalVariablesJob = appScope.launch {
+            delay(300)
+            settingsStore.update { settings ->
+                if (settings.stGlobalVariables == snapshot) {
+                    settings
+                } else {
+                    settings.copy(stGlobalVariables = snapshot)
+                }
+            }
+        }
+    }
+
+    private fun schedulePersistConversationLocalVariables(
+        conversationId: Uuid,
+        localVariables: Map<String, String>,
+    ) {
+        persistConversationLocalVariablesJobs.remove(conversationId)?.cancel()
+        val job = appScope.launch {
+            delay(300)
+            conversationRepo.updateConversationLocalVariables(conversationId, localVariables)
+        }
+        persistConversationLocalVariablesJobs[conversationId] = job
+        job.invokeOnCompletion {
+            persistConversationLocalVariablesJobs.remove(conversationId, job)
+        }
+    }
+
+    private fun applyPersistentStLocalVariables(
+        conversationId: Uuid,
+        conversation: Conversation,
+    ): Conversation {
+        val localVariables = sessions[conversationId]
+            ?.getPersistentLocalVariablesSnapshot()
+            ?: conversation.stLocalVariables
+        return if (conversation.stLocalVariables == localVariables) {
+            conversation
+        } else {
+            conversation.copy(stLocalVariables = localVariables)
         }
     }
 
@@ -295,7 +382,20 @@ class ChatService(
         val session = getOrCreateSession(conversationId)
         // Unsnapshotted assistant turns may come from imported history, greeting presets,
         // or legacy branches, so treating them as prior generations corrupts ST state.
-        session.restoreStRuntimeState(visibleMessages.readLatestAssistantStRuntimeSnapshot())
+        val persistentLocalVariables = session.state.value.stLocalVariables
+        session.restoreStRuntimeState(
+            snapshot = visibleMessages.readLatestAssistantStRuntimeSnapshot(),
+            persistentLocalVariables = persistentLocalVariables,
+        )
+        if (persistentLocalVariables.isEmpty()) {
+            val migratedLocalVariables = session.getPersistentLocalVariablesSnapshot()
+            if (migratedLocalVariables.isNotEmpty()) {
+                syncConversationLocalVariables(
+                    conversationId = conversationId,
+                    localVariables = migratedLocalVariables,
+                )
+            }
+        }
     }
 
     private fun selectMessagesForGeneration(
@@ -404,7 +504,7 @@ class ChatService(
             settingsStore.updateAssistant(conversation.assistantId)
         } else {
             // 新建对话, 并添加预设消息
-            resetConversationStMacroState(conversationId)
+            resetConversationStRuntimeState(conversationId, clearLocalVariables = true)
             val currentSettings = settingsStore.settingsFlowRaw.first()
             val assistant = currentSettings.getCurrentAssistant()
             val newConversation = Conversation.ofId(
@@ -689,7 +789,11 @@ class ChatService(
             } else {
                 memoryRepository.getMemoriesOfAssistant(effectiveAssistant.id.toString())
             },
-            stMacroState = StMacroState(globalVariables = stMacroGlobalVariables),
+            stMacroState = StMacroState(
+                globalVariables = ObservedMutableMap(stMacroGlobalVariables) {
+                    schedulePersistGlobalVariables()
+                }
+            ),
             inputTransformers = buildList {
                 addAll(inputTransformers)
                 add(RegexPromptOnlyTransformer)
@@ -772,7 +876,7 @@ class ChatService(
                         messageNodes = conversation.messageNodes.subList(0, indexAt + 1)
                     )
                     saveConversation(conversationId, newConversation)
-                    resetConversationStMacroState(conversationId)
+                    resetConversationStRuntimeState(conversationId)
                     handleMessageComplete(
                         conversationId = conversationId,
                         stGenerationType = stGenerationType,
@@ -781,7 +885,7 @@ class ChatService(
                     if (regenerateAssistantMsg) {
                         val node = conversation.getMessageNodeByMessage(message)
                         val nodeIndex = conversation.messageNodes.indexOf(node)
-                        resetConversationStMacroState(conversationId)
+                        resetConversationStRuntimeState(conversationId)
                         handleMessageComplete(
                             conversationId = conversationId,
                             messageRange = 0..<nodeIndex,
@@ -1536,7 +1640,10 @@ class ChatService(
             return // 新会话且为空时不保存
         }
 
-        val updatedConversation = conversation.copy()
+        val updatedConversation = applyPersistentStLocalVariables(
+            conversationId = conversationId,
+            conversation = conversation.copy(),
+        )
         updateConversation(conversationId, updatedConversation)
 
         if (!exists) {
@@ -1544,6 +1651,8 @@ class ChatService(
         } else {
             conversationRepo.updateConversation(updatedConversation)
         }
+
+        persistConversationLocalVariablesJobs.remove(conversationId)?.cancel()
     }
 
     // ---- 翻译消息 ----
@@ -1648,7 +1757,7 @@ class ChatService(
         }
         if (!edited) return
 
-        resetConversationStMacroState(conversationId)
+        resetConversationStRuntimeState(conversationId)
         saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
@@ -1683,6 +1792,7 @@ class ChatService(
             id = Uuid.random(),
             assistantId = currentConversation.assistantId,
             messageNodes = copiedNodes,
+            stLocalVariables = currentConversation.stLocalVariables,
         )
 
         saveConversation(forkConversation.id, forkConversation)
@@ -1714,7 +1824,7 @@ class ChatService(
             }
         }
 
-        resetConversationStMacroState(conversationId)
+        resetConversationStRuntimeState(conversationId)
         saveConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
@@ -1733,7 +1843,7 @@ class ChatService(
             return
         }
 
-        resetConversationStMacroState(conversationId)
+        resetConversationStRuntimeState(conversationId)
         saveConversation(conversationId, updatedConversation)
     }
 

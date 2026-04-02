@@ -34,6 +34,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_17_18
 import me.rerere.rikkahub.data.db.migrations.Migration_18_19
 import me.rerere.rikkahub.data.db.migrations.Migration_19_20
 import me.rerere.rikkahub.data.db.migrations.Migration_20_21
+import me.rerere.rikkahub.data.db.migrations.Migration_21_22
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.search.SearchService
@@ -63,7 +64,8 @@ val dataSourceModule = module {
                 Migration_17_18,
                 Migration_18_19,
                 Migration_19_20,
-                Migration_20_21
+                Migration_20_21,
+                Migration_21_22
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {

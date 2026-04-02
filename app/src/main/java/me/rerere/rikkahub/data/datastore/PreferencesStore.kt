@@ -170,6 +170,7 @@ class SettingsStore(
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
         val GLOBAL_REGEX_ENABLED = booleanPreferencesKey("global_regex_enabled")
         val GLOBAL_REGEXES = stringPreferencesKey("global_regexes")
+        val ST_GLOBAL_VARIABLES = stringPreferencesKey("st_global_variables")
         val REGEXES = stringPreferencesKey("regexes")
         val ST_PRESET_ENABLED = booleanPreferencesKey("st_preset_enabled")
         val ST_PRESET_TEMPLATE = stringPreferencesKey("st_preset_template")
@@ -312,6 +313,9 @@ class SettingsStore(
                         emptyList()
                     }
                 },
+                stGlobalVariables = preferences[ST_GLOBAL_VARIABLES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyMap(),
                 regexes = preferences[REGEXES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -581,6 +585,7 @@ class SettingsStore(
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(normalizedSettings.quickMessages)
             preferences[GLOBAL_REGEX_ENABLED] = normalizedSettings.globalRegexEnabled
             preferences[GLOBAL_REGEXES] = JsonInstant.encodeToString(normalizedSettings.globalRegexes)
+            preferences[ST_GLOBAL_VARIABLES] = JsonInstant.encodeToString(normalizedSettings.stGlobalVariables)
             preferences[REGEXES] = JsonInstant.encodeToString(normalizedSettings.regexes)
             preferences[ST_PRESET_ENABLED] = normalizedSettings.stPresetEnabled
             normalizedSettings.stPresetTemplate?.let {
@@ -740,6 +745,7 @@ data class Settings(
     val quickMessages: List<QuickMessage> = emptyList(),
     val globalRegexEnabled: Boolean = true,
     val globalRegexes: List<AssistantRegex> = emptyList(),
+    val stGlobalVariables: Map<String, String> = emptyMap(),
     // Legacy cache for older builds. Active preset regexes are mirrored here during persistence.
     val regexes: List<AssistantRegex> = emptyList(),
     val stPresetEnabled: Boolean = false,

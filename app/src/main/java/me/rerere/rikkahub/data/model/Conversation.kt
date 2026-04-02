@@ -18,6 +18,7 @@ data class Conversation(
     val assistantId: Uuid,
     val title: String = "",
     val messageNodes: List<MessageNode>,
+    val stLocalVariables: Map<String, String> = emptyMap(),
     val chatSuggestions: List<String> = emptyList(),
     val isPinned: Boolean = false,
     @Serializable(with = InstantSerializer::class)
@@ -93,6 +94,7 @@ data class Conversation(
             id = id,
             assistantId = assistantId,
             messageNodes = messages,
+            stLocalVariables = emptyMap(),
             newConversation = newConversation,
         )
     }

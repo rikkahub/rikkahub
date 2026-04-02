@@ -59,6 +59,7 @@ interface ConversationDAO {
         SET assistant_id = :assistantId,
             title = :title,
             nodes = :nodes,
+            st_local_variables = :stLocalVariables,
             create_at = :createAt,
             update_at = :updateAt,
             suggestions = :chatSuggestions,
@@ -71,10 +72,17 @@ interface ConversationDAO {
         assistantId: String,
         title: String,
         nodes: String,
+        stLocalVariables: String,
         createAt: Long,
         updateAt: Long,
         chatSuggestions: String,
         isPinned: Boolean,
+    )
+
+    @Query("UPDATE conversationentity SET st_local_variables = :stLocalVariables WHERE id = :id")
+    suspend fun updateStLocalVariables(
+        id: String,
+        stLocalVariables: String,
     )
 
     @Delete

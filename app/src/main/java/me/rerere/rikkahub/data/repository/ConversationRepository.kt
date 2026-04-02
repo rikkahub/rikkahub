@@ -228,6 +228,7 @@ class ConversationRepository(
                 assistantId = entity.assistantId,
                 title = entity.title,
                 nodes = entity.nodes,
+                stLocalVariables = entity.stLocalVariables,
                 createAt = entity.createAt,
                 updateAt = entity.updateAt,
                 chatSuggestions = entity.chatSuggestions,
@@ -238,6 +239,16 @@ class ConversationRepository(
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
         messageFtsManager.indexConversation(conversation)
+    }
+
+    suspend fun updateConversationLocalVariables(
+        conversationId: Uuid,
+        stLocalVariables: Map<String, String>,
+    ) {
+        conversationDAO.updateStLocalVariables(
+            id = conversationId.toString(),
+            stLocalVariables = JsonInstant.encodeToString(stLocalVariables),
+        )
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
@@ -301,6 +312,7 @@ class ConversationRepository(
             id = conversation.id.toString(),
             title = conversation.title,
             nodes = "[]",  // nodes 现在存储在单独的表中
+            stLocalVariables = JsonInstant.encodeToString(conversation.stLocalVariables),
             createAt = conversation.createAt.toEpochMilli(),
             updateAt = conversation.updateAt.toEpochMilli(),
             assistantId = conversation.assistantId.toString(),
@@ -317,6 +329,7 @@ class ConversationRepository(
             id = Uuid.parse(conversationEntity.id),
             title = conversationEntity.title,
             messageNodes = messageNodes.filter { it.messages.isNotEmpty() },
+            stLocalVariables = JsonInstant.decodeFromString(conversationEntity.stLocalVariables),
             createAt = Instant.ofEpochMilli(conversationEntity.createAt),
             updateAt = Instant.ofEpochMilli(conversationEntity.updateAt),
             assistantId = Uuid.parse(conversationEntity.assistantId),

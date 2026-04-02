@@ -89,14 +89,20 @@ class ConversationSession(
 
     fun getJob(): Job? = _generationJob.value
 
-    fun getStMacroState(globalVariables: MutableMap<String, String>): StMacroState {
+    fun getStMacroState(
+        globalVariables: MutableMap<String, String>,
+        onLocalVariablesChanged: (() -> Unit)? = null,
+        onGlobalVariablesChanged: (() -> Unit)? = null,
+    ): StMacroState {
         return StMacroState(
-            localVariables = stMacroLocalVariables,
-            globalVariables = globalVariables,
+            localVariables = ObservedMutableMap(stMacroLocalVariables, onLocalVariablesChanged),
+            globalVariables = ObservedMutableMap(globalVariables, onGlobalVariablesChanged),
         )
     }
 
     fun getLorebookRuntimeState(): LorebookRuntimeState = lorebookRuntimeState
+
+    fun getPersistentLocalVariablesSnapshot(): Map<String, String> = stMacroLocalVariables.toMap()
 
     fun resetStMacroLocalVariables() {
         stMacroLocalVariables.clear()
@@ -114,7 +120,10 @@ class ConversationSession(
         )
     }
 
-    fun restoreStRuntimeState(snapshot: StRuntimeSnapshot?) {
+    fun restoreStRuntimeState(
+        snapshot: StRuntimeSnapshot?,
+        persistentLocalVariables: Map<String, String> = emptyMap(),
+    ) {
         stMacroLocalVariables.clear()
         lorebookRuntimeState.clear()
         stGenerationType = snapshot?.generationType
@@ -123,7 +132,12 @@ class ConversationSession(
             .orEmpty()
             .ifBlank { "normal" }
 
-        snapshot?.localVariables?.let { stMacroLocalVariables.putAll(it) }
+        val resolvedLocalVariables = persistentLocalVariables.ifEmpty {
+            snapshot?.localVariables.orEmpty()
+        }
+        if (resolvedLocalVariables.isNotEmpty()) {
+            stMacroLocalVariables.putAll(resolvedLocalVariables)
+        }
         snapshot?.lorebookRuntimeState?.let { lorebookRuntimeState.restoreFromSnapshot(it) }
     }
 
@@ -148,5 +162,48 @@ class ConversationSession(
         idleCheckJob?.cancel()
         idleCheckJob = null
         lorebookRuntimeState.clear()
+    }
+}
+
+internal class ObservedMutableMap<K, V>(
+    private val delegate: MutableMap<K, V>,
+    private val onMutate: (() -> Unit)?,
+) : MutableMap<K, V> by delegate {
+    override fun clear() {
+        if (delegate.isEmpty()) return
+        delegate.clear()
+        onMutate?.invoke()
+    }
+
+    override fun put(key: K, value: V): V? {
+        val previous = delegate.put(key, value)
+        if (previous != value) {
+            onMutate?.invoke()
+        }
+        return previous
+    }
+
+    override fun putAll(from: Map<out K, V>) {
+        if (from.isEmpty()) return
+        var changed = false
+        from.forEach { (key, value) ->
+            val previous = delegate.put(key, value)
+            if (previous != value) {
+                changed = true
+            }
+        }
+        if (changed) {
+            onMutate?.invoke()
+        }
+    }
+
+    override fun remove(key: K): V? {
+        val previous = delegate.remove(key)
+        if (previous != null || !delegate.containsKey(key)) {
+            if (previous != null) {
+                onMutate?.invoke()
+            }
+        }
+        return previous
     }
 }
