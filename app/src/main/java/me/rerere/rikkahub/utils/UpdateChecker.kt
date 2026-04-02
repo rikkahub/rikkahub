@@ -9,12 +9,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.rerere.common.http.await
 import me.rerere.rikkahub.APP_DISPLAY_NAME
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.UPDATE_CHECK_ENABLED
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -22,35 +24,43 @@ private const val API_URL = "https://updates.rikka-ai.com/"
 
 class UpdateChecker(private val client: OkHttpClient) {
     private val json = Json { ignoreUnknownKeys = true }
+    val isEnabled = UPDATE_CHECK_ENABLED
+    val initialState: UiState<UpdateInfo> = if (isEnabled) UiState.Loading else UiState.Idle
 
-    fun checkUpdate(): Flow<UiState<UpdateInfo>> = flow {
-        emit(UiState.Loading)
-        emit(
-            UiState.Success(
-                data = try {
-                    val response = client.newCall(
-                        Request.Builder()
-                            .url(API_URL)
-                            .get()
-                            .addHeader(
-                                "User-Agent",
-                                "$APP_DISPLAY_NAME ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
-                            )
-                            .build()
-                    ).await()
-                    if (response.isSuccessful) {
-                        json.decodeFromString<UpdateInfo>(response.body.string())
-                    } else {
-                        throw Exception("Failed to fetch update info")
+    fun checkUpdate(): Flow<UiState<UpdateInfo>> {
+        if (!isEnabled) {
+            return flowOf(UiState.Idle)
+        }
+
+        return flow {
+            emit(UiState.Loading)
+            emit(
+                UiState.Success(
+                    data = try {
+                        val response = client.newCall(
+                            Request.Builder()
+                                .url(API_URL)
+                                .get()
+                                .addHeader(
+                                    "User-Agent",
+                                    "$APP_DISPLAY_NAME ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
+                                )
+                                .build()
+                        ).await()
+                        if (response.isSuccessful) {
+                            json.decodeFromString<UpdateInfo>(response.body.string())
+                        } else {
+                            throw Exception("Failed to fetch update info")
+                        }
+                    } catch (e: Exception) {
+                        throw Exception("Failed to fetch update info", e)
                     }
-                } catch (e: Exception) {
-                    throw Exception("Failed to fetch update info", e)
-                }
+                )
             )
-        )
-    }.catch {
-        emit(UiState.Error(it))
-    }.flowOn(Dispatchers.IO)
+        }.catch {
+            emit(UiState.Error(it))
+        }.flowOn(Dispatchers.IO)
+    }
 
     fun downloadUpdate(context: Context, download: UpdateDownload) {
         runCatching {

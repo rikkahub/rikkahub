@@ -124,129 +124,129 @@ fun ChatDrawerContent(
                 modifier = Modifier.padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-            if (settings.displaySetting.showUpdates && !isPlayStore) {
-                UpdateCard(vm)
-            }
+                if (settings.displaySetting.showUpdates && !isPlayStore && vm.updateChecker.isEnabled) {
+                    UpdateCard(vm)
+                }
 
-            BackupReminderCard(
-                settings = settings,
-                onClick = { navController.navigate(Screen.Backup) },
-            )
+                BackupReminderCard(
+                    settings = settings,
+                    onClick = { navController.navigate(Screen.Backup) },
+                )
 
-            // 用户头像和昵称自定义区域
-            LuneSection(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        navController.navigate(Screen.UserPersona) {
-                            launchSingleTop = true
-                        }
-                    },
-            ) {
-                Row(
+                // 用户头像和昵称自定义区域
+                LuneSection(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    UIAvatar(
-                        name = effectiveUserName,
-                        value = settings.effectiveUserAvatar(),
-                        modifier = Modifier.size(52.dp),
-                    )
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(
-                                text = effectiveUserName,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            if (selectedPersonaProfile != null) {
-                                Text(
-                                    text = stringResource(R.string.chat_drawer_persona_current),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
+                        .clickable {
+                            navController.navigate(Screen.UserPersona) {
+                                launchSingleTop = true
                             }
-                        }
-                        Text(
-                            text = effectiveUserPersona.ifBlank {
-                                if (settings.userPersonaProfiles.isEmpty()) {
-                                    stringResource(R.string.chat_drawer_persona_hint_create)
-                                } else {
-                                    stringResource(R.string.chat_drawer_persona_hint_manage)
-                                }
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+                        },
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        UIAvatar(
+                            name = effectiveUserName,
+                            value = settings.effectiveUserAvatar(),
+                            modifier = Modifier.size(52.dp),
                         )
-                        Text(
-                            text = if (settings.userPersonaProfiles.isEmpty()) {
-                                stringResource(R.string.chat_drawer_persona_none)
-                            } else {
-                                stringResource(R.string.chat_drawer_persona_count, settings.userPersonaProfiles.size)
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    Icon(
-                        imageVector = HugeIcons.ArrowRight01,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(LocalTextStyle.current.fontSize.toDp() + 4.dp)
-                    )
-                }
-            }
 
-            ConversationList(
-                current = current,
-                conversations = conversations,
-                conversationJobs = conversationJobs.keys,
-                listState = conversationListState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                headerContent = {
-                    DrawerActions(navController = navController)
-                },
-                onClick = {
-                    navigateToChatPage(navController, it.id)
-                },
-                onRegenerateTitle = {
-                    vm.generateTitle(it, true)
-                },
-                onDelete = {
-                    vm.deleteConversation(it)
-                    // Refresh the conversation list to immediately remove the deleted item
-                    // This fixes the issue where deleted conversations sometimes remain visible
-                    // until manually clicked (issue #747)
-                    conversations.refresh()
-                    if (it.id == current.id) {
-                        navigateToChatPage(navController)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    text = effectiveUserName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                if (selectedPersonaProfile != null) {
+                                    Text(
+                                        text = stringResource(R.string.chat_drawer_persona_current),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                            Text(
+                                text = effectiveUserPersona.ifBlank {
+                                    if (settings.userPersonaProfiles.isEmpty()) {
+                                        stringResource(R.string.chat_drawer_persona_hint_create)
+                                    } else {
+                                        stringResource(R.string.chat_drawer_persona_hint_manage)
+                                    }
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = if (settings.userPersonaProfiles.isEmpty()) {
+                                    stringResource(R.string.chat_drawer_persona_none)
+                                } else {
+                                    stringResource(R.string.chat_drawer_persona_count, settings.userPersonaProfiles.size)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Icon(
+                            imageVector = HugeIcons.ArrowRight01,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(LocalTextStyle.current.fontSize.toDp() + 4.dp)
+                        )
                     }
-                },
-                onPin = {
-                    vm.updatePinnedStatus(it)
-                },
-                onMoveToAssistant = {
-                    conversationToMove = it
-                    showMoveToAssistantSheet = true
                 }
-            )
+
+                ConversationList(
+                    current = current,
+                    conversations = conversations,
+                    conversationJobs = conversationJobs.keys,
+                    listState = conversationListState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    headerContent = {
+                        DrawerActions(navController = navController)
+                    },
+                    onClick = {
+                        navigateToChatPage(navController, it.id)
+                    },
+                    onRegenerateTitle = {
+                        vm.generateTitle(it, true)
+                    },
+                    onDelete = {
+                        vm.deleteConversation(it)
+                        // Refresh the conversation list to immediately remove the deleted item
+                        // This fixes the issue where deleted conversations sometimes remain visible
+                        // until manually clicked (issue #747)
+                        conversations.refresh()
+                        if (it.id == current.id) {
+                            navigateToChatPage(navController)
+                        }
+                    },
+                    onPin = {
+                        vm.updatePinnedStatus(it)
+                    },
+                    onMoveToAssistant = {
+                        conversationToMove = it
+                        showMoveToAssistantSheet = true
+                    }
+                )
 
             // 助手选择器
             AssistantPicker(

@@ -53,6 +53,8 @@ import kotlin.time.toJavaInstant
 @OptIn(ExperimentalTime::class)
 @Composable
 fun UpdateCard(vm: ChatVM) {
+    if (!vm.updateChecker.isEnabled) return
+
     val state by vm.updateState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val resources = LocalResources.current
