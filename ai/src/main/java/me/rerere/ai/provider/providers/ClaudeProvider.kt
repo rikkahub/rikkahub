@@ -30,6 +30,8 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextRequestHeader
+import me.rerere.ai.provider.TextRequestPreview
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.openai.normalizedTopKOrNull
 import me.rerere.ai.provider.providers.normalizedStopSequencesOrNull
@@ -63,6 +65,31 @@ private const val ANTHROPIC_VERSION = "2023-06-01"
 
 class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+
+    fun previewTextRequest(
+        providerSetting: ProviderSetting.Claude,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+        stream: Boolean,
+    ): TextRequestPreview {
+        val requestBody = buildMessageRequest(providerSetting, messages, params, stream = stream)
+        val request = Request.Builder()
+            .url("${providerSetting.baseUrl}/messages")
+            .headers(params.customHeaders.toHeaders())
+            .addHeader("x-api-key", "<redacted>")
+            .addHeader("anthropic-version", ANTHROPIC_VERSION)
+            .addHeader("Content-Type", "application/json")
+            .configureReferHeaders(providerSetting.baseUrl)
+            .build()
+        return TextRequestPreview(
+            providerName = providerSetting.name,
+            apiName = "Claude Messages API",
+            url = request.url.toString(),
+            stream = stream,
+            headers = request.headers.toHeaderList(),
+            body = requestBody,
+        )
+    }
 
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
         withContext(Dispatchers.IO) {
@@ -580,6 +607,15 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             completionTokens = completionTokens,
             totalTokens = promptTokens + completionTokens,
             cachedTokens = cachedInputTokens,
+        )
+    }
+}
+
+private fun okhttp3.Headers.toHeaderList(): List<TextRequestHeader> {
+    return List(size) { index ->
+        TextRequestHeader(
+            name = name(index),
+            value = value(index),
         )
     }
 }

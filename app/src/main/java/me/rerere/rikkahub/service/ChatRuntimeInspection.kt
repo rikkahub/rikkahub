@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.service
 
+import me.rerere.ai.provider.TextRequestPreview
 import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.MessageRole
 
@@ -20,4 +21,5 @@ data class ChatRuntimeInspection(
     val localVariables: Map<String, String>,
     val globalVariables: Map<String, String>,
     val contextVariables: JsonObject,
+    val payloadPreview: TextRequestPreview,
 )

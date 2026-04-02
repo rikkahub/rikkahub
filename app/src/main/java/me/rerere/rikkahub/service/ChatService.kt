@@ -516,6 +516,8 @@ class ChatService(
         val model = assistant.chatModelId?.let { settings.findModelById(it) }
             ?: settings.getCurrentChatModel()
             ?: error("No model configured for this conversation")
+        val provider = model.findProvider(settings.providers)
+            ?: error("No provider configured for model ${model.modelId}")
         val generationType = resolveConversationStGenerationType(
             conversationId = conversationId,
             conversation = conversation,
@@ -532,7 +534,11 @@ class ChatService(
                 ?.lorebookRuntimeState
                 ?.let(::restoreFromSnapshot)
         }
-        val promptPreviewMessages = generationHandler.previewPreparedMessages(
+        val conversationTools = buildConversationTools(
+            settings = settings,
+            assistant = assistant,
+        )
+        val preparedMessages = generationHandler.previewPreparedMessages(
             settings = settings,
             model = model,
             messages = conversation.currentMessages,
@@ -547,14 +553,22 @@ class ChatService(
             } else {
                 memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
             },
-            tools = buildConversationTools(
-                settings = settings,
-                assistant = assistant,
-            ),
+            tools = conversationTools,
             stGenerationType = generationType,
             stMacroState = previewMacroState,
             lorebookRuntimeState = previewLorebookRuntimeState,
-        ).map(::toPromptPreviewMessage)
+        )
+        val promptPreviewMessages = preparedMessages.map(::toPromptPreviewMessage)
+        val payloadPreview = providerManager.previewTextRequest(
+            setting = provider,
+            messages = preparedMessages,
+            params = buildConversationGenerationParams(
+                assistant = assistant,
+                model = model,
+                tools = conversationTools,
+            ),
+            stream = assistant.streamOutput,
+        )
         val activeTemplate = settings.activeStPresetTemplate()
             ?.takeIf { settings.stPresetEnabled }
         val macroEnvironment = StMacroEnvironment.from(
@@ -594,6 +608,7 @@ class ChatService(
                 promptMessages = promptPreviewMessages,
                 previewMacroState = previewMacroState,
             ),
+            payloadPreview = payloadPreview,
         )
     }
 
@@ -647,6 +662,40 @@ class ChatService(
                 )
             }
         }
+    }
+
+    private fun buildConversationGenerationParams(
+        assistant: Assistant,
+        model: me.rerere.ai.provider.Model,
+        tools: List<Tool>,
+    ): TextGenerationParams {
+        return TextGenerationParams(
+            model = model,
+            temperature = assistant.temperature,
+            topP = assistant.topP,
+            maxTokens = assistant.maxTokens,
+            frequencyPenalty = assistant.frequencyPenalty,
+            presencePenalty = assistant.presencePenalty,
+            minP = assistant.minP,
+            topK = assistant.topK,
+            topA = assistant.topA,
+            repetitionPenalty = assistant.repetitionPenalty,
+            seed = assistant.seed,
+            stopSequences = assistant.stopSequences,
+            googleResponseMimeType = assistant.googleResponseMimeType,
+            tools = tools,
+            thinkingBudget = assistant.thinkingBudget,
+            openAIReasoningEffort = assistant.openAIReasoningEffort,
+            openAIVerbosity = assistant.openAIVerbosity,
+            customHeaders = buildList {
+                addAll(assistant.customHeaders)
+                addAll(model.customHeaders)
+            },
+            customBody = buildList {
+                addAll(assistant.customBodies)
+                addAll(model.customBodies)
+            }
+        )
     }
 
     private fun buildRuntimeContextJson(

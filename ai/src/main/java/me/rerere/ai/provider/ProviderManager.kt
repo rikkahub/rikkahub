@@ -54,4 +54,22 @@ class ProviderManager(client: OkHttpClient, context: Context) {
             is ProviderSetting.Claude -> getProvider("claude")
         } as Provider<T>
     }
+
+    fun previewTextRequest(
+        setting: ProviderSetting,
+        messages: List<me.rerere.ai.ui.UIMessage>,
+        params: TextGenerationParams,
+        stream: Boolean,
+    ): TextRequestPreview {
+        return when (setting) {
+            is ProviderSetting.OpenAI ->
+                (getProvider("openai") as OpenAIProvider).previewTextRequest(setting, messages, params, stream)
+
+            is ProviderSetting.Google ->
+                (getProvider("google") as GoogleProvider).previewTextRequest(setting, messages, params, stream)
+
+            is ProviderSetting.Claude ->
+                (getProvider("claude") as ClaudeProvider).previewTextRequest(setting, messages, params, stream)
+        }
+    }
 }

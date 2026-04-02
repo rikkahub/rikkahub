@@ -26,6 +26,8 @@ import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextRequestHeader
+import me.rerere.ai.provider.TextRequestPreview
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.collectLeadingSystemTextParts
@@ -65,6 +67,35 @@ class ResponseAPI(
     private val client: OkHttpClient,
     private val keyRoulette: KeyRoulette = KeyRoulette.default()
 ) : OpenAIImpl {
+    fun previewTextRequest(
+        providerSetting: ProviderSetting.OpenAI,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+        stream: Boolean,
+    ): TextRequestPreview {
+        val requestBody = buildRequestBody(
+            providerSetting = providerSetting,
+            messages = messages,
+            params = params,
+            stream = stream,
+        )
+        val request = Request.Builder()
+            .url("${providerSetting.baseUrl}/responses")
+            .headers(params.customHeaders.toHeaders())
+            .addHeader("Authorization", "Bearer <redacted>")
+            .addHeader("Content-Type", "application/json")
+            .configureReferHeaders(providerSetting.baseUrl)
+            .build()
+        return TextRequestPreview(
+            providerName = providerSetting.name,
+            apiName = "OpenAI Responses API",
+            url = request.url.toString(),
+            stream = stream,
+            headers = request.headers.toHeaderList(),
+            body = requestBody,
+        )
+    }
+
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
@@ -689,6 +720,15 @@ private fun List<UIMessagePart>.isOnlyTextPart(): Boolean {
     val gonnaSend = filter { it is UIMessagePart.Text || it is UIMessagePart.Image }.size
     val texts = filter { it is UIMessagePart.Text }.size
     return gonnaSend == texts && texts == 1
+}
+
+private fun okhttp3.Headers.toHeaderList(): List<TextRequestHeader> {
+    return List(size) { index ->
+        TextRequestHeader(
+            name = name(index),
+            value = value(index),
+        )
+    }
 }
 
 internal data class ResponseProviderCapabilities(

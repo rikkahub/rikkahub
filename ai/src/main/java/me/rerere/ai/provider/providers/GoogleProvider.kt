@@ -34,6 +34,8 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextRequestHeader
+import me.rerere.ai.provider.TextRequestPreview
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.openai.normalizedSeedOrNull
 import me.rerere.ai.provider.providers.openai.normalizedTopKOrNull
@@ -79,6 +81,55 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
+    }
+
+    fun previewTextRequest(
+        providerSetting: ProviderSetting.Google,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+        stream: Boolean,
+    ): TextRequestPreview {
+        val requestBody = buildCompletionRequestBody(messages, params)
+        val url = if (stream) {
+            buildUrl(
+                providerSetting = providerSetting,
+                path = if (providerSetting.vertexAI) {
+                    "publishers/google/models/${params.model.modelId}:streamGenerateContent"
+                } else {
+                    "models/${params.model.modelId}:streamGenerateContent"
+                }
+            ).newBuilder().addQueryParameter("alt", "sse").build()
+        } else {
+            buildUrl(
+                providerSetting = providerSetting,
+                path = if (providerSetting.vertexAI) {
+                    "publishers/google/models/${params.model.modelId}:generateContent"
+                } else {
+                    "models/${params.model.modelId}:generateContent"
+                }
+            )
+        }
+        val request = Request.Builder()
+            .url(url)
+            .headers(params.customHeaders.toHeaders())
+            .addHeader("Content-Type", "application/json")
+            .configureReferHeaders(providerSetting.baseUrl)
+            .apply {
+                if (providerSetting.vertexAI) {
+                    addHeader("Authorization", "Bearer <redacted_vertex_access_token>")
+                } else {
+                    addHeader("x-goog-api-key", "<redacted>")
+                }
+            }
+            .build()
+        return TextRequestPreview(
+            providerName = providerSetting.name,
+            apiName = if (providerSetting.vertexAI) "Google Vertex AI Generate Content" else "Google Gemini Generate Content",
+            url = request.url.toString(),
+            stream = stream,
+            headers = request.headers.toHeaderList(),
+            body = requestBody,
+        )
     }
 
     private fun buildUrl(providerSetting: ProviderSetting.Google, path: String): HttpUrl {
@@ -869,4 +920,13 @@ private fun normalizeGoogleModelId(name: String): String = when {
     name.startsWith("models/") -> name.removePrefix("models/")
     name.startsWith("publishers/google/models/") -> name.removePrefix("publishers/google/models/")
     else -> name
+}
+
+private fun okhttp3.Headers.toHeaderList(): List<TextRequestHeader> {
+    return List(size) { index ->
+        TextRequestHeader(
+            name = name(index),
+            value = value(index),
+        )
+    }
 }
