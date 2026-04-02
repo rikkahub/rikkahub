@@ -40,6 +40,10 @@
         "label": "自动",
         "description": "让模型自动决定推理级别。"
       },
+      "minimal": {
+        "label": "极简推理",
+        "description": "模型将使用极少的推理，适合简单任务。"
+      },
       "low": {
         "label": "轻度推理",
         "description": "模型将使用少量推理来回答问题。"
@@ -51,6 +55,10 @@
       "high": {
         "label": "重度推理",
         "description": "模型将使用大量推理来回答问题。"
+      },
+      "xhigh": {
+        "label": "超重度推理",
+        "description": "模型将使用最大限度的推理来处理复杂任务。"
       }
     }
   },

@@ -386,10 +386,9 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         else -> {
                             if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
                                 when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
-                                    ReasoningLevel.HIGH -> put("thinkingLevel", "high")
-                                    ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
-                                    ReasoningLevel.LOW -> put("thinkingLevel", "low")
-                                    else -> error("Unknown reasoning level: $level")
+                                    ReasoningLevel.HIGH, ReasoningLevel.MEDIUM, ReasoningLevel.XHIGH -> put("thinkingLevel", "high")
+                                    ReasoningLevel.LOW, ReasoningLevel.MINIMAL -> put("thinkingLevel", "low")
+                                    else -> put("thinkingLevel", "low")
                                 }
                             } else {
                                 put("thinkingBudget", params.thinkingBudget)

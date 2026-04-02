@@ -40,6 +40,10 @@
         "label": "Auto",
         "description": "Let the model decide the reasoning level automatically."
       },
+      "minimal": {
+        "label": "Minimal",
+        "description": "Use very minimal reasoning, suitable for simple tasks."
+      },
       "low": {
         "label": "Light",
         "description": "Use a small amount of reasoning to answer."
@@ -51,6 +55,10 @@
       "high": {
         "label": "Heavy",
         "description": "Use extensive reasoning to answer."
+      },
+      "xhigh": {
+        "label": "Extra Heavy",
+        "description": "Use the maximum amount of reasoning for complex tasks."
       }
     }
   },

@@ -27,9 +27,11 @@ import { PickerErrorAlert } from "./picker-error-alert";
 const PRESET_BUDGETS = {
   OFF: 0,
   AUTO: -1,
+  MINIMAL: 512,
   LOW: 1024,
   MEDIUM: 16_000,
   HIGH: 32_000,
+  XHIGH: 64_000,
 } as const;
 
 type ReasoningLevel = keyof typeof PRESET_BUDGETS;
@@ -44,9 +46,11 @@ interface ReasoningPreset {
 const REASONING_PRESET_BUDGETS: Array<Pick<ReasoningPreset, "key" | "budget">> = [
   { key: "OFF", budget: PRESET_BUDGETS.OFF },
   { key: "AUTO", budget: PRESET_BUDGETS.AUTO },
+  { key: "MINIMAL", budget: PRESET_BUDGETS.MINIMAL },
   { key: "LOW", budget: PRESET_BUDGETS.LOW },
   { key: "MEDIUM", budget: PRESET_BUDGETS.MEDIUM },
   { key: "HIGH", budget: PRESET_BUDGETS.HIGH },
+  { key: "XHIGH", budget: PRESET_BUDGETS.XHIGH },
 ];
 
 export interface ReasoningPickerButtonProps {
@@ -104,6 +108,12 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
         budget: PRESET_BUDGETS.AUTO,
       },
       {
+        key: "MINIMAL",
+        label: t("reasoning.presets.minimal.label"),
+        description: t("reasoning.presets.minimal.description"),
+        budget: PRESET_BUDGETS.MINIMAL,
+      },
+      {
         key: "LOW",
         label: t("reasoning.presets.low.label"),
         description: t("reasoning.presets.low.description"),
@@ -120,6 +130,12 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
         label: t("reasoning.presets.high.label"),
         description: t("reasoning.presets.high.description"),
         budget: PRESET_BUDGETS.HIGH,
+      },
+      {
+        key: "XHIGH",
+        label: t("reasoning.presets.xhigh.label"),
+        description: t("reasoning.presets.xhigh.description"),
+        budget: PRESET_BUDGETS.XHIGH,
       },
     ],
     [t],
