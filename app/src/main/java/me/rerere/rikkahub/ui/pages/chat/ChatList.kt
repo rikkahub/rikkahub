@@ -235,8 +235,8 @@ private fun ChatListNormal(
     val density = LocalDensity.current
     val activity = LocalActivity.current as? me.rerere.rikkahub.RouteActivity
     val enableGlassBlur = settings.displaySetting.enableBlurEffect
-    val topFadeHeight = if (topBarVisible) innerPadding.calculateTopPadding() + 20.dp else 0.dp
-    val bottomFadeHeight = innerPadding.calculateBottomPadding() + 24.dp
+    val topFadeHeight = if (topBarVisible) innerPadding.calculateTopPadding() + 40.dp else 0.dp
+    val bottomFadeHeight = innerPadding.calculateBottomPadding() + 56.dp
     val assistant = remember(settings.assistants, conversation.assistantId) {
         settings.getAssistantById(conversation.assistantId)
     }
@@ -462,6 +462,11 @@ private fun ChatListNormal(
             }
         }
 
+        ChatListChromeScrims(
+            innerPadding = innerPadding,
+            showTopScrim = topBarVisible,
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -578,6 +583,46 @@ private fun ChatListNormal(
             }
         }
     }
+}
+
+@Composable
+private fun BoxScope.ChatListChromeScrims(
+    innerPadding: PaddingValues,
+    showTopScrim: Boolean,
+) {
+    val background = MaterialTheme.colorScheme.background
+
+    if (showTopScrim) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(innerPadding.calculateTopPadding() + 48.dp)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            background.copy(alpha = 0.80f),
+                            Color.Transparent,
+                        ),
+                    )
+                )
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .height(innerPadding.calculateBottomPadding() + 80.dp)
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        background.copy(alpha = 0.90f),
+                    ),
+                )
+            )
+    )
 }
 
 private fun Modifier.chatFadingEdges(
