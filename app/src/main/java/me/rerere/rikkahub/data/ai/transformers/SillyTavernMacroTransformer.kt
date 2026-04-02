@@ -16,6 +16,38 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
     private val diceRegex = Regex("""^\s*(\d*)d(\d+)([+-]\d+)?\s*$""", setOf(RegexOption.IGNORE_CASE))
     private val legacyTrimRegex = Regex("""(?:\r?\n)*\{\{trim\}\}(?:\r?\n)*""", setOf(RegexOption.IGNORE_CASE))
     private val scopedCommentRegex = Regex("""\{\{//\}\}[\s\S]*?\{\{///\}\}""")
+    private val stRuntimeOnlyMacros = setOf(
+        "outlet",
+        "instructstorystringprefix",
+        "instructstorystringsuffix",
+        "instructuserprefix",
+        "instructinput",
+        "instructusersuffix",
+        "instructassistantprefix",
+        "instructoutput",
+        "instructassistantsuffix",
+        "instructseparator",
+        "instructsystemprefix",
+        "instructsystemsuffix",
+        "instructfirstassistantprefix",
+        "instructfirstoutputprefix",
+        "instructlastassistantprefix",
+        "instructlastoutputprefix",
+        "instructstop",
+        "instructuserfiller",
+        "instructsysteminstructionprefix",
+        "instructfirstuserprefix",
+        "instructfirstinput",
+        "instructlastuserprefix",
+        "instructlastinput",
+        "defaultsystemprompt",
+        "instructsystem",
+        "instructsystemprompt",
+        "systemprompt",
+        "exampleseparator",
+        "chatseparator",
+        "chatstart",
+    )
 
     override suspend fun transform(
         ctx: TransformerContext,
@@ -24,7 +56,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         val template = ctx.settings.activeStPresetTemplate()
             ?.takeIf { ctx.settings.stPresetEnabled }
         val characterData = ctx.assistant.stCharacterData
-        if (template == null && characterData == null) return messages
+        val stRuntimeEnabled = template != null || characterData != null
 
         val env = StMacroEnvironment.from(
             ctx = ctx,
@@ -37,6 +69,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
             env = env,
             template = template,
             state = ctx.stMacroState ?: StMacroState(),
+            stRuntimeEnabled = stRuntimeEnabled,
         )
     }
 
@@ -45,13 +78,18 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         env: StMacroEnvironment,
         template: SillyTavernPromptTemplate? = null,
         state: StMacroState = StMacroState(),
+        stRuntimeEnabled: Boolean = true,
     ): List<UIMessage> {
         val transformed = messages.map { message ->
             message.copy(
                 parts = message.parts.map { part ->
                     when (part) {
-                        is UIMessagePart.Text -> part.copy(text = resolveMacros(part.text, env, state))
-                        is UIMessagePart.Reasoning -> part.copy(reasoning = resolveMacros(part.reasoning, env, state))
+                        is UIMessagePart.Text -> part.copy(
+                            text = resolveMacros(part.text, env, state, stRuntimeEnabled = stRuntimeEnabled)
+                        )
+                        is UIMessagePart.Reasoning -> part.copy(
+                            reasoning = resolveMacros(part.reasoning, env, state, stRuntimeEnabled = stRuntimeEnabled)
+                        )
                         else -> part
                     }
                 }
@@ -69,6 +107,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         text: String,
         env: StMacroEnvironment,
         state: StMacroState,
+        stRuntimeEnabled: Boolean,
         rootHash: Int = text.hashCode(),
     ): String {
         if (!text.contains("{{")) return text
@@ -76,7 +115,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         var result = text
         repeat(MAX_MACRO_PASSES) {
             var changed = false
-            val scopedResolved = resolveScopedMacros(result, env, state)
+            val scopedResolved = resolveScopedMacros(result, env, state, stRuntimeEnabled)
             if (scopedResolved != result) {
                 result = scopedResolved
                 changed = true
@@ -89,6 +128,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
                     state = state,
                     macroOffset = match.range.first,
                     rootHash = rootHash,
+                    stRuntimeEnabled = stRuntimeEnabled,
                 )
                 if (replacement != match.value) {
                     changed = true
@@ -112,11 +152,12 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         text: String,
         env: StMacroEnvironment,
         state: StMacroState,
+        stRuntimeEnabled: Boolean,
     ): String {
         var result = scopedCommentRegex.replace(text, "")
         while (true) {
             val scopedMacro = findInnermostScopedMacro(result) ?: return result
-            val replacement = evaluateScopedMacro(scopedMacro, result, env, state)
+            val replacement = evaluateScopedMacro(scopedMacro, result, env, state, stRuntimeEnabled)
             result = result.replaceRange(scopedMacro.open.startIndex, scopedMacro.close.endIndex + 1, replacement)
         }
     }
@@ -128,9 +169,11 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         state: StMacroState,
         macroOffset: Int,
         rootHash: Int,
+        stRuntimeEnabled: Boolean,
     ): String {
         val parsed = ParsedMacro.parse(body) ?: return raw
         val name = parsed.name.lowercase()
+        if (!stRuntimeEnabled && isStRuntimeOnlyMacro(name)) return raw
 
         fun arg(index: Int): String = parsed.args.getOrNull(index).orEmpty()
         fun tail(index: Int): String = parsed.args.drop(index).joinToString("::")
@@ -142,8 +185,8 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
                 if (inlineIf == null) {
                     raw
                 } else {
-                    if (evaluateCondition(inlineIf.condition, env, state)) {
-                        resolveMacros(inlineIf.content, env, state)
+                    if (evaluateCondition(inlineIf.condition, env, state, stRuntimeEnabled)) {
+                        resolveMacros(inlineIf.content, env, state, stRuntimeEnabled)
                     } else {
                         ""
                     }
@@ -273,19 +316,20 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         text: String,
         env: StMacroEnvironment,
         state: StMacroState,
+        stRuntimeEnabled: Boolean,
     ): String {
         val content = text.substring(macro.open.endIndex + 1, macro.close.startIndex)
         return when (macro.open.name) {
-            "trim" -> trimScopedContent(resolveMacros(content, env, state))
+            "trim" -> trimScopedContent(resolveMacros(content, env, state, stRuntimeEnabled))
             "//" -> ""
             "if" -> {
                 val split = splitTopLevelElse(content)
-                val chosenBranch = if (evaluateCondition(macro.open.args.firstOrNull().orEmpty(), env, state)) {
+                val chosenBranch = if (evaluateCondition(macro.open.args.firstOrNull().orEmpty(), env, state, stRuntimeEnabled)) {
                     split.thenBranch
                 } else {
                     split.elseBranch
                 }
-                trimScopedContent(resolveMacros(chosenBranch.orEmpty(), env, state))
+                trimScopedContent(resolveMacros(chosenBranch.orEmpty(), env, state, stRuntimeEnabled))
             }
             else -> macro.open.raw
         }
@@ -295,6 +339,7 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         rawCondition: String,
         env: StMacroEnvironment,
         state: StMacroState,
+        stRuntimeEnabled: Boolean,
     ): Boolean {
         var condition = rawCondition.trim()
         var inverted = false
@@ -303,11 +348,11 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
             condition = condition.removePrefix("!").trimStart()
         }
 
-        condition = resolveMacros(condition, env, state).trim()
+        condition = resolveMacros(condition, env, state, stRuntimeEnabled).trim()
         condition = when {
             condition.startsWith(".") -> state.localVariables[condition.removePrefix(".").trim()].orEmpty()
             condition.startsWith("$") -> state.globalVariables[condition.removePrefix("$").trim()].orEmpty()
-            else -> resolveBareConditionMacro(condition, env, state)
+            else -> resolveBareConditionMacro(condition, env, state, stRuntimeEnabled)
         }
 
         val truthy = condition.isNotEmpty() && !isFalseBoolean(condition)
@@ -318,9 +363,19 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
         condition: String,
         env: StMacroEnvironment,
         state: StMacroState,
+        stRuntimeEnabled: Boolean,
     ): String {
         if (condition.isBlank()) return ""
+        macroRegex.matchEntire(condition)?.groupValues?.getOrNull(1)?.let { wrappedBody ->
+            val wrappedParsed = ParsedMacro.parse(wrappedBody)
+            if (wrappedParsed != null && !stRuntimeEnabled && isStRuntimeOnlyMacro(wrappedParsed.name.lowercase())) {
+                return ""
+            }
+        }
         val parsed = ParsedMacro.parse(condition) ?: return condition
+        if (!stRuntimeEnabled && isStRuntimeOnlyMacro(parsed.name.lowercase())) {
+            return ""
+        }
         val raw = "{{${condition}}}"
         val resolved = replaceMacro(
             raw = raw,
@@ -329,8 +384,13 @@ object SillyTavernMacroTransformer : InputMessageTransformer {
             state = state,
             macroOffset = 0,
             rootHash = parsed.hashCode(),
+            stRuntimeEnabled = stRuntimeEnabled,
         )
         return if (resolved == raw) condition else resolved
+    }
+
+    private fun isStRuntimeOnlyMacro(name: String): Boolean {
+        return name in stRuntimeOnlyMacros
     }
 
     private fun pickRandom(args: List<String>): String {

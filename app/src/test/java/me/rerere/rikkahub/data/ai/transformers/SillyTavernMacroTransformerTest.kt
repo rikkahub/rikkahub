@@ -1,7 +1,13 @@
 package me.rerere.rikkahub.data.ai.transformers
 
+import android.content.ContextWrapper
+import kotlinx.coroutines.runBlocking
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.SillyTavernPromptTemplate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -11,6 +17,40 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 class SillyTavernMacroTransformerTest {
+    @Test
+    fun `common macros should resolve without ST runtime while ST only macros stay gated`() = runBlocking {
+        val result = listOf(
+            UIMessage.system(
+                "{{user}} / {{char}} / {{persona}} / " +
+                    "{{lastUserMessage}} / {{setvar::style::Calm}}{{getvar::style}}"
+            ),
+            UIMessage.system("{{chatStart}} / {{instructSystemPrompt}}"),
+            UIMessage.system("{{if chatStart::WRONG}}{{if !chatStart::Fallback}}"),
+            UIMessage.user("Hello"),
+        ).transforms(
+            transformers = listOf(SillyTavernMacroTransformer),
+            context = ContextWrapper(null),
+            model = Model(modelId = "test-model", displayName = "Test Model"),
+            assistant = Assistant(
+                name = "Seraphina",
+                userPersona = "Archivist",
+            ),
+            settings = Settings(
+                displaySetting = DisplaySetting(userNickname = "Alice"),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                "Alice / Seraphina / Archivist / Hello / Calm",
+                "{{chatStart}} / {{instructSystemPrompt}}",
+                "Fallback",
+                "Hello",
+            ),
+            result.map { it.toText() }
+        )
+    }
+
     @Test
     fun `macros should resolve variables and remove empty prompt messages`() {
         val env = StMacroEnvironment(

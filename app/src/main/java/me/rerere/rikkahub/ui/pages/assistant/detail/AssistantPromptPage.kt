@@ -442,6 +442,62 @@ private fun AssistantPromptContent(
                     maxLines = 10
                 )
 
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    PromptFeatureGuideRow(
+                        title = "常驻可用宏",
+                        body = "{{user}}、{{char}}、{{persona}}、{{input}}、{{lastUserMessage}}、{{if}}、{{setvar}}、{{getvar}} 等不依赖 ST 开关。",
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        listOf(
+                            "{{user}}",
+                            "{{char}}",
+                            "{{persona}}",
+                            "{{input}}",
+                            "{{lastUserMessage}}",
+                            "{{if persona::...}}",
+                            "{{setvar::style::calm}}",
+                            "{{getvar::style}}",
+                        ).forEach { macro ->
+                            Tag(
+                                type = TagType.SUCCESS,
+                                onClick = {
+                                    systemPromptValue.insertAtCursor(macro)
+                                }
+                            ) {
+                                Text(macro)
+                            }
+                        }
+                    }
+                    PromptFeatureGuideRow(
+                        title = "仅 ST 运行时",
+                        body = "{{chatStart}}、{{instructSystemPrompt}}、{{outlet::name}} 等需要启用 ST 预设或加载角色卡后才会生效。",
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        listOf(
+                            "{{chatStart}}",
+                            "{{instructSystemPrompt}}",
+                            "{{outlet::memory}}",
+                        ).forEach { macro ->
+                            Tag(
+                                type = TagType.WARNING,
+                                onClick = {
+                                    systemPromptValue.insertAtCursor(macro)
+                                }
+                            ) {
+                                Text(macro)
+                            }
+                        }
+                    }
+                }
+
                 Column {
                     Text(
                         text = stringResource(R.string.assistant_page_available_variables),
