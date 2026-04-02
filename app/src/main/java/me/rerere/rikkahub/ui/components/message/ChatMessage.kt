@@ -12,12 +12,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -168,11 +166,15 @@ fun ChatMessage(
     val navController = LocalNavController.current
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
-    val assistantAvatarSlotWidth = if (message.role == MessageRole.ASSISTANT && settings.showModelIcon) 32.dp else 0.dp
-    val userAvatarSlotWidth = if (message.role == MessageRole.USER && settings.showUserAvatar) 36.dp else 0.dp
-    val avatarGap = 6.dp
+    val headerState = message.headerState(
+        settings = allSettings,
+        showIdentity = showIdentity,
+        model = model,
+        assistant = assistant,
+    )
     val showPrimaryActions = message.shouldShowPrimaryActions(loading)
     val showAccessoryRow = showPrimaryActions || node.messages.size > 1
+    val contentAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start
 
     @Composable
     fun MessageContentColumn(horizontalAlignment: Alignment.Horizontal) {
@@ -182,14 +184,6 @@ fun ChatMessage(
             horizontalAlignment = horizontalAlignment,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            if (showIdentity) {
-                ChatMessageIdentityLabel(
-                    message = message,
-                    model = model,
-                    assistant = assistant,
-                )
-            }
-
             ProvideTextStyle(textStyle) {
                 MessagePartsBlock(
                     assistant = assistant,
@@ -249,59 +243,70 @@ fun ChatMessage(
         }
     }
 
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        when (message.role) {
-            MessageRole.ASSISTANT -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.Start,
-                ) {
-                    if (assistantAvatarSlotWidth > 0.dp) {
-                        if (showIdentity) {
-                            ChatMessageAssistantAvatar(
-                                model = model,
-                                assistant = assistant,
-                                loading = loading,
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.width(assistantAvatarSlotWidth))
-                        }
-                        Spacer(modifier = Modifier.width(avatarGap))
+    @Composable
+    fun MessageHeaderRow() {
+        Row(
+            modifier = Modifier.widthIn(max = 680.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            when (message.role) {
+                MessageRole.USER -> {
+                    if (headerState.showIdentityLabel) {
+                        ChatMessageIdentityLabel(
+                            message = message,
+                            model = model,
+                            assistant = assistant,
+                        )
                     }
-                    MessageContentColumn(horizontalAlignment = Alignment.Start)
-                }
-            }
-
-            MessageRole.USER -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    MessageContentColumn(horizontalAlignment = Alignment.End)
-                    if (userAvatarSlotWidth > 0.dp) {
-                        Spacer(modifier = Modifier.width(avatarGap))
-                        if (showIdentity) {
-                            ChatMessageUserAvatar(
-                                avatar = allSettings.effectiveUserAvatar(),
-                                nickname = allSettings.effectiveUserName(),
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.width(userAvatarSlotWidth))
-                        }
+                    if (headerState.showAvatar) {
+                        ChatMessageUserAvatar(
+                            avatar = allSettings.effectiveUserAvatar(),
+                            nickname = allSettings.effectiveUserName(),
+                        )
                     }
                 }
-            }
 
-            else -> {
-                MessageContentColumn(horizontalAlignment = Alignment.Start)
+                MessageRole.ASSISTANT -> {
+                    if (headerState.showAvatar) {
+                        ChatMessageAssistantAvatar(
+                            model = model,
+                            assistant = assistant,
+                            loading = loading,
+                        )
+                    }
+                    if (headerState.showIdentityLabel) {
+                        ChatMessageIdentityLabel(
+                            message = message,
+                            model = model,
+                            assistant = assistant,
+                        )
+                    }
+                }
+
+                else -> {
+                    if (headerState.showIdentityLabel) {
+                        ChatMessageIdentityLabel(
+                            message = message,
+                            model = model,
+                            assistant = assistant,
+                        )
+                    }
+                }
             }
         }
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = contentAlignment,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        if (headerState.isVisible) {
+            MessageHeaderRow()
+        }
+
+        MessageContentColumn(horizontalAlignment = contentAlignment)
     }
     if (showActionsSheet) {
         ChatMessageActionsSheet(

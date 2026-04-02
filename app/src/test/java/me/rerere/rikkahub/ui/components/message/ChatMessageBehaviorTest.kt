@@ -5,6 +5,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.UserPersonaProfile
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -67,5 +68,84 @@ class ChatMessageBehaviorTest {
         )
 
         assertNotEquals(userRegexRenderCacheKey(initial), userRegexRenderCacheKey(updated))
+    }
+
+    @Test
+    fun `header state should show user avatar and label when enabled`() {
+        val settings = Settings(
+            displaySetting = DisplaySetting(
+                showUserAvatar = true,
+            ),
+        )
+        val message = UIMessage(
+            role = MessageRole.USER,
+            parts = emptyList(),
+        )
+
+        val headerState = message.headerState(
+            settings = settings,
+            showIdentity = true,
+            model = null,
+            assistant = null,
+        )
+
+        assertTrue(headerState.showAvatar)
+        assertTrue(headerState.showIdentityLabel)
+        assertTrue(headerState.isVisible)
+    }
+
+    @Test
+    fun `header state should hide assistant avatar when no visible identity source exists`() {
+        val settings = Settings(
+            displaySetting = DisplaySetting(
+                showModelIcon = true,
+                showModelName = true,
+                showDateBelowName = false,
+            ),
+        )
+        val message = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = emptyList(),
+        )
+
+        val headerState = message.headerState(
+            settings = settings,
+            showIdentity = true,
+            model = null,
+            assistant = null,
+        )
+
+        assertFalse(headerState.showAvatar)
+        assertFalse(headerState.showIdentityLabel)
+        assertFalse(headerState.isVisible)
+    }
+
+    @Test
+    fun `header state should keep assistant header visible with assistant avatar`() {
+        val settings = Settings(
+            displaySetting = DisplaySetting(
+                showModelIcon = true,
+                showModelName = true,
+            ),
+        )
+        val assistant = Assistant(
+            name = "Rikka",
+            useAssistantAvatar = true,
+        )
+        val message = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = emptyList(),
+        )
+
+        val headerState = message.headerState(
+            settings = settings,
+            showIdentity = true,
+            model = null,
+            assistant = assistant,
+        )
+
+        assertTrue(headerState.showAvatar)
+        assertTrue(headerState.showIdentityLabel)
+        assertTrue(headerState.isVisible)
     }
 }
