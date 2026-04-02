@@ -153,6 +153,26 @@ class ModelRegistryTest {
     }
 
     @Test
+    fun testSupportedReasoningLevels_prefixedModelIds() {
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.AUTO, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH),
+            ModelRegistry.supportedReasoningLevels("openai/o4-mini")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.AUTO, ReasoningLevel.HIGH),
+            ModelRegistry.supportedReasoningLevels("openai/gpt-5-pro")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.OFF, ReasoningLevel.AUTO, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            ModelRegistry.supportedReasoningLevels("openai/gpt-5.1")
+        )
+        assertEquals(
+            listOf(ReasoningLevel.AUTO, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH),
+            ModelRegistry.supportedReasoningLevels("openai/gpt-oss-20b")
+        )
+    }
+
+    @Test
     fun testSupportedReasoningLevels_default() {
         assertEquals(
             ReasoningLevel.entries.toList(),
@@ -185,6 +205,47 @@ class ModelRegistryTest {
         assertEquals("low", ModelRegistry.reasoningEffortOrNull("o4-mini", ReasoningLevel.MINIMAL))
         // o4-mini doesn't support XHIGH → should normalize to HIGH
         assertEquals("high", ModelRegistry.reasoningEffortOrNull("o4-mini", ReasoningLevel.XHIGH))
+    }
+
+    @Test
+    fun testNormalizeReasoningBudget_prefixedModelIds() {
+        assertEquals(
+            ReasoningLevel.LOW.budgetTokens,
+            ModelRegistry.normalizeReasoningBudget("openai/o4-mini", ReasoningLevel.MINIMAL.budgetTokens)
+        )
+        assertEquals(
+            ReasoningLevel.HIGH.budgetTokens,
+            ModelRegistry.normalizeReasoningBudget("openai/gpt-5-pro", ReasoningLevel.LOW.budgetTokens)
+        )
+        assertEquals(
+            ReasoningLevel.XHIGH.budgetTokens,
+            ModelRegistry.normalizeReasoningBudget("openai/gpt-5.1", ReasoningLevel.XHIGH.budgetTokens)
+        )
+        assertEquals(
+            ReasoningLevel.MEDIUM.budgetTokens,
+            ModelRegistry.normalizeReasoningBudget("openai/gpt-oss-20b", ReasoningLevel.MEDIUM.budgetTokens)
+        )
+    }
+
+    @Test
+    fun testNormalizeReasoningBudget_freeBudgetModelsKeepCustomValue() {
+        assertEquals(
+            777,
+            ModelRegistry.normalizeReasoningBudget("gemini-2.5-pro", 777)
+        )
+        assertEquals(
+            777,
+            ModelRegistry.normalizeReasoningBudget("claude-4.5", 777)
+        )
+        assertEquals(
+            777,
+            ModelRegistry.normalizeReasoningBudget("unknown-model", 777)
+        )
+        assertEquals(
+            ReasoningLevel.AUTO.budgetTokens,
+            ModelRegistry.normalizeReasoningBudget("openai/gpt-5.1", ReasoningLevel.AUTO.budgetTokens)
+        )
+        assertNull(ModelRegistry.normalizeReasoningBudget("openai/gpt-5.1", null))
     }
 
     // endregion

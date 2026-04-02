@@ -53,6 +53,8 @@ const REASONING_PRESET_BUDGETS: Array<Pick<ReasoningPreset, "key" | "budget">> =
   { key: "XHIGH", budget: PRESET_BUDGETS.XHIGH },
 ];
 
+const ALL_LEVELS: ReasoningLevel[] = ["OFF", "AUTO", "MINIMAL", "LOW", "MEDIUM", "HIGH", "XHIGH"];
+
 export interface ReasoningPickerButtonProps {
   disabled?: boolean;
   className?: string;
@@ -66,28 +68,81 @@ function isReasoningModel(model: ProviderModel | null): boolean {
   return (model.abilities ?? []).includes("REASONING");
 }
 
+function tokenizeModelId(modelId: string): string[] {
+  const tokens: string[] = [];
+  const input = modelId.toLowerCase();
+  let index = 0;
+
+  while (index < input.length) {
+    const ch = input[index];
+    if (/[a-z]/.test(ch)) {
+      const start = index;
+      index += 1;
+      while (index < input.length && /[a-z]/.test(input[index])) {
+        index += 1;
+      }
+      tokens.push(input.slice(start, index));
+      continue;
+    }
+
+    if (/[0-9]/.test(ch)) {
+      const start = index;
+      index += 1;
+      while (index < input.length && /[0-9]/.test(input[index])) {
+        index += 1;
+      }
+      tokens.push(input.slice(start, index));
+      continue;
+    }
+
+    tokens.push(ch);
+    index += 1;
+  }
+
+  return tokens;
+}
+
+function matchesTokenSequence(tokens: string[], specs: Array<string | RegExp>): boolean {
+  let specIndex = 0;
+  for (const token of tokens) {
+    const spec = specs[specIndex];
+    const matched = typeof spec === "string" ? token === spec : spec.test(token);
+    if (!matched) continue;
+    specIndex += 1;
+    if (specIndex === specs.length) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Returns the supported reasoning levels for a given model.
  * Mirrors the logic in ModelRegistry.supportedReasoningLevels() on the Kotlin side.
  */
 function getSupportedLevels(model: ProviderModel | null): ReasoningLevel[] {
-  const ALL_LEVELS: ReasoningLevel[] = ["OFF", "AUTO", "MINIMAL", "LOW", "MEDIUM", "HIGH", "XHIGH"];
   if (!model) return ALL_LEVELS;
 
   const id = model.modelId.toLowerCase();
-  const tokens = id.split(/[-._]/);
+  const tokens = tokenizeModelId(id);
 
-  // O-series (o1, o3, o4, etc.)
-  if (/^o\d+/.test(tokens[0] ?? "")) {
+  if (matchesTokenSequence(tokens, [/^o$/i, /^\d+$/])) {
     return ["OFF", "AUTO", "LOW", "MEDIUM", "HIGH"];
   }
 
-  const isGpt5Base = tokens.includes("gpt") && tokens.includes("5") && !id.match(/gpt-5\.\d/);
-  const isGpt51Plus = tokens.includes("gpt") && Boolean(id.match(/gpt-5\.\d/));
+  const isGpt5Base =
+    matchesTokenSequence(tokens, ["gpt", "5"]) &&
+    !matchesTokenSequence(tokens, ["gpt", "5", "."]) &&
+    !matchesTokenSequence(tokens, ["gpt", "5", "chat"]);
+  const isGpt51Plus =
+    matchesTokenSequence(tokens, ["gpt", "5", "1"]) ||
+    matchesTokenSequence(tokens, ["gpt", "5", "2"]) ||
+    matchesTokenSequence(tokens, ["gpt", "5", "3"]) ||
+    matchesTokenSequence(tokens, ["gpt", "5", "4"]);
   const isPro = id.includes("pro");
   const isCodexMax = id.includes("codex-max");
   const isCodex = id.includes("codex");
-  const isOss = tokens.includes("gpt") && tokens.includes("oss");
+  const isOss = matchesTokenSequence(tokens, ["gpt", "oss"]);
 
   if (isGpt5Base && isPro) return ["AUTO", "HIGH"];
   if (isGpt5Base && isCodex) return ["AUTO", "LOW", "MEDIUM", "HIGH"];
@@ -117,6 +172,40 @@ function getReasoningLevel(budget: number | null | undefined): ReasoningLevel {
   }
 
   return closest.key;
+}
+
+function normalizeBudget(model: ProviderModel | null, budget: number | null | undefined): number {
+  const value = budget ?? PRESET_BUDGETS.AUTO;
+  if (value === PRESET_BUDGETS.AUTO || !model) {
+    return value;
+  }
+
+  const supportedLevels = getSupportedLevels(model);
+  if (ALL_LEVELS.every((level) => supportedLevels.includes(level))) {
+    return value;
+  }
+
+  if (value === PRESET_BUDGETS.OFF && supportedLevels.includes("OFF")) {
+    return value;
+  }
+
+  const enabledSupportedLevels = supportedLevels
+    .filter((level) => level !== "AUTO" && level !== "OFF");
+  const candidateLevels =
+    enabledSupportedLevels.length > 0
+      ? enabledSupportedLevels
+      : supportedLevels.filter((level) => level !== "AUTO");
+
+  if (candidateLevels.length === 0) {
+    return value;
+  }
+
+  const normalizedLevel = candidateLevels.reduce((closest, level) => {
+    const currentDistance = Math.abs(PRESET_BUDGETS[level] - value);
+    const closestDistance = Math.abs(PRESET_BUDGETS[closest] - value);
+    return currentDistance < closestDistance ? level : closest;
+  });
+  return PRESET_BUDGETS[normalizedLevel];
 }
 
 export function ReasoningPickerButton({ disabled = false, className }: ReasoningPickerButtonProps) {
@@ -188,9 +277,15 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   );
 
   const currentBudget = currentAssistant?.thinkingBudget ?? PRESET_BUDGETS.AUTO;
-  const currentLevel = getReasoningLevel(currentBudget);
+  const normalizedCurrentBudget = React.useMemo(
+    () => normalizeBudget(currentModel, currentBudget),
+    [currentBudget, currentModel],
+  );
+  const currentLevel = getReasoningLevel(normalizedCurrentBudget);
   const currentPreset =
-    filteredPresets.find((preset) => preset.key === currentLevel) ?? filteredPresets[0];
+    filteredPresets.find((preset) => preset.key === currentLevel) ??
+    filteredPresets[0] ??
+    reasoningPresets[0];
 
   React.useEffect(() => {
     if (!canUse || !canReasoning) {
@@ -200,10 +295,10 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
 
   React.useEffect(() => {
     if (open) {
-      setCustomValue(String(currentBudget));
+      setCustomValue(String(normalizedCurrentBudget));
       setCustomExpanded(false);
     }
-  }, [currentBudget, open]);
+  }, [normalizedCurrentBudget, open]);
 
   const updateThinkingBudgetMutation = useMutation({
     mutationFn: ({
@@ -346,9 +441,10 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
                         return;
                       }
                       if (!currentAssistant) return;
+                      const nextBudget = normalizeBudget(currentModel, parsedValue);
                       updateThinkingBudgetMutation.mutate({
                         assistantId: currentAssistant.id,
-                        thinkingBudget: parsedValue,
+                        thinkingBudget: nextBudget,
                       });
                     }}
                   >

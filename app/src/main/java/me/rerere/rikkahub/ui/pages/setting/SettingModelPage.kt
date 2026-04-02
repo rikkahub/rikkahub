@@ -50,13 +50,16 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -183,11 +186,15 @@ private fun DefaultTranslationModelSetting(
                         Text(stringResource(R.string.assistant_page_thinking_budget))
                     },
                 ) {
+                    val translateModel = settings.providers.findModelById(settings.translateModeId)
                     ReasoningButton(
                         reasoningTokens = settings.translateThinkingBudget,
                         onUpdateReasoningTokens = {
                             vm.updateSettings(settings.copy(translateThinkingBudget = it))
-                        }
+                        },
+                        supportedLevels = translateModel?.let {
+                            ModelRegistry.supportedReasoningLevels(it.modelId)
+                        } ?: ReasoningLevel.entries.toList(),
                     )
                 }
 

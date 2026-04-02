@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -19,10 +21,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.rerere.ai.core.ReasoningLevel
@@ -41,6 +44,7 @@ import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningHigh
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningLow
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningMedium
+import kotlin.math.abs
 
 private data class ReasoningLevelOption(
     val level: ReasoningLevel,
@@ -59,6 +63,32 @@ private val ALL_LEVEL_OPTIONS = listOf(
     ReasoningLevelOption(ReasoningLevel.XHIGH, ReasoningHigh, R.string.reasoning_xhigh, R.string.reasoning_xhigh_desc),
 )
 
+private val ALL_REASONING_LEVELS = ReasoningLevel.entries.toList()
+
+private fun normalizeReasoningTokens(reasoningTokens: Int, supportedLevels: List<ReasoningLevel>): Int {
+    if (supportedLevels.isEmpty() || supportedLevels.containsAll(ALL_REASONING_LEVELS)) {
+        return reasoningTokens
+    }
+
+    if (reasoningTokens == ReasoningLevel.AUTO.budgetTokens) {
+        return reasoningTokens
+    }
+
+    if (reasoningTokens == ReasoningLevel.OFF.budgetTokens && ReasoningLevel.OFF in supportedLevels) {
+        return reasoningTokens
+    }
+
+    val enabledSupported = supportedLevels
+        .filter { it != ReasoningLevel.AUTO && it != ReasoningLevel.OFF }
+        .ifEmpty { supportedLevels.filter { it != ReasoningLevel.AUTO } }
+
+    if (enabledSupported.isEmpty()) {
+        return reasoningTokens
+    }
+
+    return enabledSupported.minBy { abs(it.budgetTokens - reasoningTokens) }.budgetTokens
+}
+
 @Composable
 fun ReasoningButton(
     modifier: Modifier = Modifier,
@@ -68,17 +98,18 @@ fun ReasoningButton(
     supportedLevels: List<ReasoningLevel> = ReasoningLevel.entries.toList(),
 ) {
     var showPicker by remember { mutableStateOf(false) }
+    val normalizedTokens = normalizeReasoningTokens(reasoningTokens, supportedLevels)
 
     if (showPicker) {
         ReasoningPicker(
-            reasoningTokens = reasoningTokens,
+            reasoningTokens = normalizedTokens,
             onDismissRequest = { showPicker = false },
             onUpdateReasoningTokens = onUpdateReasoningTokens,
             supportedLevels = supportedLevels,
         )
     }
 
-    val level = ReasoningLevel.fromBudgetTokens(reasoningTokens)
+    val level = ReasoningLevel.fromBudgetTokens(normalizedTokens)
     ToggleSurface(
         checked = level.isEnabled,
         onClick = {
@@ -118,11 +149,20 @@ fun ReasoningPicker(
     onUpdateReasoningTokens: (Int) -> Unit,
     supportedLevels: List<ReasoningLevel> = ReasoningLevel.entries.toList(),
 ) {
-    val currentLevel = ReasoningLevel.fromBudgetTokens(reasoningTokens)
+    val normalizedTokens = normalizeReasoningTokens(reasoningTokens, supportedLevels)
+    val currentLevel = ReasoningLevel.fromBudgetTokens(normalizedTokens)
     val visibleOptions = ALL_LEVEL_OPTIONS.filter { it.level in supportedLevels }
+    var input by remember(normalizedTokens) {
+        mutableStateOf(normalizedTokens.toString())
+    }
+
+    fun commitInput() {
+        input.toIntOrNull()?.let(onUpdateReasoningTokens)
+    }
 
     ModalBottomSheet(
         onDismissRequest = {
+            commitInput()
             onDismissRequest()
         },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -140,7 +180,10 @@ fun ReasoningPicker(
                     icon = { Icon(option.icon, null) },
                     title = { Text(stringResource(id = option.titleRes)) },
                     description = { Text(stringResource(id = option.descRes)) },
-                    onClick = { onUpdateReasoningTokens(option.level.budgetTokens) }
+                    onClick = {
+                        input = option.level.budgetTokens.toString()
+                        onUpdateReasoningTokens(option.level.budgetTokens)
+                    }
                 )
             }
 
@@ -151,21 +194,32 @@ fun ReasoningPicker(
                     modifier = Modifier.padding(16.dp),
                 ) {
                     Text(stringResource(id = R.string.reasoning_custom))
-                    var input by remember(reasoningTokens) {
-                        mutableStateOf(reasoningTokens.toString())
-                    }
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { newValue ->
-                            input = newValue
-                            val newTokens = newValue.toIntOrNull()
-                            if (newTokens != null) {
-                                onUpdateReasoningTokens(newTokens)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = input,
+                            onValueChange = { input = it },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    commitInput()
+                                    onDismissRequest()
+                                }
+                            ),
+                        )
+                        TextButton(
+                            onClick = {
+                                commitInput()
+                                onDismissRequest()
                             }
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                        ) {
+                            Text(stringResource(R.string.confirm))
+                        }
+                    }
                 }
             }
         }
@@ -230,7 +284,7 @@ private fun ReasoningLevelCard(
 @Preview(showBackground = true)
 private fun ReasoningPickerPreview() {
     MaterialTheme {
-        var reasoningTokens by remember { mutableIntStateOf(0) }
+        var reasoningTokens by remember { mutableStateOf(0) }
         ReasoningPicker(
             onDismissRequest = {},
             reasoningTokens = reasoningTokens,

@@ -460,6 +460,29 @@ object ModelRegistry {
         }
     }
 
+    fun normalizeReasoningBudget(modelId: String, budgetTokens: Int?): Int? {
+        if (budgetTokens == null || budgetTokens == ReasoningLevel.AUTO.budgetTokens) return budgetTokens
+
+        val supported = supportedReasoningLevels(modelId)
+        if (supported.containsAll(ReasoningLevel.entries)) {
+            return budgetTokens
+        }
+
+        if (budgetTokens == ReasoningLevel.OFF.budgetTokens && ReasoningLevel.OFF in supported) {
+            return budgetTokens
+        }
+
+        val enabledSupported = supported
+            .filter { it != ReasoningLevel.AUTO && it != ReasoningLevel.OFF }
+            .ifEmpty { supported.filter { it != ReasoningLevel.AUTO } }
+
+        if (enabledSupported.isEmpty()) {
+            return budgetTokens
+        }
+
+        return enabledSupported.minBy { kotlin.math.abs(it.budgetTokens - budgetTokens) }.budgetTokens
+    }
+
     /**
      * Returns the effort string for OpenAI reasoning_effort parameter,
      * or null if the parameter should be omitted (e.g. AUTO mode).
@@ -467,21 +490,19 @@ object ModelRegistry {
      */
     fun reasoningEffortOrNull(modelId: String, level: ReasoningLevel): String? {
         if (level == ReasoningLevel.AUTO) return null
+        val normalizedLevel = ReasoningLevel.fromBudgetTokens(normalizeReasoningBudget(modelId, level.budgetTokens))
         val supported = supportedReasoningLevels(modelId)
             .filter { it != ReasoningLevel.AUTO }
         if (supported.isEmpty()) {
             // OpenAI does not accept "none"; fall back to "low"
             return if (level == ReasoningLevel.OFF) "low" else level.effort
         }
-        // Normalize to closest supported level
-        val normalized = if (level in supported) level
-            else supported.minBy { kotlin.math.abs(it.budgetTokens - level.budgetTokens) }
         // OpenAI does not accept "none"; fall back to lowest supported
-        if (normalized == ReasoningLevel.OFF) {
+        if (normalizedLevel == ReasoningLevel.OFF) {
             val lowest = supported.filter { it != ReasoningLevel.OFF }.minByOrNull { it.budgetTokens }
             return lowest?.effort ?: "low"
         }
-        return normalized.effort
+        return normalizedLevel.effort
     }
 
     private fun isGpt51OrLater(modelId: String): Boolean {
