@@ -28,11 +28,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
 import me.rerere.rikkahub.ui.components.table.DataTable
@@ -310,19 +312,36 @@ private fun RenderImage(
     }
 }
 
+internal fun buildAnnotatedStringFromHtmlFragment(html: String): AnnotatedString {
+    val element = runCatching {
+        Jsoup.parseBodyFragment("<span>$html</span>").body().children().singleOrNull()
+    }.getOrNull()
+
+    return if (element != null) {
+        buildAnnotatedStringFromElement(element)
+    } else {
+        AnnotatedString(html)
+    }
+}
+
 private fun buildAnnotatedStringFromElement(
     element: Element,
     onLinkClick: (String) -> Unit
 ): AnnotatedString {
+    return buildAnnotatedStringFromElement(element)
+}
+
+private fun buildAnnotatedStringFromElement(
+    element: Element,
+): AnnotatedString {
     return buildAnnotatedString {
-        processElementNodes(element, this, onLinkClick)
+        processElementNodes(element, this)
     }
 }
 
 private fun processElementNodes(
     element: Element,
     builder: AnnotatedString.Builder,
-    onLinkClick: (String) -> Unit
 ) {
     element.childNodes().forEach { node ->
         when (node) {
@@ -334,7 +353,7 @@ private fun processElementNodes(
                 when (node.tagName().lowercase()) {
                     "b", "strong" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder)
                         builder.addStyle(
                             SpanStyle(fontWeight = FontWeight.Bold),
                             start,
@@ -344,7 +363,7 @@ private fun processElementNodes(
 
                     "i", "em" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder)
                         builder.addStyle(
                             SpanStyle(fontStyle = FontStyle.Italic),
                             start,
@@ -354,7 +373,7 @@ private fun processElementNodes(
 
                     "u" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder)
                         builder.addStyle(
                             SpanStyle(textDecoration = TextDecoration.Underline),
                             start,
@@ -364,29 +383,29 @@ private fun processElementNodes(
 
                     "a" -> {
                         val href = node.attr("href")
-                        val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
                         if (href.isNotEmpty()) {
-                            builder.addStyle(
-                                SpanStyle(
-                                    color = Color.Blue,
-                                    textDecoration = TextDecoration.Underline
-                                ),
-                                start,
-                                builder.length
-                            )
-                            builder.addStringAnnotation(
-                                tag = "URL",
-                                annotation = href,
-                                start = start,
-                                end = builder.length
-                            )
+                            with(builder) {
+                                withLink(LinkAnnotation.Url(href)) {
+                                    val start = length
+                                    processElementNodes(node, this)
+                                    addStyle(
+                                        SpanStyle(
+                                            color = Color.Blue,
+                                            textDecoration = TextDecoration.Underline
+                                        ),
+                                        start,
+                                        length
+                                    )
+                                }
+                            }
+                        } else {
+                            processElementNodes(node, builder)
                         }
                     }
 
                     "code" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder)
                         builder.addStyle(
                             SpanStyle(
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
@@ -403,7 +422,7 @@ private fun processElementNodes(
 
                     "span" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder)
 
                         // Handle inline styles
                         val style = node.attr("style")
@@ -421,7 +440,7 @@ private fun processElementNodes(
 
                     "font" -> {
                         val start = builder.length
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder)
 
                         // Handle font color attribute
                         val color = node.attr("color")
@@ -438,7 +457,7 @@ private fun processElementNodes(
                     }
 
                     else -> {
-                        processElementNodes(node, builder, onLinkClick)
+                        processElementNodes(node, builder)
                     }
                 }
             }

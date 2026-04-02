@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +23,7 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
@@ -32,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -219,13 +222,132 @@ fun MarkdownBlock(
         Column(
             modifier = modifier.padding(start = 4.dp)
         ) {
-            astTree.children.fastForEach { child ->
-                MarkdownNode(
-                    node = child, content = preprocessed, onClickCitation = onClickCitation
+            RenderMarkdownNodes(
+                nodes = astTree.children,
+                content = preprocessed,
+                onClickCitation = onClickCitation,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RenderMarkdownNodes(
+    nodes: List<ASTNode>,
+    content: String,
+    modifier: Modifier = Modifier,
+    onClickCitation: (String) -> Unit = {},
+    listLevel: Int = 0,
+) {
+    var index = 0
+    while (index < nodes.size) {
+        val detailsBlock = collectMarkdownDetailsBlock(nodes, index, content)
+        if (detailsBlock != null) {
+            key(detailsBlock.stableKey) {
+                MarkdownDetailsNode(
+                    detailsBlock = detailsBlock,
+                    modifier = modifier,
+                    onClickCitation = onClickCitation,
+                    listLevel = listLevel,
+                )
+            }
+            if (detailsBlock.trailingMarkdown.isNotBlank()) {
+                RenderMarkdownFragment(
+                    content = detailsBlock.trailingMarkdown,
+                    modifier = modifier,
+                    onClickCitation = onClickCitation,
+                    listLevel = listLevel,
+                )
+            }
+            index += detailsBlock.consumedNodeCount
+            continue
+        }
+
+        MarkdownNode(
+            node = nodes[index],
+            content = content,
+            modifier = modifier,
+            onClickCitation = onClickCitation,
+            listLevel = listLevel,
+        )
+        index++
+    }
+}
+
+@Composable
+private fun MarkdownDetailsNode(
+    detailsBlock: MarkdownDetailsBlock,
+    modifier: Modifier = Modifier,
+    onClickCitation: (String) -> Unit = {},
+    listLevel: Int = 0,
+) {
+    val isExpandedState = remember(
+        detailsBlock.stableKey,
+        detailsBlock.isOpenByDefault,
+    ) {
+        mutableStateOf(detailsBlock.isOpenByDefault)
+    }
+    val isExpanded = isExpandedState.value
+    val summaryText = remember(detailsBlock.summaryHtml, detailsBlock.summaryText) {
+        detailsBlock.summaryHtml?.let(::buildAnnotatedStringFromHtmlFragment) ?: AnnotatedString(detailsBlock.summaryText)
+    }
+
+    Column(modifier = modifier.padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { isExpandedState.value = !isExpandedState.value }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (isExpanded) "▼ " else "▶ ",
+                style = LocalTextStyle.current.copy(color = LocalContentColor.current),
+            )
+            Text(
+                text = summaryText,
+                style = LocalTextStyle.current.copy(
+                    color = LocalContentColor.current,
+                    fontWeight = FontWeight.Medium,
+                ),
+            )
+        }
+
+        AnimatedVisibility(visible = isExpanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, top = 4.dp),
+            ) {
+                RenderMarkdownFragment(
+                    content = detailsBlock.contentMarkdown,
+                    onClickCitation = onClickCitation,
+                    listLevel = listLevel,
                 )
             }
         }
     }
+}
+
+@Composable
+private fun RenderMarkdownFragment(
+    content: String,
+    modifier: Modifier = Modifier,
+    onClickCitation: (String) -> Unit = {},
+    listLevel: Int = 0,
+) {
+    if (content.isBlank()) return
+
+    val astTree = remember(content) {
+        parser.buildMarkdownTreeFromString(content)
+    }
+    RenderMarkdownNodes(
+        nodes = astTree.children,
+        content = content,
+        modifier = modifier,
+        onClickCitation = onClickCitation,
+        listLevel = listLevel,
+    )
 }
 
 // for debug
@@ -273,11 +395,13 @@ private fun MarkdownNode(
     when (node.type) {
         // 文件根节点
         MarkdownElementTypes.MARKDOWN_FILE -> {
-            node.children.fastForEach { child ->
-                MarkdownNode(
-                    node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
-                )
-            }
+            RenderMarkdownNodes(
+                nodes = node.children,
+                content = content,
+                modifier = modifier,
+                onClickCitation = onClickCitation,
+                listLevel = listLevel,
+            )
         }
 
         // 段落
@@ -387,11 +511,12 @@ private fun MarkdownNode(
                             )
                         }
                         .padding(8.dp)) {
-                    node.children.fastForEach { child ->
-                        MarkdownNode(
-                            node = child, content = content, onClickCitation = onClickCitation
-                        )
-                    }
+                    RenderMarkdownNodes(
+                        nodes = node.children,
+                        content = content,
+                        onClickCitation = onClickCitation,
+                        listLevel = listLevel,
+                    )
                 }
             }
         }
@@ -572,11 +697,13 @@ private fun MarkdownNode(
         // 其他类型的节点，递归处理子节点
         else -> {
             // 递归处理其他节点的子节点
-            node.children.fastForEach { child ->
-                MarkdownNode(
-                    node = child, content = content, modifier = modifier, onClickCitation = onClickCitation
-                )
-            }
+            RenderMarkdownNodes(
+                nodes = node.children,
+                content = content,
+                modifier = modifier,
+                onClickCitation = onClickCitation,
+                listLevel = listLevel,
+            )
         }
     }
 }
@@ -658,14 +785,12 @@ private fun ListItemNode(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
-                    directContent.fastForEach { contentChild ->
-                        MarkdownNode(
-                            node = contentChild,
-                            content = content,
-                            onClickCitation = onClickCitation,
-                            listLevel = level,
-                        )
-                    }
+                    RenderMarkdownNodes(
+                        nodes = directContent,
+                        content = content,
+                        onClickCitation = onClickCitation,
+                        listLevel = level,
+                    )
                 }
             }
         }
