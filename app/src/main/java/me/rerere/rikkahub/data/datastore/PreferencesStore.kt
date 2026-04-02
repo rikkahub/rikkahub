@@ -588,6 +588,7 @@ data class BackupReminderConfig(
 
 fun Settings.isNotConfigured() = providers.all { it.models.isEmpty() }
 
+// 持久化前归一化所有 thinkingBudget，防止旧数据/导入数据携带模型不支持的值
 private fun Settings.normalizeThinkingBudgets(): Settings {
     fun normalizeForModel(model: Model?, budgetTokens: Int?): Int? {
         if (model == null || ModelAbility.REASONING !in model.abilities) return budgetTokens

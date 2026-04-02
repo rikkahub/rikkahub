@@ -117,8 +117,8 @@ function matchesTokenSequence(tokens: string[], specs: Array<string | RegExp>): 
 }
 
 /**
- * Returns the supported reasoning levels for a given model.
- * Mirrors the logic in ModelRegistry.supportedReasoningLevels() on the Kotlin side.
+ * 返回模型支持的 reasoning 级别列表（客户端侧）。
+ * 需与 Kotlin 端 ModelRegistry.supportedReasoningLevels() 保持同步。
  */
 function getSupportedLevels(model: ProviderModel | null): ReasoningLevel[] {
   if (!model) return ALL_LEVELS;

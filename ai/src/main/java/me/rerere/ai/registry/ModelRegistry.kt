@@ -460,6 +460,11 @@ object ModelRegistry {
         }
     }
 
+    /**
+     * 将 budget 值约束到模型支持的最近级别。
+     * 对支持全部级别的模型（Claude、Gemini 等）原样返回；
+     * 对 OpenAI 等受限模型，归一化到最近的合法值。
+     */
     fun normalizeReasoningBudget(modelId: String, budgetTokens: Int?): Int? {
         if (budgetTokens == null || budgetTokens == ReasoningLevel.AUTO.budgetTokens) return budgetTokens
 
@@ -484,9 +489,9 @@ object ModelRegistry {
     }
 
     /**
-     * Returns the effort string for OpenAI reasoning_effort parameter,
-     * or null if the parameter should be omitted (e.g. AUTO mode).
-     * Normalizes the requested level to the closest supported level for the model.
+     * 返回 OpenAI reasoning_effort 参数的 effort 字符串，AUTO 时返回 null（不发送参数）。
+     * 内部先通过 [normalizeReasoningBudget] 归一化到模型支持的级别，
+     * 再映射为 effort 字符串。OpenAI 不接受 "none"，OFF 会降级为最低支持级别。
      */
     fun reasoningEffortOrNull(modelId: String, level: ReasoningLevel): String? {
         if (level == ReasoningLevel.AUTO) return null
