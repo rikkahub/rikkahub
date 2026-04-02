@@ -795,7 +795,10 @@ class ChatService(
                     is UIMessagePart.Video -> add("[Video]\n${part.url}")
                     is UIMessagePart.Audio -> add("[Audio]\n${part.url}")
                     is UIMessagePart.Document -> add("[Document] ${part.fileName} (${part.mime})\n${part.url}")
-                    is UIMessagePart.Reasoning -> add("[Reasoning]\n${part.reasoning}")
+                    // Prompt viewer should stay human-readable and avoid mixing in
+                    // provider-specific reasoning replay semantics. Exact wire payload
+                    // is exposed separately in the Payload tab.
+                    is UIMessagePart.Reasoning -> Unit
                     is UIMessagePart.Tool -> {
                         add("[Tool:${part.toolName}]\n${part.input}")
                         if (part.output.isNotEmpty()) {

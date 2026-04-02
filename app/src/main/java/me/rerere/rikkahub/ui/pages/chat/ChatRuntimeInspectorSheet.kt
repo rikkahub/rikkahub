@@ -299,7 +299,7 @@ private fun PromptInspectorLoaded(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "约 ${inspection.promptTokenEstimate} tokens · ${filteredMessages.size}/${inspection.promptMessages.size} 条消息",
+                            text = "可读提示词视图，不含思维链字段；精确请求看 Payload · 约 ${inspection.promptTokenEstimate} tokens · ${filteredMessages.size}/${inspection.promptMessages.size} 条消息",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
