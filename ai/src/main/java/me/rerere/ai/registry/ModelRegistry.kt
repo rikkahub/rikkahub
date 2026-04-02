@@ -1,5 +1,6 @@
 package me.rerere.ai.registry
 
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ModelAbility
 
@@ -420,6 +421,63 @@ object ModelRegistry {
             if (ModelAbility.REASONING in abilities) add(ModelAbility.REASONING)
         }
     }
+
+    // region Reasoning Level Support
+
+    val SUPPORTED_REASONING_LEVELS = ModelData { modelId -> supportedReasoningLevels(modelId) }
+
+    fun supportedReasoningLevels(modelId: String): List<ReasoningLevel> {
+        val id = modelId.lowercase()
+        return when {
+            OPENAI_O_MODELS.match(modelId) ->
+                listOf(ReasoningLevel.OFF, ReasoningLevel.AUTO, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH)
+
+            GPT_5.match(modelId) && "pro" in id ->
+                listOf(ReasoningLevel.AUTO, ReasoningLevel.HIGH)
+
+            GPT_5.match(modelId) && "codex" in id ->
+                listOf(ReasoningLevel.AUTO, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH)
+
+            GPT_5.match(modelId) ->
+                listOf(ReasoningLevel.OFF, ReasoningLevel.AUTO, ReasoningLevel.MINIMAL, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH)
+
+            isGpt51OrLater(modelId) && "codex-max" in id ->
+                listOf(ReasoningLevel.AUTO, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH)
+
+            isGpt51OrLater(modelId) && "codex" in id ->
+                listOf(ReasoningLevel.AUTO, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH)
+
+            isGpt51OrLater(modelId) && "pro" in id ->
+                listOf(ReasoningLevel.AUTO, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH)
+
+            isGpt51OrLater(modelId) ->
+                listOf(ReasoningLevel.OFF, ReasoningLevel.AUTO, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH)
+
+            GPT_OSS.match(modelId) ->
+                listOf(ReasoningLevel.AUTO, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH)
+
+            else -> ReasoningLevel.entries.toList()
+        }
+    }
+
+    /**
+     * Returns the effort string for OpenAI reasoning_effort parameter,
+     * or null if the parameter should be omitted (e.g. AUTO mode).
+     */
+    fun reasoningEffortOrNull(modelId: String, level: ReasoningLevel): String? {
+        if (level == ReasoningLevel.AUTO) return null
+        // OpenAI does not accept "none"; fall back to "low"
+        if (level == ReasoningLevel.OFF) return "low"
+        return level.effort
+    }
+
+    private fun isGpt51OrLater(modelId: String): Boolean {
+        return GPT_5_1.match(modelId) || GPT_5_2.match(modelId)
+            || GPT_5_3.match(modelId) || GPT_5_4.match(modelId)
+            || GPT_5_4_MINI.match(modelId) || GPT_5_4_NANO.match(modelId)
+    }
+
+    // endregion
 
     private fun resolveModels(modelId: String): List<ModelDefinition> {
         var bestScore: Int? = null

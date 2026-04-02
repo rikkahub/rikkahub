@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -41,12 +42,30 @@ import me.rerere.rikkahub.ui.components.ui.icons.ReasoningHigh
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningLow
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningMedium
 
+private data class ReasoningLevelOption(
+    val level: ReasoningLevel,
+    val icon: ImageVector,
+    val titleRes: Int,
+    val descRes: Int,
+)
+
+private val ALL_LEVEL_OPTIONS = listOf(
+    ReasoningLevelOption(ReasoningLevel.OFF, HugeIcons.Idea, R.string.reasoning_off, R.string.reasoning_off_desc),
+    ReasoningLevelOption(ReasoningLevel.AUTO, HugeIcons.Idea01, R.string.reasoning_auto, R.string.reasoning_auto_desc),
+    ReasoningLevelOption(ReasoningLevel.MINIMAL, ReasoningLow, R.string.reasoning_minimal, R.string.reasoning_minimal_desc),
+    ReasoningLevelOption(ReasoningLevel.LOW, ReasoningLow, R.string.reasoning_light, R.string.reasoning_light_desc),
+    ReasoningLevelOption(ReasoningLevel.MEDIUM, ReasoningMedium, R.string.reasoning_medium, R.string.reasoning_medium_desc),
+    ReasoningLevelOption(ReasoningLevel.HIGH, ReasoningHigh, R.string.reasoning_heavy, R.string.reasoning_heavy_desc),
+    ReasoningLevelOption(ReasoningLevel.XHIGH, ReasoningHigh, R.string.reasoning_xhigh, R.string.reasoning_xhigh_desc),
+)
+
 @Composable
 fun ReasoningButton(
     modifier: Modifier = Modifier,
     onlyIcon: Boolean = false,
     reasoningTokens: Int,
     onUpdateReasoningTokens: (Int) -> Unit,
+    supportedLevels: List<ReasoningLevel> = ReasoningLevel.entries.toList(),
 ) {
     var showPicker by remember { mutableStateOf(false) }
 
@@ -54,7 +73,8 @@ fun ReasoningButton(
         ReasoningPicker(
             reasoningTokens = reasoningTokens,
             onDismissRequest = { showPicker = false },
-            onUpdateReasoningTokens = onUpdateReasoningTokens
+            onUpdateReasoningTokens = onUpdateReasoningTokens,
+            supportedLevels = supportedLevels,
         )
     }
 
@@ -79,9 +99,11 @@ fun ReasoningButton(
                 when (level) {
                     ReasoningLevel.OFF -> Icon(HugeIcons.Idea, null)
                     ReasoningLevel.AUTO -> Icon(HugeIcons.Idea01, null)
+                    ReasoningLevel.MINIMAL -> Icon(ReasoningLow, null)
                     ReasoningLevel.LOW -> Icon(ReasoningLow, null)
                     ReasoningLevel.MEDIUM -> Icon(ReasoningMedium, null)
                     ReasoningLevel.HIGH -> Icon(ReasoningHigh, null)
+                    ReasoningLevel.XHIGH -> Icon(ReasoningHigh, null)
                 }
             }
             if (!onlyIcon) Text(stringResource(R.string.setting_provider_page_reasoning))
@@ -94,8 +116,11 @@ fun ReasoningPicker(
     reasoningTokens: Int,
     onDismissRequest: () -> Unit = {},
     onUpdateReasoningTokens: (Int) -> Unit,
+    supportedLevels: List<ReasoningLevel> = ReasoningLevel.entries.toList(),
 ) {
     val currentLevel = ReasoningLevel.fromBudgetTokens(reasoningTokens)
+    val visibleOptions = ALL_LEVEL_OPTIONS.filter { it.level in supportedLevels }
+
     ModalBottomSheet(
         onDismissRequest = {
             onDismissRequest()
@@ -109,81 +134,15 @@ fun ReasoningPicker(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.OFF,
-                icon = {
-                    Icon(HugeIcons.Idea, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_off))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_off_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(0)
-                }
-            )
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.AUTO,
-                icon = {
-                    Icon(HugeIcons.Idea01, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_auto))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_auto_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(-1)
-                }
-            )
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.LOW,
-                icon = {
-                    Icon(ReasoningLow, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_light))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_light_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(1024)
-                }
-            )
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.MEDIUM,
-                icon = {
-                    Icon(ReasoningMedium, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_medium))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_medium_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(16_000)
-                }
-            )
-            ReasoningLevelCard(
-                selected = currentLevel == ReasoningLevel.HIGH,
-                icon = {
-                    Icon(ReasoningHigh, null)
-                },
-                title = {
-                    Text(stringResource(id = R.string.reasoning_heavy))
-                },
-                description = {
-                    Text(stringResource(id = R.string.reasoning_heavy_desc))
-                },
-                onClick = {
-                    onUpdateReasoningTokens(32_000)
-                }
-            )
+            visibleOptions.forEach { option ->
+                ReasoningLevelCard(
+                    selected = currentLevel == option.level,
+                    icon = { Icon(option.icon, null) },
+                    title = { Text(stringResource(id = option.titleRes)) },
+                    description = { Text(stringResource(id = option.descRes)) },
+                    onClick = { onUpdateReasoningTokens(option.level.budgetTokens) }
+                )
+            }
 
             Card(
                 modifier = Modifier.imePadding(),

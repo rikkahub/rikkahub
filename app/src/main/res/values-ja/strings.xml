@@ -971,4 +971,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="video">動画</string>
   <string name="web_search_disabled">ウェブ検索が無効になりました</string>
   <string name="web_search_enabled">ウェブ検索が有効になりました</string>
+  <string name="reasoning_minimal">最小限の推論</string>
+  <string name="reasoning_minimal_desc">モデルは最小限の推論を使用します。簡単なタスクに適しています。</string>
+  <string name="reasoning_xhigh">超高度な推論</string>
+  <string name="reasoning_xhigh_desc">モデルは複雑なタスクに対して最大限の推論を使用します。</string>
 </resources>
+

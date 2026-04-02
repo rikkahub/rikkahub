@@ -1,10 +1,12 @@
 package me.rerere.ai
 
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.registry.ModelRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -90,4 +92,84 @@ class ModelRegistryTest {
             ModelRegistry.MODEL_ABILITIES.getData("minimax-m2.5")
         )
     }
+
+    // region Reasoning Level Tests
+
+    @Test
+    fun testSupportedReasoningLevels_oSeries() {
+        val expected = listOf(
+            ReasoningLevel.OFF, ReasoningLevel.AUTO,
+            ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+        )
+        assertEquals(expected, ModelRegistry.supportedReasoningLevels("o1"))
+        assertEquals(expected, ModelRegistry.supportedReasoningLevels("o3-mini"))
+        assertEquals(expected, ModelRegistry.supportedReasoningLevels("o4-mini"))
+    }
+
+    @Test
+    fun testSupportedReasoningLevels_gpt5() {
+        val expected = listOf(
+            ReasoningLevel.OFF, ReasoningLevel.AUTO,
+            ReasoningLevel.MINIMAL, ReasoningLevel.LOW,
+            ReasoningLevel.MEDIUM, ReasoningLevel.HIGH
+        )
+        assertEquals(expected, ModelRegistry.supportedReasoningLevels("gpt-5"))
+        assertEquals(expected, ModelRegistry.supportedReasoningLevels("gpt-5-mini"))
+    }
+
+    @Test
+    fun testSupportedReasoningLevels_gpt5Pro() {
+        assertEquals(
+            listOf(ReasoningLevel.AUTO, ReasoningLevel.HIGH),
+            ModelRegistry.supportedReasoningLevels("gpt-5-pro")
+        )
+    }
+
+    @Test
+    fun testSupportedReasoningLevels_gpt5Codex() {
+        assertEquals(
+            listOf(ReasoningLevel.AUTO, ReasoningLevel.LOW, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH),
+            ModelRegistry.supportedReasoningLevels("gpt-5-codex")
+        )
+    }
+
+    @Test
+    fun testSupportedReasoningLevels_gpt51() {
+        val expected = listOf(
+            ReasoningLevel.OFF, ReasoningLevel.AUTO,
+            ReasoningLevel.LOW, ReasoningLevel.MEDIUM,
+            ReasoningLevel.HIGH, ReasoningLevel.XHIGH
+        )
+        assertEquals(expected, ModelRegistry.supportedReasoningLevels("gpt-5.1"))
+        assertEquals(expected, ModelRegistry.supportedReasoningLevels("gpt-5.2"))
+    }
+
+    @Test
+    fun testSupportedReasoningLevels_gpt51CodexMax() {
+        assertEquals(
+            listOf(ReasoningLevel.AUTO, ReasoningLevel.MEDIUM, ReasoningLevel.HIGH, ReasoningLevel.XHIGH),
+            ModelRegistry.supportedReasoningLevels("gpt-5.1-codex-max")
+        )
+    }
+
+    @Test
+    fun testSupportedReasoningLevels_default() {
+        assertEquals(
+            ReasoningLevel.entries.toList(),
+            ModelRegistry.supportedReasoningLevels("unknown-model")
+        )
+    }
+
+    @Test
+    fun testReasoningEffortOrNull() {
+        assertNull(ModelRegistry.reasoningEffortOrNull("o4-mini", ReasoningLevel.AUTO))
+        assertEquals("low", ModelRegistry.reasoningEffortOrNull("o4-mini", ReasoningLevel.OFF))
+        assertEquals("low", ModelRegistry.reasoningEffortOrNull("gpt-5", ReasoningLevel.LOW))
+        assertEquals("medium", ModelRegistry.reasoningEffortOrNull("gpt-5", ReasoningLevel.MEDIUM))
+        assertEquals("high", ModelRegistry.reasoningEffortOrNull("gpt-5", ReasoningLevel.HIGH))
+        assertEquals("minimal", ModelRegistry.reasoningEffortOrNull("gpt-5", ReasoningLevel.MINIMAL))
+        assertEquals("xhigh", ModelRegistry.reasoningEffortOrNull("gpt-5.2", ReasoningLevel.XHIGH))
+    }
+
+    // endregion
 }

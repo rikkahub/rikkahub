@@ -213,8 +213,8 @@ class ResponseAPI(
                     if (capabilities.supportsReasoningSummary) {
                         put("summary", "auto")
                     }
-                    if (level != ReasoningLevel.AUTO) {
-                        put("effort", level.effort)
+                    ModelRegistry.reasoningEffortOrNull(params.model.modelId, level)?.let {
+                        put("effort", it)
                     }
                 })
                 if (capabilities.supportEncryptedContent) {

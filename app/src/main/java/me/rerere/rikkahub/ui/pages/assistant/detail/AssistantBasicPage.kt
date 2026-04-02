@@ -30,8 +30,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
@@ -403,6 +406,7 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_thinking_budget))
                 },
             ) {
+                val chatModel = assistant.chatModelId?.let { providers.findModelById(it) }
                 ReasoningButton(
                     reasoningTokens = assistant.thinkingBudget ?: 0,
                     onUpdateReasoningTokens = { tokens ->
@@ -411,7 +415,10 @@ internal fun AssistantBasicContent(
                                 thinkingBudget = tokens
                             )
                         )
-                    }
+                    },
+                    supportedLevels = chatModel?.let {
+                        ModelRegistry.supportedReasoningLevels(it.modelId)
+                    } ?: ReasoningLevel.entries.toList(),
                 )
             }
             HorizontalDivider()

@@ -361,10 +361,9 @@ class ChatCompletionsAPI(
                     }
 
                     else -> {
-                        // OpenAI 官方
-                        // 文档中，completions API 只支持 "low", "medium", "high"
-                        if (level != ReasoningLevel.AUTO) {
-                            put("reasoning_effort", if (level.effort == "none") "low" else level.effort)
+                        // OpenAI 官方及兼容 API
+                        ModelRegistry.reasoningEffortOrNull(params.model.modelId, level)?.let {
+                            put("reasoning_effort", it)
                         }
                     }
                 }

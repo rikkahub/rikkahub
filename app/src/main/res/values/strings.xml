@@ -969,4 +969,9 @@
   <string name="video">Video</string>
   <string name="web_search_disabled">Web search disabled</string>
   <string name="web_search_enabled">Web search enabled</string>
+  <string name="reasoning_minimal">Minimal reasoning</string>
+  <string name="reasoning_minimal_desc">The model will use very minimal reasoning, suitable for simple tasks.</string>
+  <string name="reasoning_xhigh">Extra heavy reasoning</string>
+  <string name="reasoning_xhigh_desc">The model will use the maximum amount of reasoning for complex tasks.</string>
 </resources>
+

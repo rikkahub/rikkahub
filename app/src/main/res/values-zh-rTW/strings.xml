@@ -969,4 +969,9 @@
   <string name="video">影片</string>
   <string name="web_search_disabled">已禁用網頁搜尋</string>
   <string name="web_search_enabled">已啟用網頁搜尋</string>
+  <string name="reasoning_minimal">極簡推理</string>
+  <string name="reasoning_minimal_desc">模型將使用極少的推理，適合簡單任務。</string>
+  <string name="reasoning_xhigh">超重度推理</string>
+  <string name="reasoning_xhigh_desc">模型將使用最大限度的推理來處理複雜任務。</string>
 </resources>
+
