@@ -207,6 +207,9 @@
   <string name="chat_page_history">История чата</string>
   <string name="chat_page_move_to_assistant">Перейти к ассистенту</string>
   <string name="chat_page_new_chat">Новый чат</string>
+  <string name="chat_page_temporary_chat">Временный чат</string>
+  <string name="chat_page_temporary_chat_enabled">Временный чат включён. Эта беседа не будет отображаться в истории.</string>
+  <string name="chat_page_temporary_chat_disabled">Временный чат отключён. Эта беседа будет отображаться в истории.</string>
   <string name="chat_page_new_message">Новое сообщение</string>
   <string name="chat_page_nickname_placeholder">Введите никнейм</string>
   <string name="chat_page_no_conversations">Нет бесед</string>
@@ -1822,4 +1825,3 @@
   <string name="prompt_page_st_preset_editor_system_prompt_metadata_tag">Сист. мета</string>
   <string name="prompt_page_st_preset_editor_marker_metadata_tag">Мета маркера</string>
 </resources>
-

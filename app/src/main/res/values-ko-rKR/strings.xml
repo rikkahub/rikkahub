@@ -209,6 +209,9 @@
   <string name="chat_page_history">채팅 기록</string>
   <string name="chat_page_move_to_assistant">어시스턴트로 이동</string>
   <string name="chat_page_new_chat">새 채팅</string>
+  <string name="chat_page_temporary_chat">임시 채팅</string>
+  <string name="chat_page_temporary_chat_enabled">임시 채팅이 활성화되었습니다. 이 대화는 기록에 표시되지 않습니다.</string>
+  <string name="chat_page_temporary_chat_disabled">임시 채팅이 비활성화되었습니다. 이 대화는 기록에 표시됩니다.</string>
   <string name="chat_page_new_message">새 메시지</string>
   <string name="chat_page_nickname_placeholder">이름을 입력하세요</string>
   <string name="chat_page_no_conversations">대화 없음</string>
@@ -1822,4 +1825,3 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="prompt_page_st_preset_editor_system_prompt_metadata_tag">시스템 메타</string>
   <string name="prompt_page_st_preset_editor_marker_metadata_tag">마커 메타</string>
 </resources>
-
