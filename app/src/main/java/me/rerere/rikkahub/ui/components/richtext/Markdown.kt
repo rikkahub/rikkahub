@@ -694,7 +694,7 @@ private fun MarkdownNode(
             val imageUrl =
                 node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_DESTINATION)?.getTextInNode(content) ?: ""
             Box(
-                modifier = modifier.fillMaxWidth(),
+                modifier = modifier.wrapContentSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 ZoomableAsyncImage(
