@@ -77,7 +77,6 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantInjectionsPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPluginPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantSkillsPage
@@ -107,6 +106,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
+import me.rerere.rikkahub.ui.pages.setting.SettingPluginPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
@@ -477,8 +477,8 @@ class RouteActivity : ComponentActivity() {
                                 AssistantRequestPage(key.id)
                             }
 
-                            entry<Screen.AssistantPlugin> { key ->
-                                AssistantPluginPage(key.id)
+                            entry<Screen.AssistantPlugin> {
+                                SettingPluginPage()
                             }
 
                             entry<Screen.AssistantMcp> { key ->
@@ -503,6 +503,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.Setting> {
                                 SettingPage()
+                            }
+
+                            entry<Screen.SettingPlugin> {
+                                SettingPluginPage()
                             }
 
                             entry<Screen.Backup> {
@@ -739,6 +743,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Setting : Screen
+
+    @Serializable
+    data object SettingPlugin : Screen
 
     @Serializable
     data object Backup : Screen

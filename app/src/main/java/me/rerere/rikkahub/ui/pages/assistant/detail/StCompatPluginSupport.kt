@@ -8,7 +8,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
-import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.datastore.Settings
 
 internal val CompatSettingsJson = Json {
     prettyPrint = true
@@ -81,18 +81,18 @@ internal fun String.parseCompatSettingsJson(): JsonObject {
     return CompatSettingsJson.parseToJsonElement(this).jsonObject
 }
 
-internal fun detectStCompatPlugins(assistant: Assistant): List<DetectedStCompatPlugin> {
+internal fun detectStCompatPlugins(settings: Settings): List<DetectedStCompatPlugin> {
     val scriptKeys = linkedSetOf<String>()
-    extensionNameDeclarationRegex.findAll(assistant.stCompatScriptSource).forEach { match ->
+    extensionNameDeclarationRegex.findAll(settings.stCompatScriptSource).forEach { match ->
         match.groupValues.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }?.let(scriptKeys::add)
     }
-    extensionSettingsIndexRegex.findAll(assistant.stCompatScriptSource).forEach { match ->
+    extensionSettingsIndexRegex.findAll(settings.stCompatScriptSource).forEach { match ->
         match.groupValues.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }?.let(scriptKeys::add)
     }
 
     val allKeys = linkedSetOf<String>()
     allKeys += scriptKeys
-    allKeys += assistant.stCompatExtensionSettings.keys
+    allKeys += settings.stCompatExtensionSettings.keys
 
     return allKeys.map { key ->
         when (key) {
@@ -102,7 +102,7 @@ internal fun detectStCompatPlugins(assistant: Assistant): List<DetectedStCompatP
                 description = "消息合并、标签替换与捕获规则。",
                 kind = DetectedStCompatPluginKind.MERGE_EDITOR,
                 detectedInScript = key in scriptKeys,
-                hasSettings = key in assistant.stCompatExtensionSettings,
+                hasSettings = key in settings.stCompatExtensionSettings,
             )
 
             else -> DetectedStCompatPlugin(
@@ -111,7 +111,7 @@ internal fun detectStCompatPlugins(assistant: Assistant): List<DetectedStCompatP
                 description = "已检测到自定义插件，当前使用通用 JSON 设置面板。",
                 kind = DetectedStCompatPluginKind.GENERIC,
                 detectedInScript = key in scriptKeys,
-                hasSettings = key in assistant.stCompatExtensionSettings,
+                hasSettings = key in settings.stCompatExtensionSettings,
             )
         }
     }.sortedWith(
@@ -121,20 +121,20 @@ internal fun detectStCompatPlugins(assistant: Assistant): List<DetectedStCompatP
     )
 }
 
-internal fun Assistant.shouldShowMergeEditorConfig(): Boolean {
+internal fun Settings.shouldShowMergeEditorConfig(): Boolean {
     return stCompatScriptSource.contains(MergeEditorExtensionName) ||
         stCompatExtensionSettings.containsKey(MergeEditorExtensionName)
 }
 
-internal fun Assistant.readCompatPluginSettings(key: String): JsonObject {
+internal fun Settings.readCompatPluginSettings(key: String): JsonObject {
     return runCatching { stCompatExtensionSettings[key]?.jsonObject }.getOrNull()
         ?: buildJsonObject { }
 }
 
-internal fun Assistant.withCompatPluginSettings(
+internal fun Settings.withCompatPluginSettings(
     key: String,
     settings: JsonObject,
-): Assistant {
+): Settings {
     val updated = stCompatExtensionSettings.toMutableMap().apply {
         if (settings.isEmpty()) {
             remove(key)
@@ -145,7 +145,7 @@ internal fun Assistant.withCompatPluginSettings(
     return copy(stCompatExtensionSettings = JsonObject(updated))
 }
 
-internal fun Assistant.readMergeEditorConfig(): MergeEditorConfig {
+internal fun Settings.readMergeEditorConfig(): MergeEditorConfig {
     val raw = runCatching { stCompatExtensionSettings[MergeEditorExtensionName]?.jsonObject }.getOrNull()
         ?: return MergeEditorConfig()
     return runCatching {
@@ -155,7 +155,7 @@ internal fun Assistant.readMergeEditorConfig(): MergeEditorConfig {
     }
 }
 
-internal fun Assistant.withMergeEditorConfig(config: MergeEditorConfig): Assistant {
+internal fun Settings.withMergeEditorConfig(config: MergeEditorConfig): Settings {
     val updated = stCompatExtensionSettings.toMutableMap().apply {
         put(
             MergeEditorExtensionName,

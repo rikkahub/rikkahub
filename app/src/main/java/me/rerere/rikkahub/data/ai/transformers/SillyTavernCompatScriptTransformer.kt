@@ -92,9 +92,9 @@ class SillyTavernCompatScriptTransformer(
         messages: List<UIMessage>,
     ): List<UIMessage> {
         val assistant = ctx.assistant
-        if (!assistant.stCompatScriptEnabled) return messages
+        if (!ctx.settings.stCompatScriptEnabled) return messages
 
-        val scriptSource = assistant.stCompatScriptSource.trim()
+        val scriptSource = ctx.settings.stCompatScriptSource.trim()
         if (scriptSource.isBlank()) return messages
 
         val provider = ctx.model.findProvider(ctx.settings.providers) ?: return messages
@@ -125,7 +125,7 @@ class SillyTavernCompatScriptTransformer(
                     userName = userName,
                     charName = charName,
                 ),
-                extensionSettings = assistant.stCompatExtensionSettings,
+                extensionSettings = ctx.settings.stCompatExtensionSettings,
                 temperature = assistant.temperature?.toDouble(),
                 frequencyPenalty = assistant.frequencyPenalty?.toDouble(),
                 presencePenalty = assistant.presencePenalty?.toDouble(),
@@ -153,8 +153,7 @@ class SillyTavernCompatScriptTransformer(
 
         if (!ctx.dryRun) {
             persistExtensionSettingsIfNeeded(
-                assistantId = assistant.id.toString(),
-                current = assistant.stCompatExtensionSettings,
+                current = ctx.settings.stCompatExtensionSettings,
                 updated = response.extensionSettings,
             )
         }
@@ -163,21 +162,12 @@ class SillyTavernCompatScriptTransformer(
     }
 
     private suspend fun persistExtensionSettingsIfNeeded(
-        assistantId: String,
         current: JsonObject,
         updated: JsonObject,
     ) {
         if (current == updated) return
         settingsStore.update { settings ->
-            settings.copy(
-                assistants = settings.assistants.map { assistant ->
-                    if (assistant.id.toString() == assistantId) {
-                        assistant.copy(stCompatExtensionSettings = updated)
-                    } else {
-                        assistant
-                    }
-                }
-            )
+            settings.copy(stCompatExtensionSettings = updated)
         }
     }
 

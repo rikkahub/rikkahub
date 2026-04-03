@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.datastore.migration
 import android.util.Log
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.utils.JsonInstant
 
@@ -58,6 +59,24 @@ object SettingsJsonMigrator {
                         }
                     )
                     root["quickMessages"] = merged
+                }
+            }
+
+            // V4: 将 assistants 中的 ST 兼容脚本/插件设置提升为全局设置
+            root["assistants"]?.let { element ->
+                val migrated = migrateAssistantsStCompatSettings(
+                    assistantsJson = JsonInstant.encodeToString(element),
+                    selectedAssistantId = root["assistantId"]?.toString()?.trim('"'),
+                )
+                root["assistants"] = JsonInstant.parseToJsonElement(migrated.assistantsJson)
+                if (!root.containsKey("stCompatScriptEnabled")) {
+                    root["stCompatScriptEnabled"] = JsonPrimitive(migrated.enabled)
+                }
+                if (!root.containsKey("stCompatScriptSource")) {
+                    root["stCompatScriptSource"] = JsonPrimitive(migrated.scriptSource)
+                }
+                if (!root.containsKey("stCompatExtensionSettings")) {
+                    root["stCompatExtensionSettings"] = migrated.extensionSettings
                 }
             }
 

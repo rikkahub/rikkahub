@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -22,10 +21,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -71,7 +68,6 @@ internal fun AssistantRequestContent(
     assistant: Assistant,
     onUpdate: (Assistant) -> Unit
 ) {
-    val navController = LocalNavController.current
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -103,37 +99,5 @@ internal fun AssistantRequestContent(
                 )
             }
         )
-
-        HorizontalDivider()
-
-        PluginSettingsShortcutCard(
-            onClick = {
-                navController.navigate(Screen.AssistantPlugin(assistant.id.toString()))
-            }
-        )
-    }
-}
-
-@Composable
-private fun PluginSettingsShortcutCard(
-    onClick: () -> Unit,
-) {
-    Card(
-        colors = CustomColors.cardColorsOnSurfaceContainer,
-        onClick = onClick,
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = "自定义插件",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = "单独管理 ST 兼容脚本、插件设置和原始 JSON。复杂插件建议在独立页面调整。",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
     }
 }

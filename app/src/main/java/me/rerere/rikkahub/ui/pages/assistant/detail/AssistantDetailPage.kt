@@ -131,13 +131,6 @@ fun AssistantDetailPage(id: String) {
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.AssistantPlugin(id)) },
-                        leadingContent = { Icon(HugeIcons.Code, null) },
-                        supportingContent = { Text("管理 ST 兼容脚本、自定义插件设置和高级 JSON。") },
-                        headlineContent = { Text("自定义插件") },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
-                    )
-                    item(
                         onClick = { navController.navigate(Screen.AssistantMcp(id)) },
                         leadingContent = { Icon(HugeIcons.Wrench01, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_mcp_desc)) },

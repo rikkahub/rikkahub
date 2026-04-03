@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
@@ -35,6 +37,7 @@ import me.rerere.rikkahub.data.ai.tools.termux.TERMUX_PTY_DEFAULT_YIELD_TIME_MS
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
+import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV4Migration
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantRegex
@@ -75,7 +78,8 @@ private val Context.settingsStore by preferencesDataStore(
         listOf(
             PreferenceStoreV1Migration(),
             PreferenceStoreV2Migration(),
-            PreferenceStoreV3Migration()
+            PreferenceStoreV3Migration(),
+            PreferenceStoreV4Migration(),
         )
     }
 )
@@ -123,6 +127,9 @@ class SettingsStore(
         val ASSISTANT_TAGS = stringPreferencesKey("assistant_tags")
         val SCHEDULED_TASKS = stringPreferencesKey("scheduled_tasks")
         val SCHEDULED_TASK_KEEP_ALIVE_ENABLED = booleanPreferencesKey("scheduled_task_keep_alive_enabled")
+        val ST_COMPAT_SCRIPT_ENABLED = booleanPreferencesKey("st_compat_script_enabled")
+        val ST_COMPAT_SCRIPT_SOURCE = stringPreferencesKey("st_compat_script_source")
+        val ST_COMPAT_EXTENSION_SETTINGS = stringPreferencesKey("st_compat_extension_settings")
 
         // 搜索
         val SEARCH_SERVICES = stringPreferencesKey("search_services")
@@ -247,6 +254,11 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 scheduledTaskKeepAliveEnabled = preferences[SCHEDULED_TASK_KEEP_ALIVE_ENABLED] == true,
+                stCompatScriptEnabled = preferences[ST_COMPAT_SCRIPT_ENABLED] == true,
+                stCompatScriptSource = preferences[ST_COMPAT_SCRIPT_SOURCE] ?: "",
+                stCompatExtensionSettings = preferences[ST_COMPAT_EXTENSION_SETTINGS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: buildJsonObject { },
                 searchServices = preferences[SEARCH_SERVICES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: listOf(SearchServiceOptions.DEFAULT),
@@ -557,6 +569,9 @@ class SettingsStore(
             preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(normalizedSettings.assistantTags)
             preferences[SCHEDULED_TASKS] = JsonInstant.encodeToString(normalizedSettings.scheduledTasks)
             preferences[SCHEDULED_TASK_KEEP_ALIVE_ENABLED] = normalizedSettings.scheduledTaskKeepAliveEnabled
+            preferences[ST_COMPAT_SCRIPT_ENABLED] = normalizedSettings.stCompatScriptEnabled
+            preferences[ST_COMPAT_SCRIPT_SOURCE] = normalizedSettings.stCompatScriptSource
+            preferences[ST_COMPAT_EXTENSION_SETTINGS] = JsonInstant.encodeToString(normalizedSettings.stCompatExtensionSettings)
 
             preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(normalizedSettings.searchServices)
             preferences[SEARCH_COMMON] = JsonInstant.encodeToString(normalizedSettings.searchCommonOptions)
@@ -719,6 +734,9 @@ data class Settings(
     val assistantTags: List<Tag> = emptyList(),
     val scheduledTasks: List<ScheduledPromptTask> = emptyList(),
     val scheduledTaskKeepAliveEnabled: Boolean = false,
+    val stCompatScriptEnabled: Boolean = false,
+    val stCompatScriptSource: String = "",
+    val stCompatExtensionSettings: JsonObject = buildJsonObject { },
     val searchServices: List<SearchServiceOptions> = listOf(SearchServiceOptions.DEFAULT),
     val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),
     val searchServiceSelected: Int = 0,

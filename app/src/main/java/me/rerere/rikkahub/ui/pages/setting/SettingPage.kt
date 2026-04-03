@@ -58,6 +58,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Clapping01
 import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.Developer
+import me.rerere.hugeicons.stroke.FileScript
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
 import me.rerere.hugeicons.stroke.LookTop
@@ -223,13 +224,20 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     val scheduledDesc = stringResource(R.string.setting_page_scheduled_tasks_desc)
                     val extensionsTitle = stringResource(R.string.setting_page_extensions)
                     val extensionsDesc = stringResource(R.string.setting_page_extensions_desc)
+                    val pluginTitle = "自定义插件"
+                    val pluginDesc = "管理全局 ST 兼容脚本、自定义插件设置和原始 JSON。"
                     val showColorMode = generalSectionMatch || matchesSetting(colorModeTitle, selectedColorModeText)
                     val showDisplay = generalSectionMatch || matchesSetting(displayTitle, displayDesc)
                     val showAssistant = generalSectionMatch || matchesSetting(assistantTitle, assistantDesc)
                     val showScheduled = generalSectionMatch || matchesSetting(scheduledTitle, scheduledDesc)
                     val showExtensions = generalSectionMatch || matchesSetting(extensionsTitle, extensionsDesc)
+                    val showPlugin = generalSectionMatch || matchesSetting(
+                        pluginTitle,
+                        pluginDesc,
+                        listOf("plugin", "script", "sillytavern", "st"),
+                    )
 
-                    if (showColorMode || showDisplay || showAssistant || showScheduled || showExtensions) {
+                    if (showColorMode || showDisplay || showAssistant || showScheduled || showExtensions || showPlugin) {
                         CardGroup(
                             modifier = Modifier.padding(horizontal = 8.dp),
                             title = { Text(generalSectionTitle) },
@@ -293,6 +301,14 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                                     leadingContent = { Icon(HugeIcons.Package, null) },
                                     supportingContent = { Text(extensionsDesc) },
                                     headlineContent = { Text(extensionsTitle) },
+                                )
+                            }
+                            if (showPlugin) {
+                                item(
+                                    onClick = { navController.navigate(Screen.SettingPlugin) },
+                                    leadingContent = { Icon(HugeIcons.FileScript, null) },
+                                    supportingContent = { Text(pluginDesc) },
+                                    headlineContent = { Text(pluginTitle) },
                                 )
                             }
                         }

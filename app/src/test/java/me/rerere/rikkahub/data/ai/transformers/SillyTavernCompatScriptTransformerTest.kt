@@ -7,7 +7,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.datastore.Settings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -217,8 +217,8 @@ class SillyTavernCompatScriptTransformerTest {
     }
 
     @Test
-    fun `assistant should serialize compat extension settings`() {
-        val assistant = Assistant(
+    fun `settings should serialize compat extension settings`() {
+        val settings = Settings(
             stCompatScriptEnabled = true,
             stCompatScriptSource = "script.eventSource.on('x', () => {})",
             stCompatExtensionSettings = buildJsonObject {
@@ -231,11 +231,11 @@ class SillyTavernCompatScriptTransformerTest {
             }
         )
 
-        val encoded = Json.encodeToString(Assistant.serializer(), assistant)
-        val decoded = Json.decodeFromString(Assistant.serializer(), encoded)
+        val encoded = Json.encodeToString(Settings.serializer(), settings)
+        val decoded = Json.decodeFromString(Settings.serializer(), encoded)
 
-        assertEquals(assistant.stCompatScriptEnabled, decoded.stCompatScriptEnabled)
-        assertEquals(assistant.stCompatScriptSource, decoded.stCompatScriptSource)
-        assertEquals(assistant.stCompatExtensionSettings, decoded.stCompatExtensionSettings)
+        assertEquals(settings.stCompatScriptEnabled, decoded.stCompatScriptEnabled)
+        assertEquals(settings.stCompatScriptSource, decoded.stCompatScriptSource)
+        assertEquals(settings.stCompatExtensionSettings, decoded.stCompatExtensionSettings)
     }
 }

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -21,17 +20,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -44,79 +40,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Code
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ui.TextArea
 import me.rerere.rikkahub.ui.theme.CustomColors
-import org.koin.androidx.compose.koinViewModel
-import org.koin.core.parameter.parametersOf
 
 @Composable
-fun AssistantPluginPage(id: String) {
-    val vm: AssistantDetailVM = koinViewModel(
-        parameters = {
-            parametersOf(id)
-        }
-    )
-    val assistant by vm.assistant.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
-    Scaffold(
-        topBar = {
-            LargeFlexibleTopAppBar(
-                title = {
-                    Text("自定义插件")
-                },
-                navigationIcon = {
-                    BackButton()
-                },
-                scrollBehavior = scrollBehavior,
-                colors = CustomColors.topBarColors,
-            )
-        },
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = CustomColors.topBarColors.containerColor,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-    ) { innerPadding ->
-        AssistantPluginContent(
-            modifier = Modifier.padding(innerPadding),
-            assistant = assistant,
-            onUpdate = { vm.update(it) },
-        )
-    }
-}
-
-@Composable
-private fun AssistantPluginContent(
+internal fun CompatPluginContent(
     modifier: Modifier = Modifier,
-    assistant: Assistant,
-    onUpdate: (Assistant) -> Unit,
+    settings: Settings,
+    onUpdate: (Settings) -> Unit,
 ) {
-    val latestAssistant by rememberUpdatedState(assistant)
+    val latestSettings by rememberUpdatedState(settings)
     val latestOnUpdate by rememberUpdatedState(onUpdate)
     val invalidJsonText = stringResource(R.string.invalid_json)
-    val detectedPlugins = remember(assistant.stCompatScriptSource, assistant.stCompatExtensionSettings) {
-        detectStCompatPlugins(assistant)
+    val detectedPlugins = remember(settings.stCompatScriptSource, settings.stCompatExtensionSettings) {
+        detectStCompatPlugins(settings)
     }
 
-    val scriptState = rememberTextFieldState(initialText = assistant.stCompatScriptSource)
-    var lastExternalScript by remember { mutableStateOf(assistant.stCompatScriptSource) }
-    var lastDispatchedScript by remember { mutableStateOf(assistant.stCompatScriptSource) }
+    val scriptState = rememberTextFieldState(initialText = settings.stCompatScriptSource)
+    var lastExternalScript by remember { mutableStateOf(settings.stCompatScriptSource) }
+    var lastDispatchedScript by remember { mutableStateOf(settings.stCompatScriptSource) }
     val scriptText = scriptState.text.toString()
 
-    val initialSettingsText = remember(assistant.stCompatExtensionSettings) {
-        assistant.stCompatExtensionSettings.toPrettyCompatJson()
+    val initialSettingsText = remember(settings.stCompatExtensionSettings) {
+        settings.stCompatExtensionSettings.toPrettyCompatJson()
     }
     val settingsState = rememberTextFieldState(initialText = initialSettingsText)
     var lastExternalSettings by remember { mutableStateOf(initialSettingsText) }
@@ -124,31 +79,31 @@ private fun AssistantPluginContent(
     var settingsError by remember { mutableStateOf<String?>(null) }
     val settingsText = settingsState.text.toString()
 
-    var showScriptEditor by remember(assistant.stCompatScriptSource) {
-        mutableStateOf(assistant.stCompatScriptSource.isNotBlank())
+    var showScriptEditor by remember(settings.stCompatScriptSource) {
+        mutableStateOf(settings.stCompatScriptSource.isNotBlank())
     }
     var showRawJson by remember { mutableStateOf(false) }
 
-    LaunchedEffect(assistant.stCompatScriptSource) {
+    LaunchedEffect(settings.stCompatScriptSource) {
         val currentText = scriptState.text.toString()
         val shouldSyncText =
             currentText == lastExternalScript ||
-                assistant.stCompatScriptSource != lastDispatchedScript ||
-                currentText == assistant.stCompatScriptSource
-        lastExternalScript = assistant.stCompatScriptSource
+                settings.stCompatScriptSource != lastDispatchedScript ||
+                currentText == settings.stCompatScriptSource
+        lastExternalScript = settings.stCompatScriptSource
 
-        if (shouldSyncText && currentText != assistant.stCompatScriptSource) {
+        if (shouldSyncText && currentText != settings.stCompatScriptSource) {
             scriptState.edit {
-                replace(0, length, assistant.stCompatScriptSource)
+                replace(0, length, settings.stCompatScriptSource)
             }
         }
         if (shouldSyncText) {
-            lastDispatchedScript = assistant.stCompatScriptSource
+            lastDispatchedScript = settings.stCompatScriptSource
         }
     }
     LaunchedEffect(scriptText) {
         if (
-            scriptText == latestAssistant.stCompatScriptSource ||
+            scriptText == latestSettings.stCompatScriptSource ||
             scriptText == lastDispatchedScript
         ) {
             return@LaunchedEffect
@@ -157,12 +112,12 @@ private fun AssistantPluginContent(
         val latestText = scriptState.text.toString()
         if (
             latestText == scriptText &&
-            latestText != latestAssistant.stCompatScriptSource &&
+            latestText != latestSettings.stCompatScriptSource &&
             latestText != lastDispatchedScript
         ) {
             lastDispatchedScript = latestText
             latestOnUpdate(
-                latestAssistant.copy(
+                latestSettings.copy(
                     stCompatScriptSource = latestText,
                 )
             )
@@ -172,12 +127,12 @@ private fun AssistantPluginContent(
         onDispose {
             val currentText = scriptState.text.toString()
             if (
-                currentText != latestAssistant.stCompatScriptSource &&
+                currentText != latestSettings.stCompatScriptSource &&
                 currentText != lastDispatchedScript
             ) {
                 lastDispatchedScript = currentText
                 latestOnUpdate(
-                    latestAssistant.copy(
+                    latestSettings.copy(
                         stCompatScriptSource = currentText,
                     )
                 )
@@ -185,8 +140,8 @@ private fun AssistantPluginContent(
         }
     }
 
-    LaunchedEffect(assistant.stCompatExtensionSettings) {
-        val externalText = assistant.stCompatExtensionSettings.toPrettyCompatJson()
+    LaunchedEffect(settings.stCompatExtensionSettings) {
+        val externalText = settings.stCompatExtensionSettings.toPrettyCompatJson()
         val currentText = settingsState.text.toString()
         val shouldSyncText =
             currentText == lastExternalSettings ||
@@ -207,7 +162,7 @@ private fun AssistantPluginContent(
     LaunchedEffect(settingsText) {
         if (
             settingsText == lastDispatchedSettings ||
-            settingsText == latestAssistant.stCompatExtensionSettings.toPrettyCompatJson()
+            settingsText == latestSettings.stCompatExtensionSettings.toPrettyCompatJson()
         ) {
             settingsError = null
             return@LaunchedEffect
@@ -221,11 +176,11 @@ private fun AssistantPluginContent(
             .getOrElse { error ->
                 settingsError = error.message ?: invalidJsonText
                 return@LaunchedEffect
-            }
+        }
         settingsError = null
         lastDispatchedSettings = latestText
         latestOnUpdate(
-            latestAssistant.copy(
+            latestSettings.copy(
                 stCompatExtensionSettings = parsed,
             )
         )
@@ -235,7 +190,7 @@ private fun AssistantPluginContent(
             val currentText = settingsState.text.toString()
             if (
                 currentText == lastDispatchedSettings ||
-                currentText == latestAssistant.stCompatExtensionSettings.toPrettyCompatJson()
+                currentText == latestSettings.stCompatExtensionSettings.toPrettyCompatJson()
             ) {
                 return@onDispose
             }
@@ -246,7 +201,7 @@ private fun AssistantPluginContent(
             settingsError = null
             lastDispatchedSettings = currentText
             latestOnUpdate(
-                latestAssistant.copy(
+                latestSettings.copy(
                     stCompatExtensionSettings = parsed,
                 )
             )
@@ -263,13 +218,13 @@ private fun AssistantPluginContent(
     ) {
         PluginHeroCard(
             pluginCount = detectedPlugins.size,
-            settingsCount = assistant.stCompatExtensionSettings.size,
-            enabled = assistant.stCompatScriptEnabled,
+            settingsCount = settings.stCompatExtensionSettings.size,
+            enabled = settings.stCompatScriptEnabled,
         )
 
         SectionHeader(
             title = "脚本引擎",
-            subtitle = "兼容层会在请求发送前运行 ST 风格脚本。这里负责总开关和脚本源码。"
+            subtitle = "兼容层会在请求发送前运行 ST 风格脚本。这里负责全局总开关和脚本源码。"
         )
         Surface(
             modifier = Modifier
@@ -285,18 +240,18 @@ private fun AssistantPluginContent(
                 ToggleRow(
                     title = "启用兼容脚本",
                     subtitle = "关闭后不会执行任何自定义插件或 ST 兼容脚本。",
-                    checked = assistant.stCompatScriptEnabled,
+                    checked = settings.stCompatScriptEnabled,
                     onToggle = { enabled ->
-                        onUpdate(assistant.copy(stCompatScriptEnabled = enabled))
+                        onUpdate(settings.copy(stCompatScriptEnabled = enabled))
                     }
                 )
 
                 ExpandableRow(
                     title = "脚本源码",
-                    subtitle = if (assistant.stCompatScriptSource.isBlank()) {
+                    subtitle = if (settings.stCompatScriptSource.isBlank()) {
                         "当前还没有脚本，可直接粘贴插件源码。"
                     } else {
-                        "已载入 ${assistant.stCompatScriptSource.length} 个字符，点击展开编辑。"
+                        "已载入 ${settings.stCompatScriptSource.length} 个字符，点击展开编辑。"
                     },
                     expanded = showScriptEditor,
                     onToggle = { showScriptEditor = !showScriptEditor },
@@ -330,7 +285,7 @@ private fun AssistantPluginContent(
 
         SectionHeader(
             title = "活动插件",
-            subtitle = "从脚本源码和现有设置里自动识别插件。已知插件使用可视化表单，未知插件保留通用 JSON 面板。"
+            subtitle = "从全局脚本源码和现有设置里自动识别插件。已知插件使用可视化表单，未知插件保留通用 JSON 面板。"
         )
         if (detectedPlugins.isEmpty()) {
             EmptyPluginState()
@@ -338,13 +293,13 @@ private fun AssistantPluginContent(
             detectedPlugins.forEach { plugin ->
                 when (plugin.kind) {
                     DetectedStCompatPluginKind.MERGE_EDITOR -> MergeEditorPluginPanel(
-                        assistant = assistant,
+                        settings = settings,
                         plugin = plugin,
                         onUpdate = onUpdate,
                     )
 
                     DetectedStCompatPluginKind.GENERIC -> GenericPluginPanel(
-                        assistant = assistant,
+                        settings = settings,
                         plugin = plugin,
                         onUpdate = onUpdate,
                     )
@@ -354,7 +309,7 @@ private fun AssistantPluginContent(
 
         SectionHeader(
             title = "高级",
-            subtitle = "需要排错、批量迁移或处理未知字段时，再用整个扩展设置 JSON。"
+            subtitle = "需要排错、批量迁移或处理未知字段时，再用整个全局扩展设置 JSON。"
         )
         Surface(
             modifier = Modifier
@@ -369,7 +324,7 @@ private fun AssistantPluginContent(
             ) {
                 ExpandableRow(
                     title = "原始扩展设置 JSON",
-                    subtitle = "直接编辑 assistant.stCompatExtensionSettings。",
+                    subtitle = "直接编辑全局 settings.stCompatExtensionSettings。",
                     expanded = showRawJson,
                     onToggle = { showRawJson = !showRawJson },
                 )
@@ -451,14 +406,14 @@ private fun PluginHeroCard(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "ST 兼容插件工作台",
+                            text = "全局 ST 兼容插件工作台",
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
                             text = if (enabled) {
-                                "当前引擎已启用，脚本会参与每次请求前的消息整形。"
+                                "当前引擎已启用，脚本会参与所有助手请求前的消息整形。"
                             } else {
-                                "当前引擎已关闭，所有插件和兼容脚本都不会运行。"
+                                "当前引擎已关闭，所有助手上的插件和兼容脚本都不会运行。"
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -617,12 +572,12 @@ private fun EmptyPluginState() {
 
 @Composable
 private fun MergeEditorPluginPanel(
-    assistant: Assistant,
+    settings: Settings,
     plugin: DetectedStCompatPlugin,
-    onUpdate: (Assistant) -> Unit,
+    onUpdate: (Settings) -> Unit,
 ) {
-    val config = assistant.readMergeEditorConfig()
-    val latestAssistant by rememberUpdatedState(assistant)
+    val config = settings.readMergeEditorConfig()
+    val latestSettings by rememberUpdatedState(settings)
     val latestConfig by rememberUpdatedState(config)
     val latestOnUpdate by rememberUpdatedState(onUpdate)
     val invalidJsonText = stringResource(R.string.invalid_json)
@@ -639,7 +594,7 @@ private fun MergeEditorPluginPanel(
     var showPluginJson by remember { mutableStateOf(false) }
 
     fun updateConfig(transform: (MergeEditorConfig) -> MergeEditorConfig) {
-        onUpdate(assistant.withMergeEditorConfig(transform(config)))
+        onUpdate(settings.withMergeEditorConfig(transform(config)))
     }
 
     LaunchedEffect(config.storedData) {
@@ -678,11 +633,11 @@ private fun MergeEditorPluginPanel(
             .getOrElse { error ->
                 storedDataError = error.message ?: invalidJsonText
                 return@LaunchedEffect
-            }
+        }
         storedDataError = null
         lastDispatchedStoredData = latestText
         latestOnUpdate(
-            latestAssistant.withMergeEditorConfig(
+            latestSettings.withMergeEditorConfig(
                 latestConfig.copy(storedData = parsed)
             )
         )
@@ -703,7 +658,7 @@ private fun MergeEditorPluginPanel(
             storedDataError = null
             lastDispatchedStoredData = currentText
             latestOnUpdate(
-                latestAssistant.withMergeEditorConfig(
+                latestSettings.withMergeEditorConfig(
                     latestConfig.copy(storedData = parsed)
                 )
             )
@@ -932,7 +887,7 @@ private fun MergeEditorPluginPanel(
             )
             AnimatedVisibility(showPluginJson) {
                 GenericPluginJsonEditor(
-                    assistant = assistant,
+                    settings = settings,
                     pluginKey = plugin.key,
                     label = "${plugin.displayName} JSON",
                     onUpdate = onUpdate,
@@ -944,9 +899,9 @@ private fun MergeEditorPluginPanel(
 
 @Composable
 private fun GenericPluginPanel(
-    assistant: Assistant,
+    settings: Settings,
     plugin: DetectedStCompatPlugin,
-    onUpdate: (Assistant) -> Unit,
+    onUpdate: (Settings) -> Unit,
 ) {
     Surface(
         modifier = Modifier
@@ -966,7 +921,7 @@ private fun GenericPluginPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             GenericPluginJsonEditor(
-                assistant = assistant,
+                settings = settings,
                 pluginKey = plugin.key,
                 label = "${plugin.displayName} JSON",
                 onUpdate = onUpdate,
@@ -1057,17 +1012,17 @@ private fun PluginMetaPill(
 
 @Composable
 private fun GenericPluginJsonEditor(
-    assistant: Assistant,
+    settings: Settings,
     pluginKey: String,
     label: String,
-    onUpdate: (Assistant) -> Unit,
+    onUpdate: (Settings) -> Unit,
 ) {
-    val latestAssistant by rememberUpdatedState(assistant)
+    val latestSettings by rememberUpdatedState(settings)
     val latestOnUpdate by rememberUpdatedState(onUpdate)
     val invalidJsonText = stringResource(R.string.invalid_json)
 
-    val externalJson = remember(assistant.stCompatExtensionSettings, pluginKey) {
-        assistant.readCompatPluginSettings(pluginKey)
+    val externalJson = remember(settings.stCompatExtensionSettings, pluginKey) {
+        settings.readCompatPluginSettings(pluginKey)
     }
     val initialText = remember(externalJson) { externalJson.toPrettyCompatJson() }
     val state = rememberTextFieldState(initialText = initialText)
@@ -1098,7 +1053,7 @@ private fun GenericPluginJsonEditor(
     LaunchedEffect(currentText) {
         if (
             currentText == lastDispatchedText ||
-            currentText == latestAssistant.readCompatPluginSettings(pluginKey).toPrettyCompatJson()
+            currentText == latestSettings.readCompatPluginSettings(pluginKey).toPrettyCompatJson()
         ) {
             errorText = null
             return@LaunchedEffect
@@ -1115,14 +1070,14 @@ private fun GenericPluginJsonEditor(
             }
         errorText = null
         lastDispatchedText = latestText
-        latestOnUpdate(latestAssistant.withCompatPluginSettings(pluginKey, parsed))
+        latestOnUpdate(latestSettings.withCompatPluginSettings(pluginKey, parsed))
     }
     DisposableEffect(Unit) {
         onDispose {
             val text = state.text.toString()
             if (
                 text == lastDispatchedText ||
-                text == latestAssistant.readCompatPluginSettings(pluginKey).toPrettyCompatJson()
+                text == latestSettings.readCompatPluginSettings(pluginKey).toPrettyCompatJson()
             ) {
                 return@onDispose
             }
@@ -1132,7 +1087,7 @@ private fun GenericPluginJsonEditor(
             }
             errorText = null
             lastDispatchedText = text
-            latestOnUpdate(latestAssistant.withCompatPluginSettings(pluginKey, parsed))
+            latestOnUpdate(latestSettings.withCompatPluginSettings(pluginKey, parsed))
         }
     }
 
@@ -1172,7 +1127,7 @@ private fun GenericPluginJsonEditor(
                     state.edit {
                         replace(0, length, emptyText)
                     }
-                    latestOnUpdate(latestAssistant.withCompatPluginSettings(pluginKey, empty))
+                    latestOnUpdate(latestSettings.withCompatPluginSettings(pluginKey, empty))
                 }
             ) {
                 Text("清空")
