@@ -235,8 +235,8 @@ private fun ChatListNormal(
     val density = LocalDensity.current
     val activity = LocalActivity.current as? me.rerere.rikkahub.RouteActivity
     val enableGlassBlur = settings.displaySetting.enableBlurEffect
-    val topFadeHeight = if (topBarVisible) innerPadding.calculateTopPadding() + 40.dp else 0.dp
-    val bottomFadeHeight = innerPadding.calculateBottomPadding() + 56.dp
+    val topFadeHeight = if (topBarVisible) innerPadding.calculateTopPadding() + 24.dp else 0.dp
+    val bottomFadeHeight = innerPadding.calculateBottomPadding() + 28.dp
     val assistant = remember(settings.assistants, conversation.assistantId) {
         settings.getAssistantById(conversation.assistantId)
     }
@@ -597,11 +597,11 @@ private fun BoxScope.ChatListChromeScrims(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .height(innerPadding.calculateTopPadding() + 48.dp)
+                .height(innerPadding.calculateTopPadding() + 32.dp)
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            background.copy(alpha = 0.80f),
+                            background.copy(alpha = 0.68f),
                             Color.Transparent,
                         ),
                     )
@@ -613,12 +613,12 @@ private fun BoxScope.ChatListChromeScrims(
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
-            .height(innerPadding.calculateBottomPadding() + 80.dp)
+            .height(innerPadding.calculateBottomPadding() + 44.dp)
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
                         Color.Transparent,
-                        background.copy(alpha = 0.90f),
+                        background.copy(alpha = 0.74f),
                     ),
                 )
             )
