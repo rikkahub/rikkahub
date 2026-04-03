@@ -78,6 +78,7 @@ import me.rerere.hugeicons.stroke.ArrowDownDouble
 import me.rerere.hugeicons.stroke.ArrowUpDouble
 import me.rerere.hugeicons.stroke.BubbleChatTemporary
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.InspectCode
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
@@ -536,13 +537,8 @@ private fun ChatPageContent(
                                 onHideTopBar = {
                                     topBarVisible = false
                                 },
-                                onOpenPromptInspector = {
+                                onOpenRuntimeInspector = {
                                     inspectorTab = ChatRuntimeInspectorTab.PROMPTS
-                                    inspectorVisible = true
-                                    vm.refreshRuntimeInspection()
-                                },
-                                onOpenVariableInspector = {
-                                    inspectorTab = ChatRuntimeInspectorTab.VARIABLES
                                     inspectorVisible = true
                                     vm.refreshRuntimeInspection()
                                 }
@@ -750,8 +746,7 @@ private fun TopBar(
     onToggleTemporaryConversation: () -> Unit,
     onUpdateTitle: (String) -> Unit,
     onHideTopBar: () -> Unit,
-    onOpenPromptInspector: () -> Unit,
-    onOpenVariableInspector: () -> Unit,
+    onOpenRuntimeInspector: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -889,18 +884,14 @@ private fun TopBar(
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("提示词查看器") },
+                    text = { Text("运行时检查") },
                     onClick = {
                         showOverflowMenu = false
-                        onOpenPromptInspector()
+                        onOpenRuntimeInspector()
                     },
-                )
-                DropdownMenuItem(
-                    text = { Text("变量查看器") },
-                    onClick = {
-                        showOverflowMenu = false
-                        onOpenVariableInspector()
-                    },
+                    leadingIcon = {
+                        Icon(HugeIcons.InspectCode, null)
+                    }
                 )
             }
         },
