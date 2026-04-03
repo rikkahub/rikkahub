@@ -735,18 +735,25 @@ private fun Paragraph(
     ) {
         val annotatedString = remember(content, enableLatexRendering) {
             buildAnnotatedString {
-                node.children.fastForEach { child ->
-                    appendMarkdownNodeContent(
-                        node = child,
-                        content = content,
-                        inlineContents = inlineContents,
-                        colorScheme = colorScheme,
-                        onClickCitation = onClickCitation,
-                        style = textStyle,
-                        density = density,
-                        trim = trim,
-                        enableLatexRendering = enableLatexRendering,
-                    )
+                // ✅ FIX 1: 添加 try-catch 拦截隐式异常，防止 Compose 崩溃导致协程 Cancel 断流
+                try {
+                    node.children.fastForEach { child ->
+                        appendMarkdownNodeContent(
+                            node = child,
+                            content = content,
+                            inlineContents = inlineContents,
+                            colorScheme = colorScheme,
+                            onClickCitation = onClickCitation,
+                            style = textStyle,
+                            density = density,
+                            trim = trim,
+                            enableLatexRendering = enableLatexRendering,
+                        )
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    // 降级处理：如果 Markdown AST 节点解析越界或失败，直接追加原文，保证流不断
+                    append(node.getTextInNode(content))
                 }
             }
         }
@@ -907,11 +914,14 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                 node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_DESTINATION)?.getTextInNode(content) ?: ""
             val linkText = node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_TEXT)?.getTextInNode(content)
                 ?.trim { it == '[' || it == ']' } ?: linkDest
+                
             if (linkText.startsWith("citation,")) {
                 // 如果是引用，则特殊处理
                 val domain = linkText.substringAfter("citation,")
                 val id = linkDest
-                if (id.length == 6) {
+                
+                // ✅ FIX 2: 增加 domain.isNotEmpty() 校验，防止计算 width 异常
+                if (id.length == 6 && domain.isNotEmpty()) {
                     inlineContents.putIfAbsent(
                         "citation:$linkDest", InlineTextContent(
                             placeholder = Placeholder(
@@ -943,16 +953,25 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                             })
                     )
                     appendInlineContent("citation:$linkDest")
+                } else {
+                    // ✅ FIX 3: 缺少 else 分支的致命 BUG！
+                    // 如果模型输出了空的 [] 导致无法解析 citation，降级作为普通文本输出，不再吃掉字符
+                    append(node.getTextInNode(content))
                 }
             } else {
-                withLink(LinkAnnotation.Url(linkDest)) {
-                    withStyle(
-                        SpanStyle(
-                            color = colorScheme.primary, textDecoration = TextDecoration.Underline
-                        )
-                    ) {
-                        append(linkText)
+                // ✅ FIX 4: 防止普通链接 linkDest 为空时，LinkAnnotation.Url 抛出越界或非法参数异常
+                if (linkDest.isNotBlank()) {
+                    withLink(LinkAnnotation.Url(linkDest)) {
+                        withStyle(
+                            SpanStyle(
+                                color = colorScheme.primary, textDecoration = TextDecoration.Underline
+                            )
+                        ) {
+                            append(linkText)
+                        }
                     }
+                } else {
+                    append(node.getTextInNode(content))
                 }
             }
         }
