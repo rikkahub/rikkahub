@@ -209,7 +209,7 @@ object CustomColors {
     val listItemSurfaceColors: CustomSurfaceColors
         @Composable get() {
             val containerColor = colorScheme.surfaceColorAtElevation(1.dp).copy(
-                alpha = if (LocalDarkMode.current) 0.52f else 0.88f
+                alpha = if (LocalDarkMode.current) 0.72f else 0.88f
             )
             return CustomSurfaceColors(
                 containerColor = containerColor,

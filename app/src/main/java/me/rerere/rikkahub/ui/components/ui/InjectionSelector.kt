@@ -13,7 +13,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Switch
@@ -24,7 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -35,6 +33,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
+import me.rerere.rikkahub.ui.theme.CustomColors
 
 @Composable
 fun InjectionSelector(
@@ -64,7 +63,7 @@ fun InjectionSelector(
         ) {
             SecondaryTabRow(
                 selectedTabIndex = pagerState.currentPage,
-                containerColor = Color.Transparent,
+                containerColor = CustomColors.scaffoldSurfaceColors.containerColor,
                 modifier = Modifier.weight(1f)
             ) {
                 Tab(
@@ -167,9 +166,7 @@ private fun ModeInjectionsSection(
                         }
                     )
                 },
-                colors = ListItemDefaults.colors(
-                    containerColor = Color.Transparent,
-                )
+                colors = CustomColors.listItemColors
             )
         }
     }
@@ -207,9 +204,7 @@ private fun LorebooksSection(
                         }
                     )
                 },
-                colors = ListItemDefaults.colors(
-                    containerColor = Color.Transparent,
-                )
+                colors = CustomColors.listItemColors
             )
         }
     }

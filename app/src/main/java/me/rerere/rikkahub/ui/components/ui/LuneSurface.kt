@@ -26,7 +26,7 @@ import kotlin.math.min
 fun luneGlassContainerColor(): Color {
     val base = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp)
     return if (LocalDarkMode.current) {
-        base.copy(alpha = 0.84f)
+        base.copy(alpha = 0.90f)
     } else {
         base.copy(alpha = 0.96f)
     }

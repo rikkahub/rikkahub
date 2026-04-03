@@ -425,10 +425,7 @@ private fun ModeInjectionCard(
         modifier = modifier
     ) {
         Card(
-            colors = CardDefaults.cardColors(
-                containerColor = CustomColors.listItemColors.containerColor,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            )
+            colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
             Row(
                 modifier = Modifier
@@ -818,10 +815,7 @@ private fun LorebookOverviewCard(
     assistants: List<Assistant>,
 ) {
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        )
+        colors = CustomColors.cardColorsOnSurfaceContainer
     ) {
         Column(
             modifier = Modifier
@@ -912,10 +906,7 @@ private fun LorebookGlobalSettingsCard(
     }
 
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        )
+        colors = CustomColors.cardColorsOnSurfaceContainer
     ) {
         Column(
             modifier = Modifier
@@ -1114,10 +1105,7 @@ private fun LorebookCard(
         modifier = modifier
     ) {
         Card(
-            colors = CardDefaults.cardColors(
-                containerColor = CustomColors.listItemColors.containerColor,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            )
+            colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
             Row(
                 modifier = Modifier
@@ -1290,9 +1278,7 @@ private fun LorebookBindingSheet(
                                 onCheckedChange = onUpdateGlobalBinding,
                             )
                         },
-                        colors = ListItemDefaults.colors(
-                            containerColor = Color.Transparent,
-                        )
+                        colors = CustomColors.listItemColors
                     )
                 }
 
@@ -1323,9 +1309,7 @@ private fun LorebookBindingSheet(
                                     }
                                 )
                             },
-                            colors = ListItemDefaults.colors(
-                                containerColor = Color.Transparent,
-                            )
+                            colors = CustomColors.listItemColors
                         )
                     }
                 }

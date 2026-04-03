@@ -693,16 +693,16 @@ private fun MarkdownNode(
             val altText = node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_TEXT)?.getTextInNode(content) ?: ""
             val imageUrl =
                 node.findChildOfTypeRecursive(MarkdownElementTypes.LINK_DESTINATION)?.getTextInNode(content) ?: ""
-            Column(
+            Box(
                 modifier = modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                contentAlignment = Alignment.Center,
             ) {
                 ZoomableAsyncImage(
                     model = imageUrl,
                     contentDescription = altText,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .fillMaxWidth()
+                        .widthIn(min = 120.dp, max = 280.dp)
                         .heightIn(min = 120.dp, max = 400.dp),
                 )
             }
