@@ -27,6 +27,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
+import me.rerere.ai.provider.GoogleAccessMode
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -70,6 +71,23 @@ import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
+private const val VERTEX_BASE_URL = "https://aiplatform.googleapis.com"
+private const val GEMINI_PUBLISHER_PATH = "publishers/google/models"
+private val FALLBACK_VERTEX_GEMINI_MODELS = listOf(
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash-image",
+    "gemini-3-pro-image",
+    "nano-banana",
+    "gemini-3-pro",
+    "gemini-3-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-3.1-pro-preview-customtools",
+    "gemini-3.1-flash-image",
+    "gemini-flash-latest",
+    "gemini-pro-latest",
+)
 
 class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
@@ -77,11 +95,80 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         ServiceAccountTokenProvider(client)
     }
 
-    private fun buildUrl(providerSetting: ProviderSetting.Google, path: String): HttpUrl {
-        return if (!providerSetting.vertexAI) {
-            "${providerSetting.baseUrl}/$path".toHttpUrl()
+    private enum class GoogleAuthMode {
+        API_KEY_HEADER,
+        API_KEY_QUERY,
+        SERVICE_ACCOUNT_BEARER,
+    }
+
+    private data class GoogleEndpointConfig(
+        val authMode: GoogleAuthMode,
+        val operationBaseUrl: String,
+        val modelListBaseUrl: String,
+    )
+
+    private fun resolveApiKey(providerSetting: ProviderSetting.Google): String {
+        return keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+    }
+
+    private fun resolveEndpointConfig(providerSetting: ProviderSetting.Google): GoogleEndpointConfig {
+        return when (providerSetting.resolvedAccessMode()) {
+            GoogleAccessMode.GEMINI_API -> GoogleEndpointConfig(
+                authMode = GoogleAuthMode.API_KEY_HEADER,
+                operationBaseUrl = providerSetting.baseUrl,
+                modelListBaseUrl = providerSetting.baseUrl,
+            )
+
+            GoogleAccessMode.VERTEX_API_KEY -> GoogleEndpointConfig(
+                authMode = GoogleAuthMode.API_KEY_QUERY,
+                operationBaseUrl = "$VERTEX_BASE_URL/v1",
+                modelListBaseUrl = "$VERTEX_BASE_URL/v1beta1",
+            )
+
+            GoogleAccessMode.VERTEX_SERVICE_ACCOUNT -> GoogleEndpointConfig(
+                authMode = GoogleAuthMode.SERVICE_ACCOUNT_BEARER,
+                operationBaseUrl = "$VERTEX_BASE_URL/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}",
+                modelListBaseUrl = "$VERTEX_BASE_URL/v1beta1",
+            )
+        }
+    }
+
+    private fun buildOperationUrl(providerSetting: ProviderSetting.Google, path: String): HttpUrl {
+        val endpointConfig = resolveEndpointConfig(providerSetting)
+        val urlBuilder = "${endpointConfig.operationBaseUrl}/$path".toHttpUrl().newBuilder()
+        if (endpointConfig.authMode == GoogleAuthMode.API_KEY_QUERY) {
+            urlBuilder.addQueryParameter("key", resolveApiKey(providerSetting))
+        }
+        return urlBuilder.build()
+    }
+
+    private fun buildModelListUrl(providerSetting: ProviderSetting.Google): HttpUrl {
+        val endpointConfig = resolveEndpointConfig(providerSetting)
+        val path = when (providerSetting.resolvedAccessMode()) {
+            GoogleAccessMode.GEMINI_API -> "models?pageSize=100"
+            GoogleAccessMode.VERTEX_API_KEY,
+            GoogleAccessMode.VERTEX_SERVICE_ACCOUNT -> "$GEMINI_PUBLISHER_PATH?pageSize=100&listAllVersions=true"
+        }
+        val urlBuilder = "${endpointConfig.modelListBaseUrl}/$path".toHttpUrl().newBuilder()
+        if (endpointConfig.authMode == GoogleAuthMode.API_KEY_QUERY) {
+            urlBuilder.addQueryParameter("key", resolveApiKey(providerSetting))
+        }
+        return urlBuilder.build()
+    }
+
+    private fun buildModelOperationPath(providerSetting: ProviderSetting.Google, modelId: String, action: String): String {
+        return when (providerSetting.resolvedAccessMode()) {
+            GoogleAccessMode.GEMINI_API -> "models/$modelId:$action"
+            GoogleAccessMode.VERTEX_API_KEY,
+            GoogleAccessMode.VERTEX_SERVICE_ACCOUNT -> "$GEMINI_PUBLISHER_PATH/$modelId:$action"
+        }
+    }
+
+    private fun Request.Builder.configureGoogleReferHeaders(providerSetting: ProviderSetting.Google): Request.Builder {
+        return if (providerSetting.resolvedAccessMode() == GoogleAccessMode.GEMINI_API) {
+            configureReferHeaders(providerSetting.baseUrl)
         } else {
-            "https://aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/$path".toHttpUrl()
+            this
         }
     }
 
@@ -89,60 +176,142 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         providerSetting: ProviderSetting.Google,
         request: Request
     ): Request {
-        return if (providerSetting.vertexAI) {
-            val accessToken = serviceAccountTokenProvider.fetchAccessToken(
-                serviceAccountEmail = providerSetting.serviceAccountEmail.trim(),
-                privateKeyPem = StringEscapeUtils.unescapeJson(providerSetting.privateKey.trim()),
-            )
-            request.newBuilder()
-                .addHeader("Authorization", "Bearer $accessToken")
-                .build()
-        } else {
-            val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
-            request.newBuilder()
-                .addHeader("x-goog-api-key", key)
-                .build()
+        return when (resolveEndpointConfig(providerSetting).authMode) {
+            GoogleAuthMode.SERVICE_ACCOUNT_BEARER -> {
+                val accessToken = serviceAccountTokenProvider.fetchAccessToken(
+                    serviceAccountEmail = providerSetting.serviceAccountEmail.trim(),
+                    privateKeyPem = StringEscapeUtils.unescapeJson(providerSetting.privateKey.trim()),
+                )
+                request.newBuilder()
+                    .addHeader("Authorization", "Bearer $accessToken")
+                    .build()
+            }
+
+            GoogleAuthMode.API_KEY_HEADER -> {
+                request.newBuilder()
+                    .addHeader("x-goog-api-key", resolveApiKey(providerSetting))
+                    .build()
+            }
+
+            GoogleAuthMode.API_KEY_QUERY -> request
         }
     }
 
     override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> =
         withContext(Dispatchers.IO) {
-            val url = buildUrl(providerSetting = providerSetting, path = "models?pageSize=100")
-            val request = transformRequest(
-                providerSetting = providerSetting,
-                request = Request.Builder()
-                    .url(url)
-                    .get()
-                    .build()
-            )
-            val response = client.newCall(request).await()
-            if (response.isSuccessful) {
-                val body = response.body?.string() ?: error("empty body")
-                Log.d(TAG, "listModels: $body")
-                val bodyObject = json.parseToJsonElement(body).jsonObject
-                val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
-
-                models.mapNotNull {
-                    val modelObject = it.jsonObject
-
-                    // 忽略非chat/embedding模型
-                    val supportedGenerationMethods =
-                        modelObject["supportedGenerationMethods"]!!.jsonArray
-                            .map { method -> method.jsonPrimitive.content }
-                    if ("generateContent" !in supportedGenerationMethods && "embedContent" !in supportedGenerationMethods) {
-                        return@mapNotNull null
-                    }
-
-                    Model(
-                        modelId = modelObject["name"]!!.jsonPrimitive.content.substringAfter("/"),
-                        displayName = modelObject["displayName"]!!.jsonPrimitive.content,
-                        type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
-                    )
+            when (providerSetting.resolvedAccessMode()) {
+                GoogleAccessMode.GEMINI_API -> listGeminiModels(providerSetting)
+                GoogleAccessMode.VERTEX_API_KEY,
+                GoogleAccessMode.VERTEX_SERVICE_ACCOUNT -> {
+                    runCatching {
+                        listVertexModels(providerSetting)
+                    }.onFailure {
+                        logWarn("Failed to fetch Vertex models, falling back to local Gemini candidates", it)
+                    }.getOrDefault(emptyList())
+                        .ifEmpty { buildFallbackGeminiModels() }
                 }
-            } else {
-                emptyList()
             }
         }
+
+    private suspend fun listGeminiModels(providerSetting: ProviderSetting.Google): List<Model> {
+        val request = transformRequest(
+            providerSetting = providerSetting,
+            request = Request.Builder()
+                .url(buildModelListUrl(providerSetting))
+                .get()
+                .build()
+        )
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            return emptyList()
+        }
+
+        val body = response.body?.string() ?: error("empty body")
+        logDebug("listGeminiModels: $body")
+        val bodyObject = json.parseToJsonElement(body).jsonObject
+        val models = bodyObject["models"]?.jsonArray ?: return emptyList()
+
+        return models.mapNotNull {
+            val modelObject = it.jsonObject
+            val supportedGenerationMethods =
+                modelObject["supportedGenerationMethods"]?.jsonArray
+                    ?.map { method -> method.jsonPrimitive.content }
+                    ?: return@mapNotNull null
+            if ("generateContent" !in supportedGenerationMethods && "embedContent" !in supportedGenerationMethods) {
+                return@mapNotNull null
+            }
+
+            Model(
+                modelId = modelObject["name"]?.jsonPrimitive?.contentOrNull?.substringAfter("/") ?: return@mapNotNull null,
+                displayName = modelObject["displayName"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
+                type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
+            )
+        }
+    }
+
+    private suspend fun listVertexModels(providerSetting: ProviderSetting.Google): List<Model> {
+        val request = transformRequest(
+            providerSetting = providerSetting,
+            request = Request.Builder()
+                .url(buildModelListUrl(providerSetting))
+                .get()
+                .build()
+        )
+        val response = client.newCall(request).await()
+        if (!response.isSuccessful) {
+            throw IllegalStateException("Failed to list Vertex models: ${response.code} ${response.body?.string()}")
+        }
+
+        val body = response.body?.string() ?: error("empty body")
+        logDebug("listVertexModels: $body")
+        val bodyObject = json.parseToJsonElement(body).jsonObject
+        val publisherModels = bodyObject["publisherModels"]?.jsonArray ?: return emptyList()
+
+        return publisherModels.mapNotNull { model ->
+            val modelObject = model.jsonObject
+            val modelId = modelObject["name"]?.jsonPrimitive?.contentOrNull?.substringAfterLast("/") ?: return@mapNotNull null
+            buildKnownGeminiModel(
+                modelId = modelId,
+                displayName = modelObject["displayName"]?.jsonPrimitive?.contentOrNull ?: modelId,
+            )
+        }.distinctBy { it.modelId }
+    }
+
+    private fun buildFallbackGeminiModels(): List<Model> {
+        return FALLBACK_VERTEX_GEMINI_MODELS.mapNotNull { modelId ->
+            buildKnownGeminiModel(modelId = modelId)
+        }
+    }
+
+    private fun buildKnownGeminiModel(modelId: String, displayName: String = modelId): Model? {
+        val normalizedModelId = FALLBACK_VERTEX_GEMINI_MODELS.firstOrNull { knownId ->
+            knownId.equals(modelId, ignoreCase = true)
+        } ?: return null
+        val inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(normalizedModelId)
+        val outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(normalizedModelId)
+        val abilities = ModelRegistry.MODEL_ABILITIES.getData(normalizedModelId)
+
+        return Model(
+            modelId = normalizedModelId,
+            displayName = displayName,
+            type = if (outputModalities.contains(Modality.IMAGE)) ModelType.IMAGE else ModelType.CHAT,
+            inputModalities = inputModalities,
+            outputModalities = outputModalities,
+            abilities = abilities,
+        )
+    }
+
+    private fun logDebug(message: String) {
+        runCatching { Log.d(TAG, message) }
+    }
+
+    private fun logInfo(message: String) {
+        runCatching { Log.i(TAG, message) }
+    }
+
+    private fun logWarn(message: String, throwable: Throwable) {
+        runCatching { Log.w(TAG, message, throwable) }
+    }
 
     override suspend fun generateText(
         providerSetting: ProviderSetting.Google,
@@ -151,13 +320,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     ): MessageChunk = withContext(Dispatchers.IO) {
         val requestBody = buildCompletionRequestBody(messages, params)
 
-        val url = buildUrl(
+        val url = buildOperationUrl(
             providerSetting = providerSetting,
-            path = if (providerSetting.vertexAI) {
-                "publishers/google/models/${params.model.modelId}:generateContent"
-            } else {
-                "models/${params.model.modelId}:generateContent"
-            }
+            path = buildModelOperationPath(
+                providerSetting = providerSetting,
+                modelId = params.model.modelId,
+                action = "generateContent"
+            )
         )
 
         val request = transformRequest(
@@ -168,7 +337,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .post(
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )
-                .configureReferHeaders(providerSetting.baseUrl)
+                .configureGoogleReferHeaders(providerSetting)
                 .build()
         )
 
@@ -207,13 +376,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     ): Flow<MessageChunk> = callbackFlow {
         val requestBody = buildCompletionRequestBody(messages, params)
 
-        val url = buildUrl(
+        val url = buildOperationUrl(
             providerSetting = providerSetting,
-            path = if (providerSetting.vertexAI) {
-                "publishers/google/models/${params.model.modelId}:streamGenerateContent"
-            } else {
-                "models/${params.model.modelId}:streamGenerateContent"
-            }
+            path = buildModelOperationPath(
+                providerSetting = providerSetting,
+                modelId = params.model.modelId,
+                action = "streamGenerateContent"
+            )
         ).newBuilder().addQueryParameter("alt", "sse").build()
 
         val request = transformRequest(
@@ -224,11 +393,11 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .post(
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )
-                .configureReferHeaders(providerSetting.baseUrl)
+                .configureGoogleReferHeaders(providerSetting)
                 .build()
         )
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
+        logInfo("streamText: ${json.encodeToString(requestBody)}")
 
         val listener = object : EventSourceListener() {
             override fun onEvent(
@@ -237,7 +406,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 type: String?,
                 data: String
             ) {
-                Log.i(TAG, "onEvent: $data")
+                logInfo("onEvent: $data")
 
                 try {
                     val jsonData = json.parseToJsonElement(data).jsonObject
@@ -510,7 +679,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         } ?: emptyList()
 
         val groundingMetadata = message["groundingMetadata"]?.jsonObject
-        Log.i(TAG, "parseMessage: $groundingMetadata")
+        logInfo("parseMessage: $groundingMetadata")
         val annotations = parseSearchGroundingMetadata(groundingMetadata)
 
         return UIMessage(
@@ -532,7 +701,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 url = uri
             )
         }
-        Log.i(TAG, "parseSearchGroundingMetadata: $chunks")
+        logInfo("parseSearchGroundingMetadata: $chunks")
         return chunks
     }
 
@@ -763,13 +932,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
         }.mergeCustomBody(params.customBody)
 
-        val url = buildUrl(
+        val url = buildOperationUrl(
             providerSetting = providerSetting,
-            path = if (providerSetting.vertexAI) {
-                "publishers/google/models/${params.model.modelId}:predict"
-            } else {
-                "models/${params.model.modelId}:predict"
-            }
+            path = buildModelOperationPath(
+                providerSetting = providerSetting,
+                modelId = params.model.modelId,
+                action = "predict"
+            )
         )
 
         val request = transformRequest(
@@ -780,7 +949,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .post(
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )
-                .configureReferHeaders(providerSetting.baseUrl)
+                .configureGoogleReferHeaders(providerSetting)
                 .build()
         )
 

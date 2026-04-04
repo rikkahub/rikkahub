@@ -11,6 +11,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.ai.provider.GoogleAccessMode
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -160,6 +161,7 @@ class BackupVM(
                             name = "Gemini",
                             baseUrl = "$apiHost/v1beta",
                             apiKey = apiKey,
+                            accessMode = GoogleAccessMode.GEMINI_API,
                         )
                     )
                 }

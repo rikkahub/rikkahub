@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
+import me.rerere.ai.provider.GoogleAccessMode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
@@ -127,7 +128,9 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             description = this.description,
             shortDescription = this.shortDescription,
             apiKey = apiKey,
-            baseUrl = convertedBaseUrl
+            baseUrl = convertedBaseUrl,
+            vertexAI = false,
+            accessMode = GoogleAccessMode.GEMINI_API
         )
 
         ProviderSetting.Claude::class -> ProviderSetting.Claude(
@@ -396,6 +399,8 @@ private fun ColumnScope.ProviderConfigureGoogle(
     provider: ProviderSetting.Google,
     onEdit: (provider: ProviderSetting.Google) -> Unit
 ) {
+    val accessMode = provider.resolvedAccessMode()
+
     provider.description()
 
     Row(
@@ -421,91 +426,125 @@ private fun ColumnScope.ProviderConfigureGoogle(
         modifier = Modifier.fillMaxWidth()
     )
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically
+    Text(stringResource(id = R.string.setting_provider_page_access_mode))
+
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(stringResource(id = R.string.setting_provider_page_vertex_ai), modifier = Modifier.weight(1f))
-        Checkbox(
-            checked = provider.vertexAI,
-            onCheckedChange = {
-                onEdit(provider.copy(vertexAI = it))
-            }
-        )
+        GoogleAccessMode.entries.forEachIndexed { index, mode ->
+            SegmentedButton(
+                shape = SegmentedButtonDefaults.itemShape(
+                    index = index,
+                    count = GoogleAccessMode.entries.size
+                ),
+                selected = accessMode == mode,
+                onClick = {
+                    onEdit(provider.withAccessMode(mode))
+                },
+                label = {
+                    Text(
+                        when (mode) {
+                            GoogleAccessMode.GEMINI_API -> stringResource(R.string.setting_provider_page_google_access_mode_gemini_api)
+                            GoogleAccessMode.VERTEX_API_KEY -> stringResource(R.string.setting_provider_page_google_access_mode_vertex_api_key)
+                            GoogleAccessMode.VERTEX_SERVICE_ACCOUNT -> stringResource(R.string.setting_provider_page_google_access_mode_vertex_service_account)
+                        }
+                    )
+                }
+            )
+        }
     }
 
-    if (!provider.vertexAI) {
-        OutlinedTextField(
-            value = provider.apiKey,
-            onValueChange = {
-                onEdit(provider.copy(apiKey = it.trim()))
-            },
-            label = {
-                Text(stringResource(id = R.string.setting_provider_page_api_key))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 3,
-        )
+    when (accessMode) {
+        GoogleAccessMode.GEMINI_API -> {
+            OutlinedTextField(
+                value = provider.apiKey,
+                onValueChange = {
+                    onEdit(provider.copy(apiKey = it.trim()))
+                },
+                label = {
+                    Text(stringResource(id = R.string.setting_provider_page_api_key))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+            )
 
-        OutlinedTextField(
-            value = provider.baseUrl,
-            onValueChange = {
-                onEdit(provider.copy(baseUrl = it.trim()))
-            },
-            label = {
-                Text(stringResource(id = R.string.setting_provider_page_api_base_url))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            isError = !provider.baseUrl.endsWith("/v1beta"),
-            supportingText = if (!provider.baseUrl.endsWith("/v1beta")) {
-                {
-                    Text("The base URL usually ends with `/v1beta`")
-                }
-            } else null
-        )
-    } else {
-        OutlinedTextField(
-            value = provider.serviceAccountEmail,
-            onValueChange = {
-                onEdit(provider.copy(serviceAccountEmail = it.trim()))
-            },
-            label = {
-                Text(stringResource(id = R.string.setting_provider_page_service_account_email))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = provider.privateKey,
-            onValueChange = {
-                onEdit(provider.copy(privateKey = it.trim()))
-            },
-            label = {
-                Text(stringResource(id = R.string.setting_provider_page_private_key))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 6,
-            minLines = 3,
-            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = JetbrainsMono),
-        )
-        OutlinedTextField(
-            value = provider.location,
-            onValueChange = {
-                onEdit(provider.copy(location = it.trim()))
-            },
-            label = {
-                // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#available-regions
-                Text(stringResource(id = R.string.setting_provider_page_location))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = provider.projectId,
-            onValueChange = {
-                onEdit(provider.copy(projectId = it.trim()))
-            },
-            label = {
-                Text(stringResource(id = R.string.setting_provider_page_project_id))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+            OutlinedTextField(
+                value = provider.baseUrl,
+                onValueChange = {
+                    onEdit(provider.copy(baseUrl = it.trim()))
+                },
+                label = {
+                    Text(stringResource(id = R.string.setting_provider_page_api_base_url))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                isError = !provider.baseUrl.endsWith("/v1beta"),
+                supportingText = if (!provider.baseUrl.endsWith("/v1beta")) {
+                    {
+                        Text("The base URL usually ends with `/v1beta`")
+                    }
+                } else null
+            )
+        }
+
+        GoogleAccessMode.VERTEX_API_KEY -> {
+            OutlinedTextField(
+                value = provider.apiKey,
+                onValueChange = {
+                    onEdit(provider.copy(apiKey = it.trim()))
+                },
+                label = {
+                    Text(stringResource(id = R.string.setting_provider_page_api_key))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+            )
+        }
+
+        GoogleAccessMode.VERTEX_SERVICE_ACCOUNT -> {
+            OutlinedTextField(
+                value = provider.serviceAccountEmail,
+                onValueChange = {
+                    onEdit(provider.copy(serviceAccountEmail = it.trim()))
+                },
+                label = {
+                    Text(stringResource(id = R.string.setting_provider_page_service_account_email))
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = provider.privateKey,
+                onValueChange = {
+                    onEdit(provider.copy(privateKey = it.trim()))
+                },
+                label = {
+                    Text(stringResource(id = R.string.setting_provider_page_private_key))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 6,
+                minLines = 3,
+                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = JetbrainsMono),
+            )
+            OutlinedTextField(
+                value = provider.location,
+                onValueChange = {
+                    onEdit(provider.copy(location = it.trim()))
+                },
+                label = {
+                    // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#available-regions
+                    Text(stringResource(id = R.string.setting_provider_page_location))
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = provider.projectId,
+                onValueChange = {
+                    onEdit(provider.copy(projectId = it.trim()))
+                },
+                label = {
+                    Text(stringResource(id = R.string.setting_provider_page_project_id))
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }

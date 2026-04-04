@@ -769,6 +769,7 @@
   <string name="setting_provider_page_add_provider">添加提供商</string>
   <string name="setting_provider_page_add_provider_override">新增提供商覆寫</string>
   <string name="setting_provider_page_advanced_settings">進階設定</string>
+  <string name="setting_provider_page_access_mode">訪問模式</string>
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">API 路徑</string>
@@ -788,6 +789,9 @@
   <string name="setting_provider_page_embedding_model">嵌入</string>
   <string name="setting_provider_page_enable">是否啟用</string>
   <string name="setting_provider_page_enabled">啟用</string>
+  <string name="setting_provider_page_google_access_mode_gemini_api">Gemini API</string>
+  <string name="setting_provider_page_google_access_mode_vertex_api_key">Vertex API Key</string>
+  <string name="setting_provider_page_google_access_mode_vertex_service_account">Vertex 服務帳戶</string>
   <string name="setting_provider_page_filter_example">例如：GPT-3.5</string>
   <string name="setting_provider_page_filter_placeholder">輸入模型名稱篩選</string>
   <string name="setting_provider_page_image">圖片</string>

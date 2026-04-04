@@ -14,6 +14,13 @@ data class BalanceOption(
 )
 
 @Serializable
+enum class GoogleAccessMode {
+    GEMINI_API,
+    VERTEX_API_KEY,
+    VERTEX_SERVICE_ACCOUNT,
+}
+
+@Serializable
 sealed class ProviderSetting {
     abstract val id: Uuid
     abstract val enabled: Boolean
@@ -115,11 +122,27 @@ sealed class ProviderSetting {
         var apiKey: String = "",
         var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta", // only for google AI
         var vertexAI: Boolean = false,
+        var accessMode: GoogleAccessMode? = null,
         var privateKey: String = "", // only for vertex AI
         var serviceAccountEmail: String = "", // only for vertex AI
         var location: String = "us-central1", // only for vertex AI
         var projectId: String = "", // only for vertex AI
     ) : ProviderSetting() {
+        fun resolvedAccessMode(): GoogleAccessMode {
+            return accessMode ?: if (vertexAI) {
+                GoogleAccessMode.VERTEX_SERVICE_ACCOUNT
+            } else {
+                GoogleAccessMode.GEMINI_API
+            }
+        }
+
+        fun withAccessMode(accessMode: GoogleAccessMode): Google {
+            return copy(
+                accessMode = accessMode,
+                vertexAI = accessMode != GoogleAccessMode.GEMINI_API
+            )
+        }
+
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)
         }

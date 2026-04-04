@@ -9,6 +9,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import me.rerere.ai.provider.BalanceOption
+import me.rerere.ai.provider.GoogleAccessMode
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -53,7 +54,8 @@ val DEFAULT_PROVIDERS = listOf(
         name = "Gemini",
         apiKey = "",
         enabled = true,
-        builtIn = true
+        builtIn = true,
+        accessMode = GoogleAccessMode.GEMINI_API
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("1b1395ed-b702-4aeb-8bc1-b681c4456953"),

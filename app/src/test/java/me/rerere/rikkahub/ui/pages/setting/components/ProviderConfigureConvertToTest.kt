@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.setting.components
 
 import me.rerere.ai.provider.BalanceOption
+import me.rerere.ai.provider.GoogleAccessMode
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -44,6 +45,8 @@ class ProviderConfigureConvertToTest {
         assertEquals(original.balanceOption, google.balanceOption)
         assertEquals(original.apiKey, google.apiKey)
         assertEquals("https://generativelanguage.googleapis.com/v1beta", google.baseUrl)
+        assertEquals(false, google.vertexAI)
+        assertEquals(GoogleAccessMode.GEMINI_API, google.accessMode)
     }
 
     @Test

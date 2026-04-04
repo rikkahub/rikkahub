@@ -769,6 +769,7 @@
   <string name="setting_provider_page_add_provider">Add Provider</string>
   <string name="setting_provider_page_add_provider_override">Add Provider Override</string>
   <string name="setting_provider_page_advanced_settings">Advanced Settings</string>
+  <string name="setting_provider_page_access_mode">Access Mode</string>
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">API Path</string>
@@ -790,6 +791,9 @@
   <string name="setting_provider_page_enabled">Enabled</string>
   <string name="setting_provider_page_filter_example">e.g.: GPT-3.5</string>
   <string name="setting_provider_page_filter_placeholder">Enter model name to filter</string>
+  <string name="setting_provider_page_google_access_mode_gemini_api">Gemini API</string>
+  <string name="setting_provider_page_google_access_mode_vertex_api_key">Vertex API Key</string>
+  <string name="setting_provider_page_google_access_mode_vertex_service_account">Vertex Service Account</string>
   <string name="setting_provider_page_image">Image</string>
   <string name="setting_provider_page_image_model">Image</string>
   <string name="setting_provider_page_image_qr_decode_failed">Failed to parse QR code from image: %s</string>

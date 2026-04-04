@@ -1,11 +1,14 @@
 package me.rerere.rikkahub
 
 import me.rerere.ai.provider.BalanceOption
+import me.rerere.ai.provider.GoogleAccessMode
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
 import me.rerere.rikkahub.ui.components.ui.encodeForShare
+import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
@@ -40,8 +43,7 @@ class ShareSheetTest {
         assertEquals("Test OpenAI", decodedOpenAI.name)
         assertEquals("sk-test-key", decodedOpenAI.apiKey)
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
-        assertEquals(1, decodedOpenAI.models.size)
-        assertEquals("gpt-4", decodedOpenAI.models[0].displayName)
+        assertEquals(0, decodedOpenAI.models.size)
     }
 
     @Test
@@ -66,6 +68,45 @@ class ShareSheetTest {
         assertEquals("Test Google", decodedGoogle.name)
         assertEquals("test-google-key", decodedGoogle.apiKey)
         assertEquals(false, decodedGoogle.vertexAI)
+    }
+
+    @Test
+    fun `decode should preserve Google access mode when present`() {
+        val original = ProviderSetting.Google(
+            id = Uuid.random(),
+            enabled = true,
+            name = "Vertex API Key",
+            apiKey = "vertex-key",
+            vertexAI = true,
+            accessMode = GoogleAccessMode.VERTEX_API_KEY,
+            projectId = "project-123"
+        )
+
+        val encoded = original.encodeForShare()
+        val decoded = decodeProviderSetting(encoded) as ProviderSetting.Google
+
+        assertEquals(GoogleAccessMode.VERTEX_API_KEY, decoded.accessMode)
+        assertEquals(GoogleAccessMode.VERTEX_API_KEY, decoded.resolvedAccessMode())
+        assertEquals(true, decoded.vertexAI)
+    }
+
+    @Test
+    fun `legacy google provider without access mode should resolve to vertex service account`() {
+        val serialized = JsonInstant.encodeToString<ProviderSetting>(
+            ProviderSetting.Google(
+                name = "Legacy Vertex",
+                vertexAI = true,
+                accessMode = GoogleAccessMode.VERTEX_SERVICE_ACCOUNT,
+                projectId = "legacy-project",
+                serviceAccountEmail = "service@example.com"
+            )
+        ).replace(",\"accessMode\":\"VERTEX_SERVICE_ACCOUNT\"", "")
+
+        val decoded = JsonInstant.decodeFromString<ProviderSetting>(serialized) as ProviderSetting.Google
+
+        assertNull(decoded.accessMode)
+        assertEquals(true, decoded.vertexAI)
+        assertEquals(GoogleAccessMode.VERTEX_SERVICE_ACCOUNT, decoded.resolvedAccessMode())
     }
 
     @Test

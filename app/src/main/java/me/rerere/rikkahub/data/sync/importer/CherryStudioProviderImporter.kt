@@ -7,6 +7,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.ai.provider.GoogleAccessMode
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.registry.ModelRegistry
@@ -65,17 +66,26 @@ object CherryStudioProviderImporter {
                 models = models,
             )
 
-            "gemini", "vertexai" -> ProviderSetting.Google(
-                name = name,
-                enabled = enabled,
-                baseUrl = normalizeBaseUrl(
-                    apiHost = apiHost,
-                    suffix = "/v1beta",
-                    fallback = ProviderSetting.Google().baseUrl
-                ),
-                apiKey = apiKey,
-                models = models,
-            )
+            "gemini", "vertexai" -> {
+                val accessMode = if (type == "vertexai") {
+                    GoogleAccessMode.VERTEX_API_KEY
+                } else {
+                    GoogleAccessMode.GEMINI_API
+                }
+                ProviderSetting.Google(
+                    name = name,
+                    enabled = enabled,
+                    baseUrl = normalizeBaseUrl(
+                        apiHost = apiHost,
+                        suffix = "/v1beta",
+                        fallback = ProviderSetting.Google().baseUrl
+                    ),
+                    apiKey = apiKey,
+                    models = models,
+                    vertexAI = accessMode != GoogleAccessMode.GEMINI_API,
+                    accessMode = accessMode,
+                )
+            }
 
             else -> {
                 val useResponseApi = type == "openai-response" || provider["models"]?.jsonArray?.any {
