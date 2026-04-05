@@ -5,6 +5,8 @@ import kotlinx.serialization.Serializable
 import me.rerere.ai.core.InputSchema
 import kotlin.uuid.Uuid
 
+private const val DEFAULT_TERMUX_WORKDIR = "/data/data/com.termux/files/home"
+
 @Serializable
 data class McpCommonOptions(
     val enable: Boolean = true,
@@ -50,6 +52,21 @@ sealed class McpServerConfig {
         override val id: Uuid = Uuid.random(),
         override val commonOptions: McpCommonOptions = McpCommonOptions(),
         val url: String = "",
+    ) : McpServerConfig() {
+        override fun clone(id: Uuid, commonOptions: McpCommonOptions): McpServerConfig {
+            return copy(id = id, commonOptions = commonOptions)
+        }
+    }
+
+    @Serializable
+    @SerialName("stdio")
+    data class StdioServer(
+        override val id: Uuid = Uuid.random(),
+        override val commonOptions: McpCommonOptions = McpCommonOptions(),
+        val command: String = "",
+        val args: List<String> = emptyList(),
+        val env: List<Pair<String, String>> = emptyList(),
+        val workdir: String = DEFAULT_TERMUX_WORKDIR,
     ) : McpServerConfig() {
         override fun clone(id: Uuid, commonOptions: McpCommonOptions): McpServerConfig {
             return copy(id = id, commonOptions = commonOptions)

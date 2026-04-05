@@ -11,6 +11,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxMcpStdioServerManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtySessionManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxWorkdirServerManager
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -54,6 +55,14 @@ val appModule = module {
             okHttpClient = get(),
             termuxCommandManager = get(),
             settingsStore = get(),
+        )
+    }
+
+    single {
+        TermuxMcpStdioServerManager(
+            json = get(),
+            okHttpClient = get(),
+            termuxCommandManager = get(),
         )
     }
 

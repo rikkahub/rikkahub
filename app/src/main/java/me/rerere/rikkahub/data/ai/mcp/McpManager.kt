@@ -33,7 +33,9 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.mcp.transport.SseClientTransport
+import me.rerere.rikkahub.data.ai.mcp.transport.TermuxStdioClientTransport
 import me.rerere.rikkahub.data.ai.mcp.transport.StreamableHttpClientTransport
+import me.rerere.rikkahub.data.ai.tools.termux.TermuxMcpStdioServerManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.files.FilesManager
@@ -54,6 +56,7 @@ class McpManager(
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
     private val filesManager: FilesManager,
+    private val termuxMcpStdioServerManager: TermuxMcpStdioServerManager,
 ) {
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -219,6 +222,16 @@ class McpManager(
                         }
                     })
                 }
+            )
+        }
+
+        is McpServerConfig.StdioServer -> {
+            TermuxStdioClientTransport(
+                sessionManager = termuxMcpStdioServerManager,
+                command = config.command,
+                args = config.args,
+                workdir = config.workdir,
+                environment = config.env.toMap(),
             )
         }
     }

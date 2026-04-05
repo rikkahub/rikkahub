@@ -79,17 +79,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import me.rerere.ai.core.InputSchema
 import me.rerere.hugeicons.stroke.McpServer
+import me.rerere.rikkahub.data.ai.mcp.McpConfigImportParser
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
-import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
 import me.rerere.rikkahub.data.ai.mcp.McpStatus
 import me.rerere.rikkahub.data.ai.mcp.McpTool
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -330,6 +326,7 @@ private fun McpServerItem(
                             when (item) {
                                 is McpServerConfig.SseTransportServer -> Text("SSE")
                                 is McpServerConfig.StreamableHTTPServer -> Text("Streamable HTTP")
+                                is McpServerConfig.StdioServer -> Text(stringResource(R.string.setting_mcp_page_stdio))
                             }
                         }
                     }
@@ -420,7 +417,7 @@ private fun McpServerConfigModal(state: EditState<McpServerConfig>) {
                 ) {
                     TextButton(
                         onClick = {
-                            if (config.commonOptions.name.isNotBlank()) {
+                            if (isConfigSavable(config)) {
                                 state.confirm()
                             }
                         }
@@ -438,6 +435,12 @@ private fun McpCommonOptionsConfigure(
     config: McpServerConfig,
     update: (McpServerConfig) -> Unit
 ) {
+    val remoteUrl = when (config) {
+        is McpServerConfig.SseTransportServer -> config.url
+        is McpServerConfig.StreamableHTTPServer -> config.url
+        is McpServerConfig.StdioServer -> ""
+    }
+    val stdioConfig = config as? McpServerConfig.StdioServer
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -465,17 +468,7 @@ private fun McpCommonOptionsConfigure(
                 Switch(
                     checked = config.commonOptions.enable,
                     onCheckedChange = { enabled ->
-                        update(
-                            when (config) {
-                                is McpServerConfig.SseTransportServer -> config.copy(
-                                    commonOptions = config.commonOptions.copy(enable = enabled)
-                                )
-
-                                is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                    commonOptions = config.commonOptions.copy(enable = enabled)
-                                )
-                            }
-                        )
+                        update(config.withCommonOptions { copy(enable = enabled) })
                     }
                 )
             }
@@ -495,17 +488,7 @@ private fun McpCommonOptionsConfigure(
             OutlinedTextField(
                 value = config.commonOptions.name,
                 onValueChange = { name ->
-                    update(
-                        when (config) {
-                            is McpServerConfig.SseTransportServer -> config.copy(
-                                commonOptions = config.commonOptions.copy(name = name)
-                            )
-
-                            is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                commonOptions = config.commonOptions.copy(name = name)
-                            )
-                        }
-                    )
+                    update(config.withCommonOptions { copy(name = name) })
                 },
                 label = { Text(stringResource(R.string.setting_mcp_page_name)) },
                 modifier = Modifier.fillMaxWidth(),
@@ -526,11 +509,13 @@ private fun McpCommonOptionsConfigure(
         ) {
             val transportTypes = listOf(
                 "Streamable HTTP",
-                "SSE"
+                "SSE",
+                stringResource(R.string.setting_mcp_page_stdio),
             )
             val currentTypeIndex = when (config) {
                 is McpServerConfig.StreamableHTTPServer -> 0
                 is McpServerConfig.SseTransportServer -> 1
+                is McpServerConfig.StdioServer -> 2
             }
 
             SingleChoiceSegmentedButtonRow(
@@ -545,19 +530,22 @@ private fun McpCommonOptionsConfigure(
                                     0 -> McpServerConfig.StreamableHTTPServer(
                                         id = config.id,
                                         commonOptions = config.commonOptions,
-                                        url = when (config) {
-                                            is McpServerConfig.SseTransportServer -> config.url
-                                            is McpServerConfig.StreamableHTTPServer -> config.url
-                                        }
+                                        url = remoteUrl,
                                     )
 
                                     1 -> McpServerConfig.SseTransportServer(
                                         id = config.id,
                                         commonOptions = config.commonOptions,
-                                        url = when (config) {
-                                            is McpServerConfig.SseTransportServer -> config.url
-                                            is McpServerConfig.StreamableHTTPServer -> config.url
-                                        }
+                                        url = remoteUrl,
+                                    )
+
+                                    2 -> McpServerConfig.StdioServer(
+                                        id = config.id,
+                                        commonOptions = config.commonOptions,
+                                        command = stdioConfig?.command.orEmpty(),
+                                        args = stdioConfig?.args.orEmpty(),
+                                        env = stdioConfig?.env.orEmpty(),
+                                        workdir = stdioConfig?.workdir ?: DEFAULT_TERMUX_WORKDIR,
                                     )
 
                                     else -> config
@@ -575,165 +563,269 @@ private fun McpCommonOptionsConfigure(
 
         HorizontalDivider()
 
-        // 服务器地址配置
-        FormItem(
-            label = {
-                Text(stringResource(R.string.setting_mcp_page_server_url))
-            },
-            description = {
-                Text(
-                    when (config) {
-                        is McpServerConfig.SseTransportServer -> stringResource(R.string.setting_mcp_page_sse_url_desc)
-                        is McpServerConfig.StreamableHTTPServer -> stringResource(R.string.setting_mcp_page_streamable_http_url_desc)
-                    }
-                )
+        if (config is McpServerConfig.SseTransportServer || config is McpServerConfig.StreamableHTTPServer) {
+            val remoteDescription = when (config) {
+                is McpServerConfig.SseTransportServer -> stringResource(R.string.setting_mcp_page_sse_url_desc)
+                is McpServerConfig.StreamableHTTPServer -> stringResource(R.string.setting_mcp_page_streamable_http_url_desc)
+                is McpServerConfig.StdioServer -> ""
             }
-        ) {
-            OutlinedTextField(
-                value = when (config) {
-                    is McpServerConfig.SseTransportServer -> config.url
-                    is McpServerConfig.StreamableHTTPServer -> config.url
+            val remotePlaceholder = when (config) {
+                is McpServerConfig.SseTransportServer -> stringResource(R.string.setting_mcp_page_sse_url_placeholder)
+                is McpServerConfig.StreamableHTTPServer -> stringResource(R.string.setting_mcp_page_streamable_http_url_placeholder)
+                is McpServerConfig.StdioServer -> ""
+            }
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.setting_mcp_page_server_url))
                 },
-                onValueChange = { url ->
-                    update(
-                        when (config) {
-                            is McpServerConfig.SseTransportServer -> config.copy(url = url)
-                            is McpServerConfig.StreamableHTTPServer -> config.copy(url = url)
-                        }
-                    )
-                },
-                label = { Text(stringResource(R.string.setting_mcp_page_url_label)) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = {
-                    Text(
-                        when (config) {
-                            is McpServerConfig.SseTransportServer -> stringResource(R.string.setting_mcp_page_sse_url_placeholder)
-                            is McpServerConfig.StreamableHTTPServer -> stringResource(R.string.setting_mcp_page_streamable_http_url_placeholder)
-                        }
-                    )
+                description = {
+                    Text(remoteDescription)
                 }
-            )
-        }
-
-        HorizontalDivider()
-
-        // 请求头配置
-        FormItem(
-            label = {
-                Text(stringResource(R.string.setting_mcp_page_custom_headers))
-            },
-            description = {
-                Text(stringResource(R.string.setting_mcp_page_custom_headers_desc))
-            }
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                config.commonOptions.headers.forEachIndexed { index, header ->
-                    var headerName by remember(header.first) { mutableStateOf(header.first) }
-                    var headerValue by remember(header.second) { mutableStateOf(header.second) }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            OutlinedTextField(
-                                value = headerName,
-                                onValueChange = {
-                                    headerName = it
-                                    val updatedHeaders =
-                                        config.commonOptions.headers.toMutableList()
-                                    updatedHeaders[index] =
-                                        it.trim() to updatedHeaders[index].second
-                                    update(
-                                        when (config) {
-                                            is McpServerConfig.SseTransportServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                            )
-
-                                            is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                            )
-                                        }
-                                    )
-                                },
-                                label = { Text(stringResource(R.string.setting_mcp_page_header_name)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_name_placeholder)) }
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = headerValue,
-                                onValueChange = {
-                                    headerValue = it
-                                    val updatedHeaders =
-                                        config.commonOptions.headers.toMutableList()
-                                    updatedHeaders[index] = updatedHeaders[index].first to it.trim()
-                                    update(
-                                        when (config) {
-                                            is McpServerConfig.SseTransportServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                            )
-
-                                            is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                            )
-                                        }
-                                    )
-                                },
-                                label = { Text(stringResource(R.string.setting_mcp_page_header_value)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_value_placeholder)) }
-                            )
-                        }
-                        IconButton(onClick = {
-                            val updatedHeaders = config.commonOptions.headers.toMutableList()
-                            updatedHeaders.removeAt(index)
-                            update(
-                                when (config) {
-                                    is McpServerConfig.SseTransportServer -> config.copy(
-                                        commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                    )
-
-                                    is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                        commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                    )
-                                }
-                            )
-                        }) {
-                            Icon(
-                                HugeIcons.Delete01,
-                                contentDescription = stringResource(R.string.setting_mcp_page_delete_header)
-                            )
-                        }
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        val updatedHeaders = config.commonOptions.headers.toMutableList()
-                        updatedHeaders.add("" to "")
+                OutlinedTextField(
+                    value = remoteUrl,
+                    onValueChange = { url ->
                         update(
                             when (config) {
-                                is McpServerConfig.SseTransportServer -> config.copy(
-                                    commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                )
-
-                                is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                    commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                )
+                                is McpServerConfig.SseTransportServer -> config.copy(url = url)
+                                is McpServerConfig.StreamableHTTPServer -> config.copy(url = url)
+                                is McpServerConfig.StdioServer -> config
                             }
                         )
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text(stringResource(R.string.setting_mcp_page_url_label)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text(remotePlaceholder)
+                    }
+                )
+            }
+
+            HorizontalDivider()
+
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.setting_mcp_page_custom_headers))
+                },
+                description = {
+                    Text(stringResource(R.string.setting_mcp_page_custom_headers_desc))
+                }
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        HugeIcons.Add01,
-                        contentDescription = stringResource(R.string.setting_mcp_page_add_header)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.setting_mcp_page_add_header))
+                    config.commonOptions.headers.forEachIndexed { index, header ->
+                        var headerName by remember(header.first) { mutableStateOf(header.first) }
+                        var headerValue by remember(header.second) { mutableStateOf(header.second) }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                OutlinedTextField(
+                                    value = headerName,
+                                    onValueChange = {
+                                        headerName = it
+                                        val updatedHeaders = config.commonOptions.headers.toMutableList()
+                                        updatedHeaders[index] = it.trim() to updatedHeaders[index].second
+                                        update(config.withCommonOptions { copy(headers = updatedHeaders) })
+                                    },
+                                    label = { Text(stringResource(R.string.setting_mcp_page_header_name)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text(stringResource(R.string.setting_mcp_page_header_name_placeholder)) }
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = headerValue,
+                                    onValueChange = {
+                                        headerValue = it
+                                        val updatedHeaders = config.commonOptions.headers.toMutableList()
+                                        updatedHeaders[index] = updatedHeaders[index].first to it.trim()
+                                        update(config.withCommonOptions { copy(headers = updatedHeaders) })
+                                    },
+                                    label = { Text(stringResource(R.string.setting_mcp_page_header_value)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text(stringResource(R.string.setting_mcp_page_header_value_placeholder)) }
+                                )
+                            }
+                            IconButton(onClick = {
+                                val updatedHeaders = config.commonOptions.headers.toMutableList()
+                                updatedHeaders.removeAt(index)
+                                update(config.withCommonOptions { copy(headers = updatedHeaders) })
+                            }) {
+                                Icon(
+                                    HugeIcons.Delete01,
+                                    contentDescription = stringResource(R.string.setting_mcp_page_delete_header)
+                                )
+                            }
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            val updatedHeaders = config.commonOptions.headers.toMutableList()
+                            updatedHeaders.add("" to "")
+                            update(config.withCommonOptions { copy(headers = updatedHeaders) })
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            HugeIcons.Add01,
+                            contentDescription = stringResource(R.string.setting_mcp_page_add_header)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.setting_mcp_page_add_header))
+                    }
+                }
+            }
+        }
+
+        if (stdioConfig != null) {
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.setting_mcp_page_stdio_command))
+                },
+                description = {
+                    Text(stringResource(R.string.setting_mcp_page_stdio_command_desc))
+                }
+            ) {
+                OutlinedTextField(
+                    value = stdioConfig.command,
+                    onValueChange = { command ->
+                        update(stdioConfig.copy(command = command))
+                    },
+                    label = { Text(stringResource(R.string.setting_mcp_page_stdio_command)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text(stringResource(R.string.setting_mcp_page_stdio_command_placeholder)) }
+                )
+            }
+
+            HorizontalDivider()
+
+            val argsText = remember(stdioConfig.args) { stdioConfig.args.joinToString("\n") }
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.setting_mcp_page_stdio_arguments))
+                },
+                description = {
+                    Text(stringResource(R.string.setting_mcp_page_stdio_arguments_desc))
+                }
+            ) {
+                OutlinedTextField(
+                    value = argsText,
+                    onValueChange = { rawArgs ->
+                        update(
+                            stdioConfig.copy(
+                                args = rawArgs.lineSequence()
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() }
+                                    .toList()
+                            )
+                        )
+                    },
+                    label = { Text(stringResource(R.string.setting_mcp_page_stdio_arguments)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    placeholder = { Text(stringResource(R.string.setting_mcp_page_stdio_arguments_placeholder)) }
+                )
+            }
+
+            HorizontalDivider()
+
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.setting_mcp_page_stdio_workdir))
+                },
+                description = {
+                    Text(stringResource(R.string.setting_mcp_page_stdio_workdir_desc))
+                }
+            ) {
+                OutlinedTextField(
+                    value = stdioConfig.workdir,
+                    onValueChange = { workdir ->
+                        update(stdioConfig.copy(workdir = workdir))
+                    },
+                    label = { Text(stringResource(R.string.setting_mcp_page_stdio_workdir)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text(stringResource(R.string.setting_mcp_page_stdio_workdir_placeholder)) }
+                )
+            }
+
+            HorizontalDivider()
+
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.setting_mcp_page_stdio_env))
+                },
+                description = {
+                    Text(stringResource(R.string.setting_mcp_page_stdio_env_desc))
+                }
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    stdioConfig.env.forEachIndexed { index, entry ->
+                        var envName by remember(entry.first) { mutableStateOf(entry.first) }
+                        var envValue by remember(entry.second) { mutableStateOf(entry.second) }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                OutlinedTextField(
+                                    value = envName,
+                                    onValueChange = {
+                                        envName = it
+                                        val updatedEnv = stdioConfig.env.toMutableList()
+                                        updatedEnv[index] = it.trim() to updatedEnv[index].second
+                                        update(stdioConfig.copy(env = updatedEnv))
+                                    },
+                                    label = { Text(stringResource(R.string.setting_mcp_page_stdio_env_name)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text(stringResource(R.string.setting_mcp_page_stdio_env_name_placeholder)) }
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = envValue,
+                                    onValueChange = {
+                                        envValue = it
+                                        val updatedEnv = stdioConfig.env.toMutableList()
+                                        updatedEnv[index] = updatedEnv[index].first to it
+                                        update(stdioConfig.copy(env = updatedEnv))
+                                    },
+                                    label = { Text(stringResource(R.string.setting_mcp_page_stdio_env_value)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text(stringResource(R.string.setting_mcp_page_stdio_env_value_placeholder)) }
+                                )
+                            }
+                            IconButton(onClick = {
+                                val updatedEnv = stdioConfig.env.toMutableList()
+                                updatedEnv.removeAt(index)
+                                update(stdioConfig.copy(env = updatedEnv))
+                            }) {
+                                Icon(
+                                    HugeIcons.Delete01,
+                                    contentDescription = stringResource(R.string.setting_mcp_page_delete_header)
+                                )
+                            }
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            update(stdioConfig.copy(env = stdioConfig.env + ("" to "")))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            HugeIcons.Add01,
+                            contentDescription = stringResource(R.string.setting_mcp_page_stdio_add_env)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.setting_mcp_page_stdio_add_env))
+                    }
                 }
             }
         }
@@ -904,21 +996,20 @@ private fun McpToolCard(
     }
 }
 
-private fun parseMcpServersFromJson(json: String): List<McpServerConfig> {
-    val root = Json.parseToJsonElement(json).jsonObject
-    val mcpServers = root["mcpServers"]?.jsonObject ?: return emptyList()
-    return mcpServers.entries.mapNotNull { (name, element) ->
-        val obj = element.jsonObject
-        val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: "streamable_http"
-        val url = obj["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-        val headers = obj["headers"]?.jsonObject?.entries?.map { (k, v) ->
-            k to (v.jsonPrimitive.contentOrNull ?: "")
-        } ?: emptyList()
-        val commonOptions = McpCommonOptions(name = name, headers = headers)
-        when (type) {
-            "sse" -> McpServerConfig.SseTransportServer(commonOptions = commonOptions, url = url)
-            else -> McpServerConfig.StreamableHTTPServer(commonOptions = commonOptions, url = url)
-        }
+private const val DEFAULT_TERMUX_WORKDIR = "/data/data/com.termux/files/home"
+
+private fun McpServerConfig.withCommonOptions(
+    transform: McpCommonOptions.() -> McpCommonOptions,
+): McpServerConfig {
+    return clone(commonOptions = commonOptions.transform())
+}
+
+private fun isConfigSavable(config: McpServerConfig): Boolean {
+    if (config.commonOptions.name.isBlank()) return false
+    return when (config) {
+        is McpServerConfig.SseTransportServer -> config.url.isNotBlank()
+        is McpServerConfig.StreamableHTTPServer -> config.url.isNotBlank()
+        is McpServerConfig.StdioServer -> config.command.isNotBlank()
     }
 }
 
@@ -973,7 +1064,7 @@ private fun McpImportModal(
                 Button(
                     onClick = {
                         try {
-                            val configs = parseMcpServersFromJson(jsonText.trim())
+                            val configs = McpConfigImportParser.parseMcpServersFromJson(jsonText.trim())
                             if (configs.isEmpty()) {
                                 errorMessage = noValidConfigMsg
                             } else {
