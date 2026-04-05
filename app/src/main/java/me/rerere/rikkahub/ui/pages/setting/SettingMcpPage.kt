@@ -39,19 +39,21 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SwipeToDismissBox
 import me.rerere.rikkahub.ui.components.ui.Switch
 import me.rerere.rikkahub.ui.components.ui.SwitchSize
@@ -517,45 +519,64 @@ private fun McpCommonOptionsConfigure(
                 is McpServerConfig.SseTransportServer -> 1
                 is McpServerConfig.StdioServer -> 2
             }
+            var transportExpanded by remember { mutableStateOf(false) }
 
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth()
+            ExposedDropdownMenuBox(
+                expanded = transportExpanded,
+                onExpandedChange = { transportExpanded = !transportExpanded }
             ) {
-                transportTypes.forEachIndexed { index, type ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(index, transportTypes.size),
-                        onClick = {
-                            if (index != currentTypeIndex) {
-                                val newConfig = when (index) {
-                                    0 -> McpServerConfig.StreamableHTTPServer(
-                                        id = config.id,
-                                        commonOptions = config.commonOptions,
-                                        url = remoteUrl,
-                                    )
+                OutlinedTextField(
+                    value = transportTypes[currentTypeIndex],
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = transportExpanded)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                )
+                ExposedDropdownMenu(
+                    expanded = transportExpanded,
+                    onDismissRequest = { transportExpanded = false }
+                ) {
+                    transportTypes.forEachIndexed { index, type ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(type)
+                            },
+                            onClick = {
+                                transportExpanded = false
+                                if (index != currentTypeIndex) {
+                                    val newConfig = when (index) {
+                                        0 -> McpServerConfig.StreamableHTTPServer(
+                                            id = config.id,
+                                            commonOptions = config.commonOptions,
+                                            url = remoteUrl,
+                                        )
 
-                                    1 -> McpServerConfig.SseTransportServer(
-                                        id = config.id,
-                                        commonOptions = config.commonOptions,
-                                        url = remoteUrl,
-                                    )
+                                        1 -> McpServerConfig.SseTransportServer(
+                                            id = config.id,
+                                            commonOptions = config.commonOptions,
+                                            url = remoteUrl,
+                                        )
 
-                                    2 -> McpServerConfig.StdioServer(
-                                        id = config.id,
-                                        commonOptions = config.commonOptions,
-                                        command = stdioConfig?.command.orEmpty(),
-                                        args = stdioConfig?.args.orEmpty(),
-                                        env = stdioConfig?.env.orEmpty(),
-                                        workdir = stdioConfig?.workdir ?: DEFAULT_TERMUX_WORKDIR,
-                                    )
+                                        2 -> McpServerConfig.StdioServer(
+                                            id = config.id,
+                                            commonOptions = config.commonOptions,
+                                            command = stdioConfig?.command.orEmpty(),
+                                            args = stdioConfig?.args.orEmpty(),
+                                            env = stdioConfig?.env.orEmpty(),
+                                            workdir = stdioConfig?.workdir ?: DEFAULT_TERMUX_WORKDIR,
+                                        )
 
-                                    else -> config
+                                        else -> config
+                                    }
+                                    update(newConfig)
                                 }
-                                update(newConfig)
                             }
-                        },
-                        selected = index == currentTypeIndex
-                    ) {
-                        Text(type)
+                        )
                     }
                 }
             }
