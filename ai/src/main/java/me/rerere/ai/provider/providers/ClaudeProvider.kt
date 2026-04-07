@@ -59,6 +59,11 @@ import kotlin.time.Clock
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
 
+private data class ClaudeThinkingConfig(
+    val thinking: JsonObject?,
+    val outputConfig: JsonObject? = null
+)
+
 class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
@@ -297,23 +302,12 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
             // 处理 thinking budget
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
-                val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget ?: 0)
-                put("thinking", buildJsonObject {
-                    when (level) {
-                        ReasoningLevel.OFF -> {
-                            put("type", "disabled")
-                        }
-
-                        ReasoningLevel.AUTO -> {
-                            put("type", "adaptive")
-                        }
-
-                        else -> {
-                            put("type", "enabled")
-                            put("budget_tokens", params.thinkingBudget ?: 1024)
-                        }
-                    }
-                })
+                val thinkingConfig = buildThinkingConfig(
+                    modelId = params.model.modelId,
+                    thinkingBudget = params.thinkingBudget
+                )
+                thinkingConfig.thinking?.let { put("thinking", it) }
+                thinkingConfig.outputConfig?.let { put("output_config", it) }
             }
 
             // 处理工具
@@ -332,6 +326,90 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 }
             }
         }.mergeCustomBody(params.customBody)
+    }
+
+    private fun buildThinkingConfig(modelId: String, thinkingBudget: Int?): ClaudeThinkingConfig {
+        val exactLevel = thinkingBudget.toExactReasoningLevel()
+
+        if (exactLevel == ReasoningLevel.OFF || (thinkingBudget ?: 0) == 0) {
+            return ClaudeThinkingConfig(
+                thinking = buildJsonObject {
+                    put("type", "disabled")
+                }
+            )
+        }
+
+        if (!supportsAdaptiveThinking(modelId)) {
+            if (exactLevel == ReasoningLevel.AUTO) {
+                return ClaudeThinkingConfig(thinking = null)
+            }
+
+            if ((thinkingBudget ?: 0) > 0) {
+                return ClaudeThinkingConfig(
+                    thinking = buildJsonObject {
+                        put("type", "enabled")
+                        put("budget_tokens", thinkingBudget ?: 1024)
+                    }
+                )
+            }
+
+            return ClaudeThinkingConfig(
+                thinking = buildJsonObject {
+                    put("type", "disabled")
+                }
+            )
+        }
+
+        return when (exactLevel) {
+            ReasoningLevel.AUTO -> ClaudeThinkingConfig(
+                thinking = buildJsonObject {
+                    put("type", "adaptive")
+                }
+            )
+
+            ReasoningLevel.LOW,
+            ReasoningLevel.MEDIUM,
+            ReasoningLevel.HIGH -> ClaudeThinkingConfig(
+                thinking = buildJsonObject {
+                    put("type", "adaptive")
+                },
+                outputConfig = buildJsonObject {
+                    put("effort", exactLevel.effort)
+                }
+            )
+
+            else -> if ((thinkingBudget ?: 0) > 0) {
+                ClaudeThinkingConfig(
+                    thinking = buildJsonObject {
+                        put("type", "enabled")
+                        put("budget_tokens", thinkingBudget ?: 1024)
+                    }
+                )
+            } else {
+                ClaudeThinkingConfig(
+                    thinking = buildJsonObject {
+                        put("type", "disabled")
+                    }
+                )
+            }
+        }
+    }
+
+    private fun supportsAdaptiveThinking(modelId: String): Boolean {
+        val normalizedModelId = modelId.lowercase()
+        return normalizedModelId.contains("claude-opus-4-6") ||
+            normalizedModelId.contains("claude-sonnet-4-6")
+    }
+
+    private fun Int?.toExactReasoningLevel(): ReasoningLevel? {
+        return when (this) {
+            ReasoningLevel.OFF.budgetTokens -> ReasoningLevel.OFF
+            ReasoningLevel.AUTO.budgetTokens -> ReasoningLevel.AUTO
+            ReasoningLevel.LOW.budgetTokens -> ReasoningLevel.LOW
+            ReasoningLevel.MEDIUM.budgetTokens -> ReasoningLevel.MEDIUM
+            ReasoningLevel.HIGH.budgetTokens -> ReasoningLevel.HIGH
+            else -> null
+        }
     }
 
     private fun buildMessages(messages: List<UIMessage>, promptCaching: Boolean) = buildJsonArray {
