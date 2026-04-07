@@ -27,6 +27,7 @@ data class UIMessage(
     val finishedAt: LocalDateTime? = null,
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
+    val pendingUsage: TokenUsage? = null,
     val translation: String? = null
 ) {
     private fun appendChunk(chunk: MessageChunk): UIMessage {

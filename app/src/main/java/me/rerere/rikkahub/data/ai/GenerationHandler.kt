@@ -14,8 +14,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.Tool
-import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
@@ -55,6 +55,11 @@ sealed interface GenerationChunk {
     ) : GenerationChunk
 }
 
+private data class GenerationRoundResult(
+    val messages: List<UIMessage>,
+    val usage: TokenUsage?
+)
+
 class GenerationHandler(
     private val context: Context,
     private val providerManager: ProviderManager,
@@ -78,6 +83,7 @@ class GenerationHandler(
         val providerImpl = providerManager.getProviderByType(provider)
 
         var messages: List<UIMessage> = messages
+        var accumulatedUsage = messages.lastOrNull()?.pendingUsage ?: messages.lastOrNull()?.usage
 
         for (stepIndex in 0 until maxSteps) {
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
@@ -115,7 +121,7 @@ class GenerationHandler(
 
             // Skip generation if we have approved/denied tool calls to handle
             if (pendingTools.isEmpty()) {
-                generateInternal(
+                val generationResult = generateInternal(
                     assistant = assistant,
                     settings = settings,
                     messages = messages,
@@ -147,7 +153,7 @@ class GenerationHandler(
                     memories = memories ?: emptyList(),
                     stream = assistant.streamOutput
                 )
-                messages = messages.visualTransforms(
+                messages = generationResult.messages.visualTransforms(
                     transformers = outputTransformers,
                     context = context,
                     model = model,
@@ -161,17 +167,30 @@ class GenerationHandler(
                     assistant = assistant,
                     settings = settings
                 )
-                messages = messages.slice(0 until messages.lastIndex) + messages.last().copy(
-                    finishedAt = Clock.System.now()
-                        .toLocalDateTime(TimeZone.currentSystemDefault())
-                )
-                emit(GenerationChunk.Messages(messages))
+                accumulatedUsage = accumulateUsage(accumulatedUsage, generationResult.usage)
 
                 val tools = messages.last().getTools().filter { !it.isExecuted }
                 if (tools.isEmpty()) {
-                    // no tool calls, break
+                    messages = messages.updateLastMessage { message ->
+                        message.copy(
+                            usage = accumulatedUsage,
+                            pendingUsage = null,
+                            finishedAt = Clock.System.now()
+                                .toLocalDateTime(TimeZone.currentSystemDefault())
+                        )
+                    }
+                    emit(GenerationChunk.Messages(messages))
                     break
                 }
+
+                messages = messages.updateLastMessage { message ->
+                    message.copy(
+                        usage = null,
+                        pendingUsage = accumulatedUsage,
+                        finishedAt = null
+                    )
+                }
+                emit(GenerationChunk.Messages(messages))
 
                 // Check for tools that need approval
                 var hasPendingApproval = false
@@ -332,7 +351,7 @@ class GenerationHandler(
         tools: List<Tool>,
         memories: List<AssistantMemory>,
         stream: Boolean
-    ) {
+    ): GenerationRoundResult {
         val internalMessages = buildList {
             val system = buildString {
                 // 如果助手有系统提示，则添加到消息中
@@ -367,6 +386,7 @@ class GenerationHandler(
         )
 
         var messages: List<UIMessage> = messages
+        var roundUsage: TokenUsage? = null
         val params = TextGenerationParams(
             model = model,
             temperature = assistant.temperature,
@@ -398,20 +418,7 @@ class GenerationHandler(
                 params = params
             ).collect {
                 messages = messages.handleMessageChunk(chunk = it, model = model)
-                it.usage?.let { usage ->
-                    messages = messages.mapIndexed { index, message ->
-                        if (index == messages.lastIndex) {
-                            val merged = message.usage.merge(usage)
-                            if (message.usage == null || merged.totalTokens >= (message.usage?.totalTokens ?: 0)) {
-                                message.copy(usage = merged)
-                            } else {
-                                message
-                            }
-                        } else {
-                            message
-                        }
-                    }
-                }
+                roundUsage = it.usage ?: roundUsage
                 onUpdateMessages(messages)
             }
         } else {
@@ -429,22 +436,31 @@ class GenerationHandler(
                 params = params,
             )
             messages = messages.handleMessageChunk(chunk = chunk, model = model)
-            chunk.usage?.let { usage ->
-                messages = messages.mapIndexed { index, message ->
-                    if (index == messages.lastIndex) {
-                        val merged = message.usage.merge(usage)
-                        if (message.usage == null || merged.totalTokens >= (message.usage?.totalTokens ?: 0)) {
-                            message.copy(usage = merged)
-                        } else {
-                            message
-                        }
-                    } else {
-                        message
-                    }
-                }
-            }
+            roundUsage = chunk.usage
             onUpdateMessages(messages)
         }
+        return GenerationRoundResult(messages = messages, usage = roundUsage)
+    }
+
+    private fun List<UIMessage>.updateLastMessage(transform: (UIMessage) -> UIMessage): List<UIMessage> {
+        if (isEmpty()) return this
+        return dropLast(1) + transform(last())
+    }
+
+    private fun accumulateUsage(current: TokenUsage?, round: TokenUsage?): TokenUsage? {
+        if (round == null) return current
+        if (current == null) return round
+
+        val promptTokens = current.promptTokens + round.promptTokens
+        val completionTokens = current.completionTokens + round.completionTokens
+        val cachedTokens = current.cachedTokens + round.cachedTokens
+
+        return TokenUsage(
+            promptTokens = promptTokens,
+            completionTokens = completionTokens,
+            cachedTokens = cachedTokens,
+            totalTokens = promptTokens + completionTokens
+        )
     }
 
     fun translateText(
