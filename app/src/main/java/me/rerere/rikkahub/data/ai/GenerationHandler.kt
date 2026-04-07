@@ -401,7 +401,12 @@ class GenerationHandler(
                 it.usage?.let { usage ->
                     messages = messages.mapIndexed { index, message ->
                         if (index == messages.lastIndex) {
-                            message.copy(usage = message.usage.merge(usage))
+                            val merged = message.usage.merge(usage)
+                            if (message.usage == null || merged.totalTokens >= (message.usage?.totalTokens ?: 0)) {
+                                message.copy(usage = merged)
+                            } else {
+                                message
+                            }
                         } else {
                             message
                         }
@@ -427,9 +432,12 @@ class GenerationHandler(
             chunk.usage?.let { usage ->
                 messages = messages.mapIndexed { index, message ->
                     if (index == messages.lastIndex) {
-                        message.copy(
-                            usage = message.usage.merge(usage)
-                        )
+                        val merged = message.usage.merge(usage)
+                        if (message.usage == null || merged.totalTokens >= (message.usage?.totalTokens ?: 0)) {
+                            message.copy(usage = merged)
+                        } else {
+                            message
+                        }
                     } else {
                         message
                     }
