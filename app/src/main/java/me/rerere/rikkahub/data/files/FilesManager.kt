@@ -139,9 +139,11 @@ class FilesManager(
                 if (!file.exists()) {
                     file.createNewFile()
                 }
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    file.outputStream().use { outputStream ->
-                        inputStream.copyTo(outputStream)
+                val inputStream = context.contentResolver.openInputStream(uri)
+                    ?: error("Failed to open input stream for $uri")
+                inputStream.use { input ->
+                    file.outputStream().use { output ->
+                        input.copyTo(output)
                     }
                 }
                 val guessedMime = sourceMime ?: guessMimeType(file, sourceName)
