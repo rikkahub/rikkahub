@@ -14,6 +14,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,8 +69,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -119,6 +125,18 @@ import kotlin.uuid.Uuid
 private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
 private const val ScrollBottomKey = "ScrollBottomKey"
+
+private fun Modifier.clearChatInputFocusOnPress(
+    onDismiss: () -> Unit,
+): Modifier = pointerInput(onDismiss) {
+    awaitEachGesture {
+        awaitFirstDown(
+            requireUnconsumed = false,
+            pass = PointerEventPass.Initial,
+        )
+        onDismiss()
+    }
+}
 
 private fun UIMessage.previewText(): String {
     return parts
@@ -233,6 +251,8 @@ private fun ChatListNormal(
     val scope = rememberCoroutineScope()
     var isRecentScroll by remember { mutableStateOf(false) }
     val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val activity = LocalActivity.current as? me.rerere.rikkahub.RouteActivity
     val enableGlassBlur = settings.displaySetting.enableBlurEffect
     val topFadeHeight = if (topBarVisible) innerPadding.calculateTopPadding() + 24.dp else 0.dp
@@ -307,7 +327,11 @@ private fun ChatListNormal(
 
     Box(
         modifier = Modifier
-            .fillMaxSize(),
+            .fillMaxSize()
+            .clearChatInputFocusOnPress {
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+            }
     ) {
         // 自动滚动到底部
         if (settings.displaySetting.enableAutoScroll) {
@@ -740,6 +764,8 @@ private fun ChatListPreview(
     onJumpToMessage: (Int) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找
     val filteredMessages = remember(conversation.messageNodes, searchQuery) {
@@ -793,7 +819,11 @@ private fun ChatListPreview(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
+                .clearChatInputFocusOnPress {
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                },
         ) {
             itemsIndexed(
                 items = filteredMessages,
