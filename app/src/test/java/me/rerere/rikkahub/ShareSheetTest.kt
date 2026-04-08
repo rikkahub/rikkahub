@@ -142,8 +142,7 @@ class ShareSheetTest {
             ProviderSetting.Google(
                 name = "Google Test",
                 apiKey = "key2",
-                vertexAI = true,
-                projectId = "project-123"
+                vertexAI = true
             ),
             ProviderSetting.Claude(
                 name = "Claude Test",
@@ -192,8 +191,7 @@ class ShareSheetTest {
             ProviderSetting.Google(
                 name = "Google Batch",
                 apiKey = "key-2",
-                vertexAI = true,
-                projectId = "batch-project"
+                vertexAI = true
             ),
             ProviderSetting.Claude(
                 name = "Claude Batch",

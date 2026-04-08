@@ -113,12 +113,8 @@ sealed class ProviderSetting {
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
-        var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta", // only for google AI
+        var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
         var vertexAI: Boolean = false,
-        var privateKey: String = "", // only for vertex AI
-        var serviceAccountEmail: String = "", // only for vertex AI
-        var location: String = "us-central1", // only for vertex AI
-        var projectId: String = "", // only for vertex AI
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

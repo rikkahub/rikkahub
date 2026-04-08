@@ -433,19 +433,19 @@ private fun ColumnScope.ProviderConfigureGoogle(
         )
     }
 
-    if (!provider.vertexAI) {
-        OutlinedTextField(
-            value = provider.apiKey,
-            onValueChange = {
-                onEdit(provider.copy(apiKey = it.trim()))
-            },
-            label = {
-                Text(stringResource(id = R.string.setting_provider_page_api_key))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 3,
-        )
+    OutlinedTextField(
+        value = provider.apiKey,
+        onValueChange = {
+            onEdit(provider.copy(apiKey = it.trim()))
+        },
+        label = {
+            Text(stringResource(id = R.string.setting_provider_page_api_key))
+        },
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
+    )
 
+    if (!provider.vertexAI) {
         OutlinedTextField(
             value = provider.baseUrl,
             onValueChange = {
@@ -461,51 +461,6 @@ private fun ColumnScope.ProviderConfigureGoogle(
                     Text("The base URL usually ends with `/v1beta`")
                 }
             } else null
-        )
-    } else {
-        OutlinedTextField(
-            value = provider.serviceAccountEmail,
-            onValueChange = {
-                onEdit(provider.copy(serviceAccountEmail = it.trim()))
-            },
-            label = {
-                Text(stringResource(id = R.string.setting_provider_page_service_account_email))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = provider.privateKey,
-            onValueChange = {
-                onEdit(provider.copy(privateKey = it.trim()))
-            },
-            label = {
-                Text(stringResource(id = R.string.setting_provider_page_private_key))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 6,
-            minLines = 3,
-            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = JetbrainsMono),
-        )
-        OutlinedTextField(
-            value = provider.location,
-            onValueChange = {
-                onEdit(provider.copy(location = it.trim()))
-            },
-            label = {
-                // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#available-regions
-                Text(stringResource(id = R.string.setting_provider_page_location))
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = provider.projectId,
-            onValueChange = {
-                onEdit(provider.copy(projectId = it.trim()))
-            },
-            label = {
-                Text(stringResource(id = R.string.setting_provider_page_project_id))
-            },
-            modifier = Modifier.fillMaxWidth()
         )
     }
 }

@@ -41,7 +41,6 @@ import me.rerere.ai.provider.providers.openai.normalizedSeedOrNull
 import me.rerere.ai.provider.providers.openai.normalizedTopKOrNull
 import me.rerere.ai.provider.providers.normalizedNonBlankOrNull
 import me.rerere.ai.provider.providers.normalizedStopSequencesOrNull
-import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
@@ -71,7 +70,6 @@ import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
-import org.apache.commons.text.StringEscapeUtils
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
@@ -79,9 +77,6 @@ private const val TAG = "GoogleProvider"
 
 class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
-    private val serviceAccountTokenProvider by lazy {
-        ServiceAccountTokenProvider(client)
-    }
 
     fun previewTextRequest(
         providerSetting: ProviderSetting.Google,
@@ -109,15 +104,18 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 }
             )
         }
+        val previewUrl = if (providerSetting.vertexAI) {
+            url.newBuilder().addQueryParameter("key", "<redacted>").build()
+        } else {
+            url
+        }
         val request = Request.Builder()
-            .url(url)
+            .url(previewUrl)
             .headers(params.customHeaders.toHeaders())
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .apply {
-                if (providerSetting.vertexAI) {
-                    addHeader("Authorization", "Bearer <redacted_vertex_access_token>")
-                } else {
+                if (!providerSetting.vertexAI) {
                     addHeader("x-goog-api-key", "<redacted>")
                 }
             }
@@ -136,24 +134,20 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         return if (!providerSetting.vertexAI) {
             "${providerSetting.baseUrl}/$path".toHttpUrl()
         } else {
-            "https://aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/$path".toHttpUrl()
+            "https://aiplatform.googleapis.com/v1/$path".toHttpUrl()
         }
     }
 
-    private suspend fun transformRequest(
+    private fun transformRequest(
         providerSetting: ProviderSetting.Google,
         request: Request
     ): Request {
+        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         return if (providerSetting.vertexAI) {
-            val accessToken = serviceAccountTokenProvider.fetchAccessToken(
-                serviceAccountEmail = providerSetting.serviceAccountEmail.trim(),
-                privateKeyPem = StringEscapeUtils.unescapeJson(providerSetting.privateKey.trim()),
-            )
             request.newBuilder()
-                .addHeader("Authorization", "Bearer $accessToken")
+                .url(request.url.newBuilder().addQueryParameter("key", key).build())
                 .build()
         } else {
-            val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
             request.newBuilder()
                 .addHeader("x-goog-api-key", key)
                 .build()
