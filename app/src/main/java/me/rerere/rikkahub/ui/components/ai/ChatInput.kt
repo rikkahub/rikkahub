@@ -113,6 +113,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.appTempFolder
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Camera01
@@ -120,7 +121,6 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.CommandLine
 import me.rerere.hugeicons.stroke.Files02
 import me.rerere.hugeicons.stroke.FileZip
-import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Video01
@@ -536,6 +536,38 @@ private fun TextInputRow(
                     }
                 }
             }
+        AnimatedVisibility(
+            visible = isFocused,
+            enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom),
+            modifier = Modifier
+                .align(Alignment.End)
+                .padding(end = 6.dp)
+        ) {
+            Surface(
+                onClick = {
+                    isFullScreen = true
+                },
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = luneGlassBorderColor().copy(alpha = 0.9f)
+                ),
+            ) {
+                Box(
+                    modifier = Modifier.size(30.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.ArrowUp01,
+                        contentDescription = stringResource(R.string.text_area_fullscreen_edit),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
         TextField(
             state = state.textContent,
             modifier = Modifier
@@ -563,17 +595,6 @@ private fun TextInputRow(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
             ),
-            trailingIcon = {
-                if (isFocused) {
-                    IconButton(
-                        onClick = {
-                            isFullScreen = !isFullScreen
-                        }
-                    ) {
-                        Icon(HugeIcons.FullScreen, null)
-                    }
-                }
-            },
             leadingIcon = when {
                 termuxCommandModeEnabled && !state.isEditing() -> {
                     {

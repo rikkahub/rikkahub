@@ -1361,6 +1361,7 @@
   <string name="setting_display_page_chat_font_family_monospace">等寬字體</string>
   <string name="chat_page_back_to_conversation">返回對話</string>
   <string name="chat_page_hide_top_bar">隱藏頂部欄</string>
+  <string name="chat_page_show_top_bar">顯示頂部欄</string>
   <string name="setting_provider_page_import_success_count">已匯入 %1$d 個提供商</string>
   <string name="setting_provider_page_selected">已選擇</string>
   <string name="setting_provider_page_selected_count">已選擇 %1$d 個</string>

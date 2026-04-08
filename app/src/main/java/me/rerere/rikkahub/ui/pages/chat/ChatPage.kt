@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -74,7 +76,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.ArrowDownDouble
+import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUpDouble
 import me.rerere.hugeicons.stroke.BubbleChatTemporary
 import me.rerere.hugeicons.stroke.Cancel01
@@ -694,27 +696,36 @@ private fun ChatPageContent(
             AnimatedVisibility(
                 visible = !topBarVisible,
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.statusBars)
                     .windowInsetsPadding(WindowInsets.displayCutout)
-                    .padding(top = 8.dp, end = 12.dp),
-                enter = fadeIn() + scaleIn(initialScale = 0.92f),
-                exit = fadeOut() + scaleOut(targetScale = 0.92f),
+                    .padding(top = 6.dp),
+                enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top),
             ) {
                 Surface(
                     onClick = {
                         topBarVisible = true
                     },
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = luneGlassContainerColor(),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, luneGlassBorderColor()),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = luneGlassBorderColor().copy(alpha = 0.9f)
+                    ),
                 ) {
-                    Icon(
-                        imageVector = HugeIcons.ArrowDownDouble,
-                        contentDescription = stringResource(R.string.more_options),
+                    Box(
                         modifier = Modifier
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
-                            .size(18.dp)
-                    )
+                            .size(30.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.ArrowDown01,
+                            contentDescription = stringResource(R.string.chat_page_show_top_bar),
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 

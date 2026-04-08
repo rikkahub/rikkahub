@@ -1352,6 +1352,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_chat_font_family_monospace">等幅</string>
   <string name="chat_page_back_to_conversation">会話に戻る</string>
   <string name="chat_page_hide_top_bar">トップバーを隠す</string>
+  <string name="chat_page_show_top_bar">トップバーを表示</string>
   <string name="theme_name_lune">ムーンライトLune</string>
   <string name="setting_display_page_custom_theme_state_auto">自動</string>
   <string name="setting_display_page_custom_theme_auto_on_colors_title">on* 色を自動生成</string>

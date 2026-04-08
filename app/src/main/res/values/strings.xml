@@ -269,6 +269,7 @@
   <string name="chat_page_temporary_chat_disabled">Temporary chat disabled. This conversation will appear in history.</string>
   <string name="chat_page_back_to_conversation">Back to conversation</string>
   <string name="chat_page_hide_top_bar">Hide top bar</string>
+  <string name="chat_page_show_top_bar">Show top bar</string>
   <string name="chat_page_new_message">New message</string>
   <string name="chat_page_nickname_placeholder">Please enter nickname</string>
   <string name="chat_page_no_conversations">No conversations</string>
