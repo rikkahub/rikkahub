@@ -8,6 +8,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
@@ -70,6 +72,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.rememberHazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
@@ -698,31 +702,48 @@ private fun ChatPageContent(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .windowInsetsPadding(WindowInsets.statusBars)
-                    .windowInsetsPadding(WindowInsets.displayCutout)
-                    .padding(top = 6.dp),
-                enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
-                exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top),
+                    .windowInsetsPadding(WindowInsets.displayCutout),
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
             ) {
                 Surface(
                     onClick = {
                         topBarVisible = true
                     },
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                    modifier = Modifier
+                        .size(width = 56.dp, height = 24.dp)
+                        .then(
+                            if (activeHazeState != null) {
+                                Modifier.hazeEffect(
+                                    state = activeHazeState,
+                                    style = HazeMaterials.thin(containerColor = luneGlassContainerColor())
+                                )
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    shape = RoundedCornerShape(
+                        topStart = 0.dp,
+                        topEnd = 0.dp,
+                        bottomStart = 16.dp,
+                        bottomEnd = 16.dp,
+                    ),
+                    color = if (activeHazeState != null) Color.Transparent else luneGlassContainerColor(),
                     border = androidx.compose.foundation.BorderStroke(
                         width = 1.dp,
-                        color = luneGlassBorderColor().copy(alpha = 0.9f)
+                        color = luneGlassBorderColor()
                     ),
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(30.dp),
-                        contentAlignment = Alignment.Center,
+                            .fillMaxSize()
+                            .padding(bottom = 2.dp),
+                        contentAlignment = Alignment.BottomCenter,
                     ) {
                         Icon(
                             imageVector = HugeIcons.ArrowDown01,
                             contentDescription = stringResource(R.string.chat_page_show_top_bar),
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
