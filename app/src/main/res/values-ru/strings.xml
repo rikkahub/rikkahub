@@ -1825,4 +1825,22 @@
   <string name="prompt_page_st_preset_editor_compat_flags_desc">Эти значения сохраняются для совместимости с ST, отображения и экспорта. Здесь они не редактируются как обычные параметры рантайма. В текущем рантайме приложения на поведение реально влияют поля `role`, `identifier` и настройки внедрения.</string>
   <string name="prompt_page_st_preset_editor_system_prompt_metadata_tag">Сист. мета</string>
   <string name="prompt_page_st_preset_editor_marker_metadata_tag">Мета маркера</string>
+  <string name="setting_mcp_page_stdio">Termux Stdio</string>
+  <string name="setting_mcp_page_stdio_command">Команда</string>
+  <string name="setting_mcp_page_stdio_command_desc">Имя исполняемого файла или путь для запуска внутри Termux</string>
+  <string name="setting_mcp_page_stdio_command_placeholder">например: npx</string>
+  <string name="setting_mcp_page_stdio_arguments">Аргументы</string>
+  <string name="setting_mcp_page_stdio_arguments_desc">По одному аргументу на строку. Соответствует массиву args в стандартной конфигурации.</string>
+  <string name="setting_mcp_page_stdio_arguments_placeholder">-y\n@mcp/server-filesystem\n/data/data/com.termux/files/home</string>
+  <string name="setting_mcp_page_stdio_workdir">Рабочая папка</string>
+  <string name="setting_mcp_page_stdio_workdir_desc">Каталог, используемый при запуске локального MCP-сервера в Termux</string>
+  <string name="setting_mcp_page_stdio_workdir_placeholder">/data/data/com.termux/files/home</string>
+  <string name="setting_mcp_page_stdio_env">Переменные окружения</string>
+  <string name="setting_mcp_page_stdio_env_desc">Необязательные переменные окружения, передаваемые локальному процессу MCP-сервера</string>
+  <string name="setting_mcp_page_stdio_env_name">Имя переменной</string>
+  <string name="setting_mcp_page_stdio_env_name_placeholder">например: API_KEY</string>
+  <string name="setting_mcp_page_stdio_env_value">Значение переменной</string>
+  <string name="setting_mcp_page_stdio_env_value_placeholder">например: sk-***</string>
+  <string name="setting_mcp_page_stdio_add_env">Добавить переменную</string>
 </resources>
+
