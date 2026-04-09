@@ -28,13 +28,16 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,12 +74,17 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
+import me.rerere.common.markdown.extractDetailsBlocks
+import me.rerere.common.markdown.isDetailsPlaceholder
+import me.rerere.common.markdown.parseDetailsBlock
+import me.rerere.common.markdown.prepareDetailsBodyForMarkdown
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.toDp
+import org.jsoup.Jsoup
 import org.intellij.markdown.IElementType
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
@@ -102,12 +110,21 @@ private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MAT
 val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
+private val LocalDetailsBlocks = compositionLocalOf<Map<String, String>> { emptyMap() }
+
+private data class MarkdownParseState(
+    val content: String,
+    val astTree: ASTNode,
+    val detailsBlocks: Map<String, String>
+)
 
 // 预处理markdown内容
-private fun preProcess(content: String): String {
+private fun parseMarkdown(content: String): MarkdownParseState {
+    val detailsExtraction = extractDetailsBlocks(content)
+
     // 先找出所有代码块的位置
     val codeBlocks = mutableListOf<IntRange>()
-    CODE_BLOCK_REGEX.findAll(content).forEach { match ->
+    CODE_BLOCK_REGEX.findAll(detailsExtraction.content).forEach { match ->
         codeBlocks.add(match.range)
     }
 
@@ -117,7 +134,7 @@ private fun preProcess(content: String): String {
     }
 
     // 替换行内公式 \( ... \) 到 $ ... $，但跳过代码块内的内容
-    var result = INLINE_LATEX_REGEX.replace(content) { matchResult ->
+    var result = INLINE_LATEX_REGEX.replace(detailsExtraction.content) { matchResult ->
         if (isInCodeBlock(matchResult.range.first)) {
             matchResult.value // 保持原样
         } else {
@@ -134,7 +151,11 @@ private fun preProcess(content: String): String {
         }
     }
 
-    return result
+    return MarkdownParseState(
+        content = result,
+        astTree = parser.buildMarkdownTreeFromString(result),
+        detailsBlocks = detailsExtraction.blocks
+    )
 }
 
 @Preview(showBackground = true)
@@ -192,10 +213,8 @@ fun MarkdownBlock(
     onClickCitation: (String) -> Unit = {}
 ) {
     var (data, setData) = remember {
-        val preprocessed = preProcess(content)
-        val astTree = parser.buildMarkdownTreeFromString(preprocessed)
         mutableStateOf(
-            value = preprocessed to astTree,
+            value = parseMarkdown(content),
             policy = referentialEqualityPolicy(),
         )
     }
@@ -205,24 +224,23 @@ fun MarkdownBlock(
     val updatedContent by rememberUpdatedState(content)
     LaunchedEffect(Unit) {
         snapshotFlow { updatedContent }.distinctUntilChanged().mapLatest {
-            val preprocessed = preProcess(it)
-            val astTree = parser.buildMarkdownTreeFromString(preprocessed)
-            preprocessed to astTree
+            parseMarkdown(it)
         }.catch { exception -> exception.printStackTrace() }.flowOn(Dispatchers.Default) // 在后台线程解析AST树
             .collect {
                 setData(it)
             }
     }
 
-    val (preprocessed, astTree) = data
-    ProvideTextStyle(style) {
-        Column(
-            modifier = modifier.padding(start = 4.dp)
-        ) {
-            astTree.children.fastForEach { child ->
-                MarkdownNode(
-                    node = child, content = preprocessed, onClickCitation = onClickCitation
-                )
+    CompositionLocalProvider(LocalDetailsBlocks provides data.detailsBlocks) {
+        ProvideTextStyle(style) {
+            Column(
+                modifier = modifier.padding(start = 4.dp)
+            ) {
+                data.astTree.children.fastForEach { child ->
+                    MarkdownNode(
+                        node = child, content = data.content, onClickCitation = onClickCitation
+                    )
+                }
             }
         }
     }
@@ -270,6 +288,15 @@ private fun MarkdownNode(
     onClickCitation: (String) -> Unit = {},
     listLevel: Int = 0
 ) {
+    resolveDetailsBlock(node = node, content = content)?.let { rawDetailsBlock ->
+        DetailsMarkdownBlock(
+            rawBlock = rawDetailsBlock,
+            modifier = modifier,
+            onClickCitation = onClickCitation
+        )
+        return
+    }
+
     when (node.type) {
         // 文件根节点
         MarkdownElementTypes.MARKDOWN_FILE -> {
@@ -579,6 +606,86 @@ private fun MarkdownNode(
             }
         }
     }
+}
+
+@Composable
+private fun DetailsMarkdownBlock(
+    rawBlock: String,
+    modifier: Modifier = Modifier,
+    onClickCitation: (String) -> Unit = {}
+) {
+    val parsedDetails = remember(rawBlock) {
+        parseDetailsBlock(rawBlock)
+    }
+
+    if (parsedDetails == null) {
+        SimpleHtmlBlock(
+            html = rawBlock,
+            modifier = modifier
+        )
+        return
+    }
+
+    val summaryText = remember(parsedDetails.summaryRaw) {
+        parsedDetails.summaryRaw
+            ?.let { Jsoup.parse(it).text() }
+            ?.takeIf { it.isNotBlank() }
+            ?: "Details"
+    }
+    val preparedBody = remember(rawBlock) {
+        prepareDetailsBodyForMarkdown(parsedDetails.bodyRaw)
+    }
+    var isExpanded by remember(rawBlock) {
+        mutableStateOf(parsedDetails.openByDefault)
+    }
+
+    Column(modifier = modifier.padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { isExpanded = !isExpanded }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (isExpanded) "▼ " else "▶ ",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            )
+            Text(
+                text = summaryText,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Medium
+                )
+            )
+        }
+
+        if (isExpanded && preparedBody.isNotBlank()) {
+            MarkdownBlock(
+                content = preparedBody,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, top = 4.dp),
+                onClickCitation = onClickCitation
+            )
+        }
+    }
+}
+
+@Composable
+private fun resolveDetailsBlock(node: ASTNode, content: String): String? {
+    if (node.type != MarkdownElementTypes.PARAGRAPH && node.type != MarkdownTokenTypes.TEXT) {
+        return null
+    }
+
+    val text = node.getTextInNode(content).trim()
+    if (!isDetailsPlaceholder(text)) {
+        return null
+    }
+
+    return LocalDetailsBlocks.current[text]
 }
 
 @Composable
