@@ -111,6 +111,7 @@ val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
 private val LocalDetailsBlocks = compositionLocalOf<Map<String, String>> { emptyMap() }
+private val DETAILS_PLACEHOLDER_TOKEN_REGEX = Regex("""RIKKAHUBDETAILSBLOCK\d+""")
 
 private data class MarkdownParseState(
     val content: String,
@@ -685,7 +686,8 @@ private fun resolveDetailsBlock(node: ASTNode, content: String): String? {
         return null
     }
 
-    return LocalDetailsBlocks.current[text]
+    val placeholder = DETAILS_PLACEHOLDER_TOKEN_REGEX.find(text)?.value ?: return null
+    return LocalDetailsBlocks.current[placeholder]
 }
 
 @Composable
