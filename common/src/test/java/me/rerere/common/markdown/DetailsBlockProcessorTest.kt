@@ -73,6 +73,29 @@ class DetailsBlockProcessorTest {
     }
 
     @Test
+    fun `extractDetailsBlocks continues after literal unmatched details token`() {
+        val validBlock = """
+            <details>
+            <summary>ok</summary>
+            body
+            </details>
+        """.trimIndent()
+        val sample = """
+            Here is a literal <details> tag example.
+
+            $validBlock
+        """.trimIndent()
+
+        val extraction = extractDetailsBlocks(sample)
+
+        assertEquals(1, extraction.blocks.size)
+        val placeholder = extraction.blocks.keys.single()
+        assertEquals(validBlock, extraction.blocks.getValue(placeholder))
+        assertTrue(extraction.content.contains("literal <details> tag example"))
+        assertTrue(extraction.content.contains(placeholder))
+    }
+
+    @Test
     fun `prepareDetailsBodyForMarkdown unwraps div body`() {
         val parsed = parseDetailsBlock(
             """
@@ -90,6 +113,31 @@ class DetailsBlockProcessorTest {
             """
             content
             - item
+            """.trimIndent(),
+            prepareDetailsBodyForMarkdown(parsed.bodyRaw)
+        )
+    }
+
+    @Test
+    fun `prepareDetailsBodyForMarkdown keeps html tags inside fenced code blocks`() {
+        val parsed = parseDetailsBlock(
+            """
+            <details>
+            <summary>title</summary>
+            <p>
+            ```html
+            <div>demo</div>
+            ```
+            </p>
+            </details>
+            """.trimIndent()
+        )!!
+
+        assertEquals(
+            """
+            ```html
+            <div>demo</div>
+            ```
             """.trimIndent(),
             prepareDetailsBodyForMarkdown(parsed.bodyRaw)
         )

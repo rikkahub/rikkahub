@@ -24,20 +24,26 @@ fun extractDetailsBlocks(content: String): DetailsBlockExtraction {
     val codeRanges = findProtectedRanges(content)
     val blocks = linkedMapOf<String, String>()
     val result = StringBuilder()
-    var cursor = 0
+    var writeCursor = 0
+    var scanCursor = 0
 
     while (true) {
-        val openStart = findNextDetailsOpen(content, cursor, codeRanges) ?: break
-        val blockEnd = findMatchingDetailsEnd(content, openStart, codeRanges) ?: break
+        val openStart = findNextDetailsOpen(content, scanCursor, codeRanges) ?: break
+        val blockEnd = findMatchingDetailsEnd(content, openStart, codeRanges)
+        if (blockEnd == null) {
+            scanCursor = openStart + 1
+            continue
+        }
         val placeholder = buildDetailsPlaceholder(blocks.size)
         blocks[placeholder] = content.substring(openStart, blockEnd)
 
-        result.append(content, cursor, openStart)
+        result.append(content, writeCursor, openStart)
         result.append(placeholder)
-        cursor = blockEnd
+        writeCursor = blockEnd
+        scanCursor = blockEnd
     }
 
-    result.append(content, cursor, content.length)
+    result.append(content, writeCursor, content.length)
     return DetailsBlockExtraction(
         content = result.toString(),
         blocks = blocks
@@ -80,9 +86,9 @@ fun prepareDetailsBodyForMarkdown(bodyRaw: String): String {
 
     do {
         previous = result
-        result = SIMPLE_CONTAINER_REGEX.replace(result) { matchResult ->
-            "\n${matchResult.groupValues[2].trim('\r', '\n')}\n"
-        }.trim('\r', '\n')
+        val detailsExtraction = extractDetailsBlocks(result)
+        result = unwrapSimpleContainers(detailsExtraction.content)
+        result = restoreProtectedBlocks(result, detailsExtraction.blocks).trim('\r', '\n')
     } while (result != previous)
 
     return result
@@ -94,6 +100,25 @@ fun isDetailsPlaceholder(text: String): Boolean {
 
 private fun buildDetailsPlaceholder(index: Int): String {
     return "$DETAILS_PLACEHOLDER_PREFIX$index"
+}
+
+private fun unwrapSimpleContainers(content: String): String {
+    val protectedRanges = findProtectedRanges(content)
+    return SIMPLE_CONTAINER_REGEX.replace(content) { matchResult ->
+        if (matchResult.range.first.isInside(protectedRanges) || !matchResult.range.isStandaloneBlock(content)) {
+            matchResult.value
+        } else {
+            "\n${matchResult.groupValues[2].trim('\r', '\n')}\n"
+        }
+    }
+}
+
+private fun restoreProtectedBlocks(content: String, blocks: Map<String, String>): String {
+    var result = content
+    blocks.forEach { (placeholder, rawBlock) ->
+        result = result.replace(placeholder, rawBlock)
+    }
+    return result
 }
 
 private fun findProtectedRanges(content: String): List<IntRange> {
@@ -332,6 +357,14 @@ private fun hasTagBoundary(content: String, index: Int): Boolean {
 
 private fun Int.isInside(ranges: List<IntRange>): Boolean {
     return ranges.any { this in it }
+}
+
+private fun IntRange.isStandaloneBlock(content: String): Boolean {
+    val lineStart = content.lastIndexOf('\n', first).let { if (it == -1) 0 else it + 1 }
+    val lineEnd = content.indexOf('\n', last + 1).let { if (it == -1) content.length else it }
+
+    return content.substring(lineStart, first).isBlank() &&
+        content.substring(last + 1, lineEnd).isBlank()
 }
 
 private data class DetailsTagMatch(
