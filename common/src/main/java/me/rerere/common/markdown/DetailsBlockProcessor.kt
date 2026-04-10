@@ -12,7 +12,9 @@ data class ParsedDetailsBlock(
 )
 
 private const val DETAILS_PLACEHOLDER_PREFIX = "RIKKAHUBDETAILSBLOCK"
-private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
+private val INLINE_CODE_REGEX = Regex("`[^`\n]*`")
+private val ATTRIBUTE_VALUE_REGEX = Regex("\"[^\"]*\"|'[^']*'")
+private val OPEN_ATTRIBUTE_REGEX = Regex("""(?:^|[\s<])open(?=[\s=/>])""", RegexOption.IGNORE_CASE)
 private val SUMMARY_REGEX = Regex("^\\s*(<summary\\b[^>]*>[\\s\\S]*?</summary>)\\s*", setOf(RegexOption.IGNORE_CASE))
 private val SIMPLE_CONTAINER_REGEX = Regex(
     "<(p|div)\\b[^>]*>([\\s\\S]*?)</\\1>",
@@ -20,7 +22,7 @@ private val SIMPLE_CONTAINER_REGEX = Regex(
 )
 
 fun extractDetailsBlocks(content: String): DetailsBlockExtraction {
-    val codeRanges = CODE_BLOCK_REGEX.findAll(content).map { it.range }.toList()
+    val codeRanges = findProtectedRanges(content)
     val blocks = linkedMapOf<String, String>()
     val result = StringBuilder()
     var cursor = 0
@@ -66,11 +68,12 @@ fun parseDetailsBlock(rawBlock: String): ParsedDetailsBlock? {
     } else {
         innerRaw
     }
+    val openingTagWithoutAttributeValues = ATTRIBUTE_VALUE_REGEX.replace(openingTag) { "\"\"" }
 
     return ParsedDetailsBlock(
         summaryRaw = summaryRaw,
         bodyRaw = bodyRaw,
-        openByDefault = Regex("\\bopen\\b", RegexOption.IGNORE_CASE).containsMatchIn(openingTag)
+        openByDefault = OPEN_ATTRIBUTE_REGEX.containsMatchIn(openingTagWithoutAttributeValues)
     )
 }
 
@@ -94,6 +97,96 @@ fun isDetailsPlaceholder(text: String): Boolean {
 
 private fun buildDetailsPlaceholder(index: Int): String {
     return "$DETAILS_PLACEHOLDER_PREFIX$index"
+}
+
+private fun findProtectedRanges(content: String): List<IntRange> {
+    val inlineCodeRanges = INLINE_CODE_REGEX.findAll(content).map { it.range }
+    val fencedCodeRanges = findFencedCodeBlockRanges(content).asSequence()
+
+    return (inlineCodeRanges + fencedCodeRanges)
+        .sortedBy { it.first }
+        .fold(mutableListOf()) { ranges, range ->
+            val previous = ranges.lastOrNull()
+            if (previous != null && range.first <= previous.last + 1) {
+                ranges[ranges.lastIndex] = previous.first..maxOf(previous.last, range.last)
+            } else {
+                ranges.add(range)
+            }
+            ranges
+        }
+}
+
+private fun findFencedCodeBlockRanges(content: String): List<IntRange> {
+    val ranges = mutableListOf<IntRange>()
+    var cursor = 0
+    var activeFence: MarkdownFence? = null
+    var fenceStart = -1
+
+    while (cursor < content.length) {
+        val lineEnd = content.indexOf('\n', cursor).let { if (it == -1) content.length else it }
+        val line = content.substring(cursor, lineEnd).removeSuffix("\r")
+
+        if (activeFence == null) {
+            val openingFence = parseFence(line)
+            if (openingFence != null) {
+                activeFence = openingFence
+                fenceStart = cursor
+            }
+        } else if (isClosingFence(line, activeFence)) {
+            val fenceEndExclusive = if (lineEnd < content.length) lineEnd + 1 else lineEnd
+            ranges.add(fenceStart until fenceEndExclusive)
+            activeFence = null
+            fenceStart = -1
+        }
+
+        cursor = if (lineEnd < content.length) lineEnd + 1 else content.length
+    }
+
+    return ranges
+}
+
+private fun parseFence(line: String): MarkdownFence? {
+    val contentStart = line.indexOfFirst { !it.isWhitespace() }
+    if (contentStart !in 0..3) {
+        return null
+    }
+
+    val fenceChar = line.getOrNull(contentStart)
+    if (fenceChar != '`' && fenceChar != '~') {
+        return null
+    }
+
+    val fenceLength = countRepeatedChar(line, contentStart, fenceChar)
+    if (fenceLength < 3) {
+        return null
+    }
+
+    return MarkdownFence(
+        marker = fenceChar,
+        length = fenceLength
+    )
+}
+
+private fun isClosingFence(line: String, fence: MarkdownFence): Boolean {
+    val contentStart = line.indexOfFirst { !it.isWhitespace() }
+    if (contentStart !in 0..3 || line.getOrNull(contentStart) != fence.marker) {
+        return false
+    }
+
+    val fenceLength = countRepeatedChar(line, contentStart, fence.marker)
+    if (fenceLength < fence.length) {
+        return false
+    }
+
+    return line.substring(contentStart + fenceLength).isBlank()
+}
+
+private fun countRepeatedChar(text: String, startIndex: Int, char: Char): Int {
+    var index = startIndex
+    while (index < text.length && text[index] == char) {
+        index++
+    }
+    return index - startIndex
 }
 
 private fun findMatchingDetailsEnd(
@@ -204,4 +297,9 @@ private fun Int.isInside(ranges: List<IntRange>): Boolean {
 private data class DetailsTagMatch(
     val isOpening: Boolean,
     val endExclusive: Int
+)
+
+private data class MarkdownFence(
+    val marker: Char,
+    val length: Int
 )

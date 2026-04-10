@@ -28,6 +28,23 @@ class DetailsBlockProcessorTest {
     }
 
     @Test
+    fun `extractDetailsBlocks ignores details tags inside tilde fenced code blocks`() {
+        val sample = """
+            ~~~markdown
+            <details>
+            <summary>code sample</summary>
+            still code
+            </details>
+            ~~~
+        """.trimIndent()
+
+        val extraction = extractDetailsBlocks(sample)
+
+        assertEquals(0, extraction.blocks.size)
+        assertEquals(sample, extraction.content)
+    }
+
+    @Test
     fun `prepareDetailsBodyForMarkdown unwraps div body`() {
         val parsed = parseDetailsBlock(
             """
@@ -71,6 +88,48 @@ class DetailsBlockProcessorTest {
             """.trimIndent(),
             prepareDetailsBodyForMarkdown(parsed.bodyRaw)
         )
+    }
+
+    @Test
+    fun `parseDetailsBlock does not treat open in attribute values as open attribute`() {
+        val parsed = parseDetailsBlock(
+            """
+            <details class="open panel">
+            <summary>title</summary>
+            content
+            </details>
+            """.trimIndent()
+        )!!
+
+        assertEquals(false, parsed.openByDefault)
+    }
+
+    @Test
+    fun `parseDetailsBlock ignores open token inside quoted attribute text`() {
+        val parsed = parseDetailsBlock(
+            """
+            <details title="starts open by default">
+            <summary>title</summary>
+            content
+            </details>
+            """.trimIndent()
+        )!!
+
+        assertEquals(false, parsed.openByDefault)
+    }
+
+    @Test
+    fun `parseDetailsBlock keeps real open attribute`() {
+        val parsed = parseDetailsBlock(
+            """
+            <details class="panel" open>
+            <summary>title</summary>
+            content
+            </details>
+            """.trimIndent()
+        )!!
+
+        assertEquals(true, parsed.openByDefault)
     }
 
     @Test
