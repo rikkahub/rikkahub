@@ -45,6 +45,16 @@ class DetailsBlockProcessorTest {
     }
 
     @Test
+    fun `extractDetailsBlocks ignores details tags inside multi backtick code spans`() {
+        val sample = "``<details><summary>code sample</summary>still code</details>``"
+
+        val extraction = extractDetailsBlocks(sample)
+
+        assertEquals(0, extraction.blocks.size)
+        assertEquals(sample, extraction.content)
+    }
+
+    @Test
     fun `extractDetailsBlocks preserves list indentation for placeholder`() {
         val sample = """
             - item

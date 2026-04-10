@@ -12,7 +12,6 @@ data class ParsedDetailsBlock(
 )
 
 private const val DETAILS_PLACEHOLDER_PREFIX = "RIKKAHUBDETAILSBLOCK"
-private val INLINE_CODE_REGEX = Regex("`[^`\n]*`")
 private val ATTRIBUTE_VALUE_REGEX = Regex("\"[^\"]*\"|'[^']*'")
 private val OPEN_ATTRIBUTE_REGEX = Regex("""(?:^|[\s<])open(?=[\s=/>])""", RegexOption.IGNORE_CASE)
 private val SUMMARY_REGEX = Regex("^\\s*(<summary\\b[^>]*>[\\s\\S]*?</summary>)\\s*", setOf(RegexOption.IGNORE_CASE))
@@ -98,7 +97,7 @@ private fun buildDetailsPlaceholder(index: Int): String {
 }
 
 private fun findProtectedRanges(content: String): List<IntRange> {
-    val inlineCodeRanges = INLINE_CODE_REGEX.findAll(content).map { it.range }
+    val inlineCodeRanges = findInlineCodeRanges(content).asSequence()
     val fencedCodeRanges = findFencedCodeBlockRanges(content).asSequence()
 
     return (inlineCodeRanges + fencedCodeRanges)
@@ -112,6 +111,49 @@ private fun findProtectedRanges(content: String): List<IntRange> {
             }
             ranges
         }
+}
+
+private fun findInlineCodeRanges(content: String): List<IntRange> {
+    val ranges = mutableListOf<IntRange>()
+    var cursor = 0
+
+    while (cursor < content.length) {
+        if (content[cursor] != '`') {
+            cursor++
+            continue
+        }
+
+        val delimiterLength = countRepeatedChar(content, cursor, '`')
+        val closingStart = findClosingInlineCodeDelimiter(content, cursor + delimiterLength, delimiterLength)
+        if (closingStart != -1) {
+            ranges.add(cursor until closingStart + delimiterLength)
+            cursor = closingStart + delimiterLength
+        } else {
+            cursor += delimiterLength
+        }
+    }
+
+    return ranges
+}
+
+private fun findClosingInlineCodeDelimiter(content: String, startIndex: Int, delimiterLength: Int): Int {
+    var cursor = startIndex
+
+    while (cursor < content.length) {
+        val nextBacktick = content.indexOf('`', cursor)
+        if (nextBacktick == -1) {
+            return -1
+        }
+
+        val runLength = countRepeatedChar(content, nextBacktick, '`')
+        if (runLength == delimiterLength) {
+            return nextBacktick
+        }
+
+        cursor = nextBacktick + runLength
+    }
+
+    return -1
 }
 
 private fun findFencedCodeBlockRanges(content: String): List<IntRange> {
