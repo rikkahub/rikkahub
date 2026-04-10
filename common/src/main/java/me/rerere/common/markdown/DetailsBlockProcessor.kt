@@ -34,9 +34,7 @@ fun extractDetailsBlocks(content: String): DetailsBlockExtraction {
         blocks[placeholder] = content.substring(openStart, blockEnd)
 
         result.append(content, cursor, openStart)
-        result.append('\n')
         result.append(placeholder)
-        result.append('\n')
         cursor = blockEnd
     }
 

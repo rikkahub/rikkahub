@@ -45,6 +45,24 @@ class DetailsBlockProcessorTest {
     }
 
     @Test
+    fun `extractDetailsBlocks preserves list indentation for placeholder`() {
+        val sample = """
+            - item
+              <details>
+              <summary>more</summary>
+              body
+              </details>
+            - next
+        """.trimIndent()
+
+        val extraction = extractDetailsBlocks(sample)
+
+        assertEquals(1, extraction.blocks.size)
+        val placeholder = extraction.blocks.keys.single()
+        assertTrue(extraction.content.contains("\n  $placeholder\n"))
+    }
+
+    @Test
     fun `prepareDetailsBodyForMarkdown unwraps div body`() {
         val parsed = parseDetailsBlock(
             """
