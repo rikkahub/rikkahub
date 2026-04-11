@@ -25,7 +25,7 @@
   </queries>
 
   <application
-    android:name=".RikkaHubApp"
+    android:name=".HFFChatApp"
     android:largeHeap="true"
     android:allowBackup="true"
     android:appCategory="productivity"
@@ -35,19 +35,19 @@
     android:icon="@mipmap/ic_launcher"
     android:label="@string/app_name"
     android:supportsRtl="true"
-    android:theme="@style/Theme.Rikkahub"
+    android:theme="@style/Theme.HFFChat"
     android:usesCleartextTraffic="true"
     tools:targetApi="33">
     <activity
       android:name=".ui.activity.SafeModeActivity"
       android:exported="false"
       android:label="@string/title_activity_safe_mode"
-      android:theme="@style/Theme.Rikkahub" />
+      android:theme="@style/Theme.HFFChat" />
     <activity
       android:name=".RouteActivity"
       android:configChanges="keyboardHidden|orientation|screenSize"
       android:exported="true"
-      android:theme="@style/Theme.Rikkahub"
+      android:theme="@style/Theme.HFFChat"
       android:windowSoftInputMode="adjustResize">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
@@ -84,7 +84,7 @@
 
         <data
           android:host="shortcut"
-          android:scheme="rikkahub" />
+          android:scheme="hffchat" />
       </intent-filter>
     </activity>
     <activity
