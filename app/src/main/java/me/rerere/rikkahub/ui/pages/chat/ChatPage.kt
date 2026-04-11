@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -43,6 +44,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
@@ -58,6 +61,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -72,6 +76,48 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
+
+internal sealed interface InitialChatScrollTarget {
+    data object Bottom : InitialChatScrollTarget
+    data class Node(val index: Int) : InitialChatScrollTarget
+}
+
+internal fun resolveInitialChatScrollTarget(
+    chatListInitialized: Boolean,
+    nodeId: Uuid?,
+    messageNodes: List<MessageNode>
+): InitialChatScrollTarget? {
+    if (chatListInitialized) return null
+
+    if (nodeId != null) {
+        val targetIndex = messageNodes.indexOfFirst { it.id == nodeId }
+        if (targetIndex >= 0) {
+            return InitialChatScrollTarget.Node(targetIndex)
+        }
+    }
+
+    return if (messageNodes.isNotEmpty()) {
+        InitialChatScrollTarget.Bottom
+    } else {
+        null
+    }
+}
+
+internal fun requiredItemCount(
+    target: InitialChatScrollTarget,
+    messageNodeCount: Int
+): Int = when (target) {
+    InitialChatScrollTarget.Bottom -> messageNodeCount + 1
+    is InitialChatScrollTarget.Node -> target.index + 1
+}
+
+internal fun resolveScrollIndex(
+    target: InitialChatScrollTarget,
+    totalItemCount: Int
+): Int = when (target) {
+    InitialChatScrollTarget.Bottom -> (totalItemCount - 1).coerceAtLeast(0)
+    is InitialChatScrollTarget.Node -> target.index
+}
 
 @Composable
 fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
@@ -143,21 +189,20 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val chatListState = rememberLazyListState()
-    LaunchedEffect(vm) {
-        if (nodeId == null && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
-            chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
-            vm.chatListInitialized = true
-        }
-    }
+    val initialScrollTarget = resolveInitialChatScrollTarget(
+        chatListInitialized = vm.chatListInitialized,
+        nodeId = nodeId,
+        messageNodes = conversation.messageNodes
+    )
+    LaunchedEffect(initialScrollTarget, conversation.messageNodes.size) {
+        val target = initialScrollTarget ?: return@LaunchedEffect
+        val itemCount = requiredItemCount(target, conversation.messageNodes.size)
+        val totalItemCount = snapshotFlow { chatListState.layoutInfo.totalItemsCount }
+            .distinctUntilChanged()
+            .first { it >= itemCount }
 
-    LaunchedEffect(nodeId, conversation.messageNodes.size) {
-        if (nodeId != null && conversation.messageNodes.isNotEmpty() && !vm.chatListInitialized) {
-            val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
-            if (index >= 0) {
-                chatListState.scrollToItem(index)
-            }
-            vm.chatListInitialized = true
-        }
+        chatListState.requestScrollToItem(resolveScrollIndex(target, totalItemCount))
+        vm.chatListInitialized = true
     }
 
     when {
