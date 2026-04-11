@@ -1,9 +1,11 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -184,6 +186,42 @@ class ClaudeProviderMessageTest {
         }?.jsonObject
         assertEquals("Let me think about this...",
             thinkingBlock?.get("thinking")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `thinking block should keep signature in the same content block`() {
+        val assistantMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(
+                    reasoning = "Let me think about this...",
+                    metadata = buildJsonObject {
+                        put("signature", "sig-1")
+                    }
+                ),
+                UIMessagePart.Text("Here is my response")
+            )
+        )
+
+        val result = invokeBuildMessages(
+            listOf(
+                UIMessage.user("Question"),
+                assistantMessage
+            )
+        )
+
+        val assistantMsg = result.find {
+            it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
+        }!!.jsonObject
+
+        val thinkingBlocks = assistantMsg["content"]!!.jsonArray.filter {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "thinking"
+        }
+
+        assertEquals(1, thinkingBlocks.size)
+        val thinkingBlock = thinkingBlocks.single().jsonObject
+        assertEquals("Let me think about this...", thinkingBlock["thinking"]?.jsonPrimitive?.content)
+        assertEquals("sig-1", thinkingBlock["signature"]?.jsonPrimitive?.content)
     }
 
     @Test

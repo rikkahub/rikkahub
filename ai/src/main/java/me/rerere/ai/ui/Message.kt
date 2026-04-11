@@ -33,6 +33,40 @@ data class UIMessage(
         val choice = chunk.choices.getOrNull(0)
         val message = choice?.delta ?: choice?.message
         return message?.let { delta ->
+            fun mergeMetadata(existing: JsonObject?, incoming: JsonObject?): JsonObject? {
+                return when {
+                    existing == null -> incoming
+                    incoming == null -> existing
+                    else -> JsonObject(existing + incoming)
+                }
+            }
+
+            fun List<UIMessagePart>.mergeSignatureOnlyReasoning(
+                deltaPart: UIMessagePart.Reasoning
+            ): List<UIMessagePart> {
+                val unfinishedIndex = indexOfLast {
+                    it is UIMessagePart.Reasoning && it.finishedAt == null
+                }
+                val targetIndex = if (unfinishedIndex >= 0) {
+                    unfinishedIndex
+                } else {
+                    indexOfLast { it is UIMessagePart.Reasoning }
+                }
+
+                if (targetIndex < 0) return this
+
+                return mapIndexed { index, part ->
+                    if (index == targetIndex) {
+                        val reasoningPart = part as UIMessagePart.Reasoning
+                        reasoningPart.copy().also {
+                            it.metadata = mergeMetadata(reasoningPart.metadata, deltaPart.metadata)
+                        }
+                    } else {
+                        part
+                    }
+                }
+            }
+
             // Handle Parts
             var newParts = delta.parts.fold(parts) { acc, deltaPart ->
                 when (deltaPart) {
@@ -73,6 +107,13 @@ data class UIMessage(
                         // Skip empty reasoning deltas
                         if (deltaPart.reasoning.isEmpty() && deltaPart.metadata == null) {
                             acc
+                        } else if (
+                            deltaPart.reasoning.isEmpty() &&
+                            deltaPart.metadata?.containsKey("signature") == true
+                        ) {
+                            // Anthropic/OpenRouter may send signature_delta after text content.
+                            // Attach it to the nearest reasoning block instead of creating an empty one.
+                            acc.mergeSignatureOnlyReasoning(deltaPart)
                         } else {
                             val lastPart = acc.lastOrNull()
                             if (lastPart is UIMessagePart.Reasoning) {
@@ -82,7 +123,7 @@ data class UIMessage(
                                     createdAt = lastPart.createdAt,
                                     finishedAt = null,
                                 ).also {
-                                    it.metadata = deltaPart.metadata ?: lastPart.metadata
+                                    it.metadata = mergeMetadata(lastPart.metadata, deltaPart.metadata)
                                 }
                             } else {
                                 // Create new Reasoning part

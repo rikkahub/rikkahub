@@ -1,5 +1,8 @@
 package me.rerere.ai.ui
 
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.ai.core.MessageRole
 import org.junit.Assert.assertEquals
@@ -173,6 +176,142 @@ class MessageTest {
         )
 
         assertTrue(message.isValidToUpload())
+    }
+
+    @Test
+    fun `handleMessageChunk should merge signature-only reasoning delta into existing reasoning`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(
+                        reasoning = "thinking",
+                        finishedAt = null
+                    )
+                )
+            )
+        )
+
+        val chunk = MessageChunk(
+            id = "chunk-1",
+            model = "claude-test",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Reasoning(
+                                reasoning = "",
+                                finishedAt = null,
+                                metadata = buildJsonObject {
+                                    put("signature", "sig-1")
+                                }
+                            )
+                        )
+                    ),
+                    message = null,
+                    finishReason = null
+                )
+            )
+        )
+
+        val result = messages.handleMessageChunk(chunk)
+        val reasoning = result.single().parts.single() as UIMessagePart.Reasoning
+
+        assertEquals(1, result.single().parts.size)
+        assertEquals("thinking", reasoning.reasoning)
+        assertEquals("sig-1", reasoning.metadata?.get("signature")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `handleMessageChunk should merge signature-only reasoning delta to latest reasoning after text`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(
+                        reasoning = "thinking",
+                        finishedAt = null
+                    ),
+                    UIMessagePart.Text("visible text")
+                )
+            )
+        )
+
+        val chunk = MessageChunk(
+            id = "chunk-2",
+            model = "claude-test",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Reasoning(
+                                reasoning = "",
+                                finishedAt = null,
+                                metadata = buildJsonObject {
+                                    put("signature", "sig-2")
+                                }
+                            )
+                        )
+                    ),
+                    message = null,
+                    finishReason = null
+                )
+            )
+        )
+
+        val result = messages.handleMessageChunk(chunk)
+        val parts = result.single().parts
+
+        assertEquals(2, parts.size)
+        assertTrue(parts[0] is UIMessagePart.Reasoning)
+        assertTrue(parts[1] is UIMessagePart.Text)
+        assertEquals("sig-2", (parts[0] as UIMessagePart.Reasoning).metadata?.get("signature")?.jsonPrimitive?.content)
+        assertEquals("visible text", (parts[1] as UIMessagePart.Text).text)
+    }
+
+    @Test
+    fun `handleMessageChunk should ignore orphan signature-only reasoning delta`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Text("visible text"))
+            )
+        )
+
+        val chunk = MessageChunk(
+            id = "chunk-3",
+            model = "claude-test",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Reasoning(
+                                reasoning = "",
+                                finishedAt = null,
+                                metadata = buildJsonObject {
+                                    put("signature", "sig-3")
+                                }
+                            )
+                        )
+                    ),
+                    message = null,
+                    finishReason = null
+                )
+            )
+        )
+
+        val result = messages.handleMessageChunk(chunk)
+        val parts = result.single().parts
+
+        assertEquals(1, parts.size)
+        assertTrue(parts.single() is UIMessagePart.Text)
+        assertEquals("visible text", (parts.single() as UIMessagePart.Text).text)
     }
 
     // ==================== migrateToolMessages Tests ====================
