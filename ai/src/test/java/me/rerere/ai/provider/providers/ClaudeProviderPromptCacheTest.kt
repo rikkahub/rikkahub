@@ -223,13 +223,14 @@ class ClaudeProviderPromptCacheTest {
     }
 
     @Test
-    fun `legacy Claude auto should not send adaptive thinking`() {
+    fun `legacy Claude auto should use adaptive thinking without effort`() {
         val request = reasoningRequest(
             modelId = "claude-sonnet-4-5-20250929",
             thinkingBudget = -1
         )
 
-        assertNull(request["thinking"])
+        val thinking = request["thinking"]!!.jsonObject
+        assertEquals("adaptive", thinking["type"]!!.jsonPrimitive.content)
         assertNull(request["output_config"])
     }
 
@@ -289,6 +290,18 @@ class ClaudeProviderPromptCacheTest {
         val thinking = request["thinking"]!!.jsonObject
         assertEquals("enabled", thinking["type"]!!.jsonPrimitive.content)
         assertEquals(5000, thinking["budget_tokens"]!!.jsonPrimitive.int)
+        assertNull(request["output_config"])
+    }
+
+    @Test
+    fun `OFF should keep disabled thinking`() {
+        val request = reasoningRequest(
+            modelId = "claude-opus-4-6-20251001",
+            thinkingBudget = 0
+        )
+
+        val thinking = request["thinking"]!!.jsonObject
+        assertEquals("disabled", thinking["type"]!!.jsonPrimitive.content)
         assertNull(request["output_config"])
     }
 }

@@ -339,37 +339,21 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             )
         }
 
-        if (!supportsAdaptiveThinking(modelId)) {
-            if (exactLevel == ReasoningLevel.AUTO) {
-                return ClaudeThinkingConfig(thinking = null)
-            }
-
-            if ((thinkingBudget ?: 0) > 0) {
-                return ClaudeThinkingConfig(
-                    thinking = buildJsonObject {
-                        put("type", "enabled")
-                        put("budget_tokens", thinkingBudget ?: 1024)
-                    }
-                )
-            }
-
+        if (exactLevel == ReasoningLevel.AUTO) {
             return ClaudeThinkingConfig(
-                thinking = buildJsonObject {
-                    put("type", "disabled")
-                }
-            )
-        }
-
-        return when (exactLevel) {
-            ReasoningLevel.AUTO -> ClaudeThinkingConfig(
                 thinking = buildJsonObject {
                     put("type", "adaptive")
                 }
             )
+        }
 
-            ReasoningLevel.LOW,
-            ReasoningLevel.MEDIUM,
-            ReasoningLevel.HIGH -> ClaudeThinkingConfig(
+        if (supportsEffortPresetMapping(modelId) && exactLevel in setOf(
+                ReasoningLevel.LOW,
+                ReasoningLevel.MEDIUM,
+                ReasoningLevel.HIGH
+            )
+        ) {
+            return ClaudeThinkingConfig(
                 thinking = buildJsonObject {
                     put("type", "adaptive")
                 },
@@ -377,25 +361,25 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     put("effort", exactLevel.effort)
                 }
             )
+        }
 
-            else -> if ((thinkingBudget ?: 0) > 0) {
-                ClaudeThinkingConfig(
-                    thinking = buildJsonObject {
-                        put("type", "enabled")
-                        put("budget_tokens", thinkingBudget ?: 1024)
-                    }
-                )
-            } else {
-                ClaudeThinkingConfig(
-                    thinking = buildJsonObject {
-                        put("type", "disabled")
-                    }
-                )
-            }
+        return if ((thinkingBudget ?: 0) > 0) {
+            ClaudeThinkingConfig(
+                thinking = buildJsonObject {
+                    put("type", "enabled")
+                    put("budget_tokens", thinkingBudget ?: 1024)
+                }
+            )
+        } else {
+            ClaudeThinkingConfig(
+                thinking = buildJsonObject {
+                    put("type", "disabled")
+                }
+            )
         }
     }
 
-    private fun supportsAdaptiveThinking(modelId: String): Boolean {
+    private fun supportsEffortPresetMapping(modelId: String): Boolean {
         val normalizedModelId = modelId.lowercase()
         return normalizedModelId.contains("claude-opus-4-6") ||
             normalizedModelId.contains("claude-sonnet-4-6")
