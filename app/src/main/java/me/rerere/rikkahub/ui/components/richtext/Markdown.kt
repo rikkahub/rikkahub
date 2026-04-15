@@ -32,7 +32,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
@@ -184,6 +183,23 @@ private fun MarkdownPreview() {
     }
 }
 
+private data class MarkdownParseResult(
+    val preprocessed: String,
+    val astTree: ASTNode,
+    val hasHtmlBlocks: Boolean,
+)
+
+private fun ASTNode.containsHtmlBlocks(): Boolean {
+    if (type == MarkdownElementTypes.HTML_BLOCK) return true
+    return children.any { it.containsHtmlBlocks() }
+}
+
+private fun parseMarkdown(content: String): MarkdownParseResult {
+    val preprocessed = preProcess(content)
+    val astTree = parser.buildMarkdownTreeFromString(preprocessed)
+    return MarkdownParseResult(preprocessed, astTree, astTree.containsHtmlBlocks())
+}
+
 @Composable
 fun MarkdownBlock(
     content: String,
@@ -191,38 +207,37 @@ fun MarkdownBlock(
     style: TextStyle = LocalTextStyle.current,
     onClickCitation: (String) -> Unit = {}
 ) {
-    var (data, setData) = remember {
-        val preprocessed = preProcess(content)
-        val astTree = parser.buildMarkdownTreeFromString(preprocessed)
-        mutableStateOf(
-            value = preprocessed to astTree,
-            policy = referentialEqualityPolicy(),
-        )
-    }
+    var (data, setData) = remember { mutableStateOf(parseMarkdown(content)) }
 
     // 监听内容变化，重新解析AST树
     // 这里在后台线程解析AST树, 防止频繁更新的时候掉帧
     val updatedContent by rememberUpdatedState(content)
     LaunchedEffect(Unit) {
-        snapshotFlow { updatedContent }.distinctUntilChanged().mapLatest {
-            val preprocessed = preProcess(it)
-            val astTree = parser.buildMarkdownTreeFromString(preprocessed)
-            preprocessed to astTree
-        }.catch { exception -> exception.printStackTrace() }.flowOn(Dispatchers.Default) // 在后台线程解析AST树
-            .collect {
-                setData(it)
-            }
+        snapshotFlow { updatedContent }
+            .distinctUntilChanged()
+            .mapLatest { parseMarkdown(it) }
+            .catch { exception -> exception.printStackTrace() }
+            .flowOn(Dispatchers.Default)
+            .collect { setData(it) }
     }
 
-    val (preprocessed, astTree) = data
-    ProvideTextStyle(style) {
-        Column(
-            modifier = modifier.padding(start = 4.dp)
-        ) {
-            astTree.children.fastForEach { child ->
-                MarkdownNode(
-                    node = child, content = preprocessed, onClickCitation = onClickCitation
-                )
+    if (data.hasHtmlBlocks) {
+        MarkdownNew(
+            content = content,
+            modifier = modifier,
+            style = style,
+            onClickCitation = onClickCitation,
+        )
+    } else {
+        ProvideTextStyle(style) {
+            Column(
+                modifier = modifier.padding(start = 4.dp)
+            ) {
+                data.astTree.children.fastForEach { child ->
+                    MarkdownNode(
+                        node = child, content = data.preprocessed, onClickCitation = onClickCitation
+                    )
+                }
             }
         }
     }

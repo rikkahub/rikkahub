@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
@@ -29,7 +30,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -229,6 +229,8 @@ private fun HtmlBlockElement(
         }
 
         "details" -> HtmlDetails(element = element, onClickCitation = onClickCitation)
+
+        "progress" -> HtmlProgress(element = element)
 
         "div" -> {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -574,6 +576,33 @@ private fun HtmlDetails(element: Element, onClickCitation: (String) -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun HtmlProgress(element: Element) {
+    val value = element.attr("value").toFloatOrNull() ?: 0f
+    val max = element.attr("max").toFloatOrNull()?.takeIf { it > 0 } ?: 100f
+    val progress = (value / max).coerceIn(0f, 1f)
+
+    val style = element.attr("style")
+    val widthValue = style.split(";")
+        .mapNotNull { it.split(":").takeIf { p -> p.size == 2 }?.let { p -> p[0].trim() to p[1].trim() } }
+        .toMap()["width"] ?: element.attr("width")
+
+    val widthModifier = when {
+        widthValue.endsWith("%") -> widthValue.removeSuffix("%").toFloatOrNull()
+            ?.let { Modifier.fillMaxWidth(it / 100f) } ?: Modifier.fillMaxWidth()
+        widthValue.endsWith("px") -> widthValue.removeSuffix("px").toIntOrNull()
+            ?.let { Modifier.width(it.dp) } ?: Modifier.fillMaxWidth()
+        widthValue.isNotEmpty() -> widthValue.toIntOrNull()
+            ?.let { Modifier.width(it.dp) } ?: Modifier.fillMaxWidth()
+        else -> Modifier.fillMaxWidth()
+    }
+
+    androidx.compose.material3.LinearProgressIndicator(
+        progress = { progress },
+        modifier = widthModifier.padding(vertical = 4.dp),
+    )
 }
 
 // ---- Inline group rendering (for list items with mixed inline nodes) ----
