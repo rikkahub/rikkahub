@@ -131,23 +131,24 @@ class FilesManager(
             dir.mkdirs()
         }
         uris.forEach { uri ->
-            val sourceName = getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "file"
-            val sourceMime = getFileMimeType(uri)
-            val fileName = buildUuidFileName(displayName = sourceName, mimeType = sourceMime)
-            val file = dir.resolve(fileName)
-            if (!file.exists()) {
-                file.createNewFile()
-            }
-            val newUri = file.toUri()
             runCatching {
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    file.outputStream().use { outputStream ->
-                        inputStream.copyTo(outputStream)
+                val sourceName = getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "file"
+                val sourceMime = getFileMimeType(uri)
+                val fileName = buildUuidFileName(displayName = sourceName, mimeType = sourceMime)
+                val file = dir.resolve(fileName)
+                if (!file.exists()) {
+                    file.createNewFile()
+                }
+                val inputStream = context.contentResolver.openInputStream(uri)
+                    ?: error("Failed to open input stream for $uri")
+                inputStream.use { input ->
+                    file.outputStream().use { output ->
+                        input.copyTo(output)
                     }
                 }
                 val guessedMime = sourceMime ?: guessMimeType(file, sourceName)
                 trackUploadFile(file = file, displayName = sourceName, mimeType = guessedMime)
-                newUris.add(newUri)
+                newUris.add(file.toUri())
             }.onFailure {
                 it.printStackTrace()
                 Log.e(TAG, "createChatFilesByContents: Failed to save file from $uri", it)
@@ -425,31 +426,39 @@ class FilesManager(
     }
 
     fun getFileNameFromUri(uri: Uri): String? {
-        var fileName: String? = null
-        val projection = arrayOf(
-            OpenableColumns.DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME
-        )
-        context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val documentDisplayNameIndex =
-                    cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                if (documentDisplayNameIndex != -1) {
-                    fileName = cursor.getString(documentDisplayNameIndex)
-                } else {
-                    val openableDisplayNameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (openableDisplayNameIndex != -1) {
-                        fileName = cursor.getString(openableDisplayNameIndex)
+        return runCatching {
+            var fileName: String? = null
+            val projection = arrayOf(
+                OpenableColumns.DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME
+            )
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val documentDisplayNameIndex =
+                        cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    if (documentDisplayNameIndex != -1) {
+                        fileName = cursor.getString(documentDisplayNameIndex)
+                    } else {
+                        val openableDisplayNameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (openableDisplayNameIndex != -1) {
+                            fileName = cursor.getString(openableDisplayNameIndex)
+                        }
                     }
                 }
             }
-        }
-        return fileName
+            fileName
+        }.onFailure {
+            Log.w(TAG, "getFileNameFromUri: Failed to query display name for $uri", it)
+        }.getOrNull()
     }
 
     fun getFileMimeType(uri: Uri): String? {
         return when (uri.scheme) {
-            "content" -> context.contentResolver.getType(uri)
+            "content" -> runCatching {
+                context.contentResolver.getType(uri)
+            }.onFailure {
+                Log.w(TAG, "getFileMimeType: Failed to resolve MIME for $uri", it)
+            }.getOrNull()
             else -> null
         }
     }
