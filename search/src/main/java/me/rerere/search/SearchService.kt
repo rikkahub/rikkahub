@@ -240,6 +240,8 @@ sealed class SearchServiceOptions {
     data class JinaOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
+        val searchUrl: String = "https://s.jina.ai/",
+        val scrapeUrl: String = "https://r.jina.ai/",
     ) : SearchServiceOptions()
 
     @Serializable
