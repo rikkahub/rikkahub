@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
@@ -60,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
+import androidx.core.graphics.toColorInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -759,6 +761,10 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
         appendHtmlInlineNode(it, colorScheme, inlineContents, density, style, enableLatexRendering, onClickCitation)
     }
 
+    fun appendStyledChildren(spanStyle: SpanStyle) = withStyle(spanStyle) {
+        recurseChildren(element)
+    }
+
     when (element.tagName().lowercase()) {
         "b", "strong" -> withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { recurseChildren(element) }
 
@@ -871,6 +877,20 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
                     }
                 }
             } else {
+                val inlineStyle = element.attr("style").takeIf { it.isNotBlank() }?.let(::parseInlineSpanStyle)
+                if (inlineStyle != null) {
+                    appendStyledChildren(inlineStyle)
+                } else {
+                    recurseChildren(element)
+                }
+            }
+        }
+
+        "font" -> {
+            val inlineStyle = buildFontTagStyle(element)
+            if (inlineStyle != null) {
+                appendStyledChildren(inlineStyle)
+            } else {
                 recurseChildren(element)
             }
         }
@@ -878,5 +898,171 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
         "br" -> append("\n")
 
         else -> recurseChildren(element)
+    }
+}
+
+private fun buildFontTagStyle(element: Element): SpanStyle? {
+    val color = element.attr("color").takeIf { it.isNotBlank() }?.let(::parseColor)
+    val baseStyle = element.attr("style").takeIf { it.isNotBlank() }?.let(::parseInlineSpanStyle)
+    if (color == null && baseStyle == null) return null
+    return (baseStyle ?: SpanStyle()).merge(SpanStyle(color = color ?: Color.Unspecified))
+}
+
+private fun parseInlineSpanStyle(style: String): SpanStyle? {
+    val properties = style
+        .split(";")
+        .mapNotNull { property ->
+            val parts = property.split(":", limit = 2)
+            if (parts.size == 2) parts[0].trim().lowercase() to parts[1].trim() else null
+        }
+        .toMap()
+
+    var hasStyle = false
+    var spanStyle = SpanStyle()
+
+    properties["color"]?.let { value ->
+        parseColor(value)?.let {
+            spanStyle = spanStyle.merge(SpanStyle(color = it))
+            hasStyle = true
+        }
+    }
+
+    properties["background-color"]?.let { value ->
+        parseColor(value)?.let {
+            spanStyle = spanStyle.merge(SpanStyle(background = it))
+            hasStyle = true
+        }
+    }
+
+    properties["font-weight"]?.let { value ->
+        parseFontWeight(value)?.let {
+            spanStyle = spanStyle.merge(SpanStyle(fontWeight = it))
+            hasStyle = true
+        }
+    }
+
+    properties["font-style"]?.let { value ->
+        parseFontStyle(value)?.let {
+            spanStyle = spanStyle.merge(SpanStyle(fontStyle = it))
+            hasStyle = true
+        }
+    }
+
+    properties["text-decoration"]?.let { value ->
+        parseTextDecoration(value)?.let {
+            spanStyle = spanStyle.merge(SpanStyle(textDecoration = it))
+            hasStyle = true
+        }
+    }
+
+    return spanStyle.takeIf { hasStyle }
+}
+
+private fun parseColor(colorString: String): Color? {
+    return try {
+        when {
+            colorString.startsWith("#") -> {
+                val hex = colorString.removePrefix("#")
+                when (hex.length) {
+                    6 -> Color("#$hex".toColorInt())
+                    3 -> {
+                        val r = hex[0].toString().repeat(2)
+                        val g = hex[1].toString().repeat(2)
+                        val b = hex[2].toString().repeat(2)
+                        Color("#$r$g$b".toColorInt())
+                    }
+
+                    else -> null
+                }
+            }
+
+            colorString.startsWith("rgb(") -> {
+                val rgb = colorString.removePrefix("rgb(").removeSuffix(")")
+                val values = rgb.split(",").map { it.trim().toIntOrNull() }
+                if (values.size == 3 && values.all { it != null && it in 0..255 }) {
+                    Color(values[0]!!, values[1]!!, values[2]!!)
+                } else null
+            }
+
+            colorString.startsWith("rgba(") -> {
+                val rgba = colorString.removePrefix("rgba(").removeSuffix(")")
+                val values = rgba.split(",").map { it.trim() }
+                if (values.size == 4) {
+                    val r = values[0].toIntOrNull()
+                    val g = values[1].toIntOrNull()
+                    val b = values[2].toIntOrNull()
+                    val a = values[3].toFloatOrNull()
+                    if (r != null && g != null && b != null && a != null &&
+                        r in 0..255 && g in 0..255 && b in 0..255 && a in 0f..1f
+                    ) {
+                        Color(r, g, b, (a * 255).toInt())
+                    } else null
+                } else null
+            }
+
+            else -> {
+                when (colorString.lowercase()) {
+                    "red" -> Color.Red
+                    "green" -> Color.Green
+                    "blue" -> Color.Blue
+                    "black" -> Color.Black
+                    "white" -> Color.White
+                    "gray", "grey" -> Color.Gray
+                    "yellow" -> Color.Yellow
+                    "cyan" -> Color.Cyan
+                    "magenta" -> Color.Magenta
+                    "orange" -> Color(0xFFFFA500)
+                    "purple" -> Color(0xFF800080)
+                    "brown" -> Color(0xFFA52A2A)
+                    "pink" -> Color(0xFFFFC0CB)
+                    else -> null
+                }
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun parseFontWeight(weightString: String): FontWeight? {
+    return when (weightString.lowercase()) {
+        "normal" -> FontWeight.Normal
+        "bold" -> FontWeight.SemiBold
+        "bolder" -> FontWeight.ExtraBold
+        "lighter" -> FontWeight.Light
+        "100" -> FontWeight.W100
+        "200" -> FontWeight.W200
+        "300" -> FontWeight.W300
+        "400" -> FontWeight.W400
+        "500" -> FontWeight.W500
+        "600" -> FontWeight.W600
+        "700" -> FontWeight.W700
+        "800" -> FontWeight.W800
+        "900" -> FontWeight.W900
+        else -> null
+    }
+}
+
+private fun parseFontStyle(fontStyle: String): FontStyle? {
+    return when (fontStyle.lowercase()) {
+        "italic", "oblique" -> FontStyle.Italic
+        "normal" -> FontStyle.Normal
+        else -> null
+    }
+}
+
+private fun parseTextDecoration(textDecoration: String): TextDecoration? {
+    val parts = textDecoration.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (parts.isEmpty()) return null
+
+    val decorations = buildList {
+        if ("underline" in parts) add(TextDecoration.Underline)
+        if ("line-through" in parts) add(TextDecoration.LineThrough)
+    }
+
+    return when (decorations.size) {
+        0 -> null
+        1 -> decorations.first()
+        else -> TextDecoration.combine(decorations)
     }
 }
