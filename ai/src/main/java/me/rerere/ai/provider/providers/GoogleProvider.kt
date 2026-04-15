@@ -35,6 +35,7 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
@@ -64,6 +65,7 @@ import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
+import org.apache.commons.text.StringEscapeUtils
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
@@ -71,28 +73,43 @@ private const val TAG = "GoogleProvider"
 
 class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+    private val serviceAccountTokenProvider by lazy {
+        ServiceAccountTokenProvider(client)
+    }
 
     private fun buildUrl(providerSetting: ProviderSetting.Google, path: String): HttpUrl {
         return if (!providerSetting.vertexAI) {
             "${providerSetting.baseUrl}/$path".toHttpUrl()
+        } else if (providerSetting.useServiceAccount) {
+            "https://aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/$path".toHttpUrl()
         } else {
             "https://aiplatform.googleapis.com/v1/$path".toHttpUrl()
         }
     }
 
-    private fun transformRequest(
+    private suspend fun transformRequest(
         providerSetting: ProviderSetting.Google,
         request: Request
     ): Request {
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
-        return if (providerSetting.vertexAI) {
+        return if (providerSetting.vertexAI && providerSetting.useServiceAccount) {
+            val accessToken = serviceAccountTokenProvider.fetchAccessToken(
+                serviceAccountEmail = providerSetting.serviceAccountEmail.trim(),
+                privateKeyPem = StringEscapeUtils.unescapeJson(providerSetting.privateKey.trim()),
+            )
             request.newBuilder()
-                .url(request.url.newBuilder().addQueryParameter("key", key).build())
+                .addHeader("Authorization", "Bearer $accessToken")
                 .build()
         } else {
-            request.newBuilder()
-                .addHeader("x-goog-api-key", key)
-                .build()
+            val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+            if (providerSetting.vertexAI) {
+                request.newBuilder()
+                    .url(request.url.newBuilder().addQueryParameter("key", key).build())
+                    .build()
+            } else {
+                request.newBuilder()
+                    .addHeader("x-goog-api-key", key)
+                    .build()
+            }
         }
     }
 

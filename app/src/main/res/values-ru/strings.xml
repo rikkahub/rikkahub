@@ -835,6 +835,7 @@
   <string name="setting_provider_page_title">Провайдеры</string>
   <string name="setting_provider_page_tool">Инструмент</string>
   <string name="setting_provider_page_vertex_ai">Vertex AI</string>
+  <string name="setting_provider_page_use_service_account">Использовать сервисный аккаунт</string>
   <string name="setting_tts_page_add">Добавить</string>
   <string name="setting_tts_page_add_provider">Добавить поставщика TTS</string>
   <string name="setting_tts_page_add_provider_content_description">Добавить поставщика TTS</string>
@@ -971,4 +972,6 @@
   <string name="video">Видео</string>
   <string name="web_search_disabled">Веб-поиск отключён</string>
   <string name="web_search_enabled">Веб-поиск включён</string>
+  <string name="setting_provider_page_import_service_account_json">Импорт JSON-файла служебной учётной записи</string>
 </resources>
+

@@ -835,6 +835,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_title">プロバイダー</string>
   <string name="setting_provider_page_tool">ツール</string>
   <string name="setting_provider_page_vertex_ai">Vertex AI</string>
+  <string name="setting_provider_page_use_service_account">サービスアカウントを使用</string>
   <string name="setting_tts_page_add">追加</string>
   <string name="setting_tts_page_add_provider">TTSプロバイダーを追加</string>
   <string name="setting_tts_page_add_provider_content_description">TTSプロバイダーを追加</string>
@@ -971,4 +972,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="video">動画</string>
   <string name="web_search_disabled">ウェブ検索が無効になりました</string>
   <string name="web_search_enabled">ウェブ検索が有効になりました</string>
+  <string name="setting_provider_page_import_service_account_json">サービスアカウントJSONをインポート</string>
 </resources>
+

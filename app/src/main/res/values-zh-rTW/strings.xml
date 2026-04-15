@@ -833,6 +833,7 @@
   <string name="setting_provider_page_title">提供商</string>
   <string name="setting_provider_page_tool">工具</string>
   <string name="setting_provider_page_vertex_ai">Vertex AI</string>
+  <string name="setting_provider_page_use_service_account">使用服務帳號</string>
   <string name="setting_tts_page_add">新增</string>
   <string name="setting_tts_page_add_provider">新增TTS提供商</string>
   <string name="setting_tts_page_add_provider_content_description">新增TTS提供商</string>
@@ -969,4 +970,6 @@
   <string name="video">影片</string>
   <string name="web_search_disabled">已禁用網頁搜尋</string>
   <string name="web_search_enabled">已啟用網頁搜尋</string>
+  <string name="setting_provider_page_import_service_account_json">匯入服務帳戶 JSON</string>
 </resources>
+
