@@ -1052,4 +1052,41 @@ private fun GrokOptions(
             modifier = Modifier.fillMaxWidth()
         )
     }
+
+    FormItem(
+        label = {
+            Text("Custom URL")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.customUrl,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        customUrl = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text("System Prompt")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.systemPrompt,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        systemPrompt = it
+                    )
+                )
+            },
+            minLines = 3,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
