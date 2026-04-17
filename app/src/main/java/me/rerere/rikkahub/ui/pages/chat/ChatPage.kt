@@ -61,7 +61,6 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -77,46 +76,9 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
 
-internal sealed interface InitialChatScrollTarget {
-    data object Bottom : InitialChatScrollTarget
+private sealed interface InitialChatScrollTarget {
+    data class Bottom(val requiredItemCount: Int) : InitialChatScrollTarget
     data class Node(val index: Int) : InitialChatScrollTarget
-}
-
-internal fun resolveInitialChatScrollTarget(
-    chatListInitialized: Boolean,
-    nodeId: Uuid?,
-    messageNodes: List<MessageNode>
-): InitialChatScrollTarget? {
-    if (chatListInitialized) return null
-
-    if (nodeId != null) {
-        val targetIndex = messageNodes.indexOfFirst { it.id == nodeId }
-        if (targetIndex >= 0) {
-            return InitialChatScrollTarget.Node(targetIndex)
-        }
-    }
-
-    return if (messageNodes.isNotEmpty()) {
-        InitialChatScrollTarget.Bottom
-    } else {
-        null
-    }
-}
-
-internal fun requiredItemCount(
-    target: InitialChatScrollTarget,
-    messageNodeCount: Int
-): Int = when (target) {
-    InitialChatScrollTarget.Bottom -> messageNodeCount + 1
-    is InitialChatScrollTarget.Node -> target.index + 1
-}
-
-internal fun resolveScrollIndex(
-    target: InitialChatScrollTarget,
-    totalItemCount: Int
-): Int = when (target) {
-    InitialChatScrollTarget.Bottom -> (totalItemCount - 1).coerceAtLeast(0)
-    is InitialChatScrollTarget.Node -> target.index
 }
 
 @Composable
@@ -189,19 +151,36 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val chatListState = rememberLazyListState()
-    val initialScrollTarget = resolveInitialChatScrollTarget(
-        chatListInitialized = vm.chatListInitialized,
-        nodeId = nodeId,
-        messageNodes = conversation.messageNodes
-    )
-    LaunchedEffect(initialScrollTarget, conversation.messageNodes.size) {
+    val messageNodes = conversation.messageNodes
+    val bottomScrollTarget = messageNodes
+        .takeIf { it.isNotEmpty() }
+        ?.let { InitialChatScrollTarget.Bottom(requiredItemCount = it.size + 1) }
+    val initialScrollTarget = when {
+        vm.chatListInitialized -> null
+        nodeId != null -> messageNodes.indexOfFirst { it.id == nodeId }
+            .takeIf { it >= 0 }
+            ?.let(InitialChatScrollTarget::Node)
+            ?: bottomScrollTarget
+
+        else -> bottomScrollTarget
+    }
+    LaunchedEffect(initialScrollTarget) {
         val target = initialScrollTarget ?: return@LaunchedEffect
-        val itemCount = requiredItemCount(target, conversation.messageNodes.size)
         val totalItemCount = snapshotFlow { chatListState.layoutInfo.totalItemsCount }
             .distinctUntilChanged()
-            .first { it >= itemCount }
+            .first { itemCount ->
+                when (target) {
+                    is InitialChatScrollTarget.Bottom -> itemCount >= target.requiredItemCount
+                    is InitialChatScrollTarget.Node -> itemCount > target.index
+                }
+            }
 
-        chatListState.requestScrollToItem(resolveScrollIndex(target, totalItemCount))
+        chatListState.requestScrollToItem(
+            when (target) {
+                is InitialChatScrollTarget.Bottom -> (totalItemCount - 1).coerceAtLeast(0)
+                is InitialChatScrollTarget.Node -> target.index
+            }
+        )
         vm.chatListInitialized = true
     }
 
