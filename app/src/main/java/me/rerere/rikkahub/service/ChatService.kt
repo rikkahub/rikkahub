@@ -40,6 +40,7 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.common.android.Logging
@@ -455,10 +456,10 @@ class ChatService(
         }
 
         runCatching {
-            val conversation = getConversationFlow(conversationId).value
+            val initialConversation = getConversationFlow(conversationId).value
 
             // reset suggestions
-            updateConversation(conversationId, conversation.copy(chatSuggestions = emptyList()))
+            updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
@@ -473,6 +474,7 @@ class ChatService(
 
             // check invalid messages
             checkInvalidMessages(conversationId)
+            val conversation = getConversationFlow(conversationId).value
 
             // start generating
             generationHandler.generateText(
@@ -584,7 +586,7 @@ class ChatService(
         var messagesNodes = conversation.messageNodes
 
         // 移除无效 tool (未执行的 Tool)
-        messagesNodes = messagesNodes.mapIndexed { index, node ->
+        messagesNodes = messagesNodes.mapIndexed { _, node ->
             // Check for Tool type with non-executed tools
             val hasPendingTools = node.currentMessage.getTools().any { !it.isExecuted }
 
@@ -625,6 +627,17 @@ class ChatService(
         messagesNodes = messagesNodes.filter { it.messages.isNotEmpty() }
 
         updateConversation(conversationId, conversation.copy(messageNodes = messagesNodes))
+    }
+
+    private fun cancelToolByUser(tool: UIMessagePart.Tool): UIMessagePart.Tool {
+        return tool.copy(
+            output = listOf(
+                UIMessagePart.Text(
+                    """{"status":"cancelled","error":"Generation cancelled by user before tool execution completed."}"""
+                )
+            ),
+            approvalState = ToolApprovalState.Denied("Generation cancelled by user")
+        )
     }
 
     // ---- 生成标题 ----
@@ -1224,7 +1237,26 @@ class ChatService(
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
-    fun stopGeneration(conversationId: Uuid) {
-        sessions[conversationId]?.getJob()?.cancel()
+    suspend fun stopGeneration(conversationId: Uuid) {
+        val job = sessions[conversationId]?.getJob() ?: return
+        job.cancel()
+        runCatching { job.join() }
+
+        val currentConversation = getConversationFlow(conversationId).value
+        val lastNode = currentConversation.messageNodes.lastOrNull() ?: return
+        val lastMessage = lastNode.currentMessage
+        val updatedMessage = lastMessage.finishPendingTools(::cancelToolByUser)
+        if (updatedMessage == lastMessage) {
+            return
+        }
+
+        val updatedConversation = currentConversation.copy(
+            messageNodes = currentConversation.messageNodes.dropLast(1) + lastNode.copy(
+                messages = lastNode.messages.map { message ->
+                    if (message.id == lastMessage.id) updatedMessage else message
+                }
+            )
+        )
+        saveConversation(conversationId, updatedConversation)
     }
 }

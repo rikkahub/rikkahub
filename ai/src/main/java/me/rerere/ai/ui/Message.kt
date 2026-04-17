@@ -516,6 +516,27 @@ fun UIMessage.finishReasoning(): UIMessage {
     )
 }
 
+fun UIMessage.finishPendingTools(
+    transform: (UIMessagePart.Tool) -> UIMessagePart.Tool
+): UIMessage {
+    val updatedParts = parts.map { part ->
+        if (part is UIMessagePart.Tool && !part.isExecuted) {
+            transform(part)
+        } else {
+            part
+        }
+    }
+
+    if (updatedParts == parts) {
+        return this
+    }
+
+    return copy(
+        parts = updatedParts,
+        finishedAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+    ).finishReasoning()
+}
+
 /**
  * Migrate legacy ToolCall parts to new Tool type within a single message.
  * This converts ToolCall parts to Tool parts with empty output.

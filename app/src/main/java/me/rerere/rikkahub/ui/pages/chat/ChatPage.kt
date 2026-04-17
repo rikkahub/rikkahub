@@ -284,7 +284,7 @@ private fun ChatPageContent(
                     mcpManager = vm.mcpManager,
                     hazeState = hazeState,
                     onCancelClick = {
-                        loadingJob?.cancel()
+                        vm.stopGeneration()
                     },
                     enableSearch = enableWebSearch,
                     onToggleSearch = {
