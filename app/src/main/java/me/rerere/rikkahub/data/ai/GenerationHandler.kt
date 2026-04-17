@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
@@ -47,6 +48,30 @@ import java.util.Locale
 import kotlin.time.Clock
 
 private const val TAG = "GenerationHandler"
+internal const val CLAUDE_47_THINKING_BUDGET_WARNING =
+    "当前 Claude 型号不支持手动 thinking budget，已重置到最近 effort "
+
+private val CLAUDE_EFFORT_PRESET_BUDGETS = setOf(
+    ReasoningLevel.LOW.budgetTokens,
+    ReasoningLevel.MEDIUM.budgetTokens,
+    ReasoningLevel.HIGH.budgetTokens,
+)
+
+internal fun buildAnthropicThinkingBudgetWarning(modelId: String, thinkingBudget: Int?): String? {
+    val normalizedModelId = modelId.lowercase().replace('.', '-')
+    val isClaude47Model = normalizedModelId.contains("claude") &&
+        normalizedModelId.contains("opus") &&
+        normalizedModelId.contains("4-7")
+    val isCustomPositiveBudget = thinkingBudget != null &&
+        thinkingBudget > 0 &&
+        thinkingBudget !in CLAUDE_EFFORT_PRESET_BUDGETS
+
+    return if (isClaude47Model && isCustomPositiveBudget) {
+        CLAUDE_47_THINKING_BUDGET_WARNING
+    } else {
+        null
+    }
+}
 
 @Serializable
 sealed interface GenerationChunk {

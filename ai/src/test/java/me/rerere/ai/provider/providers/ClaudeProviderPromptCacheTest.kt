@@ -53,6 +53,21 @@ class ClaudeProviderPromptCacheTest {
         )
     }
 
+    private fun reasoningModel(modelId: String): Model {
+        return Model(modelId = modelId, abilities = listOf(ModelAbility.REASONING))
+    }
+
+    private fun reasoningRequest(modelId: String, thinkingBudget: Int?): JsonObject {
+        return buildRequest(
+            providerSetting = ProviderSetting.Claude(),
+            messages = listOf(UIMessage.user("hello")),
+            params = TextGenerationParams(
+                model = reasoningModel(modelId),
+                thinkingBudget = thinkingBudget
+            )
+        )
+    }
+
     @Test
     fun `promptCaching=false should not add cache_control anywhere`() {
         val providerSetting = ProviderSetting.Claude(promptCaching = false)
@@ -204,6 +219,136 @@ class ClaudeProviderPromptCacheTest {
             content?.forEach { block ->
                 assertNull(block.jsonObject["cache_control"])
             }
+        }
+    }
+
+    @Test
+    fun `legacy Claude auto should fall back to default manual thinking budget`() {
+        val request = reasoningRequest(
+            modelId = "claude-sonnet-4-5-20250929",
+            thinkingBudget = -1
+        )
+
+        val thinking = request["thinking"]!!.jsonObject
+        assertEquals("enabled", thinking["type"]!!.jsonPrimitive.content)
+        assertEquals(1024, thinking["budget_tokens"]!!.jsonPrimitive.content.toInt())
+        assertNull(request["output_config"])
+    }
+
+    @Test
+    fun `legacy Claude custom budget should keep manual thinking`() {
+        val request = reasoningRequest(
+            modelId = "claude-sonnet-4-5-20250929",
+            thinkingBudget = 500
+        )
+
+        val thinking = request["thinking"]!!.jsonObject
+        assertEquals("enabled", thinking["type"]!!.jsonPrimitive.content)
+        assertEquals(500, thinking["budget_tokens"]!!.jsonPrimitive.content.toInt())
+        assertNull(request["output_config"])
+    }
+
+    @Test
+    fun `Claude 4_6 auto should use adaptive thinking without effort`() {
+        val request = reasoningRequest(
+            modelId = "claude-sonnet-4-6-20251001",
+            thinkingBudget = -1
+        )
+
+        val thinking = request["thinking"]!!.jsonObject
+        assertEquals("adaptive", thinking["type"]!!.jsonPrimitive.content)
+        assertNull(thinking["budget_tokens"])
+        assertNull(request["output_config"])
+    }
+
+    @Test
+    fun `Claude 4_6 preset budget should use adaptive thinking with effort`() {
+        val request = reasoningRequest(
+            modelId = "claude-sonnet-4-6-20251001",
+            thinkingBudget = 16_000
+        )
+
+        val thinking = request["thinking"]!!.jsonObject
+        val outputConfig = request["output_config"]!!.jsonObject
+        assertEquals("adaptive", thinking["type"]!!.jsonPrimitive.content)
+        assertNull(thinking["budget_tokens"])
+        assertEquals("medium", outputConfig["effort"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `Claude 4_6 custom budget should keep manual thinking`() {
+        val request = reasoningRequest(
+            modelId = "claude-sonnet-4-6-20251001",
+            thinkingBudget = 500
+        )
+
+        val thinking = request["thinking"]!!.jsonObject
+        assertEquals("enabled", thinking["type"]!!.jsonPrimitive.content)
+        assertEquals(500, thinking["budget_tokens"]!!.jsonPrimitive.content.toInt())
+        assertNull(request["output_config"])
+    }
+
+    @Test
+    fun `Claude 4_7 auto should use adaptive thinking without effort`() {
+        val request = reasoningRequest(
+            modelId = "claude-opus-4-7-20260301",
+            thinkingBudget = -1
+        )
+
+        val thinking = request["thinking"]!!.jsonObject
+        assertEquals("adaptive", thinking["type"]!!.jsonPrimitive.content)
+        assertNull(thinking["budget_tokens"])
+        assertNull(request["output_config"])
+    }
+
+    @Test
+    fun `Claude 4_7 preset budget should use adaptive thinking with effort`() {
+        val request = reasoningRequest(
+            modelId = "claude-opus-4-7-20260301",
+            thinkingBudget = 32_000
+        )
+
+        val thinking = request["thinking"]!!.jsonObject
+        val outputConfig = request["output_config"]!!.jsonObject
+        assertEquals("adaptive", thinking["type"]!!.jsonPrimitive.content)
+        assertNull(thinking["budget_tokens"])
+        assertEquals("high", outputConfig["effort"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `Claude 4_7 custom budget should approximate to nearest effort`() {
+        val request = reasoningRequest(
+            modelId = "claude-opus-4-7-20260301",
+            thinkingBudget = 500
+        )
+
+        val thinking = request["thinking"]!!.jsonObject
+        val outputConfig = request["output_config"]!!.jsonObject
+        assertEquals("adaptive", thinking["type"]!!.jsonPrimitive.content)
+        assertNull(thinking["budget_tokens"])
+        assertEquals("low", outputConfig["effort"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `Claude reasoning off should stay disabled across model families`() {
+        val legacyRequest = reasoningRequest(
+            modelId = "claude-sonnet-4-5-20250929",
+            thinkingBudget = 0
+        )
+        val adaptiveRequest = reasoningRequest(
+            modelId = "claude-sonnet-4-6-20251001",
+            thinkingBudget = 0
+        )
+        val adaptiveOnlyRequest = reasoningRequest(
+            modelId = "claude-opus-4-7-20260301",
+            thinkingBudget = 0
+        )
+
+        listOf(legacyRequest, adaptiveRequest, adaptiveOnlyRequest).forEach { request ->
+            val thinking = request["thinking"]!!.jsonObject
+            assertEquals("disabled", thinking["type"]!!.jsonPrimitive.content)
+            assertNull(thinking["budget_tokens"])
+            assertNull(request["output_config"])
         }
     }
 }

@@ -54,10 +54,29 @@ import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
+import kotlin.math.abs
 import kotlin.time.Clock
 
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
+private const val CLAUDE_DEFAULT_MANUAL_THINKING_BUDGET = 1024
+
+private enum class ClaudeThinkingModelFamily {
+    LEGACY,
+    ADAPTIVE_WITH_MANUAL_BUDGET,
+    ADAPTIVE_ONLY,
+}
+
+private data class ClaudeThinkingConfig(
+    val thinking: JsonObject,
+    val outputConfig: JsonObject? = null,
+)
+
+private val CLAUDE_EFFORT_LEVELS = listOf(
+    ReasoningLevel.LOW,
+    ReasoningLevel.MEDIUM,
+    ReasoningLevel.HIGH,
+)
 
 class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
@@ -297,23 +316,12 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
             // 处理 thinking budget
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
-                val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget ?: 0)
-                put("thinking", buildJsonObject {
-                    when (level) {
-                        ReasoningLevel.OFF -> {
-                            put("type", "disabled")
-                        }
-
-                        ReasoningLevel.AUTO -> {
-                            put("type", "adaptive")
-                        }
-
-                        else -> {
-                            put("type", "enabled")
-                            put("budget_tokens", params.thinkingBudget ?: 1024)
-                        }
-                    }
-                })
+                val thinkingConfig = buildThinkingConfig(
+                    modelId = params.model.modelId,
+                    thinkingBudget = params.thinkingBudget,
+                )
+                put("thinking", thinkingConfig.thinking)
+                thinkingConfig.outputConfig?.let { put("output_config", it) }
             }
 
             // 处理工具
@@ -388,6 +396,95 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 JsonObject(obj + mapOf("content" to newContent))
             } else msg
         })
+    }
+
+    private fun buildThinkingConfig(modelId: String, thinkingBudget: Int?): ClaudeThinkingConfig {
+        return when (classifyThinkingModel(modelId)) {
+            ClaudeThinkingModelFamily.LEGACY -> when {
+                thinkingBudget == ReasoningLevel.AUTO.budgetTokens -> ClaudeThinkingConfig(
+                    manualThinking(CLAUDE_DEFAULT_MANUAL_THINKING_BUDGET)
+                )
+
+                thinkingBudget != null && thinkingBudget > 0 -> {
+                    ClaudeThinkingConfig(manualThinking(thinkingBudget))
+                }
+
+                else -> ClaudeThinkingConfig(disabledThinking())
+            }
+
+            ClaudeThinkingModelFamily.ADAPTIVE_WITH_MANUAL_BUDGET -> when {
+                thinkingBudget == ReasoningLevel.AUTO.budgetTokens -> ClaudeThinkingConfig(adaptiveThinking())
+                thinkingBudget != null && thinkingBudget > 0 -> {
+                    val exactEffortLevel = exactEffortLevel(thinkingBudget)
+                    if (exactEffortLevel != null) {
+                        adaptiveThinkingWithEffort(exactEffortLevel)
+                    } else {
+                        ClaudeThinkingConfig(manualThinking(thinkingBudget))
+                    }
+                }
+
+                else -> ClaudeThinkingConfig(disabledThinking())
+            }
+
+            ClaudeThinkingModelFamily.ADAPTIVE_ONLY -> when {
+                thinkingBudget == ReasoningLevel.AUTO.budgetTokens -> ClaudeThinkingConfig(adaptiveThinking())
+                thinkingBudget != null && thinkingBudget > 0 -> {
+                    val effortLevel = exactEffortLevel(thinkingBudget)
+                        ?: closestEffortLevel(thinkingBudget)
+                    adaptiveThinkingWithEffort(effortLevel)
+                }
+
+                else -> ClaudeThinkingConfig(disabledThinking())
+            }
+        }
+    }
+
+    private fun classifyThinkingModel(modelId: String): ClaudeThinkingModelFamily {
+        val normalizedModelId = modelId.lowercase().replace('.', '-')
+
+        return when {
+            normalizedModelId.contains("claude") &&
+                normalizedModelId.contains("opus") &&
+                normalizedModelId.contains("4-7") -> ClaudeThinkingModelFamily.ADAPTIVE_ONLY
+
+            normalizedModelId.contains("claude") &&
+                normalizedModelId.contains("4-6") &&
+                (normalizedModelId.contains("sonnet") || normalizedModelId.contains("opus")) -> {
+                ClaudeThinkingModelFamily.ADAPTIVE_WITH_MANUAL_BUDGET
+            }
+
+            else -> ClaudeThinkingModelFamily.LEGACY
+        }
+    }
+
+    private fun exactEffortLevel(thinkingBudget: Int): ReasoningLevel? {
+        return CLAUDE_EFFORT_LEVELS.firstOrNull { it.budgetTokens == thinkingBudget }
+    }
+
+    private fun closestEffortLevel(thinkingBudget: Int): ReasoningLevel {
+        return CLAUDE_EFFORT_LEVELS.minByOrNull { abs(it.budgetTokens - thinkingBudget) } ?: ReasoningLevel.LOW
+    }
+
+    private fun disabledThinking() = buildJsonObject {
+        put("type", "disabled")
+    }
+
+    private fun adaptiveThinking() = buildJsonObject {
+        put("type", "adaptive")
+    }
+
+    private fun manualThinking(thinkingBudget: Int) = buildJsonObject {
+        put("type", "enabled")
+        put("budget_tokens", thinkingBudget)
+    }
+
+    private fun adaptiveThinkingWithEffort(level: ReasoningLevel): ClaudeThinkingConfig {
+        return ClaudeThinkingConfig(
+            thinking = adaptiveThinking(),
+            outputConfig = buildJsonObject {
+                put("effort", level.effort)
+            }
+        )
     }
 
     private fun JsonArrayBuilder.addAssistantMessage(message: UIMessage) {
