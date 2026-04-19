@@ -504,7 +504,7 @@ private fun ModelSettingsForm(
         onModelChange(
             model.copy(
                 modelId = id,
-                displayName = id.uppercase(),
+                displayName = id,
                 inputModalities = inputModality,
                 outputModalities = outputModality,
                 abilities = abilities
