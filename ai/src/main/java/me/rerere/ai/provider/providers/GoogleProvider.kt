@@ -380,12 +380,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     val isGeminiPro =
                         params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
 
-                    when (params.thinkingBudget) {
-                        null, -1 -> {} // 如果是自动，不设置thinkingBudget参数
+                    when (params.reasoningLevel) {
+                        ReasoningLevel.AUTO -> {} // 自动模式，不设置参数
 
-                        0 -> {
-                            // disable thinking if not gemini pro
-                            if (!isGeminiPro) {
+                        ReasoningLevel.OFF -> {
+                            if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
+                                put("thinkingLevel", "minimal")
+                            } else if (!isGeminiPro) {
                                 put("thinkingBudget", 0)
                                 put("includeThoughts", false)
                             }
@@ -393,14 +394,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
                         else -> {
                             if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
-                                when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
-                                    ReasoningLevel.HIGH -> put("thinkingLevel", "high")
-                                    ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
+                                when (params.reasoningLevel) {
                                     ReasoningLevel.LOW -> put("thinkingLevel", "low")
-                                    else -> error("Unknown reasoning level: $level")
+                                    ReasoningLevel.MEDIUM -> put("thinkingLevel", "medium")
+                                    else -> put("thinkingLevel", "high") // HIGH, XHIGH
                                 }
                             } else {
-                                put("thinkingBudget", params.thinkingBudget)
+                                put("thinkingBudget", params.reasoningLevel.budgetTokens)
                             }
                         }
                     }

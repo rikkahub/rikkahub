@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
@@ -672,7 +673,7 @@ class ChatService(
                 ),
                 params = TextGenerationParams(
                     model = model,
-                    thinkingBudget = 0,
+                    reasoningLevel = ReasoningLevel.OFF,
                 ),
             )
 
@@ -717,7 +718,7 @@ class ChatService(
                 ),
                 params = TextGenerationParams(
                     model = model,
-                    thinkingBudget = 0,
+                    reasoningLevel = ReasoningLevel.OFF,
                 ),
             )
             val suggestions =

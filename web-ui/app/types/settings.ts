@@ -63,7 +63,7 @@ export interface LorebookProfile {
 export interface AssistantProfile {
   id: string;
   chatModelId?: string | null;
-  thinkingBudget?: number | null;
+  reasoningLevel?: string | null;
   mcpServers?: string[];
   modeInjectionIds?: string[];
   lorebookIds?: string[];

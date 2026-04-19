@@ -515,11 +515,11 @@
   <string name="reasoning_auto">自動</string>
   <string name="reasoning_auto_desc">モデルが推論レベルを自動的に決定します。</string>
   <string name="reasoning_custom">カスタム推論予算</string>
-  <string name="reasoning_heavy">重度推論</string>
+  <string name="reasoning_heavy">高</string>
   <string name="reasoning_heavy_desc">モデルは大量の推論を使用して質問に答えます。</string>
-  <string name="reasoning_light">軽度推論</string>
+  <string name="reasoning_light">低</string>
   <string name="reasoning_light_desc">モデルは少量の推論を使用して質問に答えます。</string>
-  <string name="reasoning_medium">中度推論</string>
+  <string name="reasoning_medium">中</string>
   <string name="reasoning_medium_desc">モデルはより多くの推論を使用して質問に答えます。</string>
   <string name="reasoning_off">オフ</string>
   <string name="reasoning_off_desc">推論機能を無効にし、モデルは直接質問に答えます。</string>
@@ -973,5 +973,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="web_search_disabled">ウェブ検索が無効になりました</string>
   <string name="web_search_enabled">ウェブ検索が有効になりました</string>
   <string name="setting_provider_page_import_service_account_json">サービスアカウントJSONをインポート</string>
+  <string name="reasoning_xhigh">XHigh</string>
+  <string name="reasoning_picker_title">モデルの思考深度を調整</string>
+  <string name="reasoning_picker_hint">すべてのモデルが深さ調整に対応しているわけではありません。モデルおよびプロバイダーのドキュメントを参照してください。</string>
 </resources>
 

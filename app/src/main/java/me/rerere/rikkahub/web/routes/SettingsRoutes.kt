@@ -17,7 +17,7 @@ import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.web.dto.UpdateAssistantModelRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantRequest
-import me.rerere.rikkahub.web.dto.UpdateAssistantThinkingBudgetRequest
+import me.rerere.rikkahub.web.dto.UpdateAssistantReasoningLevelRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantMcpServersRequest
 import me.rerere.rikkahub.web.dto.UpdateAssistantInjectionsRequest
 import me.rerere.rikkahub.web.dto.UpdateBuiltInToolRequest
@@ -60,16 +60,15 @@ fun Route.settingsRoutes(
         }
 
         post("/assistant/thinking-budget") {
-            val request = call.receive<UpdateAssistantThinkingBudgetRequest>()
+            val request = call.receive<UpdateAssistantReasoningLevelRequest>()
             val assistantId = request.assistantId.toUuid("assistantId")
-            val thinkingBudget = request.thinkingBudget
 
             val settings = settingsStore.settingsFlow.value
             if (settings.assistants.none { it.id == assistantId }) {
                 throw NotFoundException("Assistant not found")
             }
 
-            settingsStore.updateAssistantThinkingBudget(assistantId, thinkingBudget)
+            settingsStore.updateAssistantReasoningLevel(assistantId, request.reasoningLevel)
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
         }
 

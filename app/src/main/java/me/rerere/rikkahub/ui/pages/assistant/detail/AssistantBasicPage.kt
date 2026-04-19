@@ -404,13 +404,9 @@ internal fun AssistantBasicContent(
                 },
             ) {
                 ReasoningButton(
-                    reasoningTokens = assistant.thinkingBudget ?: 0,
-                    onUpdateReasoningTokens = { tokens ->
-                        onUpdate(
-                            assistant.copy(
-                                thinkingBudget = tokens
-                            )
-                        )
+                    reasoningLevel = assistant.reasoningLevel,
+                    onUpdateReasoningLevel = { level ->
+                        onUpdate(assistant.copy(reasoningLevel = level))
                     }
                 )
             }

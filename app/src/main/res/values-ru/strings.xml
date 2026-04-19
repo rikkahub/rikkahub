@@ -515,11 +515,11 @@
   <string name="reasoning_auto">Авто</string>
   <string name="reasoning_auto_desc">Позволить модели автоматически определить уровень рассуждений.</string>
   <string name="reasoning_custom">Пользовательский бюджет рассуждений</string>
-  <string name="reasoning_heavy">Сложное рассуждение</string>
+  <string name="reasoning_heavy">Высокая</string>
   <string name="reasoning_heavy_desc">Модель будет использовать большое количество рассуждений для ответа на вопросы.</string>
-  <string name="reasoning_light">Лёгкий вывод</string>
+  <string name="reasoning_light">Низкий</string>
   <string name="reasoning_light_desc">Модель будет использовать небольшое количество рассуждений для ответа на вопросы.</string>
-  <string name="reasoning_medium">Среднее рассуждение</string>
+  <string name="reasoning_medium">Средний</string>
   <string name="reasoning_medium_desc">Модель будет использовать более глубокое рассуждение для ответа на вопросы.</string>
   <string name="reasoning_off">Выключено</string>
   <string name="reasoning_off_desc">Отключить функцию обоснования, модель будет отвечать на вопросы напрямую.</string>
@@ -973,5 +973,8 @@
   <string name="web_search_disabled">Веб-поиск отключён</string>
   <string name="web_search_enabled">Веб-поиск включён</string>
   <string name="setting_provider_page_import_service_account_json">Импорт JSON-файла служебной учётной записи</string>
+  <string name="reasoning_xhigh">Очень высокий</string>
+  <string name="reasoning_picker_title">Настроить глубину мышления модели</string>
+  <string name="reasoning_picker_hint">Не все модели поддерживают настройку глубины. См. документацию модели и провайдера.</string>
 </resources>
 

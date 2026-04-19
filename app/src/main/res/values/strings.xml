@@ -515,11 +515,11 @@
   <string name="reasoning_auto">Auto</string>
   <string name="reasoning_auto_desc">Let the model automatically determine reasoning level.</string>
   <string name="reasoning_custom">Custom reasoning budget</string>
-  <string name="reasoning_heavy">Heavy reasoning</string>
+  <string name="reasoning_heavy">High</string>
   <string name="reasoning_heavy_desc">The model will use a large amount of reasoning to answer questions.</string>
-  <string name="reasoning_light">Light reasoning</string>
+  <string name="reasoning_light">Low</string>
   <string name="reasoning_light_desc">The model will use a small amount of reasoning to answer questions.</string>
-  <string name="reasoning_medium">Medium reasoning</string>
+  <string name="reasoning_medium">Medium</string>
   <string name="reasoning_medium_desc">The model will use more reasoning to answer questions.</string>
   <string name="reasoning_off">Off</string>
   <string name="reasoning_off_desc">Turn off reasoning functionality, the model will directly answer questions.</string>
@@ -971,5 +971,8 @@
   <string name="web_search_disabled">Web search disabled</string>
   <string name="web_search_enabled">Web search enabled</string>
   <string name="setting_provider_page_import_service_account_json">Import Service Account JSON</string>
+  <string name="reasoning_xhigh">XHigh</string>
+  <string name="reasoning_picker_title">Adjust Model Thinking Depth</string>
+  <string name="reasoning_picker_hint">Not all models support depth adjustment. Refer to the model and provider documentation.</string>
 </resources>
 

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Earth
 import me.rerere.hugeicons.stroke.View
@@ -184,9 +185,9 @@ private fun DefaultTranslationModelSetting(
                     },
                 ) {
                     ReasoningButton(
-                        reasoningTokens = settings.translateThinkingBudget,
-                        onUpdateReasoningTokens = {
-                            vm.updateSettings(settings.copy(translateThinkingBudget = it))
+                        reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
+                        onUpdateReasoningLevel = {
+                            vm.updateSettings(settings.copy(translateThinkingBudget = it.budgetTokens))
                         }
                     )
                 }

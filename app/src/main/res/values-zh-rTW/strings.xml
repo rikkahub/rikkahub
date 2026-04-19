@@ -515,11 +515,11 @@
   <string name="reasoning_auto">自動</string>
   <string name="reasoning_auto_desc">讓模型自動決定推理級別。</string>
   <string name="reasoning_custom">自定義推理預算</string>
-  <string name="reasoning_heavy">重度推理</string>
+  <string name="reasoning_heavy">高</string>
   <string name="reasoning_heavy_desc">模型將使用大量推理來回答問題。</string>
-  <string name="reasoning_light">輕度推理</string>
+  <string name="reasoning_light">低</string>
   <string name="reasoning_light_desc">模型將使用少量推理來回答問題。</string>
-  <string name="reasoning_medium">中度推理</string>
+  <string name="reasoning_medium">中等</string>
   <string name="reasoning_medium_desc">模型將使用更多推理來回答問題。</string>
   <string name="reasoning_off">關閉</string>
   <string name="reasoning_off_desc">關閉推理功能，模型將直接回答問題。</string>
@@ -971,5 +971,8 @@
   <string name="web_search_disabled">已禁用網頁搜尋</string>
   <string name="web_search_enabled">已啟用網頁搜尋</string>
   <string name="setting_provider_page_import_service_account_json">匯入服務帳戶 JSON</string>
+  <string name="reasoning_xhigh">超高</string>
+  <string name="reasoning_picker_title">調整模型思考深度</string>
+  <string name="reasoning_picker_hint">並非所有模型都支援深度調整。請參閱模型與提供者文件。</string>
 </resources>
 

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.web.dto
 
 import kotlinx.serialization.Serializable
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessage
@@ -65,9 +66,9 @@ data class UpdateAssistantModelRequest(
 )
 
 @Serializable
-data class UpdateAssistantThinkingBudgetRequest(
+data class UpdateAssistantReasoningLevelRequest(
     val assistantId: String,
-    val thinkingBudget: Int?,
+    val reasoningLevel: ReasoningLevel,
 )
 
 @Serializable
