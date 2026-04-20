@@ -325,6 +325,7 @@ class ChatCompletionsAPI(
                         val siliconflowThinkingModels = setOf(
                             "Pro/moonshotai/Kimi-K2.5",
                             "Pro/zai-org/GLM-5",
+                            "Pro/zai-org/GLM-5.1",
                             "Pro/zai-org/GLM-4.7",
                             "deepseek-ai/DeepSeek-V3.2",
                             "Pro/deepseek-ai/DeepSeek-V3.2",
