@@ -41,6 +41,7 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
@@ -592,11 +593,11 @@ class ChatService(
             val hasPendingTools = node.currentMessage.getTools().any { !it.isExecuted }
 
             if (hasPendingTools) {
-                // Skip removal if any tool is Approved (waiting to be executed)
-                val hasApprovedTool = node.currentMessage.getTools().any {
-                    it.approvalState is ToolApprovalState.Approved
+                // Keep messages that are ready to resume, such as approved/denied/answered tools.
+                val hasResumableTool = node.currentMessage.getTools().any {
+                    !it.isExecuted && it.approvalState.canResumeToolExecution()
                 }
-                if (hasApprovedTool) {
+                if (hasResumableTool) {
                     return@mapIndexed node
                 }
 
@@ -606,7 +607,7 @@ class ChatService(
                     return@mapIndexed node
                 }
 
-                // Remove message with pending non-approved tools
+                // Remove messages that still have unresolved tool approvals.
                 return@mapIndexed node.copy(
                     messages = node.messages.filter { it.id != node.currentMessage.id },
                     selectIndex = node.selectIndex - 1

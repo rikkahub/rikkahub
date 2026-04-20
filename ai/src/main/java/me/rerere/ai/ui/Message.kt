@@ -336,6 +336,17 @@ sealed class ToolApprovalState {
     data class Answered(val answer: String) : ToolApprovalState()
 }
 
+fun ToolApprovalState.canResumeToolExecution(): Boolean {
+    return when (this) {
+        ToolApprovalState.Approved -> true
+        is ToolApprovalState.Denied -> true
+        is ToolApprovalState.Answered -> true
+        ToolApprovalState.Auto,
+        ToolApprovalState.Pending,
+            -> false
+    }
+}
+
 @Serializable
 sealed class UIMessagePart {
     abstract val metadata: JsonObject?
@@ -440,6 +451,9 @@ sealed class UIMessagePart {
 
         /** Whether the tool is pending user approval */
         val isPending: Boolean get() = approvalState is ToolApprovalState.Pending
+
+        /** Whether generation can resume and handle this tool immediately */
+        val canResumeExecution: Boolean get() = !isExecuted && approvalState.canResumeToolExecution()
 
         /** Parse input string as JsonElement */
         fun inputAsJson(): JsonElement = runCatching {
