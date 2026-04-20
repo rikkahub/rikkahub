@@ -51,14 +51,17 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import androidx.core.graphics.toColorInt
@@ -251,6 +254,33 @@ private fun HtmlBlockElement(
 
 @Composable
 private fun HtmlParagraph(element: Element, onClickCitation: (String) -> Unit) {
+    val baseTextStyle = LocalTextStyle.current
+    val density = LocalDensity.current
+    val paragraphStyle = remember(element.attr("style"), density, baseTextStyle) {
+        element.attr("style").takeIf { it.isNotBlank() }?.let {
+            parseBlockTextStyle(
+                style = it,
+                density = density,
+                baseTextStyle = baseTextStyle,
+            )
+        }
+    }
+
+    if (paragraphStyle != null) {
+        ProvideTextStyle(baseTextStyle.merge(paragraphStyle)) {
+            HtmlParagraphContent(element = element, onClickCitation = onClickCitation, density = density)
+        }
+    } else {
+        HtmlParagraphContent(element = element, onClickCitation = onClickCitation, density = density)
+    }
+}
+
+@Composable
+private fun HtmlParagraphContent(
+    element: Element,
+    onClickCitation: (String) -> Unit,
+    density: Density,
+) {
     val hasImages = element.select("img").isNotEmpty()
     // A span.math with inline != "true" is a block math element
     val hasBlockMath = element.select("span.math").any { it.attr("inline") != "true" }
@@ -272,7 +302,6 @@ private fun HtmlParagraph(element: Element, onClickCitation: (String) -> Unit) {
     val hasInlineMath = element.select("span.math").any { it.attr("inline") == "true" }
     val colorScheme = MaterialTheme.colorScheme
     val textStyle = LocalTextStyle.current
-    val density = LocalDensity.current
 
     val (annotatedString, inlineContents) = remember(element.outerHtml(), enableLatexRendering) {
         val contents = mutableMapOf<String, InlineTextContent>()
@@ -297,6 +326,7 @@ private fun HtmlParagraph(element: Element, onClickCitation: (String) -> Unit) {
         inlineContent = inlineContents,
         softWrap = true,
         overflow = TextOverflow.Visible,
+        modifier = Modifier.fillMaxWidth(),
         style = textStyle.copy(
             lineHeight = if (hasInlineMath && enableLatexRendering)
                 TextUnit.Unspecified
@@ -877,7 +907,13 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
                     }
                 }
             } else {
-                val inlineStyle = element.attr("style").takeIf { it.isNotBlank() }?.let(::parseInlineSpanStyle)
+                val inlineStyle = element.attr("style").takeIf { it.isNotBlank() }?.let {
+                    parseInlineSpanStyle(
+                        style = it,
+                        density = density,
+                        baseFontSize = style.fontSize,
+                    )
+                }
                 if (inlineStyle != null) {
                     appendStyledChildren(inlineStyle)
                 } else {
@@ -887,7 +923,11 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
         }
 
         "font" -> {
-            val inlineStyle = buildFontTagStyle(element)
+            val inlineStyle = buildFontTagStyle(
+                element = element,
+                density = density,
+                baseFontSize = style.fontSize,
+            )
             if (inlineStyle != null) {
                 appendStyledChildren(inlineStyle)
             } else {
@@ -901,14 +941,41 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
     }
 }
 
-private fun buildFontTagStyle(element: Element): SpanStyle? {
+private fun buildFontTagStyle(
+    element: Element,
+    density: Density,
+    baseFontSize: TextUnit,
+): SpanStyle? {
     val color = element.attr("color").takeIf { it.isNotBlank() }?.let(::parseColor)
-    val baseStyle = element.attr("style").takeIf { it.isNotBlank() }?.let(::parseInlineSpanStyle)
-    if (color == null && baseStyle == null) return null
-    return (baseStyle ?: SpanStyle()).merge(SpanStyle(color = color ?: Color.Unspecified))
+    val styleAttr = element.attr("style").takeIf { it.isNotBlank() }?.let {
+        parseInlineSpanStyle(
+            style = it,
+            density = density,
+            baseFontSize = baseFontSize,
+        )
+    }
+    val sizeAttr = element.attr("size").takeIf { it.isNotBlank() }?.let {
+        parseLegacyFontSize(
+            fontSize = it,
+            density = density,
+            baseFontSize = baseFontSize,
+        )
+    }
+
+    var resolvedStyle = styleAttr ?: SpanStyle()
+    color?.let { resolvedStyle = resolvedStyle.merge(SpanStyle(color = it)) }
+    sizeAttr?.let { resolvedStyle = resolvedStyle.merge(SpanStyle(fontSize = it)) }
+
+    return resolvedStyle.takeIf {
+        color != null || styleAttr != null || sizeAttr != null
+    }
 }
 
-private fun parseInlineSpanStyle(style: String): SpanStyle? {
+private fun parseInlineSpanStyle(
+    style: String,
+    density: Density,
+    baseFontSize: TextUnit,
+): SpanStyle? {
     val properties = style
         .split(";")
         .mapNotNull { property ->
@@ -948,6 +1015,35 @@ private fun parseInlineSpanStyle(style: String): SpanStyle? {
         }
     }
 
+    properties["font-family"]?.let { value ->
+        parseFontFamily(value)?.let {
+            spanStyle = spanStyle.merge(SpanStyle(fontFamily = it))
+            hasStyle = true
+        }
+    }
+
+    properties["font-size"]?.let { value ->
+        parseFontSize(
+            fontSize = value,
+            density = density,
+            baseFontSize = baseFontSize,
+        )?.let {
+            spanStyle = spanStyle.merge(SpanStyle(fontSize = it))
+            hasStyle = true
+        }
+    }
+
+    properties["letter-spacing"]?.let { value ->
+        parseSpacing(
+            spacing = value,
+            density = density,
+            baseFontSize = baseFontSize,
+        )?.let {
+            spanStyle = spanStyle.merge(SpanStyle(letterSpacing = it))
+            hasStyle = true
+        }
+    }
+
     properties["text-decoration"]?.let { value ->
         parseTextDecoration(value)?.let {
             spanStyle = spanStyle.merge(SpanStyle(textDecoration = it))
@@ -955,7 +1051,244 @@ private fun parseInlineSpanStyle(style: String): SpanStyle? {
         }
     }
 
+    val backgroundValue = properties["background-color"] ?: properties["background"]
+    backgroundValue?.let { value ->
+        parseColor(value)?.let {
+            spanStyle = spanStyle.merge(SpanStyle(background = it))
+            hasStyle = true
+        }
+    }
+
     return spanStyle.takeIf { hasStyle }
+}
+
+private fun parseBlockTextStyle(
+    style: String,
+    density: Density,
+    baseTextStyle: TextStyle,
+): TextStyle? {
+    val properties = style
+        .split(";")
+        .mapNotNull { property ->
+            val parts = property.split(":", limit = 2)
+            if (parts.size == 2) parts[0].trim().lowercase() to parts[1].trim() else null
+        }
+        .toMap()
+
+    val inlineStyle = parseInlineSpanStyle(
+        style = style,
+        density = density,
+        baseFontSize = baseTextStyle.fontSize,
+    )
+
+    var hasStyle = inlineStyle != null
+    var textStyle = TextStyle(
+        color = inlineStyle?.color ?: Color.Unspecified,
+        fontSize = inlineStyle?.fontSize ?: TextUnit.Unspecified,
+        fontWeight = inlineStyle?.fontWeight,
+        fontStyle = inlineStyle?.fontStyle,
+        fontFamily = inlineStyle?.fontFamily,
+        letterSpacing = inlineStyle?.letterSpacing ?: TextUnit.Unspecified,
+        background = inlineStyle?.background ?: Color.Unspecified,
+        textDecoration = inlineStyle?.textDecoration,
+    )
+
+    properties["line-height"]?.let { value ->
+        parseLineHeight(
+            lineHeight = value,
+            density = density,
+            baseFontSize = baseTextStyle.fontSize,
+        )?.let {
+            textStyle = textStyle.merge(TextStyle(lineHeight = it))
+            hasStyle = true
+        }
+    }
+
+    properties["text-align"]?.let { value ->
+        parseTextAlign(value)?.let {
+            textStyle = textStyle.merge(TextStyle(textAlign = it))
+            hasStyle = true
+        }
+    }
+
+    return textStyle.takeIf { hasStyle }
+}
+
+private fun parseFontSize(
+    fontSize: String,
+    density: Density,
+    baseFontSize: TextUnit,
+): TextUnit? {
+    val normalized = fontSize.trim().lowercase()
+    if (normalized.isEmpty()) return null
+
+    fun scaleBase(multiplier: Float): TextUnit? {
+        if (!baseFontSize.isSpecified) return null
+        return when (baseFontSize.type) {
+            TextUnitType.Sp -> (baseFontSize.value * multiplier).sp
+            TextUnitType.Em -> (baseFontSize.value * multiplier).em
+            else -> null
+        }
+    }
+
+    val absoluteKeywordScale = when (normalized) {
+        "xx-small" -> 0.6f
+        "x-small" -> 0.75f
+        "small" -> 0.89f
+        "medium" -> 1f
+        "large" -> 1.2f
+        "x-large" -> 1.5f
+        "xx-large" -> 2f
+        "smaller" -> 0.833f
+        "larger" -> 1.2f
+        else -> null
+    }
+    if (absoluteKeywordScale != null) {
+        return scaleBase(absoluteKeywordScale)
+    }
+
+    return when {
+        normalized.endsWith("sp") -> normalized.removeSuffix("sp").trim().toFloatOrNull()?.sp
+        normalized.endsWith("px") -> normalized.removeSuffix("px").trim().toFloatOrNull()?.let {
+            with(density) { it.toSp() }
+        }
+
+        normalized.endsWith("em") -> normalized.removeSuffix("em").trim().toFloatOrNull()?.em
+        normalized.endsWith("rem") -> normalized.removeSuffix("rem").trim().toFloatOrNull()?.let {
+            if (baseFontSize.isSpecified && baseFontSize.type == TextUnitType.Sp) {
+                (baseFontSize.value * it).sp
+            } else {
+                16.sp * it
+            }
+        }
+
+        normalized.endsWith("%") -> normalized.removeSuffix("%").trim().toFloatOrNull()?.let {
+            scaleBase(it / 100f)
+        }
+
+        else -> normalized.toFloatOrNull()?.let {
+            with(density) { it.toSp() }
+        }
+    }
+}
+
+private fun parseSpacing(
+    spacing: String,
+    density: Density,
+    baseFontSize: TextUnit,
+): TextUnit? {
+    val normalized = spacing.trim().lowercase()
+    if (normalized.isEmpty()) return null
+
+    return when {
+        normalized.endsWith("sp") -> normalized.removeSuffix("sp").trim().toFloatOrNull()?.sp
+        normalized.endsWith("px") -> normalized.removeSuffix("px").trim().toFloatOrNull()?.let {
+            with(density) { it.toSp() }
+        }
+
+        normalized.endsWith("em") -> normalized.removeSuffix("em").trim().toFloatOrNull()?.em
+        normalized.endsWith("rem") -> normalized.removeSuffix("rem").trim().toFloatOrNull()?.let {
+            if (baseFontSize.isSpecified && baseFontSize.type == TextUnitType.Sp) {
+                (baseFontSize.value * it).sp
+            } else {
+                16.sp * it
+            }
+        }
+
+        normalized.endsWith("%") -> normalized.removeSuffix("%").trim().toFloatOrNull()?.let {
+            if (!baseFontSize.isSpecified) return@let null
+            when (baseFontSize.type) {
+                TextUnitType.Sp -> (baseFontSize.value * it / 100f).sp
+                TextUnitType.Em -> (baseFontSize.value * it / 100f).em
+                else -> null
+            }
+        }
+
+        else -> normalized.toFloatOrNull()?.let {
+            with(density) { it.toSp() }
+        }
+    }
+}
+
+private fun parseLineHeight(
+    lineHeight: String,
+    density: Density,
+    baseFontSize: TextUnit,
+): TextUnit? {
+    val normalized = lineHeight.trim().lowercase()
+    if (normalized.isEmpty()) return null
+
+    if (normalized.matches(Regex("[0-9]*\\.?[0-9]+"))) {
+        if (!baseFontSize.isSpecified) return null
+        return when (baseFontSize.type) {
+            TextUnitType.Sp -> (baseFontSize.value * normalized.toFloat()).sp
+            TextUnitType.Em -> (baseFontSize.value * normalized.toFloat()).em
+            else -> null
+        }
+    }
+
+    return parseFontSize(
+        fontSize = normalized,
+        density = density,
+        baseFontSize = baseFontSize,
+    )
+}
+
+private fun parseLegacyFontSize(
+    fontSize: String,
+    density: Density,
+    baseFontSize: TextUnit,
+): TextUnit? {
+    val normalized = fontSize.trim()
+    val legacyScale = when (normalized) {
+        "1" -> 0.625f
+        "2" -> 0.8125f
+        "3" -> 1f
+        "4" -> 1.125f
+        "5" -> 1.5f
+        "6" -> 2f
+        "7" -> 3f
+        else -> null
+    }
+    if (legacyScale != null) {
+        return parseFontSize(
+            fontSize = "${legacyScale * 100}%",
+            density = density,
+            baseFontSize = if (baseFontSize.isSpecified) baseFontSize else 16.sp,
+        )
+    }
+
+    if ((normalized.startsWith("+") || normalized.startsWith("-")) && baseFontSize.isSpecified) {
+        val delta = normalized.toIntOrNull() ?: return null
+        val adjustedLevel = (3 + delta).coerceIn(1, 7)
+        return parseLegacyFontSize(
+            fontSize = adjustedLevel.toString(),
+            density = density,
+            baseFontSize = baseFontSize,
+        )
+    }
+
+    return parseFontSize(
+        fontSize = normalized,
+        density = density,
+        baseFontSize = baseFontSize,
+    )
+}
+
+private fun parseFontFamily(fontFamily: String): FontFamily? {
+    val normalized = fontFamily
+        .split(",")
+        .map { it.trim().trim('"', '\'').lowercase() }
+        .firstOrNull()
+        ?: return null
+
+    return when {
+        normalized.contains("mono") || normalized.contains("courier") -> FontFamily.Monospace
+        normalized.contains("serif") || normalized.contains("georgia") || normalized.contains("times") -> FontFamily.Serif
+        normalized.contains("sans") || normalized.contains("arial") || normalized.contains("helvetica") -> FontFamily.SansSerif
+        normalized.contains("cursive") -> FontFamily.Cursive
+        else -> null
+    }
 }
 
 private fun parseColor(colorString: String): Color? {
@@ -1064,5 +1397,15 @@ private fun parseTextDecoration(textDecoration: String): TextDecoration? {
         0 -> null
         1 -> decorations.first()
         else -> TextDecoration.combine(decorations)
+    }
+}
+
+private fun parseTextAlign(textAlign: String): TextAlign? {
+    return when (textAlign.trim().lowercase()) {
+        "left", "start" -> TextAlign.Start
+        "right", "end" -> TextAlign.End
+        "center" -> TextAlign.Center
+        "justify" -> TextAlign.Justify
+        else -> null
     }
 }
