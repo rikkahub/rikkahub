@@ -267,4 +267,24 @@ val DEFAULT_PROVIDERS = listOf(
             )
         }
     ),
+    ProviderSetting.OpenAI(
+        id = Uuid.parse("4da09554-8844-4cc8-a4a9-fe1b2515e91b"),
+        name = "UnifyLLM",
+        baseUrl = "https://apicn.unifyllm.top/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        description = {
+            Text(
+                text = buildAnnotatedString {
+                    append("一站式LLM API中转平台货源站\n官网：")
+                    withLink(LinkAnnotation.Url("https://www.unifyllm.com/")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("https://www.unifyllm.com/")
+                        }
+                    }
+                }
+            )
+        }
+    ),
 )
