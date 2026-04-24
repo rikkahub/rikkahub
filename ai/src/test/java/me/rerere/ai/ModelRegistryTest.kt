@@ -90,4 +90,17 @@ class ModelRegistryTest {
             ModelRegistry.MODEL_ABILITIES.getData("minimax-m2.5")
         )
     }
+
+    @Test
+    fun testDeepseekV4() {
+        val reasonerAbilities = ModelRegistry.MODEL_ABILITIES.getData("deepseek-reasoner")
+        assertEquals(
+            reasonerAbilities,
+            ModelRegistry.MODEL_ABILITIES.getData("deepseek-v4-flash")
+        )
+        assertEquals(
+            reasonerAbilities,
+            ModelRegistry.MODEL_ABILITIES.getData("deepseek-v4-pro")
+        )
+    }
 }
