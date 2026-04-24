@@ -362,6 +362,15 @@ class ChatCompletionsAPI(
                         })
                     }
 
+                    "api.deepseek.com" -> {
+                        put("thinking", buildJsonObject {
+                            put("type", if (!level.isEnabled) "disabled" else "enabled")
+                        })
+                        if (level.isEnabled && level != ReasoningLevel.AUTO) {
+                            put("reasoning_effort", level.effort)
+                        }
+                    }
+
                     else -> {
                         // OpenAI 官方
                         // 文档中，completions API 只支持 "low", "medium", "high"
