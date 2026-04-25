@@ -487,7 +487,9 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
     private fun UIMessagePart.Tool.toToolResultBlock() = buildJsonObject {
         put("type", "tool_result")
         put("tool_use_id", toolCallId)
-        put("content", output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+        putJsonArray("content") {
+            output.mapNotNull { it.toContentBlock() }.forEach { add(it) }
+        }
     }
 
     private fun parseMessage(content: JsonArray): UIMessage {
