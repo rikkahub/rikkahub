@@ -15,6 +15,8 @@ import me.rerere.rikkahub.ui.pages.extensions.PromptVM
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesVM
 import me.rerere.rikkahub.ui.pages.extensions.SkillDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.SkillsVM
+import me.rerere.rikkahub.ui.pages.sandbox.SandboxDetailVM
+import me.rerere.rikkahub.ui.pages.sandbox.SandboxListVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
@@ -66,4 +68,10 @@ val viewModelModule = module {
     viewModelOf(::FavoriteVM)
     viewModelOf(::SearchVM)
     viewModelOf(::StatsVM)
+    viewModel {
+        SandboxListVM(get(), get(), get())
+    }
+    viewModel<SandboxDetailVM> { params ->
+        SandboxDetailVM(sandboxId = params.get(), manager = get(), context = get())
+    }
 }

@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.stroke.Book03
+import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.Screen
@@ -71,6 +72,12 @@ fun ExtensionsPage() {
                         leadingContent = { Icon(HugeIcons.Puzzle, null) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_agent_skills)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_agent_skills_desc)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.Sandboxes) },
+                        leadingContent = { Icon(HugeIcons.ComputerTerminal01, null) },
+                        headlineContent = { Text("Linux 沙盒") },
+                        supportingContent = { Text("创建和管理基于 PRoot 的 Linux 沙盒环境") },
                     )
                 }
             }

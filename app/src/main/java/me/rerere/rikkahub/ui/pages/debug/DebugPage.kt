@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -30,14 +31,19 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import java.io.File
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
@@ -48,6 +54,10 @@ import me.rerere.rikkahub.ui.components.richtext.Mermaid
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
+import me.rerere.sandbox.PRootSandbox
+import me.rerere.sandbox.RootFsInstaller
+import me.rerere.sandbox.SandboxBind
+import me.rerere.sandbox.SandboxConfig
 import org.koin.androidx.compose.koinViewModel
 import kotlin.random.Random
 import kotlin.random.nextInt
@@ -119,6 +129,9 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
 @Composable
 private fun MainPage(vm: DebugVM) {
     val settings = LocalSettings.current
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
     Column(
         modifier = Modifier
             .padding(8.dp)
@@ -161,7 +174,6 @@ private fun MainPage(vm: DebugVM) {
         var counter by remember {
             mutableIntStateOf(0)
         }
-        val toaster = LocalToaster.current
         Button(
             onClick = {
                 toaster.show("测试 ${counter++}")
@@ -208,6 +220,243 @@ private fun MainPage(vm: DebugVM) {
         ) {
             Text("创建 1024 个消息的聊天")
         }
+
+        HorizontalDivider()
+
+        Text("Sandbox", style = MaterialTheme.typography.labelMedium)
+        Text(
+            "这是一个基于 PRoot 的非 PTY 测试终端，适合先验证 rootfs、bind mount 和命令执行。",
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        val defaultRootfs = remember(context) { File(context.filesDir, "rootfs").absolutePath }
+        val defaultRootfsArchive = remember(context) { File(context.filesDir, "rootfs.tar.xz").absolutePath }
+        val defaultWorkspace = remember(context) { File(context.filesDir, "sandbox-workspace").absolutePath }
+        var rootfsPath by rememberSaveable { mutableStateOf(defaultRootfs) }
+        var rootfsArchivePath by rememberSaveable { mutableStateOf(defaultRootfsArchive) }
+        var workspacePath by rememberSaveable { mutableStateOf(defaultWorkspace) }
+        var command by rememberSaveable {
+            mutableStateOf("echo hello-from-proot && uname -a && id && pwd && ls / && ls -la /workspace")
+        }
+        var sandboxOutput by rememberSaveable { mutableStateOf("") }
+        var sandboxRunning by remember { mutableStateOf(false) }
+        var unzipRunning by remember { mutableStateOf(false) }
+
+        val rootfsDir = remember(rootfsPath) { File(rootfsPath) }
+        val rootfsArchiveFile = remember(rootfsArchivePath) { File(rootfsArchivePath) }
+        val shellCandidate = remember(rootfsPath) { File(rootfsDir, "bin/sh") }
+        val rootfsStatus = when {
+            !rootfsDir.exists() -> "rootfs 不存在"
+            !rootfsDir.isDirectory -> "rootfs 不是目录"
+            shellCandidate.exists() -> "rootfs 已就绪，检测到 /bin/sh"
+            else -> "rootfs 存在，但没有检测到 /bin/sh"
+        }
+
+        OutlinedTextField(
+            value = rootfsPath,
+            onValueChange = { rootfsPath = it },
+            label = { Text("rootfs 路径") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = rootfsArchivePath,
+            onValueChange = { rootfsArchivePath = it },
+            label = { Text("rootfs.tar.xz 路径") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = workspacePath,
+            onValueChange = { workspacePath = it },
+            label = { Text("workspace 宿主路径") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Text(
+            rootfsStatus,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (shellCandidate.exists()) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.error
+            }
+        )
+        Text(
+            when {
+                !rootfsArchiveFile.exists() -> "归档不存在"
+                !rootfsArchiveFile.isFile -> "归档路径不是文件"
+                else -> "归档已就绪，可解压到 rootfs"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (rootfsArchiveFile.isFile) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.error
+            }
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                enabled = !unzipRunning,
+                onClick = {
+                    val trimmedArchivePath = rootfsArchivePath.trim()
+                    val trimmedRootfsPath = rootfsPath.trim()
+                    when {
+                        trimmedArchivePath.isEmpty() -> {
+                            toaster.show("请先填写 rootfs.tar.xz 路径", type = ToastType.Error)
+                        }
+
+                        trimmedRootfsPath.isEmpty() -> {
+                            toaster.show("请先填写 rootfs 路径", type = ToastType.Error)
+                        }
+
+                        else -> scope.launch {
+                            unzipRunning = true
+                            sandboxOutput = "正在解压 rootfs.tar.xz...\n"
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    val archiveFile = File(trimmedArchivePath)
+                                    val targetDir = File(trimmedRootfsPath)
+                                    val result = RootFsInstaller().installTarXz(
+                                        archiveFile = archiveFile,
+                                        targetDirectory = targetDir,
+                                        cleanTargetDirectory = true,
+                                    )
+                                    buildString {
+                                        appendLine("解压完成")
+                                        appendLine("archive=${archiveFile.absolutePath}")
+                                        appendLine("target=${targetDir.absolutePath}")
+                                        appendLine("entries=${result.totalEntries}")
+                                        appendLine("directories=${result.directoryCount}")
+                                        appendLine("files=${result.fileCount}")
+                                        appendLine("symlinks=${result.symbolicLinkCount}")
+                                        appendLine("hardLinks=${result.hardLinkCount}")
+                                        appendLine("shellExists=${File(targetDir, "bin/sh").exists()}")
+                                        appendLine("envExists=${File(targetDir, "usr/bin/env").exists()}")
+                                    }
+                                }
+                            }.onSuccess {
+                                sandboxOutput = it
+                                toaster.show("rootfs 解压完成")
+                            }.onFailure {
+                                sandboxOutput = buildString {
+                                    appendLine("解压失败")
+                                    appendLine(it.message ?: it.javaClass.name)
+                                    appendLine()
+                                    appendLine(it.stackTraceToString())
+                                }
+                                toaster.show("rootfs 解压失败", type = ToastType.Error)
+                            }
+                            unzipRunning = false
+                        }
+                    }
+                }
+            ) {
+                Text(if (unzipRunning) "解压中..." else "解压 rootfs.tar.xz")
+            }
+        }
+        OutlinedTextField(
+            value = command,
+            onValueChange = { command = it },
+            label = { Text("测试命令") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+            textStyle = TextStyle(fontFamily = JetbrainsMono),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    command = "echo hello-from-proot && uname -a && id && pwd && ls / && ls -la /workspace"
+                }
+            ) {
+                Text("填入 Smoke Test")
+            }
+            Button(
+                onClick = {
+                    command =
+                        "echo sandbox-write-test > /workspace/hello.txt && ls -la /workspace && cat /workspace/hello.txt"
+                }
+            ) {
+                Text("填入写文件测试")
+            }
+        }
+        Button(
+            enabled = !sandboxRunning,
+            onClick = {
+                val trimmedRootfsPath = rootfsPath.trim()
+                val trimmedWorkspacePath = workspacePath.trim()
+                val trimmedCommand = command.trim()
+                when {
+                    trimmedRootfsPath.isEmpty() -> {
+                        toaster.show("请先填写 rootfs 路径", type = ToastType.Error)
+                    }
+
+                    trimmedWorkspacePath.isEmpty() -> {
+                        toaster.show("请先填写 workspace 路径", type = ToastType.Error)
+                    }
+
+                    trimmedCommand.isEmpty() -> {
+                        toaster.show("请先填写测试命令", type = ToastType.Error)
+                    }
+
+                    else -> scope.launch {
+                        sandboxRunning = true
+                        sandboxOutput = "正在执行...\n"
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                val workspaceDir = File(trimmedWorkspacePath).apply { mkdirs() }
+                                val result = PRootSandbox(context).executeShell(
+                                    config = SandboxConfig(
+                                        rootfsDir = File(trimmedRootfsPath),
+                                        workingDirectory = "/workspace",
+                                        bindMounts = listOf(
+                                            SandboxBind(workspaceDir, "/workspace")
+                                        ),
+                                    ),
+                                    script = trimmedCommand,
+                                    timeoutMillis = 20_000,
+                                )
+                                buildString {
+                                    appendLine("$ rootfs=$trimmedRootfsPath")
+                                    appendLine("$ workspace=$trimmedWorkspacePath -> /workspace")
+                                    appendLine("$ cmd=$trimmedCommand")
+                                    appendLine("exit=${result.exitCode}, timedOut=${result.timedOut}, succeeded=${result.succeeded}")
+                                    appendLine()
+                                    appendLine("[stdout]")
+                                    appendLine(result.stdout.ifBlank { "<empty>" })
+                                    appendLine()
+                                    appendLine("[stderr]")
+                                    appendLine(result.stderr.ifBlank { "<empty>" })
+                                }
+                            }
+                        }.onSuccess {
+                            sandboxOutput = it
+                            toaster.show("Sandbox 执行完成")
+                        }.onFailure {
+                            sandboxOutput = buildString {
+                                appendLine("执行失败")
+                                appendLine(it.message ?: it.javaClass.name)
+                                appendLine()
+                                appendLine(it.stackTraceToString())
+                            }
+                            toaster.show("Sandbox 执行失败", type = ToastType.Error)
+                        }
+                        sandboxRunning = false
+                    }
+                }
+            }
+        ) {
+            Text(if (sandboxRunning) "执行中..." else "运行 Sandbox 命令")
+        }
+        OutlinedTextField(
+            value = sandboxOutput,
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 220.dp),
+            label = { Text("输出") },
+            textStyle = TextStyle(fontFamily = JetbrainsMono),
+        )
 
         HorizontalDivider()
 

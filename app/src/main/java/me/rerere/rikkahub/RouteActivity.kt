@@ -89,6 +89,8 @@ import me.rerere.rikkahub.ui.pages.extensions.SkillDetailPage
 import me.rerere.rikkahub.ui.pages.extensions.SkillsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
+import me.rerere.rikkahub.ui.pages.sandbox.SandboxDetailPage
+import me.rerere.rikkahub.ui.pages.sandbox.SandboxListPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
@@ -457,6 +459,14 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.Stats> {
                                 StatsPage()
                             }
+
+                            entry<Screen.Sandboxes> {
+                                SandboxListPage()
+                            }
+
+                            entry<Screen.SandboxDetail> { key ->
+                                SandboxDetailPage(sandboxId = key.sandboxId)
+                            }
                         }
                     )
                     if (BuildConfig.DEBUG) {
@@ -629,4 +639,10 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Stats : Screen
+
+    @Serializable
+    data object Sandboxes : Screen
+
+    @Serializable
+    data class SandboxDetail(val sandboxId: String) : Screen
 }
