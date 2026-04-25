@@ -140,6 +140,7 @@ fun HighlightCodeBlock(
                 code = code,
                 createDocumentLauncher = createDocumentLauncher,
                 navController = navController,
+                completeCodeBlock = completeCodeBlock,
             )
         }
         Column(
@@ -332,6 +333,7 @@ private fun HighlightCodeActions(
     code: String,
     createDocumentLauncher: ManagedActivityResultLauncher<String, Uri?>,
     navController: Navigator,
+    completeCodeBlock: Boolean = true,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -404,7 +406,7 @@ private fun HighlightCodeActions(
                 }
             )
 
-            if (language == "html" || language == "svg") {
+            if (completeCodeBlock && (language == "html" || language == "svg")) {
                 Text(
                     text = stringResource(id = R.string.code_block_preview),
                     fontSize = 12.sp,
