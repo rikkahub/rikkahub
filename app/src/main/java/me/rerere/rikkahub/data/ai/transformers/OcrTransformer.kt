@@ -49,24 +49,32 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
         messages: List<UIMessage>,
     ): List<UIMessage> {
         if (ctx.model.inputModalities.contains(Modality.IMAGE)) {
-            // 如果模型支持图片输入，直接返回原始消息
             return messages
         }
 
-        // 如果模型不支持图片输入，进行OCR转换
-        return withContext(Dispatchers.IO) {
-            messages.map { message ->
-                message.copy(
-                    parts = message.parts.map { part ->
-                        when {
-                            part is UIMessagePart.Image && part.url.startsWith("file:") -> {
-                                UIMessagePart.Text(performOcr(part))
-                            }
+        val hasImages = messages.any { message ->
+            message.parts.any { it is UIMessagePart.Image && it.url.startsWith("file:") }
+        }
+        if (!hasImages) return messages
 
-                            else -> part
+        return withContext(Dispatchers.IO) {
+            try {
+                ctx.processingStatus.value = "正在识别图片..."
+                messages.map { message ->
+                    message.copy(
+                        parts = message.parts.map { part ->
+                            when {
+                                part is UIMessagePart.Image && part.url.startsWith("file:") -> {
+                                    UIMessagePart.Text(performOcr(part))
+                                }
+
+                                else -> part
+                            }
                         }
-                    }
-                )
+                    )
+                }
+            } finally {
+                ctx.processingStatus.value = null
             }
         }
     }

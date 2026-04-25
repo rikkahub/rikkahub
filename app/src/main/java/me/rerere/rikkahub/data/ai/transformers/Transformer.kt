@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.transformers
 
 import android.content.Context
+import kotlinx.coroutines.flow.MutableStateFlow
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.Settings
@@ -11,6 +12,7 @@ class TransformerContext(
     val model: Model,
     val assistant: Assistant,
     val settings: Settings,
+    val processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
 )
 
 interface MessageTransformer {
@@ -61,8 +63,9 @@ suspend fun List<UIMessage>.transforms(
     model: Model,
     assistant: Assistant,
     settings: Settings,
+    processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
 ): List<UIMessage> {
-    val ctx = TransformerContext(context, model, assistant, settings)
+    val ctx = TransformerContext(context, model, assistant, settings, processingStatus)
     return transformers.fold(this) { acc, transformer ->
         transformer.transform(ctx, acc)
     }

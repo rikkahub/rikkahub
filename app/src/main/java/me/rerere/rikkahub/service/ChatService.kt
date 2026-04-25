@@ -245,6 +245,11 @@ class ChatService(
         return session.generationJob
     }
 
+    fun getProcessingStatusFlow(conversationId: Uuid): StateFlow<String?> {
+        val session = sessions[conversationId] ?: return MutableStateFlow(null)
+        return session.processingStatus
+    }
+
     fun getConversationJobs(): Flow<Map<Uuid, Job?>> {
         return _sessionsVersion.flatMapLatest {
             val currentSessions = sessions.values.toList()
@@ -479,9 +484,11 @@ class ChatService(
             val conversation = getConversationFlow(conversationId).value
 
             // start generating
+            val session = getOrCreateSession(conversationId)
             generationHandler.generateText(
                 settings = settings,
                 model = model,
+                processingStatus = session.processingStatus,
                 messages = conversation.currentMessages.let {
                     if (messageRange != null) {
                         it.subList(messageRange.start, messageRange.endInclusive + 1)

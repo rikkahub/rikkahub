@@ -27,6 +27,9 @@ class ConversationSession(
     // 原子引用计数
     private val refCount = AtomicInteger(0)
 
+    // 处理状态（如 OCR 识别中）
+    val processingStatus = MutableStateFlow<String?>(null)
+
     // 生成任务（内聚在 session 中）
     private val _generationJob = MutableStateFlow<Job?>(null)
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
