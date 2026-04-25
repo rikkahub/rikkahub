@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.document.DocxParser
+import me.rerere.document.EpubParser
 import me.rerere.document.PdfParser
 import me.rerere.document.PptxParser
 import java.io.File
@@ -53,6 +54,10 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
         return PptxParser.parse(file)
     }
 
+    private fun parseEpubAsText(file: File): String {
+        return EpubParser.parse(file)
+    }
+
     private fun readDocumentContent(document: UIMessagePart.Document): String {
         val file = runCatching { document.url.toUri().toFile() }.getOrNull()
             ?: return "[ERROR, invalid file uri: ${document.fileName}]"
@@ -64,6 +69,7 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
                 "application/pdf" -> parsePdfAsText(file)
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> parseDocxAsText(file)
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> parsePptxAsText(file)
+                "application/epub+zip" -> parseEpubAsText(file)
                 else -> file.readText()
             }
         }.getOrElse {

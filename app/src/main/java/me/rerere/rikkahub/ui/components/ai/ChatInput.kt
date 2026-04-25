@@ -321,7 +321,8 @@ fun ChatInput(
                     "application/vnd.ms-excel",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     "application/vnd.ms-powerpoint",
-                    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    "application/epub+zip"
                 )
                 val documents = uris.mapNotNull { uri ->
                     val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
