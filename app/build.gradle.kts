@@ -224,6 +224,7 @@ dependencies {
     implementation(libs.coil.gif)
     implementation(libs.coil.okhttp)
     implementation(libs.coil.svg)
+    implementation(libs.coil.cache.control)
 
     // serialization
     implementation(libs.kotlinx.serialization.json)
