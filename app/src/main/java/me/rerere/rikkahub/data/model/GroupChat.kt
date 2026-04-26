@@ -45,6 +45,10 @@ data class GroupChatConfig(
 
     fun getParticipantByAssistant(assistantId: Uuid): GroupChatParticipant? =
         participants.find { it.assistantId == assistantId }
+
+    fun isValid(): Boolean {
+        return isGroupChat && enabledParticipants.size >= 2
+    }
 }
 
 @Serializable

@@ -132,7 +132,7 @@ private fun ChatMessageAssistantAvatarInternal(
                     UIAvatar(
                         name = participantInfo.displayName,
                         modifier = Modifier.size(32.dp),
-                        value = null,
+                        value = Avatar.Dummy,
                         loading = loading,
                     )
                 }

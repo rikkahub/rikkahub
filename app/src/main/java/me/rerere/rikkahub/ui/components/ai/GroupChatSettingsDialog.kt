@@ -48,6 +48,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.DragDropVertical
+import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.UserAdd01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -542,7 +543,7 @@ private fun AddParticipantSheet(
                                         }
                                     ) {
                                         Icon(
-                                            imageVector = me.rerere.hugeicons.HugeIcons.stroke.PencilEdit01,
+                                            imageVector = HugeIcons.PencilEdit01,
                                             contentDescription = "Edit Assistant",
                                             tint = MaterialTheme.colorScheme.primary
                                         )
