@@ -8,9 +8,14 @@ import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AILoggingManager
+import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.groupchat.AutoDiscussManager
+import me.rerere.rikkahub.data.ai.groupchat.GroupChatManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.mcp.McpManager
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
 import me.rerere.rikkahub.utils.JsonInstant
@@ -79,7 +84,45 @@ val appModule = module {
             localTools = get(),
             mcpManager = get(),
             filesManager = get(),
-            skillManager = get()
+            skillManager = get(),
+            groupChatManager = get(),
+            autoDiscussManager = get(),
+        )
+    }
+
+    single {
+        GroupChatManager(
+            context = get(),
+            providerManager = get(),
+            json = get(),
+            memoryRepository = get(),
+            conversationRepository = get(),
+            aiLoggingManager = get(),
+            mcpManager = get(),
+            localTools = get(),
+            skillManager = get(),
+        )
+    }
+
+    single {
+        AutoDiscussManager(
+            context = get(),
+            settingsStore = get(),
+            conversationRepository = get(),
+            groupChatManager = get(),
+            generationHandler = get(),
+            inputTransformers = listOf(
+                me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer,
+                me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer,
+                me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer,
+                me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer,
+                me.rerere.rikkahub.data.ai.transformers.OcrTransformer,
+            ),
+            outputTransformers = listOf(
+                me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer,
+                me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer,
+                me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer,
+            ),
         )
     }
 

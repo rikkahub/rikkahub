@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +54,10 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.groupchat.AutoDiscussManager
+import me.rerere.rikkahub.data.ai.groupchat.AutoDiscussState
+import me.rerere.rikkahub.data.ai.groupchat.GroupChatManager
+import me.rerere.rikkahub.data.ai.groupchat.extractMentionedParticipants
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
@@ -130,6 +135,8 @@ class ChatService(
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
+    private val groupChatManager: GroupChatManager,
+    private val autoDiscussManager: AutoDiscussManager,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -299,7 +306,6 @@ class ChatService(
             try {
                 val currentConversation = session.state.value
 
-                // 添加消息到列表
                 val newConversation = currentConversation.copy(
                     messageNodes = currentConversation.messageNodes + UIMessage(
                         role = MessageRole.USER,
@@ -308,9 +314,13 @@ class ChatService(
                 )
                 saveConversation(conversationId, newConversation)
 
-                // 开始补全
                 if (answer) {
-                    handleMessageComplete(conversationId)
+                    val isGroupChat = groupChatManager.isGroupChat(newConversation)
+                    if (isGroupChat) {
+                        handleGroupChatMessageComplete(conversationId, processedContent)
+                    } else {
+                        handleMessageComplete(conversationId)
+                    }
                 }
 
                 _generationDoneFlow.emit(conversationId)
@@ -320,6 +330,81 @@ class ChatService(
             }
         }
         session.setJob(job)
+    }
+
+    private suspend fun handleGroupChatMessageComplete(
+        conversationId: Uuid,
+        userMessageParts: List<UIMessagePart>,
+    ) {
+        val settings = settingsStore.settingsFlow.first()
+        val conversation = getConversationFlow(conversationId).value
+
+        val textContent = userMessageParts
+            .filterIsInstance<UIMessagePart.Text>()
+            .joinToString("\n") { it.text }
+
+        val mentionedParticipantIds = extractMentionedParticipants(
+            content = textContent,
+            conversation = conversation,
+            selfParticipantId = Uuid.random(),
+            getAssistant = { id -> settings.assistants.find { it.id == id } },
+            getModelDisplayName = { id -> id?.let { settings.findModelById(it) }?.displayName ?: "Unknown" },
+        )
+
+        val targetParticipants = groupChatManager.resolveTargetParticipants(
+            conversation = conversation,
+            mentionedParticipantIds = mentionedParticipantIds.takeIf { it.isNotEmpty() },
+        )
+
+        if (targetParticipants.isEmpty()) {
+            return
+        }
+
+        for (participant in targetParticipants) {
+            val session = getOrCreateSession(conversationId)
+            if (session.getJob()?.isActive == true && session.getJob()?.isCancelled == false) {
+                continue
+            }
+
+            runCatching {
+                groupChatManager.generateForParticipant(
+                    conversation = getConversationFlow(conversationId).value,
+                    participant = participant,
+                    settings = settings,
+                    getAssistant = { id -> settings.assistants.find { it.id == id } },
+                    getModelById = { id -> settings.findModelById(id) },
+                    inputTransformers = buildList {
+                        addAll(inputTransformers)
+                        add(templateTransformer)
+                    },
+                    outputTransformers = outputTransformers,
+                    generationHandler = generationHandler,
+                    processingStatus = session.processingStatus,
+                ).collect { chunk ->
+                    when (chunk) {
+                        is GenerationChunk.Messages -> {
+                            val updatedConversation = getConversationFlow(conversationId).value
+                                .updateCurrentMessages(chunk.messages)
+                            updateConversation(conversationId, updatedConversation)
+                        }
+                    }
+                }
+            }.onFailure { e ->
+                if (e !is CancellationException) {
+                    addError(
+                        e,
+                        conversationId,
+                        title = context.getString(R.string.error_title_generation)
+                    )
+                    Logging.log(TAG, "handleGroupChatMessageComplete: $e")
+                }
+            }
+
+            delay(300)
+        }
+
+        val finalConversation = getConversationFlow(conversationId).value
+        saveConversation(conversationId, finalConversation)
     }
 
     private fun preprocessUserInputParts(parts: List<UIMessagePart>): List<UIMessagePart> {
@@ -1267,5 +1352,188 @@ class ChatService(
             )
         )
         saveConversation(conversationId, updatedConversation)
+    }
+
+    // ---- 群聊配置管理 ----
+
+    fun isGroupChat(conversationId: Uuid): Boolean {
+        val conversation = getConversationFlow(conversationId).value
+        return groupChatManager.isGroupChat(conversation)
+    }
+
+    fun getEnabledParticipants(conversationId: Uuid): List<me.rerere.rikkahub.data.model.GroupChatParticipant> {
+        val conversation = getConversationFlow(conversationId).value
+        return groupChatManager.getEnabledParticipants(conversation)
+    }
+
+    fun getGroupChatConfig(conversationId: Uuid): me.rerere.rikkahub.data.model.GroupChatConfig {
+        return getConversationFlow(conversationId).value.groupChatConfig
+    }
+
+    suspend fun setGroupChatConfig(
+        conversationId: Uuid,
+        config: me.rerere.rikkahub.data.model.GroupChatConfig,
+    ) {
+        val conversation = getConversationFlow(conversationId).value
+        val updatedConversation = conversation.copy(groupChatConfig = config)
+        saveConversation(conversationId, updatedConversation)
+    }
+
+    suspend fun addGroupChatParticipant(
+        conversationId: Uuid,
+        assistantId: Uuid,
+        modelId: Uuid? = null,
+        displayName: String? = null,
+    ) {
+        val conversation = getConversationFlow(conversationId).value
+        val currentConfig = conversation.groupChatConfig
+
+        val newParticipant = me.rerere.rikkahub.data.model.GroupChatParticipant(
+            assistantId = assistantId,
+            modelId = modelId,
+            displayName = displayName,
+        )
+
+        val newConfig = groupChatManager.addParticipantToConfig(currentConfig, newParticipant)
+        val updatedConversation = conversation.copy(groupChatConfig = newConfig)
+        saveConversation(conversationId, updatedConversation)
+    }
+
+    suspend fun removeGroupChatParticipant(
+        conversationId: Uuid,
+        participantId: Uuid,
+    ) {
+        val conversation = getConversationFlow(conversationId).value
+        val currentConfig = conversation.groupChatConfig
+
+        val newConfig = groupChatManager.removeParticipantFromConfig(currentConfig, participantId)
+        val updatedConversation = conversation.copy(groupChatConfig = newConfig)
+        saveConversation(conversationId, updatedConversation)
+    }
+
+    suspend fun toggleGroupChatParticipantEnabled(
+        conversationId: Uuid,
+        participantId: Uuid,
+    ) {
+        val conversation = getConversationFlow(conversationId).value
+        val currentConfig = conversation.groupChatConfig
+
+        val newConfig = groupChatManager.toggleParticipantEnabled(currentConfig, participantId)
+        val updatedConversation = conversation.copy(groupChatConfig = newConfig)
+        saveConversation(conversationId, updatedConversation)
+    }
+
+    suspend fun reorderGroupChatParticipants(
+        conversationId: Uuid,
+        participantIds: List<Uuid>,
+    ) {
+        val conversation = getConversationFlow(conversationId).value
+        val currentConfig = conversation.groupChatConfig
+
+        val newConfig = groupChatManager.reorderParticipants(currentConfig, participantIds)
+        val updatedConversation = conversation.copy(groupChatConfig = newConfig)
+        saveConversation(conversationId, updatedConversation)
+    }
+
+    suspend fun updateGroupChatParticipant(
+        conversationId: Uuid,
+        participantId: Uuid,
+        modelId: Uuid? = null,
+        displayName: String? = null,
+        enabled: Boolean? = null,
+    ) {
+        val conversation = getConversationFlow(conversationId).value
+        val currentConfig = conversation.groupChatConfig
+
+        val newParticipants = currentConfig.participants.map { p ->
+            if (p.id == participantId) {
+                p.copy(
+                    modelId = modelId ?: p.modelId,
+                    displayName = displayName ?: p.displayName,
+                    enabled = enabled ?: p.enabled,
+                )
+            } else {
+                p
+            }
+        }
+
+        val newConfig = currentConfig.copy(participants = newParticipants)
+        val updatedConversation = conversation.copy(groupChatConfig = newConfig)
+        saveConversation(conversationId, updatedConversation)
+    }
+
+    suspend fun convertToGroupChat(
+        conversationId: Uuid,
+        additionalAssistants: List<Uuid>,
+    ) {
+        val conversation = getConversationFlow(conversationId).value
+        val settings = settingsStore.settingsFlow.value
+
+        val currentAssistantId = conversation.assistantId
+        val allAssistantIds = listOf(currentAssistantId) + additionalAssistants
+
+        val participants = allAssistantIds.mapIndexed { index, assistantId ->
+            me.rerere.rikkahub.data.model.GroupChatParticipant(
+                assistantId = assistantId,
+                order = index,
+            )
+        }
+
+        val newConfig = groupChatManager.createGroupChatConfig(participants)
+        val updatedConversation = conversation.copy(groupChatConfig = newConfig)
+        saveConversation(conversationId, updatedConversation)
+    }
+
+    suspend fun convertToSingleChat(conversationId: Uuid) {
+        val conversation = getConversationFlow(conversationId).value
+        val newConfig = me.rerere.rikkahub.data.model.GroupChatConfig(isGroupChat = false)
+        val updatedConversation = conversation.copy(groupChatConfig = newConfig)
+        saveConversation(conversationId, updatedConversation)
+    }
+
+    // ---- 托管讨论 ----
+
+    fun getAutoDiscussState(): AutoDiscussState {
+        return autoDiscussManager.autoDiscussState.value
+    }
+
+    fun getAutoDiscussStateFlow(): StateFlow<AutoDiscussState> {
+        return autoDiscussManager.autoDiscussState
+    }
+
+    fun isAutoDiscussRunning(): Boolean {
+        return autoDiscussManager.isAutoDiscussRunning()
+    }
+
+    fun canStartAutoDiscuss(conversationId: Uuid): Boolean {
+        val conversation = getConversationFlow(conversationId).value
+        return autoDiscussManager.canStartAutoDiscuss(conversation)
+    }
+
+    suspend fun startAutoDiscuss(
+        conversationId: Uuid,
+        rounds: Int,
+        topicText: String? = null,
+    ) {
+        autoDiscussManager.startAutoDiscuss(
+            conversationId = conversationId,
+            rounds = rounds,
+            topicText = topicText,
+            onMessageGenerated = { messages ->
+                messages.forEach { message ->
+                    val node = message.toMessageNode()
+                    updateConversationState(conversationId) { conversation ->
+                        conversation.copy(
+                            messageNodes = conversation.messageNodes + node
+                        )
+                    }
+                }
+            },
+            onStateChange = {}
+        )
+    }
+
+    fun stopAutoDiscuss() {
+        autoDiscussManager.stopAutoDiscuss()
     }
 }

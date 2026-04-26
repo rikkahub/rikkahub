@@ -21,9 +21,12 @@ import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.GroupChatConfig
 import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
 import kotlin.uuid.Uuid
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 
 class ConversationRepository(
     private val conversationDAO: ConversationDAO,
@@ -272,7 +275,8 @@ class ConversationRepository(
             updateAt = conversation.updateAt.toEpochMilli(),
             assistantId = conversation.assistantId.toString(),
             chatSuggestions = JsonInstant.encodeToString(conversation.chatSuggestions),
-            isPinned = conversation.isPinned
+            isPinned = conversation.isPinned,
+            groupChatConfig = JsonInstant.encodeToString(conversation.groupChatConfig),
         )
     }
 
@@ -280,6 +284,11 @@ class ConversationRepository(
         conversationEntity: ConversationEntity,
         messageNodes: List<MessageNode>
     ): Conversation {
+        val groupChatConfig = try {
+            JsonInstant.decodeFromString<GroupChatConfig>(conversationEntity.groupChatConfig)
+        } catch (e: Exception) {
+            GroupChatConfig()
+        }
         return Conversation(
             id = Uuid.parse(conversationEntity.id),
             title = conversationEntity.title,
@@ -289,6 +298,7 @@ class ConversationRepository(
             assistantId = Uuid.parse(conversationEntity.assistantId),
             chatSuggestions = JsonInstant.decodeFromString(conversationEntity.chatSuggestions),
             isPinned = conversationEntity.isPinned,
+            groupChatConfig = groupChatConfig,
         )
     }
 

@@ -9,6 +9,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -21,6 +22,8 @@ import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.model.MessageParticipantInfo
+import me.rerere.rikkahub.data.model.extractParticipantInfoFromMessage
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -78,10 +81,83 @@ fun ChatMessageAssistantAvatar(
     assistant: Assistant?,
     modifier: Modifier = Modifier,
 ) {
+    val participantInfo = remember(message) {
+        extractParticipantInfoFromMessage(message)
+    }
+    ChatMessageAssistantAvatarInternal(
+        message = message,
+        loading = loading,
+        model = model,
+        assistant = assistant,
+        participantInfo = participantInfo,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun ChatMessageAssistantAvatarInternal(
+    message: UIMessage,
+    loading: Boolean,
+    model: Model?,
+    assistant: Assistant?,
+    participantInfo: MessageParticipantInfo?,
+    modifier: Modifier = Modifier,
+) {
     val settings = LocalSettings.current
     val showIcon = settings.displaySetting.showModelIcon
     val useAssistantAvatar = assistant?.useAssistantAvatar == true
-    if (message.role == MessageRole.ASSISTANT && (model != null || useAssistantAvatar)) {
+
+    if (message.role != MessageRole.ASSISTANT) return
+    if (participantInfo != null) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = modifier
+        ) {
+            if (showIcon) {
+                if (useAssistantAvatar) {
+                    UIAvatar(
+                        name = participantInfo.displayName,
+                        modifier = Modifier.size(32.dp),
+                        value = assistant.avatar,
+                        loading = loading,
+                    )
+                } else if (model != null) {
+                    AutoAIIcon(
+                        name = model.modelId,
+                        modifier = Modifier.size(32.dp),
+                        loading = loading
+                    )
+                } else {
+                    UIAvatar(
+                        name = participantInfo.displayName,
+                        modifier = Modifier.size(32.dp),
+                        value = null,
+                        loading = loading,
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                if (settings.displaySetting.showModelName) {
+                    Text(
+                        text = participantInfo.displayName,
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                        maxLines = 1,
+                    )
+                    if (settings.displaySetting.showDateBelowName) {
+                        Text(
+                            text = message.createdAt.toJavaLocalDateTime().toLocalString(),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = LocalContentColor.current.copy(alpha = 0.8f),
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+        }
+    } else if (model != null || useAssistantAvatar) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,

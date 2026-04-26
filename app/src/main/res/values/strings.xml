@@ -974,5 +974,40 @@
   <string name="reasoning_xhigh">XHigh</string>
   <string name="reasoning_picker_title">Adjust Model Thinking Depth</string>
   <string name="reasoning_picker_hint">Not all models support depth adjustment. Refer to the model and provider documentation.</string>
+
+  <string name="group_chat_settings">Group Chat Settings</string>
+  <string name="group_chat_participants">Participants</string>
+  <string name="group_chat_no_participants">No participants yet. Add assistants to start a group chat.</string>
+  <string name="group_chat_current_assistant">Current Assistant</string>
+  <string name="group_chat_speaking_order">Speaking Order</string>
+  <string name="group_chat_custom_prompt">Custom System Prompt</string>
+  <string name="group_chat_custom_prompt_placeholder">Optional: Add custom rules for this group chat...</string>
+  <string name="group_chat_order_sequential">Sequential</string>
+  <string name="group_chat_order_random">Random</string>
+  <string name="group_chat_save">Save</string>
+  <string name="group_chat_cancel">Cancel</string>
+  <string name="group_chat_add_participant">Add Participant</string>
+  <string name="group_chat_select_assistant">Select Assistant</string>
+  <string name="group_chat_no_available_assistants">No available assistants. All assistants are already participants.</string>
+  <string name="group_chat_select_model">Select Model (Optional)</string>
+  <string name="group_chat_custom_name">Custom Name (Optional)</string>
+  <string name="group_chat_custom_name_placeholder">Leave empty to use assistant name</string>
+  <string name="group_chat_add">Add</string>
+
+  <string name="auto_discuss_title">Auto Discussion</string>
+  <string name="auto_discuss_start">Start Auto Discuss</string>
+  <string name="auto_discuss_stop">Stop Auto Discuss</string>
+  <string name="auto_discuss_rounds">Round</string>
+  <string name="auto_discuss_rounds_desc">Number of discussion rounds</string>
+  <string name="auto_discuss_remaining">%d rounds remaining</string>
+  <string name="auto_discuss_in_progress">Auto discussion in progress...</string>
+  <string name="auto_discuss_hint">Select the number of rounds for the AI models to discuss automatically.</string>
+  <string name="auto_discuss_hint_no_messages">Enter a topic to start the auto discussion. The AI models will discuss this topic for the selected number of rounds.</string>
+  <string name="auto_discuss_running">Auto Discussion Running</string>
+  <string name="auto_discuss_progress">Round %d of %d</string>
+
+  <string name="group_chat_convert_to_group">Convert to Group Chat</string>
+  <string name="group_chat_convert_to_single">Convert to Single Chat</string>
+  <string name="group_chat_manage_participants">Manage Participants</string>
 </resources>
 

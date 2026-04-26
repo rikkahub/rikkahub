@@ -422,6 +422,99 @@ class ChatVM(
         }
     }
 
+    // ---- 群聊相关方法 ----
+
+    fun isGroupChat(): Boolean {
+        return chatService.isGroupChat(_conversationId)
+    }
+
+    fun getGroupChatParticipants(): List<me.rerere.rikkahub.data.model.GroupChatParticipant> {
+        return chatService.getEnabledParticipants(_conversationId)
+    }
+
+    fun getGroupChatConfig(): me.rerere.rikkahub.data.model.GroupChatConfig {
+        return chatService.getGroupChatConfig(_conversationId)
+    }
+
+    fun addGroupChatParticipant(assistantId: Uuid, modelId: Uuid? = null, displayName: String? = null) {
+        viewModelScope.launch {
+            chatService.addGroupChatParticipant(_conversationId, assistantId, modelId, displayName)
+        }
+    }
+
+    fun removeGroupChatParticipant(participantId: Uuid) {
+        viewModelScope.launch {
+            chatService.removeGroupChatParticipant(_conversationId, participantId)
+        }
+    }
+
+    fun toggleGroupChatParticipantEnabled(participantId: Uuid) {
+        viewModelScope.launch {
+            chatService.toggleGroupChatParticipantEnabled(_conversationId, participantId)
+        }
+    }
+
+    fun reorderGroupChatParticipants(participantIds: List<Uuid>) {
+        viewModelScope.launch {
+            chatService.reorderGroupChatParticipants(_conversationId, participantIds)
+        }
+    }
+
+    fun updateGroupChatParticipant(
+        participantId: Uuid,
+        modelId: Uuid? = null,
+        displayName: String? = null,
+        enabled: Boolean? = null,
+    ) {
+        viewModelScope.launch {
+            chatService.updateGroupChatParticipant(_conversationId, participantId, modelId, displayName, enabled)
+        }
+    }
+
+    fun convertToGroupChat(additionalAssistants: List<Uuid>) {
+        viewModelScope.launch {
+            chatService.convertToGroupChat(_conversationId, additionalAssistants)
+        }
+    }
+
+    fun convertToSingleChat() {
+        viewModelScope.launch {
+            chatService.convertToSingleChat(_conversationId)
+        }
+    }
+
+    fun setGroupChatConfig(config: me.rerere.rikkahub.data.model.GroupChatConfig) {
+        viewModelScope.launch {
+            chatService.setGroupChatConfig(_conversationId, config)
+        }
+    }
+
+    // ---- 托管讨论相关方法 ----
+
+    fun getAutoDiscussState() = chatService.getAutoDiscussStateFlow()
+
+    fun isAutoDiscussRunning(): Boolean {
+        return chatService.isAutoDiscussRunning()
+    }
+
+    fun canStartAutoDiscuss(): Boolean {
+        return chatService.canStartAutoDiscuss(_conversationId)
+    }
+
+    fun startAutoDiscuss(rounds: Int, topicText: String? = null) {
+        viewModelScope.launch {
+            chatService.startAutoDiscuss(
+                conversationId = _conversationId,
+                rounds = rounds,
+                topicText = topicText,
+            )
+        }
+    }
+
+    fun stopAutoDiscuss() {
+        chatService.stopAutoDiscuss()
+    }
+
     private fun getDateLabel(date: LocalDate): String {
         val today = LocalDate.now()
         val yesterday = today.minusDays(1)

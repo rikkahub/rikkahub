@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.chat
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyListState
@@ -51,6 +52,9 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
+import me.rerere.hugeicons.stroke.Play01
+import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Square02
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -58,8 +62,12 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.GroupChatConfig
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.ui.components.ai.AutoDiscussProgressBar
+import me.rerere.rikkahub.ui.components.ai.AutoDiscussRoundPickerDialog
 import me.rerere.rikkahub.ui.components.ai.ChatInput
+import me.rerere.rikkahub.ui.components.ai.GroupChatSettingsDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
@@ -253,6 +261,14 @@ private fun ChatPageContent(
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
 
+    var showGroupChatSettings by rememberSaveable { mutableStateOf(false) }
+    val groupChatConfig by remember(conversation) {
+        mutableStateOf(conversation.groupChatConfig)
+    }
+
+    var showAutoDiscussRoundPicker by rememberSaveable { mutableStateOf(false) }
+    val autoDiscussState by vm.getAutoDiscussState().collectAsStateWithLifecycle()
+
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     Surface(
@@ -276,7 +292,18 @@ private fun ChatPageContent(
                     },
                     onUpdateTitle = {
                         vm.updateTitle(it)
-                    }
+                    },
+                    onOpenGroupChatSettings = {
+                        showGroupChatSettings = true
+                    },
+                    onStartAutoDiscuss = {
+                        if (autoDiscussState.isRunning) {
+                            vm.stopAutoDiscuss()
+                        } else {
+                            showAutoDiscussRoundPicker = true
+                        }
+                    },
+                    isAutoDiscussRunning = autoDiscussState.isRunning,
                 )
             },
             bottomBar = {
@@ -356,76 +383,114 @@ private fun ChatPageContent(
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->
-            ChatList(
-                innerPadding = innerPadding,
-                conversation = conversation,
-                state = chatListState,
-                loading = loadingJob != null,
-                processingStatus = processingStatus,
-                previewMode = previewMode,
-                settings = setting,
-                hazeState = hazeState,
-                errors = errors,
-                onDismissError = onDismissError,
-                onClearAllErrors = onClearAllErrors,
-                onRegenerate = {
-                    vm.regenerateAtMessage(it)
-                },
-                onEdit = {
-                    inputState.editingMessage = it.id
-                    inputState.setContents(it.parts)
-                },
-                onForkMessage = {
-                    scope.launch {
-                        val fork = vm.forkMessage(message = it)
-                        navigateToChatPage(navController, chatId = fork.id)
-                    }
-                },
-                onDelete = {
-                    if (loadingJob != null) {
-                        vm.showDeleteBlockedWhileGeneratingError()
-                    } else {
-                        vm.deleteMessage(it)
-                    }
-                },
-                onUpdateMessage = { newNode ->
-                    vm.updateConversation(
-                        conversation.copy(
-                            messageNodes = conversation.messageNodes.map { node ->
-                                if (node.id == newNode.id) {
-                                    newNode
-                                } else {
-                                    node
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                if (autoDiscussState.isRunning) {
+                    AutoDiscussProgressBar(
+                        currentRound = autoDiscussState.completedRounds,
+                        totalRounds = autoDiscussState.totalRounds,
+                        onStop = { vm.stopAutoDiscuss() }
+                    )
+                }
+
+                ChatList(
+                    innerPadding = PaddingValues(0.dp),
+                    conversation = conversation,
+                    state = chatListState,
+                    loading = loadingJob != null,
+                    processingStatus = processingStatus,
+                    previewMode = previewMode,
+                    settings = setting,
+                    hazeState = hazeState,
+                    errors = errors,
+                    onDismissError = onDismissError,
+                    onClearAllErrors = onClearAllErrors,
+                    onRegenerate = {
+                        vm.regenerateAtMessage(it)
+                    },
+                    onEdit = {
+                        inputState.editingMessage = it.id
+                        inputState.setContents(it.parts)
+                    },
+                    onForkMessage = {
+                        scope.launch {
+                            val fork = vm.forkMessage(message = it)
+                            navigateToChatPage(navController, chatId = fork.id)
+                        }
+                    },
+                    onDelete = {
+                        if (loadingJob != null) {
+                            vm.showDeleteBlockedWhileGeneratingError()
+                        } else {
+                            vm.deleteMessage(it)
+                        }
+                    },
+                    onUpdateMessage = { newNode ->
+                        vm.updateConversation(
+                            conversation.copy(
+                                messageNodes = conversation.messageNodes.map { node ->
+                                    if (node.id == newNode.id) {
+                                        newNode
+                                    } else {
+                                        node
+                                    }
                                 }
-                            }
-                        ))
-                    vm.saveConversationAsync()
+                            )
+                        )
+                        vm.saveConversationAsync()
+                    },
+                    onClickSuggestion = { suggestion ->
+                        inputState.editingMessage = null
+                        inputState.setMessageText(suggestion)
+                    },
+                    onTranslate = { message, locale ->
+                        vm.translateMessage(message, locale)
+                    },
+                    onClearTranslation = { message ->
+                        vm.clearTranslationField(message.id)
+                    },
+                    onJumpToMessage = { index ->
+                        previewMode = false
+                        scope.launch {
+                            chatListState.animateScrollToItem(index)
+                        }
+                    },
+                    onToolApproval = { toolCallId, approved, reason ->
+                        vm.handleToolApproval(toolCallId, approved, reason)
+                    },
+                    onToolAnswer = { toolCallId, answer ->
+                        vm.handleToolAnswer(toolCallId, answer)
+                    },
+                    onToggleFavorite = { node ->
+                        vm.toggleMessageFavorite(node)
+                    },
+                )
+            }
+
+        if (showGroupChatSettings) {
+            GroupChatSettingsDialog(
+                settings = setting,
+                currentAssistant = setting.getCurrentAssistant(),
+                groupChatConfig = groupChatConfig,
+                onDismiss = { showGroupChatSettings = false },
+                onUpdateConfig = { newConfig ->
+                    vm.setGroupChatConfig(newConfig)
+                    showGroupChatSettings = false
+                }
+            )
+        }
+
+        if (showAutoDiscussRoundPicker) {
+            AutoDiscussRoundPickerDialog(
+                onDismiss = { showAutoDiscussRoundPicker = false },
+                onStart = { rounds ->
+                    showAutoDiscussRoundPicker = false
+                    vm.startAutoDiscuss(rounds = rounds)
                 },
-                onClickSuggestion = { suggestion ->
-                    inputState.editingMessage = null
-                    inputState.setMessageText(suggestion)
-                },
-                onTranslate = { message, locale ->
-                    vm.translateMessage(message, locale)
-                },
-                onClearTranslation = { message ->
-                    vm.clearTranslationField(message.id)
-                },
-                onJumpToMessage = { index ->
-                    previewMode = false
-                    scope.launch {
-                        chatListState.animateScrollToItem(index)
-                    }
-                },
-                onToolApproval = { toolCallId, approved, reason ->
-                    vm.handleToolApproval(toolCallId, approved, reason)
-                },
-                onToolAnswer = { toolCallId, answer ->
-                    vm.handleToolAnswer(toolCallId, answer)
-                },
-                onToggleFavorite = { node ->
-                    vm.toggleMessageFavorite(node)
-                },
+                hasMessages = conversation.messageNodes.isNotEmpty(),
             )
         }
     }
@@ -440,12 +505,18 @@ private fun TopBar(
     previewMode: Boolean,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
-    onUpdateTitle: (String) -> Unit
+    onUpdateTitle: (String) -> Unit,
+    onOpenGroupChatSettings: (() -> Unit)? = null,
+    onStartAutoDiscuss: (() -> Unit)? = null,
+    isAutoDiscussRunning: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val titleState = useEditState<String> {
         onUpdateTitle(it)
+    }
+    val hasValidGroupChat = remember(conversation) {
+        conversation.groupChatConfig?.isValid() == true
     }
 
     TopAppBar(
@@ -498,6 +569,34 @@ private fun TopBar(
             }
         },
         actions = {
+            onOpenGroupChatSettings?.let { onOpen ->
+                IconButton(
+                    onClick = onOpen
+                ) {
+                    Icon(HugeIcons.Settings03, "Group Chat Settings")
+                }
+            }
+
+            if (hasValidGroupChat && onStartAutoDiscuss != null) {
+                IconButton(
+                    onClick = onStartAutoDiscuss
+                ) {
+                    if (isAutoDiscussRunning) {
+                        Icon(
+                            HugeIcons.Square02,
+                            "Stop Auto Discuss",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Icon(
+                            HugeIcons.Play01,
+                            "Start Auto Discuss",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
             IconButton(
                 onClick = {
                     onClickMenu()
