@@ -34,7 +34,35 @@ jobs:
 
       - name: Create placeholder google-services.json
         run: |
-          echo '{"project_info":{"project_id":"placeholder","project_number":"0","name":"Placeholder"},"client":[{"oauth_client":[],"api_key":[{"current_key":"placeholder"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}},"client_info":{"mobilesdk_app_id":"1:0:android:placeholder","android_client_info":{"package_name":"me.rerere.rikkahub"}}}]}' > app/google-services.json
+          cat > app/google-services.json << 'EOF'
+          {
+            "project_info": {
+              "project_id": "placeholder",
+              "project_number": "0",
+              "name": "Placeholder"
+            },
+            "client": [
+              {
+                "oauth_client": [],
+                "api_key": [{"current_key": "placeholder"}],
+                "services": {"appinvite_service": {"other_platform_oauth_client": []}},
+                "client_info": {
+                  "mobilesdk_app_id": "1:0:android:placeholder",
+                  "android_client_info": {"package_name": "me.rerere.rikkahub"}
+                }
+              },
+              {
+                "oauth_client": [],
+                "api_key": [{"current_key": "placeholder"}],
+                "services": {"appinvite_service": {"other_platform_oauth_client": []}},
+                "client_info": {
+                  "mobilesdk_app_id": "1:0:android:placeholder-debug",
+                  "android_client_info": {"package_name": "me.rerere.rikkahub.debug"}
+                }
+              }
+            ]
+          }
+          EOF
 
       - name: Build Debug APK
         run: |
