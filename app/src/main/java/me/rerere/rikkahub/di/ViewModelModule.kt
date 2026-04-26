@@ -3,6 +3,7 @@ package me.rerere.rikkahub.di
 import me.rerere.rikkahub.ui.pages.assistant.AssistantVM
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailVM
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
+import me.rerere.rikkahub.ui.pages.chat.ChatDrawerVM
 import me.rerere.rikkahub.ui.pages.chat.ChatVM
 import me.rerere.rikkahub.ui.pages.debug.DebugVM
 import me.rerere.rikkahub.ui.pages.developer.DeveloperVM
@@ -36,6 +37,7 @@ val viewModelModule = module {
             favoriteRepository = get(),
         )
     }
+    viewModelOf(::ChatDrawerVM)
     viewModelOf(::SettingVM)
     viewModelOf(::DebugVM)
     viewModelOf(::HistoryVM)
