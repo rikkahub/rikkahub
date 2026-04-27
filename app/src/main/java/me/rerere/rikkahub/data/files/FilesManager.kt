@@ -304,6 +304,10 @@ class FilesManager(
                 activityContext.exportImageFile(activity, file)
             }
 
+            image.startsWith("/") -> {
+                activityContext.exportImageFile(activity, File(image))
+            }
+
             image.startsWith("http") -> {
                 runCatching {
                     val url = URL(image)
