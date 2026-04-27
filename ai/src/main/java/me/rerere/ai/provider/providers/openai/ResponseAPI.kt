@@ -77,7 +77,10 @@ class ResponseAPI(
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
+            .addHeader(
+                "Authorization",
+                "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
+            )
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -112,7 +115,10 @@ class ResponseAPI(
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
+            .addHeader(
+                "Authorization",
+                "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
+            )
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
@@ -168,7 +174,7 @@ class ResponseAPI(
         }
 
         val eventSource = EventSources.createFactory(client)
-                .newEventSource(request, listener)
+            .newEventSource(request, listener)
 
         awaitClose {
             println("[awaitClose] 关闭eventSource ")
@@ -187,7 +193,9 @@ class ResponseAPI(
         return buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)
-            put("store", false)
+            if (!params.model.tools.contains(BuiltInTools.ImageGeneration)) {
+                put("store", false)
+            }
 
             if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
@@ -254,6 +262,13 @@ class ResponseAPI(
                             }
 
                             BuiltInTools.UrlContext -> {} // not supported
+
+                            BuiltInTools.ImageGeneration -> {
+                                add(buildJsonObject {
+                                    put("type", "image_generation")
+                                    put("model", "gpt-image-2")
+                                })
+                            }
                         }
                     }
                 }
@@ -291,6 +306,9 @@ class ResponseAPI(
                                 // 输出 reasoning item
                                 add(buildJsonObject {
                                     put("type", "reasoning")
+                                    part.metadata?.get("reasoning_id")?.jsonPrimitiveOrNull?.contentOrNull?.let {
+                                        put("id", it)
+                                    }
                                     put("summary", buildJsonArray {
                                         add(buildJsonObject {
                                             put("type", "summary_text")
@@ -306,7 +324,23 @@ class ResponseAPI(
                                 })
                             }
 
-                            is UIMessagePart.Text, is UIMessagePart.Image -> {
+                            is UIMessagePart.Image -> {
+                                val callId = part.metadata?.get("openai_image_call_id")?.jsonPrimitive?.contentOrNull
+                                if (callId != null) {
+                                    if (contentBuffer.isNotEmpty()) {
+                                        addContentItem(MessageRole.ASSISTANT, contentBuffer)
+                                        contentBuffer.clear()
+                                    }
+                                    add(buildJsonObject {
+                                        put("type", "image_generation_call")
+                                        put("id", callId)
+                                    })
+                                } else {
+                                    contentBuffer.add(part)
+                                }
+                            }
+
+                            is UIMessagePart.Text -> {
                                 contentBuffer.add(part)
                             }
 
@@ -487,11 +521,36 @@ class ResponseAPI(
                                             finishedAt = null,
                                             metadata = buildJsonObject {
                                                 put("encrypted_content", encryptedContent)
+                                                put("reasoning_id", id)
                                             }
                                         )
                                     )
                                 ),
                                 finishReason = null,
+                            )
+                        )
+                    )
+                } else if (type == "image_generation_call") {
+                    val callId = item["id"]?.jsonPrimitive?.content ?: error("call_id not found")
+                    return MessageChunk(
+                        id = callId,
+                        model = "",
+                        choices = listOf(
+                            UIMessageChoice(
+                                index = 0,
+                                delta = UIMessage(
+                                    role = MessageRole.ASSISTANT,
+                                    parts = listOf(
+                                        UIMessagePart.Image(
+                                            url = "",
+                                            metadata = buildJsonObject {
+                                                put("openai_image_call_id", callId)
+                                            }
+                                        )
+                                    )
+                                ),
+                                message = null,
+                                finishReason = null
                             )
                         )
                     )
@@ -504,7 +563,6 @@ class ResponseAPI(
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
                 if (type == "reasoning") {
                     val encryptedContent = item["encrypted_content"]?.jsonPrimitive?.content
-                    // val summary = item["summary"]?.jsonArray ?: error("summary not found")
                     return MessageChunk(
                         id = id,
                         model = "",
@@ -521,11 +579,36 @@ class ResponseAPI(
                                             finishedAt = null,
                                             metadata = buildJsonObject {
                                                 put("encrypted_content", encryptedContent)
+                                                put("reasoning_id", id)
                                             }
                                         )
                                     )
                                 ),
                                 finishReason = null,
+                            )
+                        )
+                    )
+                } else if (type == "image_generation_call") {
+                    val result = item["result"]?.jsonPrimitive?.content ?: error("result not found")
+                    return MessageChunk(
+                        id = item["id"]?.jsonPrimitive?.content ?: error("item_id not found"),
+                        model = "",
+                        choices = listOf(
+                            UIMessageChoice(
+                                index = 0,
+                                delta = UIMessage(
+                                    role = MessageRole.ASSISTANT,
+                                    parts = listOf(
+                                        UIMessagePart.Image(
+                                            url = result,
+                                            metadata = buildJsonObject {
+                                                put("openai_image_call_id", item["id"]?.jsonPrimitive?.content ?: "")
+                                            }
+                                        )
+                                    )
+                                ),
+                                message = null,
+                                finishReason = null
                             )
                         )
                     )

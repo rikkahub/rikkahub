@@ -689,6 +689,8 @@
   <string name="setting_page_built_in_tools_search_desc">Enable Google Search integration</string>
   <string name="setting_page_built_in_tools_url_context">URL Context</string>
   <string name="setting_page_built_in_tools_url_context_desc">Enable URL content processing</string>
+  <string name="setting_page_built_in_tools_image_generation">Image Generation</string>
+  <string name="setting_page_built_in_tools_image_generation_desc">Enable image generation capability</string>
   <string name="setting_page_chat_storage">Chat Storage</string>
   <string name="setting_page_chat_storage_desc">%1$d files, %2$.2f MB</string>
   <string name="setting_page_code_display_settings">Code Display</string>

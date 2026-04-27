@@ -249,7 +249,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
                 try {
                     val jsonData = json.parseToJsonElement(data).jsonObject
-                    val reason = 
+                    val reason =
                         jsonData["promptFeedback"]?.jsonObject?.get("blockReason")?.jsonPrimitiveOrNull?.contentOrNull
                     if (reason != null) {
                         close(RuntimeException("Prompt feedback: $reason"))
@@ -460,6 +460,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                                 put("urlContext", buildJsonObject {})
                             })
                         }
+
+                        else -> {}
                     }
                 }
             })

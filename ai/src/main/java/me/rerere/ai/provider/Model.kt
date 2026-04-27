@@ -50,6 +50,10 @@ sealed class BuiltInTools {
     @Serializable
     @SerialName("url_context")
     data object UrlContext : BuiltInTools()
+
+    @Serializable
+    @SerialName("image_generation")
+    data object ImageGeneration : BuiltInTools()
 }
 
 

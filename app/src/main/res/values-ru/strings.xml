@@ -976,5 +976,7 @@
   <string name="reasoning_xhigh">Очень высокий</string>
   <string name="reasoning_picker_title">Настроить глубину мышления модели</string>
   <string name="reasoning_picker_hint">Не все модели поддерживают настройку глубины. См. документацию модели и провайдера.</string>
+  <string name="setting_page_built_in_tools_image_generation">Генерация изображений</string>
+  <string name="setting_page_built_in_tools_image_generation_desc">Включить возможность генерации изображений</string>
 </resources>
 

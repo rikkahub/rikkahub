@@ -299,7 +299,7 @@ private fun SettingProviderConfigPage(
                         showDeleteDialog = true
                     },
                 ) {
-                    Icon(HugeIcons.Delete01, "Delete")
+                    Icon(HugeIcons.Delete01, null)
                 }
             }
 
@@ -1370,6 +1370,10 @@ private fun BuiltInToolsSettings(
             BuiltInTools.UrlContext to Pair(
                 stringResource(R.string.setting_page_built_in_tools_url_context),
                 stringResource(R.string.setting_page_built_in_tools_url_context_desc)
+            ),
+            BuiltInTools.ImageGeneration to Pair(
+                stringResource(R.string.setting_page_built_in_tools_image_generation),
+                stringResource(R.string.setting_page_built_in_tools_image_generation_desc)
             )
         )
 

@@ -974,5 +974,7 @@
   <string name="reasoning_xhigh">超高</string>
   <string name="reasoning_picker_title">調整模型思考深度</string>
   <string name="reasoning_picker_hint">並非所有模型都支援深度調整。請參閱模型與提供者文件。</string>
+  <string name="setting_page_built_in_tools_image_generation">圖像生成</string>
+  <string name="setting_page_built_in_tools_image_generation_desc">啟用圖片生成功能</string>
 </resources>
 
