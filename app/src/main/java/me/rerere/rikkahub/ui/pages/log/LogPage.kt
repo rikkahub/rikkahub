@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.log
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -194,107 +195,109 @@ private fun RequestLogCard(log: LogEntry.RequestLog, onClick: () -> Unit) {
 private fun RequestLogDetail(log: LogEntry.RequestLog) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text(
-                text = "Request Details",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            DetailSection("Time", dateFormat.format(Date(log.timestamp)))
-        }
-
-        item {
-            DetailSection("URL", log.url)
-        }
-
-        item {
-            DetailSection("Method", log.method)
-        }
-
-        log.responseCode?.let { code ->
+    SelectionContainer {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             item {
-                DetailSection("Status Code", code.toString())
-            }
-        }
-
-        log.durationMs?.let { duration ->
-            item {
-                DetailSection("Duration", "${duration}ms")
-            }
-        }
-
-        log.error?.let { error ->
-            item {
-                DetailSection("Error", error)
-            }
-        }
-
-        if (log.requestHeaders.isNotEmpty()) {
-            item {
-                HorizontalDivider()
                 Text(
-                    text = "Request Headers",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
+                    text = "Request Details",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
-            log.requestHeaders.forEach { (key, value) ->
+
+            item {
+                DetailSection("Time", dateFormat.format(Date(log.timestamp)))
+            }
+
+            item {
+                DetailSection("URL", log.url)
+            }
+
+            item {
+                DetailSection("Method", log.method)
+            }
+
+            log.responseCode?.let { code ->
                 item {
-                    HeaderItem(key, value)
+                    DetailSection("Status Code", code.toString())
                 }
             }
-        }
 
-        log.requestBody?.let { body ->
-            item {
-                HorizontalDivider()
-                Text(
-                    text = "Request Body",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                val jsonElement = remember(body) {
-                    runCatching { JsonInstantPretty.parseToJsonElement(body) }.getOrNull()
+            log.durationMs?.let { duration ->
+                item {
+                    DetailSection("Duration", "${duration}ms")
                 }
-                if (jsonElement != null) {
-                    JsonTree(
-                        json = jsonElement,
-                        modifier = Modifier.padding(top = 4.dp),
-                        initialExpandLevel = 2
-                    )
-                } else {
+            }
+
+            log.error?.let { error ->
+                item {
+                    DetailSection("Error", error)
+                }
+            }
+
+            if (log.requestHeaders.isNotEmpty()) {
+                item {
+                    HorizontalDivider()
                     Text(
-                        text = body,
-                        fontFamily = JetbrainsMono,
-                        modifier = Modifier.padding(top = 4.dp)
+                        text = "Request Headers",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
                     )
                 }
+                log.requestHeaders.forEach { (key, value) ->
+                    item {
+                        HeaderItem(key, value)
+                    }
+                }
             }
-        }
 
-        if (log.responseHeaders.isNotEmpty()) {
-            item {
-                HorizontalDivider()
-                Text(
-                    text = "Response Headers",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-            log.responseHeaders.forEach { (key, value) ->
+            log.requestBody?.let { body ->
                 item {
-                    HeaderItem(key, value)
+                    HorizontalDivider()
+                    Text(
+                        text = "Request Body",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    val jsonElement = remember(body) {
+                        runCatching { JsonInstantPretty.parseToJsonElement(body) }.getOrNull()
+                    }
+                    if (jsonElement != null) {
+                        JsonTree(
+                            json = jsonElement,
+                            modifier = Modifier.padding(top = 4.dp),
+                            initialExpandLevel = 2
+                        )
+                    } else {
+                        Text(
+                            text = body,
+                            fontFamily = JetbrainsMono,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            if (log.responseHeaders.isNotEmpty()) {
+                item {
+                    HorizontalDivider()
+                    Text(
+                        text = "Response Headers",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                log.responseHeaders.forEach { (key, value) ->
+                    item {
+                        HeaderItem(key, value)
+                    }
                 }
             }
         }
@@ -341,28 +344,30 @@ private fun TextLogCard(log: LogEntry.TextLog) {
         modifier = Modifier.fillMaxWidth(),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+        SelectionContainer {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = log.tag,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = dateFormat.format(Date(log.timestamp)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = log.tag,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = dateFormat.format(Date(log.timestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = log.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = JetbrainsMono
                 )
             }
-            Text(
-                text = log.message,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = JetbrainsMono
-            )
         }
     }
 }
