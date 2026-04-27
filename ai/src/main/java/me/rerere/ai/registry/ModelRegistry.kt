@@ -81,6 +81,28 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    // GPT Image Generation Models
+    val GPT_IMAGE_2 = defineModel {
+        tokens("gpt", "image", "2")
+        imageOutput()
+    }
+
+    val GPT_IMAGE_1_5 = defineModel {
+        tokens("gpt", "image", "1", "5")
+        imageOutput()
+    }
+
+    val GPT_IMAGE_1 = defineModel {
+        tokens("gpt", "image", "1")
+        notTokens("mini")
+        imageOutput()
+    }
+
+    val GPT_IMAGE_1_MINI = defineModel {
+        tokens("gpt", "image", "1", "mini")
+        imageOutput()
+    }
+
     private val GEMINI_20_FLASH = defineModel {
         tokens("gemini", "2", "0", "flash")
         visionInput()

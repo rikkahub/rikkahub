@@ -83,6 +83,8 @@ import coil3.compose.AsyncImage
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import me.rerere.ai.provider.ImageQuality
+import me.rerere.ai.provider.InputFidelity
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.rikkahub.R
@@ -217,6 +219,8 @@ private fun ImageGenScreen(
     val prompt by vm.prompt.collectAsStateWithLifecycle()
     val numberOfImages by vm.numberOfImages.collectAsStateWithLifecycle()
     val aspectRatio by vm.aspectRatio.collectAsStateWithLifecycle()
+    val quality by vm.quality.collectAsStateWithLifecycle()
+    val inputFidelity by vm.inputFidelity.collectAsStateWithLifecycle()
     val isGenerating by vm.isGenerating.collectAsStateWithLifecycle()
     val currentGeneratedImages by vm.currentGeneratedImages.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
@@ -284,6 +288,8 @@ private fun ImageGenScreen(
             settings = settings,
             numberOfImages = numberOfImages,
             aspectRatio = aspectRatio,
+            quality = quality,
+            inputFidelity = inputFidelity,
             scope = scope,
             sheetState = sheetState,
             onDismiss = { showSettingsSheet = false }
@@ -519,6 +525,8 @@ private fun SettingsBottomSheet(
     settings: Settings,
     numberOfImages: Int,
     aspectRatio: ImageAspectRatio,
+    quality: ImageQuality,
+    inputFidelity: InputFidelity?,
     scope: CoroutineScope,
     sheetState: SheetState,
     onDismiss: () -> Unit
@@ -596,6 +604,63 @@ private fun SettingsBottomSheet(
                             }
                         )
                     }
+                }
+            }
+
+            FormItem(
+                label = { Text(stringResource(R.string.imggen_page_image_quality)) },
+                description = { Text(stringResource(R.string.imggen_page_image_quality_desc)) }
+            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ImageQuality.entries.forEach { q ->
+                        FilterChip(
+                            selected = quality == q,
+                            onClick = { vm.updateQuality(q) },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        when (q) {
+                                            ImageQuality.LOW -> R.string.imggen_page_quality_low
+                                            ImageQuality.MEDIUM -> R.string.imggen_page_quality_medium
+                                            ImageQuality.HIGH -> R.string.imggen_page_quality_high
+                                        }
+                                    )
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            FormItem(
+                label = { Text(stringResource(R.string.imggen_page_input_fidelity)) },
+                description = { Text(stringResource(R.string.imggen_page_input_fidelity_desc)) }
+            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Auto option (null)
+                    FilterChip(
+                        selected = inputFidelity == null,
+                        onClick = { vm.updateInputFidelity(null) },
+                        label = { Text(stringResource(R.string.imggen_page_fidelity_auto)) }
+                    )
+                    // Low fidelity
+                    FilterChip(
+                        selected = inputFidelity == InputFidelity.LOW,
+                        onClick = { vm.updateInputFidelity(InputFidelity.LOW) },
+                        label = { Text(stringResource(R.string.imggen_page_fidelity_low)) }
+                    )
+                    // High fidelity
+                    FilterChip(
+                        selected = inputFidelity == InputFidelity.HIGH,
+                        onClick = { vm.updateInputFidelity(InputFidelity.HIGH) },
+                        label = { Text(stringResource(R.string.imggen_page_fidelity_high)) }
+                    )
                 }
             }
 

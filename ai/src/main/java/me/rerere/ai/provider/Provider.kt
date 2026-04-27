@@ -57,11 +57,26 @@ data class TextGenerationParams(
 )
 
 @Serializable
+enum class ImageQuality {
+    LOW,
+    MEDIUM,
+    HIGH
+}
+
+@Serializable
+enum class InputFidelity {
+    LOW,
+    HIGH
+}
+
+@Serializable
 data class ImageGenerationParams(
     val model: Model,
     val prompt: String,
     val numOfImages: Int = 1,
     val aspectRatio: ImageAspectRatio = ImageAspectRatio.SQUARE,
+    val quality: ImageQuality? = null,
+    val inputFidelity: InputFidelity? = null,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
 )

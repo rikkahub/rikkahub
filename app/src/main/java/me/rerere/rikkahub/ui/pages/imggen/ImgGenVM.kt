@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import me.rerere.ai.provider.ImageGenerationParams
+import me.rerere.ai.provider.ImageQuality
+import me.rerere.ai.provider.InputFidelity
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
@@ -68,6 +70,12 @@ class ImgGenVM(
     private val _aspectRatio = MutableStateFlow(ImageAspectRatio.SQUARE)
     val aspectRatio: StateFlow<ImageAspectRatio> = _aspectRatio
 
+    private val _quality = MutableStateFlow(ImageQuality.MEDIUM)
+    val quality: StateFlow<ImageQuality> = _quality
+
+    private val _inputFidelity = MutableStateFlow<InputFidelity?>(null)
+    val inputFidelity: StateFlow<InputFidelity?> = _inputFidelity
+
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating: StateFlow<Boolean> = _isGenerating
     private var cancelJob: Job? = null
@@ -100,6 +108,14 @@ class ImgGenVM(
         _aspectRatio.value = aspectRatio
     }
 
+    fun updateQuality(quality: ImageQuality) {
+        _quality.value = quality
+    }
+
+    fun updateInputFidelity(inputFidelity: InputFidelity?) {
+        _inputFidelity.value = inputFidelity
+    }
+
     fun clearError() {
         _error.value = null
     }
@@ -128,6 +144,8 @@ class ImgGenVM(
                     prompt = _prompt.value,
                     numOfImages = _numberOfImages.value,
                     aspectRatio = _aspectRatio.value,
+                    quality = _quality.value,
+                    inputFidelity = _inputFidelity.value,
                     customHeaders = model.customHeaders,
                     customBody = model.customBodies
                 )

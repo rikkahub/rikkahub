@@ -384,6 +384,16 @@
   <string name="imggen_page_generate_image">Generate Image</string>
   <string name="imggen_page_generation_count">Generation Count</string>
   <string name="imggen_page_generation_count_desc">Number of images to generate each time</string>
+  <string name="imggen_page_image_quality">Image Quality</string>
+  <string name="imggen_page_image_quality_desc">Output quality for generated images (gpt-image-2)</string>
+  <string name="imggen_page_quality_high">High</string>
+  <string name="imggen_page_quality_low">Low</string>
+  <string name="imggen_page_quality_medium">Medium</string>
+  <string name="imggen_page_input_fidelity">Input Fidelity</string>
+  <string name="imggen_page_input_fidelity_desc">Fidelity to input image for edits (gpt-image-1/1.5/mini)</string>
+  <string name="imggen_page_fidelity_low">Low</string>
+  <string name="imggen_page_fidelity_high">High</string>
+  <string name="imggen_page_fidelity_auto">Auto</string>
   <string name="imggen_page_image_saved_success">Image saved to gallery</string>
   <string name="imggen_page_model_selection">Model Selection</string>
   <string name="imggen_page_model_selection_desc">Select AI model for image generation</string>

@@ -15,6 +15,8 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageGenerationParams
+import me.rerere.ai.provider.ImageQuality
+import me.rerere.ai.provider.InputFidelity
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
@@ -213,6 +215,22 @@ class OpenAIProvider(
                         ImageAspectRatio.PORTRAIT -> "1024x1536"
                     }
                 )
+                // Add quality parameter for gpt-image-2 and other models that support it
+                params.quality?.let { quality ->
+                    put("quality", when (quality) {
+                        ImageQuality.LOW -> "low"
+                        ImageQuality.MEDIUM -> "medium"
+                        ImageQuality.HIGH -> "high"
+                    })
+                }
+                // Add input_fidelity parameter for models that support it (gpt-image-1, 1.5, mini)
+                // Note: gpt-image-2 does not support input_fidelity
+                params.inputFidelity?.let { fidelity ->
+                    put("input_fidelity", when (fidelity) {
+                        InputFidelity.LOW -> "low"
+                        InputFidelity.HIGH -> "high"
+                    })
+                }
             }.mergeCustomBody(params.customBody)
         )
 
