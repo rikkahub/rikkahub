@@ -610,7 +610,7 @@ private fun ModelSettingsForm(
                             }
                         )
 
-                        if (model.type == ModelType.CHAT) {
+                        if (model.type == ModelType.CHAT || model.type == ModelType.IMAGE) {
                             ModalAbilitySelector(
                                 abilities = model.abilities,
                                 onUpdateAbilities = {
@@ -1046,7 +1046,7 @@ private fun ModelModalitySelector(
     outputModalities: List<Modality>,
     onUpdateOutputModalities: (List<Modality>) -> Unit
 ) {
-    if (model.type == ModelType.CHAT) {
+    if (model.type == ModelType.CHAT || model.type == ModelType.IMAGE) {
         Text(
             stringResource(R.string.setting_provider_page_input_modality),
             style = MaterialTheme.typography.titleSmall

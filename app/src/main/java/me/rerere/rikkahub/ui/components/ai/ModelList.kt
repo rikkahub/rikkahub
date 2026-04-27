@@ -182,7 +182,7 @@ fun ModelSelector(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 val filteredProviderSettings = providers.fastFilter {
-                    it.enabled && it.models.fastAny { model -> model.type == type }
+                    it.enabled && it.models.fastAny { model -> model.type == type || model.id == modelId }
                 }
                 ModelList(
                     currentModel = modelId,
@@ -222,23 +222,23 @@ private fun ColumnScope.ModelList(
 
     val favoriteModels = settings.value.favoriteModels.mapNotNull { modelId ->
         val model = settings.value.providers.findModelById(modelId) ?: return@mapNotNull null
-        if (model.type != modelType) return@mapNotNull null
+        if (model.type != modelType && model.id != currentModel) return@mapNotNull null
         val provider = model.findProvider(providers = settings.value.providers, checkOverwrite = false) ?: return@mapNotNull null
         model to provider
     }
 
     var searchKeywords by remember { mutableStateOf("") }
 
-    val typeFilteredModelsByProvider = remember(providers, modelType) {
+    val typeFilteredModelsByProvider = remember(providers, modelType, currentModel) {
         providers.associate { provider ->
-            provider.id to provider.models.fastFilter { it.type == modelType }
+            provider.id to provider.models.fastFilter { it.type == modelType || it.id == currentModel }
         }
     }
 
-    val searchFilteredModelsByProvider = remember(providers, modelType, searchKeywords) {
+    val searchFilteredModelsByProvider = remember(providers, modelType, searchKeywords, currentModel) {
         providers.associate { provider ->
             provider.id to provider.models.fastFilter {
-                it.type == modelType && it.displayName.contains(searchKeywords, true)
+                (it.type == modelType || it.id == currentModel) && it.displayName.contains(searchKeywords, true)
             }
         }
     }
