@@ -75,6 +75,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
@@ -263,7 +264,7 @@ private fun ImageGenScreen(
 
                 if (showPreview) {
                     ImagePreviewDialog(
-                        images = listOf(image.filePath),
+                        images = listOf(File(image.filePath).toUri().toString()),
                         onDismissRequest = { showPreview = false },
                     )
                 }
@@ -458,7 +459,10 @@ private fun ImageGalleryScreen(
                                             onClick = {
                                                 scope.launch {
                                                     try {
-                                                        filesManager.saveMessageImage(context, "file://${it.filePath}")
+                                                        filesManager.saveMessageImage(
+                                                            context,
+                                                            File(it.filePath).toUri().toString()
+                                                        )
                                                         toaster.show(
                                                             message = context.getString(R.string.imggen_page_image_saved_success),
                                                             type = ToastType.Success
@@ -501,7 +505,7 @@ private fun ImageGalleryScreen(
 
                         if (showPreview) {
                             ImagePreviewDialog(
-                                images = listOf(it.filePath),
+                                images = listOf(File(it.filePath).toUri().toString()),
                                 onDismissRequest = { showPreview = false }
                             )
                         }

@@ -292,42 +292,66 @@ class FilesManager(
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun saveMessageImage(activityContext: Context, image: String) = withContext(Dispatchers.IO) {
         val activity = requireNotNull(activityContext.getActivity()) { "Activity not found" }
-        when {
-            image.startsWith("data:image") -> {
-                val byteArray = Base64.decode(image.substringAfter("base64,").toByteArray())
-                val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
-                activityContext.exportImage(activity, bitmap)
+        when (val source = parseImageSource(image)) {
+            is ImageSource.DataUri -> {
+                exportBase64Image(activityContext, activity, source.base64Data)
             }
 
-            image.startsWith("file:") -> {
-                val file = image.toUri().toFile()
+            is ImageSource.RawBase64 -> {
+                exportBase64Image(activityContext, activity, source.base64Data)
+            }
+
+            is ImageSource.FileUri -> {
+                val file = source.raw.toUri().toFile()
                 activityContext.exportImageFile(activity, file)
             }
 
-            image.startsWith("/") -> {
-                activityContext.exportImageFile(activity, File(image))
+            is ImageSource.LocalPath -> {
+                activityContext.exportImageFile(activity, File(source.raw))
             }
 
-            image.startsWith("http") -> {
-                runCatching {
-                    val url = URL(image)
-                    val connection = url.openConnection() as HttpURLConnection
-                    connection.connect()
+            is ImageSource.ContentUri -> {
+                val bitmap = activityContext.contentResolver.openInputStream(source.raw.toUri())?.use { input ->
+                    BitmapFactory.decodeStream(input)
+                } ?: error("Unable to open image")
+                requireNotNull(bitmap) { "Unable to decode image" }
+                activityContext.exportImage(activity, bitmap)
+            }
 
-                    if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                        val bitmap = BitmapFactory.decodeStream(connection.inputStream)
-                        activityContext.exportImage(activity, bitmap)
-                    } else {
+            is ImageSource.RemoteUrl -> {
+                val connection = (URL(source.raw).openConnection() as HttpURLConnection).apply {
+                    connect()
+                }
+                try {
+                    if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                         Log.e(
                             TAG,
-                            "saveMessageImage: Failed to download image from $image, response code: ${connection.responseCode}"
+                            "saveMessageImage: Failed to download image from ${source.raw}, response code: ${connection.responseCode}"
                         )
+                        error("Failed to download image: HTTP ${connection.responseCode}")
                     }
-                }.getOrNull()
+                    val bitmap = connection.inputStream.use { input ->
+                        BitmapFactory.decodeStream(input)
+                    }
+                    requireNotNull(bitmap) { "Unable to decode downloaded image" }
+                    activityContext.exportImage(activity, bitmap)
+                } finally {
+                    connection.disconnect()
+                }
             }
-
-            else -> error("Invalid image format")
         }
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun exportBase64Image(
+        activityContext: Context,
+        activity: android.app.Activity,
+        base64Data: String
+    ) {
+        val byteArray = Base64.decode(base64Data.toByteArray())
+        val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
+        requireNotNull(bitmap) { "Unable to decode image" }
+        activityContext.exportImage(activity, bitmap)
     }
 
     suspend fun syncFolder(folder: String = FileFolders.UPLOAD): Int = withContext(Dispatchers.IO) {
@@ -548,4 +572,102 @@ class FilesManager(
 object FileFolders {
     const val UPLOAD = "upload"
     const val SKILLS = "skills"
+}
+
+internal sealed interface ImageSource {
+    val raw: String
+
+    data class DataUri(
+        override val raw: String,
+        val base64Data: String,
+    ) : ImageSource
+
+    data class RawBase64(
+        override val raw: String,
+        val base64Data: String,
+    ) : ImageSource
+
+    data class RemoteUrl(
+        override val raw: String,
+    ) : ImageSource
+
+    data class FileUri(
+        override val raw: String,
+    ) : ImageSource
+
+    data class ContentUri(
+        override val raw: String,
+    ) : ImageSource
+
+    data class LocalPath(
+        override val raw: String,
+    ) : ImageSource
+}
+
+private val WINDOWS_ABSOLUTE_PATH = Regex("^[A-Za-z]:[\\\\/].+")
+private val BASE64_PATTERN = Regex("^[A-Za-z0-9+/=_-]+$")
+
+@OptIn(ExperimentalEncodingApi::class)
+internal fun parseImageSource(raw: String): ImageSource {
+    val image = raw.trim()
+    require(image.isNotBlank()) { "Image source is empty" }
+
+    if (image.startsWith("data:", ignoreCase = true) && image.contains(";base64,", ignoreCase = true)) {
+        val base64Data = image.substringAfter(";base64,", "")
+        require(base64Data.isNotBlank()) { "Image data is empty" }
+        require(looksLikeBase64Image(base64Data)) { "Invalid image format" }
+        return ImageSource.DataUri(raw = image, base64Data = base64Data)
+    }
+
+    if (image.startsWith("http://", ignoreCase = true) || image.startsWith("https://", ignoreCase = true)) {
+        return ImageSource.RemoteUrl(image)
+    }
+
+    if (image.startsWith("file://", ignoreCase = true)) {
+        return ImageSource.FileUri(image)
+    }
+
+    if (image.startsWith("content://", ignoreCase = true)) {
+        return ImageSource.ContentUri(image)
+    }
+
+    if (image.startsWith("/") || WINDOWS_ABSOLUTE_PATH.matches(image) || File(image).isAbsolute) {
+        return ImageSource.LocalPath(image)
+    }
+
+    if (looksLikeBase64Image(image)) {
+        return ImageSource.RawBase64(raw = image, base64Data = image)
+    }
+
+    error("Invalid image format")
+}
+
+@OptIn(ExperimentalEncodingApi::class)
+private fun looksLikeBase64Image(raw: String): Boolean {
+    val normalized = raw.filterNot(Char::isWhitespace)
+    if (normalized.length < 16 || normalized.length % 4 != 0) return false
+    if (!BASE64_PATTERN.matches(normalized)) return false
+
+    val bytes = runCatching { Base64.decode(normalized.toByteArray()) }.getOrNull() ?: return false
+    return bytes.hasImageMagic()
+}
+
+private fun ByteArray.hasImageMagic(): Boolean {
+    if (startsWithBytes(0x89, 0x50, 0x4E, 0x47)) return true
+    if (startsWithBytes(0xFF, 0xD8, 0xFF)) return true
+    if (startsWithBytes(0x47, 0x49, 0x46, 0x38)) return true
+    if (startsWithBytes(0x52, 0x49, 0x46, 0x46) && size >= 12 && sliceArray(8..11)
+            .contentEquals(byteArrayOf(0x57, 0x45, 0x42, 0x50))
+    ) {
+        return true
+    }
+    return false
+}
+
+private fun ByteArray.startsWithBytes(vararg values: Int): Boolean {
+    if (size < values.size) return false
+    for (i in values.indices) {
+        if ((this[i].toInt() and 0xFF) != values[i]) return false
+    }
+    return true
 }
