@@ -940,11 +940,7 @@
   <string name="text_area_import_from_file">從檔案匯入</string>
   <string name="text_area_import_success">檔案匯入成功</string>
   <string name="text_area_save">儲存</string>
-  <string name="theme_name_autumn">秋葉黃</string>
-  <string name="theme_name_black">中性黑</string>
-  <string name="theme_name_ocean">海灣藍</string>
-  <string name="theme_name_sakura">櫻花粉</string>
-  <string name="theme_name_spring">原野綠</string>
+  <string name="theme_name_cyberpunk">賽博霓虹</string>
   <string name="title_activity_safe_mode">安全模式</string>
   <string name="tools_warning">當前模型未開啟工具調用，請在設定內啟用模型的工具能力，再使用搜尋/MCP等功能</string>
   <string name="translate">翻譯</string>

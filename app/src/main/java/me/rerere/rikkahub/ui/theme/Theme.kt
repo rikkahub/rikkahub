@@ -1,14 +1,11 @@
 package me.rerere.rikkahub.ui.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
@@ -17,13 +14,13 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
 import me.rerere.rikkahub.ui.hooks.rememberUserSettingsState
+import me.rerere.rikkahub.ui.theme.presets.CyberpunkThemePreset
 
 private val ExtendLightColors = lightExtendColors()
 private val ExtendDarkColors = darkExtendColors()
@@ -54,13 +51,11 @@ fun RikkahubTheme(
     }
     val amoledDarkMode by rememberAmoledDarkMode()
 
-    val colorScheme = when {
-        settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> findPresetTheme(settings.themeId).getColorScheme(dark = true)
-        else -> findPresetTheme(settings.themeId).getColorScheme(dark = false)
+    // 单一主题系统：强制使用 Cyberpunk 主题
+    val colorScheme = if (darkTheme) {
+        CyberpunkThemePreset.getColorScheme(dark = true)
+    } else {
+        CyberpunkThemePreset.getColorScheme(dark = false)
     }
     val colorSchemeConverted = remember(darkTheme, amoledDarkMode, colorScheme) {
         if (darkTheme && amoledDarkMode) {

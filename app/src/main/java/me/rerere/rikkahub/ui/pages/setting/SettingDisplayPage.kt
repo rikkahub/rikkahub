@@ -48,7 +48,6 @@ import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
-import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -105,38 +104,32 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
                     )
-                    ListItem(
+                    // Cyberpunk 主题（单一主题系统，不可切换）
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(
                                 RoundedCornerShape(
                                     topStart = 20.dp,
                                     topEnd = 20.dp,
-                                    bottomStart = 4.dp,
-                                    bottomEnd = 4.dp
+                                    bottomStart = 20.dp,
+                                    bottomEnd = 20.dp
                                 )
-                            ),
-                        headlineContent = { Text(stringResource(R.string.setting_page_dynamic_color)) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_dynamic_color_desc)) },
-                        trailingContent = {
-                            Switch(
-                                checked = settings.dynamicColor,
-                                onCheckedChange = { vm.updateSettings(settings.copy(dynamicColor = it)) },
                             )
-                        },
-                        colors = CustomColors.listItemColors,
-                    )
-                    if (!settings.dynamicColor) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.surfaceBright)
+                            .background(MaterialTheme.colorScheme.surfaceBright)
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            PresetThemeButtonGroup(
-                                themeId = settings.themeId,
-                                modifier = Modifier.fillMaxWidth(),
-                                onChangeTheme = { vm.updateSettings(settings.copy(themeId = it)) }
+                            Text(
+                                text = "CYBERPUNK INDUSTRIAL",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }

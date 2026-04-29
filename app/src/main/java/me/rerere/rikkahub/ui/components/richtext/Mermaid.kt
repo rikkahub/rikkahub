@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
-import com.google.common.cache.CacheBuilder
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Download01
@@ -47,9 +46,7 @@ import me.rerere.rikkahub.utils.escapeHtml
 import me.rerere.rikkahub.utils.exportImage
 import me.rerere.rikkahub.utils.toCssHex
 
-private val mermaidHeightCache = CacheBuilder.newBuilder()
-    .maximumSize(100)
-    .build<String, Int>()
+private val mermaidHeightCache = LinkedHashMap<String, Int>(100, 0.75f, true)
 
 /**
  * A component that renders Mermaid diagrams.
@@ -69,7 +66,7 @@ fun Mermaid(
     val activity = LocalActivity.current
     val toaster = LocalToaster.current
 
-    var contentHeight by remember { mutableIntStateOf(mermaidHeightCache.getIfPresent(code) ?: 150) }
+    var contentHeight by remember { mutableIntStateOf(mermaidHeightCache[code] ?: 150) }
     val height = with(density) {
         contentHeight.toDp()
     }
@@ -79,7 +76,11 @@ fun Mermaid(
                 // 需要乘以density
                 // https://stackoverflow.com/questions/43394498/how-to-get-the-full-height-of-in-android-webview
                 contentHeight = (height * density.density).toInt()
-                mermaidHeightCache.put(code, contentHeight)
+                mermaidHeightCache[code] = contentHeight
+                // LRU eviction: keep max 100 entries
+                if (mermaidHeightCache.size > 100) {
+                    mermaidHeightCache.remove(mermaidHeightCache.keys.first())
+                }
             },
             onExportImage = { base64Image ->
                 runCatching {
