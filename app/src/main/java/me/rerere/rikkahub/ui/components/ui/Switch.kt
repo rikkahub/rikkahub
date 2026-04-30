@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.RectangleShape
 
 enum class SwitchSize {
     Small,
@@ -95,7 +94,7 @@ fun Switch(
     Box(
         modifier = modifier
             .size(width = dimensions.trackWidth, height = dimensions.trackHeight)
-            .clip(RoundedCornerShape(50))
+            .clip(RectangleShape)
             .background(currentTrackColor)
             .clickable(
                 enabled = enabled,
@@ -113,9 +112,9 @@ fun Switch(
                 .size(dimensions.thumbSize)
                 .shadow(
                     elevation = if (enabled) 2.dp else 0.dp,
-                    shape = CircleShape
+                    shape = RectangleShape
                 )
-                .clip(CircleShape)
+                .clip(RectangleShape)
                 .background(currentThumbColor)
         )
     }

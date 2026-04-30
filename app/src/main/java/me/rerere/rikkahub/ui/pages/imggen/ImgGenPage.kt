@@ -33,8 +33,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
@@ -97,6 +95,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.io.File
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun ImageGenPage(
@@ -256,7 +255,7 @@ private fun ImageGenScreen(
                     modifier = Modifier
                         .weight(1f)
                         .aspectRatio(1f)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RectangleShape)
                         .clickable { showPreview = true },
                     contentScale = ContentScale.Crop
                 )

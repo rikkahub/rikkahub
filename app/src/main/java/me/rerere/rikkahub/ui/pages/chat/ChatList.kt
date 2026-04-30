@@ -42,8 +42,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
@@ -104,6 +102,7 @@ import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.rikkahub.utils.plus
 import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
@@ -622,7 +621,7 @@ private fun ChatListPreview(
                 }
             },
             singleLine = true,
-            shape = CircleShape,
+            shape = RectangleShape,
             maxLines = 1,
         )
 
@@ -704,7 +703,7 @@ private fun ChatSuggestionsRow(
         items(conversation.chatSuggestions) { suggestion ->
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(50))
+                    .clip(RectangleShape)
                     .clickable {
                         onClickSuggestion(suggestion)
                     }
@@ -747,7 +746,7 @@ private fun BoxScope.MessageJumper(
                         state.scrollToItem(0)
                     }
                 },
-                shape = CircleShape,
+                shape = RectangleShape,
                 tonalElevation = 4.dp,
                 color = MaterialTheme.colorScheme.surfaceColorAtElevation(
                     4.dp
@@ -770,7 +769,7 @@ private fun BoxScope.MessageJumper(
                         )
                     }
                 },
-                shape = CircleShape,
+                shape = RectangleShape,
                 tonalElevation = 4.dp,
                 color = MaterialTheme.colorScheme.surfaceColorAtElevation(
                     4.dp
@@ -789,7 +788,7 @@ private fun BoxScope.MessageJumper(
                         state.animateScrollToItem(state.firstVisibleItemIndex + 1)
                     }
                 },
-                shape = CircleShape,
+                shape = RectangleShape,
                 color = MaterialTheme.colorScheme.surfaceColorAtElevation(
                     4.dp
                 ).copy(alpha = 0.65f)
@@ -807,7 +806,7 @@ private fun BoxScope.MessageJumper(
                         state.scrollToItem(state.layoutInfo.totalItemsCount - 1)
                     }
                 },
-                shape = CircleShape,
+                shape = RectangleShape,
                 color = MaterialTheme.colorScheme.surfaceColorAtElevation(
                     4.dp
                 ).copy(alpha = 0.65f),

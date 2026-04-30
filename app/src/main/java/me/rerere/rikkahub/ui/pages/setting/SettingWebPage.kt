@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
+
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -65,6 +65,7 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.web.WebServerManager
 import org.koin.compose.koinInject
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun SettingWebPage() {
@@ -214,7 +215,7 @@ fun SettingWebPage() {
                                 isError = portText.toIntOrNull()?.let { it !in 1024..65535 } ?: true,
                                 modifier = Modifier.width(100.dp),
                                 enabled = !serverState.isRunning,
-                                shape = CircleShape,
+                                shape = RectangleShape,
                                 colors = TextFieldDefaults.colors(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent,
@@ -293,7 +294,7 @@ fun SettingWebPage() {
                                 singleLine = true,
                                 isError = settings.webServerJwtEnabled && accessPasswordText.isBlank(),
                                 modifier = Modifier.width(180.dp),
-                                shape = CircleShape,
+                                shape = RectangleShape,
                                 colors = TextFieldDefaults.colors(
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent,

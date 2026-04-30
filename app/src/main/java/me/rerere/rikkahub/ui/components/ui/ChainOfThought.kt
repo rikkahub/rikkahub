@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
@@ -47,6 +46,7 @@ import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.rikkahub.R
+import androidx.compose.ui.graphics.RectangleShape
 
 private val LocalCardColor = staticCompositionLocalOf { Color.White }
 
@@ -349,7 +349,7 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
-                                    .clip(CircleShape)
+                                    .clip(RectangleShape)
                                     .background(MaterialTheme.colorScheme.onSurfaceVariant)
                             )
                         }

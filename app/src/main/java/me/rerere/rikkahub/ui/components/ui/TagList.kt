@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
@@ -36,6 +35,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Tag
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun TagsInput(
@@ -77,10 +77,10 @@ fun TagsInput(
 
         // 添加按钮
         Surface(
-            shape = CircleShape,
+            shape = RectangleShape,
             tonalElevation = 2.dp,
             modifier = Modifier
-                .clip(CircleShape)
+                .clip(RectangleShape)
                 .clickable { showAddDialog = true }) {
             Icon(
                 imageVector = HugeIcons.Add01,

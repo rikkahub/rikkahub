@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +39,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun SimpleHtmlBlock(
@@ -303,7 +303,7 @@ private fun RenderImage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 400.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RectangleShape),
                 contentScale = ContentScale.Fit,
             )
         }

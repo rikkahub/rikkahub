@@ -2,8 +2,6 @@ package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -21,12 +19,13 @@ import coil3.compose.AsyncImage
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Link01
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun Favicon(
     url: String,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(25),
+    shape: Shape = RectangleShape,
 ) {
     val faviconUrl = remember(url) {
         url.toHttpUrlOrNull()?.host?.let { host ->
@@ -62,10 +61,10 @@ fun FaviconRow(
                 Favicon(
                     url = url,
                     modifier = Modifier
-                        .shadow(1.dp, CircleShape)
+                        .shadow(1.dp, RectangleShape)
                         .zIndex(index.toFloat())
                         .size(size),
-                    shape = CircleShape,
+                    shape = RectangleShape,
                 )
             }
         }

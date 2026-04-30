@@ -28,7 +28,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -86,6 +85,7 @@ import sh.calvin.reorderable.rememberReorderableLazyStaggeredGridState
 import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
@@ -184,7 +184,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     }
                 },
                 singleLine = true,
-                shape = CircleShape,
+                shape = RectangleShape,
             )
 
 

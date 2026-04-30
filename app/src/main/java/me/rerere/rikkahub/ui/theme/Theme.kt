@@ -182,6 +182,7 @@ fun RikkahubTheme(
         MaterialExpressiveTheme(
             colorScheme = colorSchemeConverted,
             typography = Typography,
+            shapes = CyberpunkShapes,
             content = content,
             motionScheme = MotionScheme.expressive()
         )

@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -81,6 +80,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
 import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun AssistantPage(vm: AssistantVM = koinViewModel()) {
@@ -172,7 +172,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp)
+                shape = RectangleShape
             )
 
             // 标签过滤器
@@ -299,7 +299,7 @@ private fun AssistantTagsFilterRow(
                                 Text(tag.name)
                             },
                             selected = tag.id in selectedTagIds,
-                            shape = RoundedCornerShape(50),
+                            shape = RectangleShape,
                             modifier = Modifier
                                 .scale(if (isDragging) 0.95f else 1f)
                                 .longPressDraggableHandle(
@@ -446,7 +446,7 @@ private fun AssistantItem(
                             val tag = settings.assistantTags.find { it.id == tagId }
                                 ?: return@fastForEach
                             Surface(
-                                shape = RoundedCornerShape(50),
+                                shape = RectangleShape,
                                 color = MaterialTheme.colorScheme.tertiaryContainer,
                             ) {
                                 Text(

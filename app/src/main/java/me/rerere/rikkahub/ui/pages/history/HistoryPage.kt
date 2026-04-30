@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,6 +56,7 @@ import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun HistoryPage(vm: HistoryVM = koinViewModel()) {
@@ -197,7 +197,7 @@ private fun SwipeableConversationItem(
                     .fillMaxSize()
                     .background(
                         MaterialTheme.colorScheme.errorContainer,
-                        RoundedCornerShape(25)
+                        RectangleShape
                     )
                     .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterEnd
@@ -230,7 +230,7 @@ private fun ConversationItem(
     Surface(
         onClick = onClick,
         tonalElevation = 2.dp,
-        shape = RoundedCornerShape(25),
+        shape = RectangleShape,
         modifier = modifier
     ) {
         ListItem(

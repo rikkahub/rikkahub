@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -49,6 +48,7 @@ import me.rerere.hugeicons.stroke.FullScreen
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.modifier.onClick
+import androidx.compose.ui.graphics.RectangleShape
 
 /**
  * A multi-line text input component with a header and file import functionality.
@@ -209,7 +209,7 @@ private fun FullScreenTextEditor(
                 modifier = Modifier
                     .widthIn(max = 800.dp)
                     .fillMaxHeight(0.9f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                shape = RectangleShape
             ) {
                 Column(
                     modifier = Modifier
@@ -234,7 +234,7 @@ private fun FullScreenTextEditor(
                         modifier = Modifier
                             .imePadding()
                             .fillMaxSize(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RectangleShape,
                         placeholder = if (placeholder.isNotEmpty()) {
                             { Text(placeholder) }
                         } else if (label.isNotEmpty()) {

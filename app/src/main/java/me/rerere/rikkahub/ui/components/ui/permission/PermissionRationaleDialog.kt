@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,6 +30,7 @@ import androidx.compose.ui.window.Dialog
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AlertCircle
 import me.rerere.rikkahub.R
+import androidx.compose.ui.graphics.RectangleShape
 
 /**
  * 权限请求说明对话框
@@ -51,7 +51,7 @@ internal fun PermissionRationaleDialog(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
+            shape = RectangleShape,
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
             )
@@ -174,7 +174,7 @@ private fun PermissionItem(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         ),
-        shape = RoundedCornerShape(8.dp)
+        shape = RectangleShape
     ) {
         Column(
             modifier = Modifier
@@ -199,7 +199,7 @@ private fun PermissionItem(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer
                             ),
-                            shape = RoundedCornerShape(4.dp)
+                            shape = RectangleShape
                         ) {
                             Text(
                                 text = stringResource(R.string.permission_required),
@@ -215,7 +215,7 @@ private fun PermissionItem(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
                             ),
-                            shape = RoundedCornerShape(4.dp)
+                            shape = RectangleShape
                         ) {
                             Text(
                                 text = stringResource(R.string.permission_permanently_denied),

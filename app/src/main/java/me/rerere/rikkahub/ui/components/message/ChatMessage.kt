@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
@@ -95,6 +94,7 @@ import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.urlDecode
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun ChatMessage(
@@ -417,7 +417,7 @@ private fun MessagePartsBlock(
                                 context.startActivity(chooserIndent)
                             },
                             modifier = Modifier,
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RectangleShape,
                         ) {
                             Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                                 Icon(HugeIcons.Video01, null)
@@ -440,7 +440,7 @@ private fun MessagePartsBlock(
                                 context.startActivity(chooserIndent)
                             },
                             modifier = Modifier,
-                            shape = RoundedCornerShape(50),
+                            shape = RectangleShape,
                             color = MaterialTheme.colorScheme.secondaryContainer
                         ) {
                             ProvideTextStyle(MaterialTheme.typography.labelSmall) {
@@ -496,7 +496,7 @@ private fun MessagePartsBlock(
                                 context.startActivity(chooserIndent)
                             },
                             modifier = Modifier,
-                            shape = RoundedCornerShape(50),
+                            shape = RectangleShape,
                             color = MaterialTheme.colorScheme.tertiaryContainer
                         ) {
                             ProvideTextStyle(MaterialTheme.typography.labelSmall) {

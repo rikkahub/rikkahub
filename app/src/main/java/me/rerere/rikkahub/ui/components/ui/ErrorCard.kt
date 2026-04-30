@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +36,7 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.service.ChatError
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun ErrorCardsDisplay(
@@ -59,7 +59,7 @@ fun ErrorCardsDisplay(
             if (errors.size > 1) {
                 Surface(
                     onClick = onClearAllErrors,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RectangleShape,
                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
                 ) {
                     Row(
@@ -110,7 +110,7 @@ fun ErrorCard(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RectangleShape,
         color = MaterialTheme.colorScheme.errorContainer,
         shadowElevation = 4.dp,
     ) {

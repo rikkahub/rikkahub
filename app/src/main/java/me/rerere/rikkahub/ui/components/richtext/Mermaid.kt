@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,6 +44,7 @@ import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.escapeHtml
 import me.rerere.rikkahub.utils.exportImage
 import me.rerere.rikkahub.utils.toCssHex
+import androidx.compose.ui.graphics.RectangleShape
 
 private val mermaidHeightCache = LinkedHashMap<String, Int>(100, 0.75f, true)
 
@@ -142,7 +142,7 @@ fun Mermaid(
         WebView(
             state = webViewState,
             modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RectangleShape)
                 .animateContentSize()
                 .height(height),
             onUpdated = {
@@ -231,7 +231,7 @@ fun Mermaid(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(400.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RectangleShape)
                 )
             }
         }

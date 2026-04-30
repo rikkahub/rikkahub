@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -56,6 +55,7 @@ import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
 import org.koin.android.ext.android.inject
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 class SafeModeActivity : ComponentActivity() {
     private val settingsStore by inject<SettingsStore>()
@@ -212,7 +212,7 @@ private fun AssistantPickerSheet(
                             },
                             label = { Text(tag.name) },
                             selected = tag.id in selectedTagIds,
-                            shape = RoundedCornerShape(50),
+                            shape = RectangleShape,
                         )
                     }
                 }

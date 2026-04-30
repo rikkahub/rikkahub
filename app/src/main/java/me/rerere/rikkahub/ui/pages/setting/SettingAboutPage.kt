@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +50,7 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun SettingAboutPage() {
@@ -107,7 +107,7 @@ fun SettingAboutPage() {
                             model = R.mipmap.ic_launcher,
                             contentDescription = "Logo",
                             modifier = Modifier
-                                .clip(CircleShape)
+                                .clip(RectangleShape)
                                 .size(150.dp)
                                 .onGloballyPositioned { coordinates ->
                                     val position = coordinates.positionInParent()

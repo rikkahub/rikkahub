@@ -43,8 +43,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material3.BasicAlertDialog
@@ -147,6 +145,7 @@ import org.koin.compose.koinInject
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 enum class ExpandState {
     Collapsed, Files,
@@ -499,7 +498,7 @@ fun ChatInput(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .size(36.dp)
-                                .clip(CircleShape)
+                                .clip(RectangleShape)
                                 .combinedClickable(
                                     enabled = loading || !state.isEmpty(),
                                     onClick = {
@@ -523,7 +522,7 @@ fun ChatInput(
                             }
                             Surface(
                                 modifier = Modifier.fillMaxSize(),
-                                shape = CircleShape,
+                                shape = RectangleShape,
                                 color = containerColor,
                                 content = {})
                             if (loading) {
@@ -560,7 +559,7 @@ fun ChatInput(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(RectangleShape)
                             .then(
                                 if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
                                     state = hazeState,
@@ -568,7 +567,7 @@ fun ChatInput(
                                 )
                                 else Modifier
                             ),
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RectangleShape,
                         tonalElevation = 0.dp,
                         color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
                     ) {
@@ -604,7 +603,7 @@ private fun ActionIconButton(
     Surface(
         onClick = onClick,
         modifier = Modifier.size(36.dp),
-        shape = CircleShape,
+        shape = RectangleShape,
         tonalElevation = 0.dp,
         color = Color.Transparent,
     ) {
@@ -634,7 +633,7 @@ private fun TextInputRow(
     ) {
         if (state.isEditing()) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = RectangleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
             ) {
                 Row(
@@ -832,7 +831,7 @@ private fun MediaFileInputRow(
                         leading = {
                             Surface(
                                 modifier = Modifier.size(34.dp),
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RectangleShape,
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             ) {
                                 AsyncImage(
@@ -899,7 +898,7 @@ private fun AttachmentChip(
     onRemove: () -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RectangleShape,
         tonalElevation = 1.dp,
         shadowElevation = 0.dp,
         color = MaterialTheme.colorScheme.surface,
@@ -922,7 +921,7 @@ private fun AttachmentChip(
             )
             Box(
                 modifier = Modifier
-                    .clip(CircleShape)
+                    .clip(RectangleShape)
                     .size(26.dp)
                     .clickable(onClick = onRemove),
                 contentAlignment = Alignment.Center
@@ -944,7 +943,7 @@ private fun AttachmentLeadingIcon(
 ) {
     Surface(
         modifier = Modifier.size(34.dp),
-        shape = RoundedCornerShape(10.dp),
+        shape = RectangleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Box(
@@ -1129,7 +1128,7 @@ private fun FullScreenEditor(
                 modifier = Modifier
                     .widthIn(max = 800.dp)
                     .fillMaxHeight(0.9f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                shape = RectangleShape
             ) {
                 Column(
                     modifier = Modifier
@@ -1151,7 +1150,7 @@ private fun FullScreenEditor(
                         modifier = Modifier
                             .padding(bottom = 2.dp)
                             .fillMaxSize(),
-                        shape = RoundedCornerShape(32.dp),
+                        shape = RectangleShape,
                         placeholder = {
                             Text(stringResource(R.string.chat_input_placeholder))
                         },
@@ -1285,7 +1284,7 @@ private fun BigIconTextButton(
     val interactionSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RectangleShape)
             .clickable(
                 interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick
             )
@@ -1296,7 +1295,7 @@ private fun BigIconTextButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Surface(
-            tonalElevation = 2.dp, shape = RoundedCornerShape(8.dp)
+            tonalElevation = 2.dp, shape = RectangleShape
         ) {
             Box(
                 modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)

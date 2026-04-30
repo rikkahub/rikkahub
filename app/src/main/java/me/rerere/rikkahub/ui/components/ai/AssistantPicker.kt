@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -50,6 +49,7 @@ import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberAssistantState
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun AssistantPicker(
@@ -166,7 +166,7 @@ private fun AssistantPickerSheet(
                             },
                             label = { Text(tag.name) },
                             selected = tag.id in selectedTagIds,
-                            shape = RoundedCornerShape(50),
+                            shape = RectangleShape,
                         )
                     }
                 }

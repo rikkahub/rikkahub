@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,6 +21,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.rikkahub.data.model.MessageNode
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun ChatMessageBranchSelector(
@@ -39,7 +39,7 @@ fun ChatMessageBranchSelector(
                 imageVector = HugeIcons.ArrowLeft01,
                 contentDescription = "Prev",
                 modifier = Modifier
-                    .clip(CircleShape)
+                    .clip(RectangleShape)
                     .alpha(if (node.selectIndex == 0) 0.5f else 1f)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -67,7 +67,7 @@ fun ChatMessageBranchSelector(
                 imageVector = HugeIcons.ArrowRight01,
                 contentDescription = "Next",
                 modifier = Modifier
-                    .clip(CircleShape)
+                    .clip(RectangleShape)
                     .alpha(if (node.selectIndex == node.messages.lastIndex) 0.5f else 1f)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },

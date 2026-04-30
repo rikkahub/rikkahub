@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -108,6 +107,7 @@ import java.io.FileOutputStream
 import java.time.LocalDateTime
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun ChatExportSheet(
@@ -623,7 +623,7 @@ private fun ExportedChatMessage(
                                     contentDescription = "Image",
                                     modifier = Modifier
                                         .sizeIn(maxHeight = 300.dp)
-                                        .clip(RoundedCornerShape(12.dp)),
+                                        .clip(RectangleShape),
                                 )
                             }
 

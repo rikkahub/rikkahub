@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemColors
@@ -32,6 +31,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.rikkahub.ui.theme.CustomColors
+import androidx.compose.ui.graphics.RectangleShape
 
 private val CardGroupCorner = 20.dp
 private val CardGroupItemSpacing = 2.dp
@@ -102,12 +102,7 @@ private fun CardGroupListItem(
         modifier = item.modifier
             .fillMaxWidth()
             .clip(
-                RoundedCornerShape(
-                    topStart = topCorner,
-                    topEnd = topCorner,
-                    bottomStart = bottomCorner,
-                    bottomEnd = bottomCorner,
-                )
+                RectangleShape
             )
             .then(
                 if (item.onClick != null) {

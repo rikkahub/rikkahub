@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,6 +55,7 @@ import org.koin.androidx.compose.koinViewModel
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun SearchPage(vm: SearchVM = koinViewModel()) {
@@ -127,7 +127,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .focusRequester(focusRequester),
                 placeholder = { Text(stringResource(R.string.search_page_placeholder)) },
-                shape = RoundedCornerShape(50),
+                shape = RectangleShape,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(

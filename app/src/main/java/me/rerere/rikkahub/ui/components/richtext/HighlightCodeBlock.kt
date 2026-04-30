@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
@@ -79,6 +78,7 @@ import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.toDp
 import kotlin.time.Clock
+import androidx.compose.ui.graphics.RectangleShape
 
 private const val COLLAPSE_LINES = 10
 
@@ -362,7 +362,7 @@ private fun HighlightCodeActions(
                 contentDescription = stringResource(id = R.string.chat_page_save),
                 tint = iconTint,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RectangleShape)
                     .onClick {
                         val extension = when (language.lowercase()) {
                             "kotlin" -> "kt"
@@ -398,7 +398,7 @@ private fun HighlightCodeActions(
                 contentDescription = stringResource(id = R.string.code_block_copy),
                 tint = iconTint,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RectangleShape)
                     .onClick {
                         scope.launch {
                             clipboardManager.setClipEntry(ClipEntry(ClipData.newPlainText("code", code)))
@@ -414,7 +414,7 @@ private fun HighlightCodeActions(
                     contentDescription = stringResource(id = R.string.code_block_preview),
                     tint = iconTint,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RectangleShape)
                         .onClick {
                             val content = if (language == "svg") {
                                 """<!DOCTYPE html><html><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;">$code</body></html>"""

@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -44,6 +42,7 @@ import me.rerere.rikkahub.ui.components.ui.icons.ReasoningHigh
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningLow
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningMedium
 import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.RectangleShape
 
 private val levels = ReasoningLevel.entries
 private val levelCount = levels.size
@@ -175,14 +174,14 @@ fun ReasoningPicker(
                         Box(
                             modifier = Modifier
                                 .size(24.dp)
-                                .clip(CircleShape)
+                                .clip(RectangleShape)
                                 .background(MaterialTheme.colorScheme.primary),
                             contentAlignment = Alignment.Center,
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(10.dp)
-                                    .clip(CircleShape)
+                                    .clip(RectangleShape)
                                     .background(MaterialTheme.colorScheme.onPrimary)
                             )
                         }
@@ -249,7 +248,7 @@ private fun ReasoningScale(
                             modifier = Modifier
                                 .width(if (selected) 20.dp else 16.dp)
                                 .height(if (selected) 6.dp else 4.dp)
-                                .clip(RoundedCornerShape(999.dp))
+                                .clip(RectangleShape)
                                 .background(tickColor)
                         )
                         Text(

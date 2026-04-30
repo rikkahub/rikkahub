@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -91,6 +90,7 @@ import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun ModelSelector(
@@ -336,7 +336,7 @@ private fun ColumnScope.ModelList(
     }
 
     Surface(
-        shape = RoundedCornerShape(50),
+        shape = RectangleShape,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp),
@@ -350,7 +350,7 @@ private fun ColumnScope.ModelList(
                     text = stringResource(R.string.model_list_search_placeholder),
                 )
             },
-            shape = RoundedCornerShape(50),
+            shape = RectangleShape,
             colors = TextFieldDefaults.colors(
                 unfocusedIndicatorColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,

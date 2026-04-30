@@ -15,8 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
@@ -37,6 +36,7 @@ import androidx.compose.ui.util.fastForEach
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.PresetTheme
 import me.rerere.rikkahub.ui.theme.PresetThemes
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun PresetThemeButton(
@@ -52,7 +52,7 @@ fun PresetThemeButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RectangleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = LocalIndication.current,
@@ -67,7 +67,7 @@ fun PresetThemeButton(
         ) {
             Canvas(
                 modifier = Modifier
-                    .clip(CircleShape)
+                    .clip(RectangleShape)
                     .size(48.dp)
             ) {
                 drawRect(

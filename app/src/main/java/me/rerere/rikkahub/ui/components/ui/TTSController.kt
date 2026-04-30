@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -37,6 +36,7 @@ import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.hooks.CustomTtsState
 import me.rerere.tts.model.PlaybackState
 import me.rerere.tts.model.PlaybackStatus
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun TTSController() {
@@ -60,7 +60,7 @@ fun TTSController() {
         val playbackState by ttsState.playbackState.collectAsState()
         var expand by remember { mutableStateOf(false) }
         Surface(
-            shape = CircleShape,
+            shape = RectangleShape,
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 4.dp,
             modifier = Modifier.padding(8.dp),

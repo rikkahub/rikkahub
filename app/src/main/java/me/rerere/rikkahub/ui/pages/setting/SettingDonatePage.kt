@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -43,6 +42,7 @@ import me.rerere.rikkahub.utils.onLoading
 import me.rerere.rikkahub.utils.onSuccess
 import me.rerere.rikkahub.utils.openUrl
 import org.koin.compose.koinInject
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun SettingDonatePage() {
@@ -153,7 +153,7 @@ private fun Sponsors(modifier: Modifier = Modifier) {
                             model = it.avatar,
                             contentDescription = null,
                             modifier = Modifier
-                                .clip(CircleShape)
+                                .clip(RectangleShape)
                                 .size(48.dp)
                         )
                         Text(

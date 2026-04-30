@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
@@ -55,6 +54,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.utils.Emoji
 import me.rerere.rikkahub.utils.EmojiData
 import org.koin.compose.koinInject
+import androidx.compose.ui.graphics.RectangleShape
 
 @Preview
 @Composable
@@ -82,7 +82,7 @@ fun EmojiPicker(
                     .height(height.dp)
                     .background(
                         MaterialTheme.colorScheme.surface,
-                        RoundedCornerShape(12.dp)
+                        RectangleShape
                     )
                     .padding(8.dp)
             ) {
@@ -108,7 +108,7 @@ fun EmojiPicker(
                             onSearch = { /* Handle search */ }
                         ),
                         singleLine = true,
-                        shape = RoundedCornerShape(50)
+                        shape = RectangleShape
                     )
                 }
 
@@ -131,7 +131,7 @@ fun EmojiPicker(
                                         lazyListState.animateScrollToItem(0)
                                     }
                                 }
-                                .clip(RoundedCornerShape(20.dp)),
+                                .clip(RectangleShape),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isSelected) {
                                     MaterialTheme.colorScheme.primary
@@ -245,7 +245,7 @@ private fun EmojiItem(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RectangleShape)
             .background(
                 MaterialTheme.colorScheme.surfaceVariant.copy(
                     alpha = if (hasVariants) 0.5f else 0.3f
@@ -279,7 +279,7 @@ private fun EmojiModifierPicker(
             modifier = Modifier
                 .wrapContentSize()
                 .padding(16.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = RectangleShape,
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = 8.dp,
             tonalElevation = 8.dp
@@ -301,7 +301,7 @@ private fun EmojiModifierPicker(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clickable { onEmojiSelected(variant) }
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RectangleShape)
                                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
                             contentAlignment = Alignment.Center
                         ) {

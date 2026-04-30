@@ -21,8 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -55,6 +53,7 @@ import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 /**
  * Represents different types of items in the conversation list
@@ -110,7 +109,7 @@ fun ColumnScope.ConversationList(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RectangleShape,
                     color = MaterialTheme.colorScheme.surfaceContainerLow
                 ) {
                     Text(
@@ -240,7 +239,7 @@ private fun ConversationItem(
     }
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(50f))
+            .clip(RectangleShape)
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = LocalIndication.current,
@@ -276,7 +275,7 @@ private fun ConversationItem(
             AnimatedVisibility(loading) {
                 Box(
                     modifier = Modifier
-                        .clip(CircleShape)
+                        .clip(RectangleShape)
                         .background(MaterialTheme.extendColors.green6)
                         .size(4.dp)
                         .semantics {

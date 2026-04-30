@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -49,6 +48,7 @@ import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 import java.time.Instant
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun FavoritePage(vm: FavoriteVM = koinViewModel()) {
@@ -156,7 +156,7 @@ private fun SwipeableFavoriteCard(
                     .fillMaxSize()
                     .background(
                         MaterialTheme.colorScheme.errorContainer,
-                        RoundedCornerShape(12.dp)
+                        RectangleShape
                     )
                     .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterEnd,

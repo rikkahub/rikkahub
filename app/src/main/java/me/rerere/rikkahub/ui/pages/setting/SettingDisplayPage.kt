@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalTextStyle
@@ -51,6 +50,7 @@ import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
@@ -109,12 +109,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(
-                                RoundedCornerShape(
-                                    topStart = 20.dp,
-                                    topEnd = 20.dp,
-                                    bottomStart = 20.dp,
-                                    bottomEnd = 20.dp
-                                )
+                                RectangleShape
                             )
                             .background(MaterialTheme.colorScheme.surfaceBright)
                             .padding(16.dp)
@@ -137,12 +132,7 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(
-                                RoundedCornerShape(
-                                    topStart = 4.dp,
-                                    topEnd = 4.dp,
-                                    bottomStart = 20.dp,
-                                    bottomEnd = 20.dp
-                                )
+                                RectangleShape
                             ),
                         headlineContent = { Text(stringResource(R.string.setting_display_page_amoled_dark_mode_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_amoled_dark_mode_desc)) },

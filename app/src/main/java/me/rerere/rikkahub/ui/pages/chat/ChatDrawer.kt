@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -83,6 +82,7 @@ import me.rerere.rikkahub.utils.toDp
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun ChatDrawerContent(
@@ -529,7 +529,7 @@ private fun DrawerAction(
         onClick = onClick,
         modifier = modifier,
         color = MaterialTheme.colorScheme.primaryContainer,
-        shape = CircleShape,
+        shape = RectangleShape,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Tooltip(

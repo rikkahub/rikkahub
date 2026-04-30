@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -26,6 +25,7 @@ import androidx.compose.ui.util.fastForEach
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun <T> Select(
@@ -47,13 +47,13 @@ fun <T> Select(
     ) {
         Surface(
             tonalElevation = 4.dp,
-            shape = RoundedCornerShape(50),
+            shape = RectangleShape,
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RectangleShape)
                     .clickable { expanded = true }
                     .padding(vertical = 8.dp, horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),

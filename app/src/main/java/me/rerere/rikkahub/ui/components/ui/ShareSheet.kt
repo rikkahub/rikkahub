@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +27,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Share03
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.io.encoding.Base64
+import androidx.compose.ui.graphics.RectangleShape
 
 @Composable
 fun ShareSheet(
@@ -76,7 +76,7 @@ fun ShareSheet(
                 QRCode(
                     value = state.currentProvider?.encodeForShare() ?: "",
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RectangleShape)
                         .fillMaxWidth()
                         .aspectRatio(1f)
                 )

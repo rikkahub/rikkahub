@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.ColorScheme
@@ -85,6 +83,7 @@ import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
+import androidx.compose.ui.graphics.RectangleShape
 
 private val flavour by lazy {
     GFMFlavourDescriptor(
@@ -364,7 +363,7 @@ private fun MarkdownNode(
         GFMTokenTypes.CHECK_BOX -> {
             val isChecked = node.getTextInNode(content).trim() == "[x]"
             Surface(
-                shape = RoundedCornerShape(2.dp),
+                shape = RectangleShape,
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                 modifier = modifier,
             ) {
@@ -482,7 +481,7 @@ private fun MarkdownNode(
                     model = imageUrl,
                     contentDescription = altText,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RectangleShape)
                         .widthIn(min = 120.dp)
                         .heightIn(min = 120.dp),
                 )
@@ -940,7 +939,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                                             onClickCitation(id.trim())
                                         }
                                         .fillMaxSize()
-                                        .clip(CircleShape)
+                                        .clip(RectangleShape)
                                         .background(colorScheme.tertiaryContainer.copy(0.2f)),
                                     contentAlignment = Alignment.Center) {
                                     Text(

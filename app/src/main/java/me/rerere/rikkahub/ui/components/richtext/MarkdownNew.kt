@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.HorizontalDivider
@@ -83,6 +81,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
+import androidx.compose.ui.graphics.RectangleShape
 
 // ---- Preprocessing (mirrors Markdown.kt logic) ----
 
@@ -246,7 +245,7 @@ private fun HtmlBlockElement(
                         model = src,
                         contentDescription = alt.takeIf { it.isNotEmpty() },
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RectangleShape)
                             .widthIn(min = 120.dp)
                             .heightIn(min = 120.dp),
                     )
@@ -444,7 +443,7 @@ private fun HtmlListItem(
                 if (isTaskItem && checkboxInput != null) {
                     // Checkbox indicator
                     Surface(
-                        shape = RoundedCornerShape(2.dp),
+                        shape = RectangleShape,
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                         modifier = Modifier.padding(end = 4.dp, top = 2.dp),
                     ) {
@@ -752,7 +751,7 @@ private fun HtmlInlineAsComposable(node: Node, onClickCitation: (String) -> Unit
                             model = src,
                             contentDescription = alt.takeIf { it.isNotEmpty() },
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RectangleShape)
                                 .widthIn(min = 120.dp)
                                 .heightIn(min = 120.dp),
                         )
@@ -910,7 +909,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
                                         modifier = Modifier
                                             .clickable { onClickCitation(id.trim()) }
                                             .fillMaxSize()
-                                            .clip(CircleShape)
+                                            .clip(RectangleShape)
                                             .background(colorScheme.tertiaryContainer.copy(0.2f)),
                                         contentAlignment = Alignment.Center,
                                     ) {
