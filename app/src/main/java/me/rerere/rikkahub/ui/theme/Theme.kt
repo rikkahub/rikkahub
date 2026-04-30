@@ -32,95 +32,90 @@ val LocalDarkMode = compositionLocalOf { false }
 
 private val AMOLED_DARK_BACKGROUND = Color(0xFF000000)
 
-// === 赛博朋克硬编码颜色 ===
-private val CyberCyan = Color(0xFF00FFFF)
-private val CyberPink = Color(0xFFFF007F)
-private val CyberPurple = Color(0xFF8B5CF6)
-private val CyberGreen = Color(0xFF39FF14)
-private val CyberBlack = Color(0xFF0A0A0F)
-private val CyberPanel = Color(0xFF111118)
-private val CyberGrid = Color(0xFF1A1A24)
-private val CyberText = Color(0xFFE0E0E8)
-private val CyberTextDim = Color(0xFF6B6B80)
-private val CyberSteel = Color(0xFF2A2A35)
-private val CyberRed = Color(0xFFFF2222)
+// === 赛博朋克硬编码颜色 - 纯黑底 + RGB纯色 ===
+private val PureRed = Color(0xFFFF0000)
+private val PureGreen = Color(0xFF00FF00)
+private val PureBlue = Color(0xFF0000FF)
+private val PureBlack = Color(0xFF000000)
+private val PureWhite = Color(0xFFFFFFFF)
+private val DimWhite = Color(0xFF888888)
 
-// 暗色模式 - 纯黑底霓虹色
+// 暗色模式 - 纯黑背景，纯白线条，RGB纯色点缀
 private val CyberDarkScheme = darkColorScheme(
-    primary = CyberCyan,
-    onPrimary = CyberBlack,
-    primaryContainer = Color(0xFF00FFFF).copy(alpha = 0.12f),
-    onPrimaryContainer = CyberCyan,
-    secondary = CyberPink,
-    onSecondary = CyberBlack,
-    secondaryContainer = Color(0xFFFF007F).copy(alpha = 0.12f),
-    onSecondaryContainer = CyberPink,
-    tertiary = CyberPurple,
-    onTertiary = CyberBlack,
-    tertiaryContainer = Color(0xFF8B5CF6).copy(alpha = 0.12f),
-    onTertiaryContainer = CyberPurple,
-    error = CyberRed,
-    onError = Color.White,
-    errorContainer = Color(0xFFFF2222).copy(alpha = 0.12f),
-    onErrorContainer = CyberRed,
-    background = CyberBlack,
-    onBackground = CyberText,
-    surface = CyberPanel,
-    onSurface = CyberText,
-    surfaceVariant = CyberGrid,
-    onSurfaceVariant = CyberTextDim,
-    outline = CyberSteel,
-    outlineVariant = CyberGrid,
-    scrim = Color(0xFF000000),
-    inverseSurface = CyberText,
-    inverseOnSurface = CyberBlack,
-    inversePrimary = CyberCyan,
-    surfaceDim = Color(0xFF08080C),
-    surfaceBright = Color(0xFF181820),
-    surfaceContainerLowest = Color(0xFF050508),
-    surfaceContainerLow = Color(0xFF0A0A0F),
-    surfaceContainer = CyberPanel,
-    surfaceContainerHigh = Color(0xFF15151C),
-    surfaceContainerHighest = Color(0xFF1A1A22),
+    primary = PureRed,
+    onPrimary = PureBlack,
+    primaryContainer = Color(0xFFFF0000).copy(alpha = 0.15f),
+    onPrimaryContainer = PureRed,
+    secondary = PureGreen,
+    onSecondary = PureBlack,
+    secondaryContainer = Color(0xFF00FF00).copy(alpha = 0.15f),
+    onSecondaryContainer = PureGreen,
+    tertiary = PureBlue,
+    onTertiary = PureBlack,
+    tertiaryContainer = Color(0xFF0000FF).copy(alpha = 0.15f),
+    onTertiaryContainer = PureBlue,
+    error = PureRed,
+    onError = PureBlack,
+    errorContainer = Color(0xFFFF0000).copy(alpha = 0.15f),
+    onErrorContainer = PureRed,
+    background = PureBlack,
+    onBackground = PureWhite,
+    surface = PureBlack,
+    onSurface = PureWhite,
+    surfaceVariant = Color(0xFF111111),
+    onSurfaceVariant = DimWhite,
+    outline = PureWhite,
+    outlineVariant = Color(0xFF333333),
+    scrim = PureBlack,
+    inverseSurface = PureWhite,
+    inverseOnSurface = PureBlack,
+    inversePrimary = PureRed,
+    surfaceDim = PureBlack,
+    surfaceBright = Color(0xFF111111),
+    surfaceContainerLowest = PureBlack,
+    surfaceContainerLow = PureBlack,
+    surfaceContainer = PureBlack,
+    surfaceContainerHigh = Color(0xFF111111),
+    surfaceContainerHighest = Color(0xFF222222),
 )
 
-// 亮色模式 - 深色底（赛博朋克没有真正的亮色）
+// 亮色模式 - 同样使用纯黑底（赛博朋克无亮色）
 private val CyberLightScheme = lightColorScheme(
-    primary = CyberCyan,
-    onPrimary = CyberBlack,
-    primaryContainer = Color(0xFF00FFFF).copy(alpha = 0.15f),
-    onPrimaryContainer = Color(0xFF006666),
-    secondary = CyberPink,
-    onSecondary = CyberBlack,
-    secondaryContainer = Color(0xFFFF007F).copy(alpha = 0.15f),
-    onSecondaryContainer = Color(0xFF99004D),
-    tertiary = CyberPurple,
-    onTertiary = CyberBlack,
-    tertiaryContainer = Color(0xFF8B5CF6).copy(alpha = 0.15f),
-    onTertiaryContainer = Color(0xFF5B3FA6),
-    error = CyberRed,
-    onError = Color.White,
-    errorContainer = Color(0xFFFF2222).copy(alpha = 0.15f),
-    onErrorContainer = Color(0xFF991111),
-    background = Color(0xFF1A1A24),
-    onBackground = CyberText,
-    surface = Color(0xFF22222E),
-    onSurface = CyberText,
-    surfaceVariant = Color(0xFF2A2A38),
-    onSurfaceVariant = CyberTextDim,
-    outline = CyberSteel,
-    outlineVariant = Color(0xFF3A3A48),
-    scrim = Color(0xFF000000),
-    inverseSurface = CyberText,
-    inverseOnSurface = CyberBlack,
-    inversePrimary = CyberCyan,
-    surfaceDim = Color(0xFF15151E),
-    surfaceBright = Color(0xFF2A2A38),
-    surfaceContainerLowest = Color(0xFF111118),
-    surfaceContainerLow = Color(0xFF181820),
-    surfaceContainer = Color(0xFF22222E),
-    surfaceContainerHigh = Color(0xFF2A2A38),
-    surfaceContainerHighest = Color(0xFF333344),
+    primary = PureRed,
+    onPrimary = PureBlack,
+    primaryContainer = Color(0xFFFF0000).copy(alpha = 0.15f),
+    onPrimaryContainer = PureRed,
+    secondary = PureGreen,
+    onSecondary = PureBlack,
+    secondaryContainer = Color(0xFF00FF00).copy(alpha = 0.15f),
+    onSecondaryContainer = PureGreen,
+    tertiary = PureBlue,
+    onTertiary = PureBlack,
+    tertiaryContainer = Color(0xFF0000FF).copy(alpha = 0.15f),
+    onTertiaryContainer = PureBlue,
+    error = PureRed,
+    onError = PureBlack,
+    errorContainer = Color(0xFFFF0000).copy(alpha = 0.15f),
+    onErrorContainer = PureRed,
+    background = PureBlack,
+    onBackground = PureWhite,
+    surface = PureBlack,
+    onSurface = PureWhite,
+    surfaceVariant = Color(0xFF111111),
+    onSurfaceVariant = DimWhite,
+    outline = PureWhite,
+    outlineVariant = Color(0xFF333333),
+    scrim = PureBlack,
+    inverseSurface = PureWhite,
+    inverseOnSurface = PureBlack,
+    inversePrimary = PureRed,
+    surfaceDim = PureBlack,
+    surfaceBright = Color(0xFF111111),
+    surfaceContainerLowest = PureBlack,
+    surfaceContainerLow = PureBlack,
+    surfaceContainer = PureBlack,
+    surfaceContainerHigh = Color(0xFF111111),
+    surfaceContainerHighest = Color(0xFF222222),
 )
 
 @Serializable

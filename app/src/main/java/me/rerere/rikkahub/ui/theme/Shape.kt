@@ -14,3 +14,6 @@ val CyberpunkShapes = Shapes(
     large = RoundedCornerShape(0.dp),
     extraLarge = RoundedCornerShape(0.dp)
 )
+
+// MaterialExpressiveTheme 使用 expressive shapes (largeIncreased 等)
+// 这些通过 Shapes() 构造函数的 large/extraLarge 已覆盖为 0.dp
