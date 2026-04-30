@@ -344,6 +344,10 @@ class ChatCompletionsAPI(
                             "zai-org/GLM-4.5V",
                             "deepseek-ai/DeepSeek-V3.1-Terminus",
                             "Pro/deepseek-ai/DeepSeek-V3.1-Terminus",
+                            "deepseek-ai/DeepSeek-V4-Flash",
+                            "Pro/deepseek-ai/DeepSeek-V4-Flash",
+                            "deepseek-ai/DeepSeek-V4-Pro",
+                            "Pro/deepseek-ai/DeepSeek-V4-Pro",
                         )
                         if (modelId in siliconflowThinkingModels) {
                             put("enable_thinking", level.isEnabled)
