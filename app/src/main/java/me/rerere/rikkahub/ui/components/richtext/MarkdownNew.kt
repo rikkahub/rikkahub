@@ -360,6 +360,7 @@ private fun HtmlParagraphContent(
         text to contents
     }
 
+    val isRtl = isRtlText(annotatedString.text)
     Text(
         text = annotatedString,
         inlineContent = inlineContents,
@@ -371,6 +372,7 @@ private fun HtmlParagraphContent(
                 TextUnit.Unspecified
             else
                 textStyle.lineHeight,
+            textDirection = if (isRtl) androidx.compose.ui.text.style.TextDirection.Rtl else androidx.compose.ui.text.style.TextDirection.ContentOrLtr,
         ),
     )
 }
@@ -723,7 +725,14 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
     }
 
     if (annotatedString.isNotEmpty()) {
-        Text(text = annotatedString, inlineContent = inlineContents)
+        val isRtl = isRtlText(annotatedString.text)
+        Text(
+            text = annotatedString,
+            inlineContent = inlineContents,
+            style = LocalTextStyle.current.copy(
+                textDirection = if (isRtl) androidx.compose.ui.text.style.TextDirection.Rtl else androidx.compose.ui.text.style.TextDirection.ContentOrLtr,
+            ),
+        )
     }
 }
 

@@ -85,6 +85,18 @@ import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
+// RTL Support: detect Arabic/Hebrew characters in text
+private fun isRtlText(text: String): Boolean {
+    return text.any { char ->
+        val dir = Character.getDirectionality(char)
+        dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT ||
+        dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC ||
+        dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING ||
+        dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE
+    }
+}
+
+
 
 private val flavour by lazy {
     GFMFlavourDescriptor(
@@ -765,6 +777,7 @@ private fun Paragraph(
                 }
             }
         }
+        val isRtl = isRtlText(annotatedString.text)
         Text(
             text = annotatedString,
             modifier = Modifier,
@@ -772,7 +785,8 @@ private fun Paragraph(
             softWrap = true,
             overflow = TextOverflow.Visible,
             style = LocalTextStyle.current.copy(
-                lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight
+                lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight,
+                textDirection = if (isRtl) androidx.compose.ui.text.style.TextDirection.Rtl else androidx.compose.ui.text.style.TextDirection.ContentOrLtr
             )
         )
     }
