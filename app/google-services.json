@@ -8,7 +8,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:1234567890:android:abcdef123456",
         "android_client_info": {
-          "package_name": "me.rerere.rikkahub"
+          "package_name": "me.rerere.rikkahub.debug"
         }
       },
       "api_key": [{"current_key": "dummy-api-key"}]
