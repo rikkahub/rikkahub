@@ -127,12 +127,44 @@ fun MarkdownNew(
     style: TextStyle = LocalTextStyle.current,
     onClickCitation: (String) -> Unit = {},
 ) {
-    var html by remember {
-        mutableStateOf(
-            value = generateMarkdownHtml(content),
-        )
+    val segments = remember(content) {
+        val list = mutableListOf<Pair<String, Boolean>>()
+        var lastEnd = 0
+        THINKING_REGEX.findAll(content).forEach { match ->
+            if (match.range.first > lastEnd)
+                list.add(Pair(content.substring(lastEnd, match.range.first), false))
+            list.add(Pair(match.groupValues[1].trim(), true))
+            lastEnd = match.range.last + 1
+        }
+        if (lastEnd < content.length)
+            list.add(Pair(content.substring(lastEnd), false))
+        if (list.isEmpty()) list.add(Pair(content, false))
+        list
     }
+    ProvideTextStyle(style) {
+        Column(modifier = modifier) {
+            segments.forEach { (text, _) ->
+                if (text.isNotBlank()) {
+                    MarkdownNewHtmlBlock(
+                        content = text,
+                        modifier = Modifier.padding(start = 4.dp),
+                        onClickCitation = onClickCitation,
+                    )
+                }
+            }
+        }
+    }
+}
 
+@Composable
+private fun MarkdownNewHtmlBlock(
+    content: String,
+    modifier: Modifier = Modifier,
+    onClickCitation: (String) -> Unit = {},
+) {
+    var html by remember {
+        mutableStateOf(generateMarkdownHtml(content))
+    }
     val updatedContent by rememberUpdatedState(content)
     LaunchedEffect(Unit) {
         snapshotFlow { updatedContent }
@@ -142,16 +174,12 @@ fun MarkdownNew(
             .flowOn(Dispatchers.Default)
             .collect { html = it }
     }
-
     val document = remember(html) {
         runCatching { Jsoup.parse(html) }.getOrElse { Jsoup.parse("") }
     }
-
-    ProvideTextStyle(style) {
-        Column(modifier = modifier.padding(start = 4.dp)) {
-            document.body().childNodes().fastForEach { node ->
-                HtmlBodyNode(node = node, onClickCitation = onClickCitation)
-            }
+    Column(modifier = modifier) {
+        document.body().childNodes().fastForEach { node ->
+            HtmlBodyNode(node = node, onClickCitation = onClickCitation)
         }
     }
 }
@@ -360,6 +388,7 @@ private fun HtmlParagraphContent(
         text to contents
     }
 
+    val isRtl = isRtlText(annotatedString.text)
     Text(
         text = annotatedString,
         inlineContent = inlineContents,
@@ -371,6 +400,7 @@ private fun HtmlParagraphContent(
                 TextUnit.Unspecified
             else
                 textStyle.lineHeight,
+            textDirection = if (isRtl) androidx.compose.ui.text.style.TextDirection.Rtl else androidx.compose.ui.text.style.TextDirection.ContentOrLtr,
         ),
     )
 }
@@ -723,7 +753,14 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
     }
 
     if (annotatedString.isNotEmpty()) {
-        Text(text = annotatedString, inlineContent = inlineContents)
+        val isRtl = isRtlText(annotatedString.text)
+        Text(
+            text = annotatedString,
+            inlineContent = inlineContents,
+            style = LocalTextStyle.current.copy(
+                textDirection = if (isRtl) androidx.compose.ui.text.style.TextDirection.Rtl else androidx.compose.ui.text.style.TextDirection.ContentOrLtr,
+            ),
+        )
     }
 }
 
