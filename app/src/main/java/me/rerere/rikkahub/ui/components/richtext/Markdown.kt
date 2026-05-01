@@ -86,7 +86,7 @@ import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
 // RTL Support: detect Arabic/Hebrew characters in text
-private fun isRtlText(text: String): Boolean {
+internal fun isRtlText(text: String): Boolean {
     return text.any { char ->
         val dir = Character.getDirectionality(char)
         dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT ||
