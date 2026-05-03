@@ -282,6 +282,12 @@ dependencies {
     // sqlite-android (requery SQLite for Android)
     implementation(libs.sqlite.android)
 
+    // Google Play Services Location (FusedLocationProvider)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    // AndroidX Biometric (BiometricPrompt)
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
     // modules
     implementation(project(":ai"))
     implementation(project(":web"))
@@ -292,6 +298,9 @@ dependencies {
     implementation(project(":common"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
+
+    // SSH client (Mwiede fork — maintained, Android-friendly)
+    implementation("com.github.mwiede:jsch:0.2.21")
 
     // Leak Canary
     // debugImplementation(libs.leakcanary.android)

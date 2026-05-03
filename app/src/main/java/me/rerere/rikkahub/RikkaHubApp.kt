@@ -79,6 +79,10 @@ class RikkaHubApp : Application() {
         // Start WebServer if enabled in settings
         startWebServerIfEnabled()
 
+        // Start Telegram bot if previously enabled — service is START_NOT_STICKY so OS won't
+        // auto-revive it after a process kill; we need to bring it back ourselves.
+        startTelegramBotIfEnabled()
+
         // Increment launch count
         incrementLaunchCount()
 
@@ -94,6 +98,20 @@ class RikkaHubApp : Application() {
                 Log.i(TAG, "incrementLaunchCount: ${store.settingsFlowRaw.first().launchCount}")
             }.onFailure {
                 Log.e(TAG, "incrementLaunchCount failed", it)
+            }
+        }
+    }
+
+    private fun startTelegramBotIfEnabled() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val cfg = get<me.rerere.rikkahub.data.telegram.TelegramBotPreferences>().current()
+                if (cfg.isUsable) {
+                    Log.i(TAG, "startTelegramBotIfEnabled: re-starting bot service")
+                    me.rerere.rikkahub.service.TelegramBotService.start(this@RikkaHubApp)
+                }
+            }.onFailure {
+                Log.e(TAG, "startTelegramBotIfEnabled failed", it)
             }
         }
     }

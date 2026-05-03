@@ -9,8 +9,17 @@ import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
+import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
+import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
+import me.rerere.rikkahub.data.ai.tools.local.MediaPlayerHolder
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.repository.ScheduledJobRepository
+import me.rerere.rikkahub.data.repository.SshHostRepository
+import me.rerere.rikkahub.data.repository.TelegramChatRepository
+import me.rerere.rikkahub.data.telegram.TelegramBotClient
+import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.CronJobScheduler
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
 import me.rerere.rikkahub.utils.JsonInstant
@@ -31,7 +40,21 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get())
+        MediaPlayerHolder()
+    }
+
+    single { CameraResultBuffer() }
+    single { BiometricResultBuffer() }
+
+    single { ScheduledJobRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().scheduledJobDao()) }
+    single { CronJobScheduler(get(), get()) }
+    single { SshHostRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().sshHostDao()) }
+    single { TelegramChatRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().telegramChatDao()) }
+    single { TelegramBotPreferences(get()) }
+    single { TelegramBotClient { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") } }
+
+    single {
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {

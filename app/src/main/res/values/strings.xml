@@ -79,14 +79,79 @@
   <string name="assistant_page_invalid_json">Invalid JSON: %s</string>
   <string name="assistant_page_local_tools_ask_user_desc">Allow the AI to ask you questions for clarification</string>
   <string name="assistant_page_local_tools_ask_user_title">Ask User</string>
+  <string name="assistant_page_local_tools_audio_info_desc">Read ringer mode, music-active state, headphone connection, and output devices.</string>
+  <string name="assistant_page_local_tools_audio_info_title">Audio info</string>
+  <string name="assistant_page_local_tools_battery_desc">Read battery level, charging state, plug type, temperature, and health.</string>
+  <string name="assistant_page_local_tools_battery_title">Battery</string>
+  <string name="assistant_page_local_tools_brightness_desc">Read and set screen brightness. Setting requires WRITE_SETTINGS.</string>
+  <string name="assistant_page_local_tools_brightness_title">Brightness</string>
   <string name="assistant_page_local_tools_clipboard_desc">Read or write plain text from the device clipboard</string>
   <string name="assistant_page_local_tools_clipboard_title">Clipboard</string>
+  <string name="assistant_page_local_tools_download_desc">Download files from URLs into the public Downloads folder, and save text content (notes, transcripts, jokes, scripts) as files there.</string>
+  <string name="assistant_page_local_tools_download_title">Download</string>
   <string name="assistant_page_local_tools_javascript_engine_desc">Execute JavaScript code with QuickJS engine for calculations and scripting</string>
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScript Engine</string>
+  <string name="assistant_page_local_tools_listening_toast">Listening — speak now…</string>
+  <string name="assistant_page_local_tools_section_automation">Automation</string>
+  <string name="assistant_page_local_tools_cron_jobs_title">Scheduled jobs</string>
+  <string name="assistant_page_local_tools_cron_jobs_desc">Let the assistant schedule prompts to run in the background later — once or on an interval. Jobs survive app close and reboot.</string>
+  <string name="assistant_page_local_tools_section_network">Network</string>
+  <string name="assistant_page_local_tools_ssh_title">SSH</string>
+  <string name="assistant_page_local_tools_ssh_desc">Let the assistant run shell commands and transfer files on remote machines via SSH/SFTP. Saved hosts, password or private-key auth, accept-new host-key checking.</string>
+  <string name="assistant_page_local_tools_telegram_title">Telegram bot</string>
+  <string name="assistant_page_local_tools_telegram_desc">Run the assistant as a Telegram bot — send/receive messages, files, manage /commands. Configured entirely via tools (set token, whitelist, default chat, then enable). Foreground service handles long-poll.</string>
+  <string name="setting_page_telegram">Telegram bot</string>
+  <string name="setting_page_telegram_desc">Run the LLM as a Telegram bot — chat with it remotely from any device.</string>
+  <string name="setting_page_telegram_token">Bot token</string>
+  <string name="setting_page_telegram_token_desc">From @BotFather. The bot must be stopped to edit.</string>
+  <string name="setting_page_telegram_default_chat">Default chat</string>
+  <string name="setting_page_telegram_default_chat_desc">Where outbound messages go when the LLM omits chat_id (e.g. cron job alerts). Use your numeric Telegram user id.</string>
+  <string name="setting_page_telegram_whitelist">Allowed chat IDs</string>
+  <string name="setting_page_telegram_whitelist_desc">Comma-separated. Empty = nobody. Find your id with @userinfobot.</string>
+  <string name="setting_page_telegram_status_running">Running</string>
+  <string name="setting_page_telegram_status_starting">Starting…</string>
+  <string name="setting_page_telegram_status_stopped">Stopped</string>
+  <string name="setting_page_telegram_start">Start</string>
+  <string name="setting_page_telegram_stop">Stop</string>
+  <string name="setting_page_telegram_no_token_toast">Set the bot token first.</string>
+  <string name="setting_page_telegram_boot_note">When started, the bot also auto-starts on device boot.</string>
+  <string name="assistant_page_local_tools_media_player_desc">Play and stop audio from a file path or URL.</string>
+  <string name="assistant_page_local_tools_media_player_title">Media player</string>
+  <string name="assistant_page_local_tools_media_scanner_desc">Notify Android\'s media scanner about new files so they appear in gallery/music apps.</string>
+  <string name="assistant_page_local_tools_media_scanner_title">Media scanner</string>
+  <string name="assistant_page_local_tools_notification_desc">Post Android notifications on the user\'s behalf.</string>
+  <string name="assistant_page_local_tools_notification_title">Notification</string>
+  <string name="assistant_page_local_tools_perm_denied_toast">%1$s permission denied</string>
+  <string name="assistant_page_local_tools_perm_needed">Permission required — tap to grant</string>
+  <string name="assistant_page_local_tools_perm_special_dialog_message">This tool needs system access. You\'ll be sent to the system settings page to grant it. Return here when done.</string>
+  <string name="assistant_page_local_tools_perm_special_dialog_title">Permission needed</string>
+  <string name="assistant_page_local_tools_section_device_info">Device info</string>
+  <string name="assistant_page_local_tools_section_existing">Built-in tools</string>
+  <string name="assistant_page_local_tools_section_hardware">Hardware control</string>
+  <string name="assistant_page_local_tools_section_media">Media</string>
+  <string name="assistant_page_local_tools_section_output">Output</string>
+  <string name="assistant_page_local_tools_sensors_desc">List device sensors and read short samples (accelerometer, gyroscope, light, etc.).</string>
+  <string name="assistant_page_local_tools_sensors_title">Sensors</string>
+  <string name="assistant_page_local_tools_share_desc">Open the system share sheet to send text or a URL to other apps.</string>
+  <string name="assistant_page_local_tools_share_title">Share</string>
+  <string name="assistant_page_local_tools_storage_desc">Read total/free/used storage on internal and external volumes.</string>
+  <string name="assistant_page_local_tools_storage_title">Storage info</string>
+  <string name="assistant_page_local_tools_telephony_desc">Read SIM and network info (carrier, network type). Requires READ_PHONE_STATE.</string>
+  <string name="assistant_page_local_tools_telephony_title">Telephony info</string>
   <string name="assistant_page_local_tools_time_info_desc">Get current date, weekday, time, and timezone info from the device</string>
   <string name="assistant_page_local_tools_time_info_title">Time Info</string>
+  <string name="assistant_page_local_tools_toast_desc">Show a brief toast popup over whatever is currently on screen.</string>
+  <string name="assistant_page_local_tools_toast_title">Toast</string>
+  <string name="assistant_page_local_tools_torch_desc">Turn the camera flashlight on or off.</string>
+  <string name="assistant_page_local_tools_torch_title">Torch</string>
   <string name="assistant_page_local_tools_tts_desc">Let the AI speak text aloud to you using the device TTS engine</string>
   <string name="assistant_page_local_tools_tts_title">Text to Speech</string>
+  <string name="assistant_page_local_tools_vibrate_desc">Vibrate the device with a duration or pattern.</string>
+  <string name="assistant_page_local_tools_vibrate_title">Vibrate</string>
+  <string name="assistant_page_local_tools_volume_desc">Read and set audio stream volumes. Ring/notification streams require DND access.</string>
+  <string name="assistant_page_local_tools_volume_title">Volume</string>
+  <string name="assistant_page_local_tools_wifi_desc">Read current Wi-Fi connection (SSID, IP, signal). Requires location permission for SSID.</string>
+  <string name="assistant_page_local_tools_wifi_title">Wi-Fi info</string>
   <string name="assistant_page_manage_memory_title">Manage Memory</string>
   <string name="assistant_page_max_tokens">Max Tokens</string>
   <string name="assistant_page_max_tokens_desc">Maximum number of tokens to generate. Leave empty for no limit.</string>
@@ -976,5 +1041,32 @@
   <string name="reasoning_xhigh">XHigh</string>
   <string name="reasoning_picker_title">Adjust Model Thinking Depth</string>
   <string name="reasoning_picker_hint">Not all models support depth adjustment. Refer to the model and provider documentation.</string>
+
+  <!-- Phase 2 — Personal data tools -->
+  <string name="assistant_page_local_tools_section_personal_data">Personal data</string>
+
+  <string name="assistant_page_local_tools_location_title">Location</string>
+  <string name="assistant_page_local_tools_location_desc">Read the device\'s current location (latitude, longitude, accuracy).</string>
+
+  <string name="assistant_page_local_tools_contacts_title">Contacts</string>
+  <string name="assistant_page_local_tools_contacts_desc">Search or list device contacts (name, phone numbers, emails).</string>
+
+  <string name="assistant_page_local_tools_call_log_title">Call log</string>
+  <string name="assistant_page_local_tools_call_log_desc">Read recent calls (incoming, outgoing, missed) with duration and timestamps.</string>
+
+  <string name="assistant_page_local_tools_sms_inbox_title">SMS inbox</string>
+  <string name="assistant_page_local_tools_sms_inbox_desc">Read or search SMS inbox messages.</string>
+
+  <string name="assistant_page_local_tools_camera_photo_title">Camera (photo)</string>
+  <string name="assistant_page_local_tools_camera_photo_desc">Open the system camera so the user can take a photo and return its file path.</string>
+
+  <string name="assistant_page_local_tools_mic_recorder_title">Mic recorder</string>
+  <string name="assistant_page_local_tools_mic_recorder_desc">Record audio from the microphone for a bounded duration to a local file.</string>
+
+  <string name="assistant_page_local_tools_speech_to_text_title">Speech to text</string>
+  <string name="assistant_page_local_tools_speech_to_text_desc">Listen to the microphone and convert spoken words to text.</string>
+
+  <string name="assistant_page_local_tools_fingerprint_title">Fingerprint</string>
+  <string name="assistant_page_local_tools_fingerprint_desc">Show the system biometric prompt to verify the user\'s identity.</string>
 </resources>
 

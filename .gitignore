@@ -11,3 +11,15 @@ local.properties
 .cursor
 .history
 .kotlin
+
+# --- Personal / AI-agent workspace (not for the public fork) ---
+.claude/
+/docs/superpowers/
+**/CLAUDE.md
+**/AGENTS.md
+
+# Sibling clones of upstream projects used as references during development
+/termux-api/
+
+# Sensitive build inputs (signed-in service account / Firebase config)
+app/google-services.json

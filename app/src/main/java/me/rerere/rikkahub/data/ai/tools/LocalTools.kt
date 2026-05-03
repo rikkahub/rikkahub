@@ -16,6 +16,62 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
+import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
+import me.rerere.rikkahub.data.ai.tools.local.MediaPlayerHolder
+import me.rerere.rikkahub.data.ai.tools.local.audioInfoTool
+import me.rerere.rikkahub.data.ai.tools.local.batteryTool
+import me.rerere.rikkahub.data.ai.tools.local.callLogTool
+import me.rerere.rikkahub.data.ai.tools.local.cameraPhotoTool
+import me.rerere.rikkahub.data.ai.tools.local.downloadTool
+import me.rerere.rikkahub.data.ai.tools.local.fingerprintTool
+import me.rerere.rikkahub.data.ai.tools.local.getBrightnessTool
+import me.rerere.rikkahub.data.ai.tools.local.getVolumeTool
+import me.rerere.rikkahub.data.ai.tools.local.listContactsTool
+import me.rerere.rikkahub.data.ai.tools.local.listSensorsTool
+import me.rerere.rikkahub.data.ai.tools.local.listSmsInboxTool
+import me.rerere.rikkahub.data.ai.tools.local.locationTool
+import me.rerere.rikkahub.data.ai.tools.local.mediaScannerTool
+import me.rerere.rikkahub.data.ai.tools.local.micRecorderTool
+import me.rerere.rikkahub.data.ai.tools.local.notificationTool
+import me.rerere.rikkahub.data.ai.tools.local.playMediaTool
+import me.rerere.rikkahub.data.ai.tools.local.readSensorTool
+import me.rerere.rikkahub.data.ai.tools.local.searchContactsTool
+import me.rerere.rikkahub.data.ai.tools.local.searchSmsTool
+import me.rerere.rikkahub.data.ai.tools.local.setBrightnessTool
+import me.rerere.rikkahub.data.ai.tools.local.setVolumeTool
+import me.rerere.rikkahub.data.ai.tools.local.shareTool
+import me.rerere.rikkahub.data.ai.tools.local.speechToTextTool
+import me.rerere.rikkahub.data.ai.tools.local.stopMediaTool
+import me.rerere.rikkahub.data.ai.tools.local.storageTool
+import me.rerere.rikkahub.data.ai.tools.local.telephonyInfoTool
+import me.rerere.rikkahub.data.ai.tools.local.toastTool
+import me.rerere.rikkahub.data.ai.tools.local.torchTool
+import me.rerere.rikkahub.data.ai.tools.local.vibrateTool
+import me.rerere.rikkahub.data.ai.tools.local.wifiInfoTool
+import me.rerere.rikkahub.data.ai.tools.local.deleteSshHostTool
+import me.rerere.rikkahub.data.ai.tools.local.forgetSshHostKeyTool
+import me.rerere.rikkahub.data.ai.tools.local.listSshHostsTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramAddWhitelistTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramDeleteCommandsTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramDisableTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramEnableTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramGetCommandsTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramRemoveWhitelistTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramSendDocumentTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramSendMessageTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramSendPhotoTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramSetAssistantTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramSetCommandsTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramSetDefaultChatTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramSetTokenTool
+import me.rerere.rikkahub.data.ai.tools.local.telegramStatusTool
+import me.rerere.rikkahub.data.ai.tools.local.saveSshHostTool
+import me.rerere.rikkahub.data.ai.tools.local.sshDownloadTool
+import me.rerere.rikkahub.data.ai.tools.local.sshExecSavedTool
+import me.rerere.rikkahub.data.ai.tools.local.sshExecTool
+import me.rerere.rikkahub.data.ai.tools.local.sshUploadTool
+import me.rerere.rikkahub.data.ai.tools.local.writeTextFileTool
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.utils.readClipboardText
@@ -45,9 +101,50 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("ask_user")
     data object AskUser : LocalToolOption()
+
+    @Serializable @SerialName("battery")        data object Battery        : LocalToolOption()
+    @Serializable @SerialName("audio_info")     data object AudioInfo      : LocalToolOption()
+    @Serializable @SerialName("telephony_info") data object TelephonyInfo  : LocalToolOption()
+    @Serializable @SerialName("wifi_info")      data object WifiInfo       : LocalToolOption()
+    @Serializable @SerialName("sensors")        data object Sensors        : LocalToolOption()
+    @Serializable @SerialName("storage_info")   data object StorageInfo    : LocalToolOption()
+    @Serializable @SerialName("toast")          data object Toast          : LocalToolOption()
+    @Serializable @SerialName("notification")   data object Notification   : LocalToolOption()
+    @Serializable @SerialName("share")          data object Share          : LocalToolOption()
+    @Serializable @SerialName("torch")          data object Torch          : LocalToolOption()
+    @Serializable @SerialName("vibrate")        data object Vibrate        : LocalToolOption()
+    @Serializable @SerialName("brightness")     data object Brightness     : LocalToolOption()
+    @Serializable @SerialName("volume")         data object Volume         : LocalToolOption()
+    @Serializable @SerialName("media_player")   data object MediaPlayer    : LocalToolOption()
+    @Serializable @SerialName("media_scanner")  data object MediaScanner   : LocalToolOption()
+    @Serializable @SerialName("download")       data object Download       : LocalToolOption()
+
+    @Serializable @SerialName("location")        data object Location       : LocalToolOption()
+    @Serializable @SerialName("contacts")        data object Contacts       : LocalToolOption()
+    @Serializable @SerialName("call_log")        data object CallLog        : LocalToolOption()
+    @Serializable @SerialName("sms_inbox")       data object SmsInbox       : LocalToolOption()
+    @Serializable @SerialName("camera_photo")    data object CameraPhoto    : LocalToolOption()
+    @Serializable @SerialName("mic_recorder")    data object MicRecorder    : LocalToolOption()
+    @Serializable @SerialName("speech_to_text")  data object SpeechToText   : LocalToolOption()
+    @Serializable @SerialName("fingerprint")     data object Fingerprint    : LocalToolOption()
+    @Serializable @SerialName("cron_jobs")       data object CronJobs       : LocalToolOption()
+    @Serializable @SerialName("ssh")             data object Ssh            : LocalToolOption()
+    @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
 }
 
-class LocalTools(private val context: Context, private val eventBus: AppEventBus) {
+class LocalTools(
+    private val context: Context,
+    private val eventBus: AppEventBus,
+    private val mediaPlayerHolder: MediaPlayerHolder,
+    private val cameraResultBuffer: CameraResultBuffer,
+    private val biometricResultBuffer: BiometricResultBuffer,
+    private val scheduledJobRepository: me.rerere.rikkahub.data.repository.ScheduledJobRepository,
+    private val cronJobScheduler: me.rerere.rikkahub.service.CronJobScheduler,
+    private val settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
+    private val sshHostRepository: me.rerere.rikkahub.data.repository.SshHostRepository,
+    private val telegramBotPreferences: me.rerere.rikkahub.data.telegram.TelegramBotPreferences,
+    private val telegramBotClient: me.rerere.rikkahub.data.telegram.TelegramBotClient,
+) {
     val javascriptTool by lazy {
         Tool(
             name = "eval_javascript",
@@ -320,6 +417,118 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
         }
         if (options.contains(LocalToolOption.AskUser)) {
             tools.add(askUserTool)
+        }
+        if (options.contains(LocalToolOption.Battery)) {
+            tools.add(batteryTool(context))
+        }
+        if (options.contains(LocalToolOption.AudioInfo)) {
+            tools.add(audioInfoTool(context))
+        }
+        if (options.contains(LocalToolOption.TelephonyInfo)) {
+            tools.add(telephonyInfoTool(context))
+        }
+        if (options.contains(LocalToolOption.WifiInfo)) {
+            tools.add(wifiInfoTool(context))
+        }
+        if (options.contains(LocalToolOption.Sensors)) {
+            tools.add(listSensorsTool(context))
+            tools.add(readSensorTool(context))
+        }
+        if (options.contains(LocalToolOption.StorageInfo)) {
+            tools.add(storageTool(context))
+        }
+        if (options.contains(LocalToolOption.Toast)) {
+            tools.add(toastTool(context))
+        }
+        if (options.contains(LocalToolOption.Notification)) {
+            tools.add(notificationTool(context))
+        }
+        if (options.contains(LocalToolOption.Share)) {
+            tools.add(shareTool(context))
+        }
+        if (options.contains(LocalToolOption.Torch)) {
+            tools.add(torchTool(context))
+        }
+        if (options.contains(LocalToolOption.Vibrate)) {
+            tools.add(vibrateTool(context))
+        }
+        if (options.contains(LocalToolOption.Brightness)) {
+            tools.add(getBrightnessTool(context))
+            tools.add(setBrightnessTool(context))
+        }
+        if (options.contains(LocalToolOption.Volume)) {
+            tools.add(getVolumeTool(context))
+            tools.add(setVolumeTool(context))
+        }
+        if (options.contains(LocalToolOption.MediaPlayer)) {
+            tools.add(playMediaTool(mediaPlayerHolder))
+            tools.add(stopMediaTool(mediaPlayerHolder))
+        }
+        if (options.contains(LocalToolOption.MediaScanner)) {
+            tools.add(mediaScannerTool(context))
+        }
+        if (options.contains(LocalToolOption.Download)) {
+            tools.add(downloadTool(context))
+            tools.add(writeTextFileTool(context))
+        }
+        if (options.contains(LocalToolOption.Location)) {
+            tools.add(locationTool(context))
+        }
+        if (options.contains(LocalToolOption.Contacts)) {
+            tools.add(searchContactsTool(context))
+            tools.add(listContactsTool(context))
+        }
+        if (options.contains(LocalToolOption.CallLog)) {
+            tools.add(callLogTool(context))
+        }
+        if (options.contains(LocalToolOption.SmsInbox)) {
+            tools.add(listSmsInboxTool(context))
+            tools.add(searchSmsTool(context))
+        }
+        if (options.contains(LocalToolOption.CameraPhoto)) {
+            tools.add(cameraPhotoTool(context, cameraResultBuffer))
+        }
+        if (options.contains(LocalToolOption.MicRecorder)) {
+            tools.add(micRecorderTool(context))
+        }
+        if (options.contains(LocalToolOption.SpeechToText)) {
+            tools.add(speechToTextTool(context))
+        }
+        if (options.contains(LocalToolOption.Fingerprint)) {
+            tools.add(fingerprintTool(context, biometricResultBuffer))
+        }
+        if (options.contains(LocalToolOption.Ssh)) {
+            tools.add(sshExecTool(context))
+            tools.add(saveSshHostTool(sshHostRepository))
+            tools.add(listSshHostsTool(sshHostRepository))
+            tools.add(deleteSshHostTool(sshHostRepository))
+            tools.add(sshExecSavedTool(context, sshHostRepository))
+            tools.add(sshUploadTool(context, sshHostRepository))
+            tools.add(sshDownloadTool(context, sshHostRepository))
+            tools.add(forgetSshHostKeyTool(context))
+        }
+        if (options.contains(LocalToolOption.TelegramBot)) {
+            tools.add(telegramSetTokenTool(telegramBotPreferences, telegramBotClient))
+            tools.add(telegramStatusTool(context, telegramBotPreferences, telegramBotClient))
+            tools.add(telegramEnableTool(context, telegramBotPreferences))
+            tools.add(telegramDisableTool(context, telegramBotPreferences))
+            tools.add(telegramAddWhitelistTool(telegramBotPreferences))
+            tools.add(telegramRemoveWhitelistTool(telegramBotPreferences))
+            tools.add(telegramSetDefaultChatTool(telegramBotPreferences))
+            tools.add(telegramSetAssistantTool(telegramBotPreferences))
+            tools.add(telegramSendMessageTool(telegramBotPreferences, telegramBotClient))
+            tools.add(telegramSendPhotoTool(telegramBotPreferences, telegramBotClient))
+            tools.add(telegramSendDocumentTool(telegramBotPreferences, telegramBotClient))
+            tools.add(telegramSetCommandsTool(telegramBotClient))
+            tools.add(telegramGetCommandsTool(telegramBotClient))
+            tools.add(telegramDeleteCommandsTool(telegramBotClient))
+        }
+        if (options.contains(LocalToolOption.CronJobs)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.scheduleJobTool(scheduledJobRepository, cronJobScheduler, settingsStore))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.listJobsTool(scheduledJobRepository))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.deleteJobTool(scheduledJobRepository, cronJobScheduler))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.pauseJobTool(scheduledJobRepository, cronJobScheduler))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.resumeJobTool(scheduledJobRepository, cronJobScheduler))
         }
         return tools
     }

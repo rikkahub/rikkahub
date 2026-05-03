@@ -9,4 +9,10 @@
   <files-path
     name="upload"
     path="." />
+  <cache-path
+    name="photos"
+    path="photos/" />
+  <cache-path
+    name="recordings"
+    path="recordings/" />
 </paths>
