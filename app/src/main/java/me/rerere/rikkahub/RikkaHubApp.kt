@@ -79,6 +79,14 @@ class RikkaHubApp : Application() {
         // Start WebServer if enabled in settings
         startWebServerIfEnabled()
 
+        // Eagerly construct ChatService on the main thread. Its constructor calls
+        // LifecycleRegistry.addObserver which throws if it runs off-main, and the Telegram
+        // bot service runs on Dispatchers.IO — without this priming, the first inbound bot
+        // message after a fresh app start crashes the bot's handleIncoming with
+        // "addObserver must be called on the main thread" because Koin's lazy factory
+        // builds ChatService on the IO thread.
+        eagerlyInitChatService()
+
         // Start Telegram bot if previously enabled — service is START_NOT_STICKY so OS won't
         // auto-revive it after a process kill; we need to bring it back ourselves.
         startTelegramBotIfEnabled()
@@ -104,6 +112,17 @@ class RikkaHubApp : Application() {
             }.onFailure {
                 Log.e(TAG, "incrementLaunchCount failed", it)
             }
+        }
+    }
+
+    private fun eagerlyInitChatService() {
+        try {
+            // Just resolving the singleton triggers Koin's factory; the side effect we care
+            // about is the LifecycleRegistry.addObserver call inside ChatService.<init>,
+            // which Android requires to happen on the main thread.
+            get<me.rerere.rikkahub.service.ChatService>()
+        } catch (t: Throwable) {
+            Log.e(TAG, "eagerlyInitChatService failed", t)
         }
     }
 
