@@ -219,6 +219,15 @@ class TelegramBotService : Service() {
             if (text.isNotEmpty()) add(UIMessagePart.Text(text))
             else if (imageParts.isNotEmpty()) add(UIMessagePart.Text("(photo)"))
         }
+        // Snapshot the conversation BEFORE sending so the streaming render can ignore the
+        // previous turn's assistant content. Without this baseline, getGenerationJobStateFlow
+        // briefly emits null between turns and `first { it == null }` returns immediately;
+        // the placeholder then gets edited with the previous reply and finalized in that
+        // stale state. Tracking the baseline lets us wait for the NEW turn to actually start
+        // before declaring it done.
+        val baselineMessageCount = conversationRepo.getConversationById(convId)
+            ?.currentMessages?.size ?: 0
+
         chatService.sendMessage(convId, parts)
 
         // Live streaming: send a placeholder reply, then edit it in place every ~1.5s with
@@ -247,7 +256,7 @@ class TelegramBotService : Service() {
             var lastSent = ""
             while (kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive == true) {
                 delay(STREAM_EDIT_INTERVAL_MS)
-                val rendered = renderAssistantStream(convId, finalizing = false)
+                val rendered = renderAssistantStream(convId, finalizing = false, baselineMessageCount)
                 if (rendered.isBlank() || rendered == lastSent) continue
                 // Edits are capped at ~4096 chars; truncate live edits, the final send will
                 // chunk anything longer.
@@ -260,6 +269,14 @@ class TelegramBotService : Service() {
         } else null
 
         try {
+            // Step 1: wait until this turn's generation has actually started. Otherwise the
+            // pre-existing "currently null" StateFlow value would pass `first { it == null }`
+            // immediately and we would finalize before any work happened. 10s timeout covers
+            // even the slowest cold-start; if it never starts the catch handles it.
+            kotlinx.coroutines.withTimeoutOrNull(10_000) {
+                chatService.getGenerationJobStateFlow(convId).first { it != null }
+            }
+            // Step 2: wait for the same job to report null again (= finished).
             chatService.getGenerationJobStateFlow(convId).first { it == null }
         } catch (e: Throwable) {
             android.util.Log.w(TAG, "handleIncoming: generation flow ended with error", e)
@@ -268,7 +285,7 @@ class TelegramBotService : Service() {
             editJob?.cancel()
         }
 
-        val finalReply = renderAssistantStream(convId, finalizing = true)
+        val finalReply = renderAssistantStream(convId, finalizing = true, baselineMessageCount)
         android.util.Log.i(TAG, "handleIncoming: finalizing ${finalReply.length} chars to chat=${m.chatId}")
 
         when {
@@ -302,10 +319,21 @@ class TelegramBotService : Service() {
      * Render the latest assistant turn for Telegram display. Combines text content with a
      * compact tool-call summary so the user can see what the bot ran end-to-end. Used both
      * for the periodic live edit and for the final send.
+     *
+     * `baselineMessageCount` is the size of `currentMessages` captured BEFORE the user's
+     * message was sent for this turn. We only consider assistant messages whose index is
+     * at or beyond that baseline, which prevents the previous turn's reply from leaking
+     * into this turn's placeholder during the brief window where the new generation has
+     * not yet appended its first chunk.
      */
-    private suspend fun renderAssistantStream(convId: kotlin.uuid.Uuid, finalizing: Boolean): String {
+    private suspend fun renderAssistantStream(
+        convId: kotlin.uuid.Uuid,
+        finalizing: Boolean,
+        baselineMessageCount: Int,
+    ): String {
         val conv = conversationRepo.getConversationById(convId) ?: return ""
-        val lastAssistant = conv.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+        val turnMessages = conv.currentMessages.drop(baselineMessageCount)
+        val lastAssistant = turnMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
             ?: return ""
         val text = assistantTextOf(lastAssistant).trim()
         val toolSummary = assistantToolSummary(lastAssistant)

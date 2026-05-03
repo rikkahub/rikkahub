@@ -673,6 +673,11 @@ private fun AssistantLocalToolContent(
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.AppLauncher),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.AppLauncher, it) },
+                        // Termux's RUN_COMMAND service is gated behind a dangerous-level
+                        // custom permission. Requesting it through the standard runtime flow
+                        // pops the system dialog so termux_run_command works without an adb
+                        // grant. If Termux is not installed the request silently no-ops.
+                        requiredRuntimePerms = listOf("com.termux.permission.RUN_COMMAND"),
                     )
                 }
             )
