@@ -1078,5 +1078,21 @@
   <string name="assistant_page_local_tools_section_screen_automation">Screen automation</string>
   <string name="assistant_page_local_tools_screen_automation_title">Screen automation</string>
   <string name="assistant_page_local_tools_screen_automation_desc">Let the LLM tap, swipe, scroll, read on-screen content, and take screenshots via Android\'s accessibility service.</string>
+  <string name="setting_page_accessibility">Accessibility</string>
+  <string name="setting_page_accessibility_desc">Status, recent actions, and screenshot diagnostics for the screen-automation service.</string>
+  <string name="setting_page_accessibility_status_section">Status</string>
+  <string name="setting_page_accessibility_status_running">Service: Running</string>
+  <string name="setting_page_accessibility_status_not_running">Service: Not running</string>
+  <string name="setting_page_accessibility_status_help">RikkaHub needs accessibility permission to perform taps, swipes, and read the screen for the LLM. Open Settings &#x2192; Accessibility &#x2192; Installed Apps &#x2192; RikkaHub and turn it on.</string>
+  <string name="setting_page_accessibility_open_settings">Open Accessibility settings</string>
+  <string name="setting_page_accessibility_diagnostics_section">Diagnostics</string>
+  <string name="setting_page_accessibility_capture_diag">Capture diagnostic screenshot</string>
+  <string name="setting_page_accessibility_capture_ok_toast">Screenshot saved: %1$s</string>
+  <string name="setting_page_accessibility_capture_fail_toast">Screenshot failed: %1$s</string>
+  <string name="setting_page_accessibility_recent_section">Recent actions</string>
+  <string name="setting_page_accessibility_no_actions">No recent actions yet.</string>
+  <string name="setting_page_accessibility_action_ago_seconds">%1$ds ago</string>
+  <string name="setting_page_accessibility_action_ago_minutes">%1$dm ago</string>
+  <string name="setting_page_accessibility_action_ago_hours">%1$dh ago</string>
 </resources>
 
