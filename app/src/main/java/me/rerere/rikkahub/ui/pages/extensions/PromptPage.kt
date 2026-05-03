@@ -87,6 +87,8 @@ import me.rerere.rikkahub.data.export.ModeInjectionSerializer
 import me.rerere.rikkahub.data.export.rememberExporter
 import me.rerere.rikkahub.data.export.rememberImporter
 import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.InMessagePosition
+import me.rerere.rikkahub.data.model.InjectionContentType
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -481,14 +483,64 @@ private fun ModeInjectionEditSheet(
                     )
                 }
 
-                Text(
-                    stringResource(R.string.prompt_page_injection_role),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                InjectionRoleSelector(
-                    role = injection.role,
-                    onSelect = { onEdit(injection.copy(role = it)) }
-                )
+                AnimatedVisibility(visible = injection.position == InjectionPosition.IN_MESSAGE) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(
+                            stringResource(R.string.prompt_page_in_message_position),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        InMessagePositionSelector(
+                            position = injection.inMessagePosition ?: InMessagePosition.AFTER,
+                            onSelect = { onEdit(injection.copy(inMessagePosition = it)) }
+                        )
+
+                        Text(
+                            stringResource(R.string.prompt_page_content_type),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        InjectionContentTypeSelector2(
+                            contentType = injection.contentType,
+                            onSelect = { onEdit(injection.copy(contentType = it)) }
+                        )
+
+                        FormItem(
+                            label = { Text(stringResource(R.string.prompt_page_persist_to_history)) },
+                            description = { Text(stringResource(R.string.prompt_page_persist_to_history_desc)) },
+                            tail = {
+                                Switch(
+                                    checked = injection.persistToHistory,
+                                    onCheckedChange = { onEdit(injection.copy(persistToHistory = it)) }
+                                )
+                            }
+                        )
+
+                        AnimatedVisibility(visible = injection.persistToHistory) {
+                            FormItem(
+                                label = { Text(stringResource(R.string.prompt_page_visible_in_history)) },
+                                description = { Text(stringResource(R.string.prompt_page_visible_in_history_desc)) },
+                                tail = {
+                                    Switch(
+                                        checked = injection.visibleInHistory,
+                                        onCheckedChange = { onEdit(injection.copy(visibleInHistory = it)) }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                AnimatedVisibility(visible = injection.position != InjectionPosition.IN_MESSAGE) {
+                    Column {
+                        Text(
+                            stringResource(R.string.prompt_page_injection_role),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        InjectionRoleSelector(
+                            role = injection.role,
+                            onSelect = { onEdit(injection.copy(role = it)) }
+                        )
+                    }
+                }
 
                 OutlinedTextField(
                     value = injection.content,
@@ -537,6 +589,7 @@ private fun getPositionLabel(position: InjectionPosition): String = when (positi
     InjectionPosition.TOP_OF_CHAT -> stringResource(R.string.prompt_page_position_top_of_chat)
     InjectionPosition.BOTTOM_OF_CHAT -> stringResource(R.string.prompt_page_position_bottom_of_chat)
     InjectionPosition.AT_DEPTH -> stringResource(R.string.prompt_page_position_at_depth)
+    InjectionPosition.IN_MESSAGE -> stringResource(R.string.prompt_page_position_in_message)
 }
 
 @Composable
@@ -1049,6 +1102,65 @@ private fun RegexInjectionEditDialog(
                     )
                 }
 
+                AnimatedVisibility(visible = entry.position == InjectionPosition.IN_MESSAGE) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(
+                            stringResource(R.string.prompt_page_in_message_position),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        InMessagePositionSelector(
+                            position = entry.inMessagePosition ?: InMessagePosition.AFTER,
+                            onSelect = { onEdit(entry.copy(inMessagePosition = it)) }
+                        )
+
+                        Text(
+                            stringResource(R.string.prompt_page_content_type),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        InjectionContentTypeSelector2(
+                            contentType = entry.contentType,
+                            onSelect = { onEdit(entry.copy(contentType = it)) }
+                        )
+
+                        FormItem(
+                            label = { Text(stringResource(R.string.prompt_page_persist_to_history)) },
+                            description = { Text(stringResource(R.string.prompt_page_persist_to_history_desc)) },
+                            tail = {
+                                Switch(
+                                    checked = entry.persistToHistory,
+                                    onCheckedChange = { onEdit(entry.copy(persistToHistory = it)) }
+                                )
+                            }
+                        )
+
+                        AnimatedVisibility(visible = entry.persistToHistory) {
+                            FormItem(
+                                label = { Text(stringResource(R.string.prompt_page_visible_in_history)) },
+                                description = { Text(stringResource(R.string.prompt_page_visible_in_history_desc)) },
+                                tail = {
+                                    Switch(
+                                        checked = entry.visibleInHistory,
+                                        onCheckedChange = { onEdit(entry.copy(visibleInHistory = it)) }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                AnimatedVisibility(visible = entry.position != InjectionPosition.IN_MESSAGE) {
+                    Column {
+                        Text(
+                            stringResource(R.string.prompt_page_injection_role),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        InjectionRoleSelector(
+                            role = entry.role,
+                            onSelect = { onEdit(entry.copy(role = it)) }
+                        )
+                    }
+                }
+
                 // 关键词
                 Text(stringResource(R.string.prompt_page_keywords_label), style = MaterialTheme.typography.titleSmall)
                 FlowRow(
@@ -1173,4 +1285,45 @@ private fun RegexInjectionEditDialog(
             }
         }
     )
+}
+
+// ==================== IN_MESSAGE Helpers ====================
+
+@Composable
+private fun InMessagePositionSelector(
+    position: InMessagePosition,
+    onSelect: (InMessagePosition) -> Unit
+) {
+    Select(
+        options = InMessagePosition.entries,
+        selectedOption = position,
+        onOptionSelected = onSelect,
+        optionToString = { getInMessagePositionLabel(it) },
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun getInMessagePositionLabel(position: InMessagePosition): String = when (position) {
+    InMessagePosition.BEFORE -> stringResource(R.string.prompt_page_in_message_before)
+    InMessagePosition.AFTER -> stringResource(R.string.prompt_page_in_message_after)
+}
+
+@Composable
+private fun InjectionContentTypeSelector2(
+    contentType: InjectionContentType,
+    onSelect: (InjectionContentType) -> Unit
+) {
+    Select(
+        options = InjectionContentType.entries,
+        selectedOption = contentType,
+        onOptionSelected = onSelect,
+        optionToString = { getContentTypeLabel2(it) },
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun getContentTypeLabel2(type: InjectionContentType): String = when (type) {
+    InjectionContentType.TEXT -> stringResource(R.string.prompt_page_content_type_text)
 }
