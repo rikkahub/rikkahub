@@ -97,6 +97,7 @@ import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
+import me.rerere.rikkahub.ui.pages.setting.SettingAccessibilityPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
@@ -427,6 +428,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingTelegramPage()
                             }
 
+                            entry<Screen.SettingAccessibility> {
+                                SettingAccessibilityPage()
+                            }
+
                             entry<Screen.Developer> {
                                 DeveloperPage()
                             }
@@ -611,6 +616,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingTelegram : Screen
+
+    @Serializable
+    data object SettingAccessibility : Screen
 
     @Serializable
     data object Developer : Screen

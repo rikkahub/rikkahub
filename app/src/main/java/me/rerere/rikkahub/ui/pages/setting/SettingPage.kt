@@ -59,6 +59,7 @@ import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Telegram
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share04
+import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.rikkahub.R
@@ -257,6 +258,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Telegram, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_telegram_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_telegram)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingAccessibility) },
+                        leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_accessibility_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_accessibility)) },
                     )
                 }
             }
