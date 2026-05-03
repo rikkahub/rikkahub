@@ -130,6 +130,40 @@ class TelegramBotClient(
     suspend fun deleteMyCommands(): Boolean =
         call(shortClient, "deleteMyCommands", buildJsonObject {}).jsonPrimitive.boolean
 
+    /**
+     * Edit the text of a previously sent bot message in place. Returns the message object on
+     * success. Treats Telegram's "message is not modified" error as a benign no-op — that
+     * happens during streaming when the latest chunk equals the previously rendered text.
+     * Returns null on rate-limit / "message_too_long" / network failure so the caller can
+     * fall back to deleting + resending as chunks.
+     */
+    suspend fun editMessageText(
+        chatId: Long,
+        messageId: Long,
+        text: String,
+        parseMode: String? = null,
+    ): JsonObject? = try {
+        call(shortClient, "editMessageText", buildJsonObject {
+            put("chat_id", chatId)
+            put("message_id", messageId)
+            put("text", text)
+            if (parseMode != null) put("parse_mode", parseMode)
+        }).jsonObject
+    } catch (e: TelegramApiException) {
+        // 400 with "message is not modified" / "message_too_long" — surface as null so the
+        // streaming consumer can decide whether to ignore (no-op) or fall back (overflow).
+        null
+    }
+
+    suspend fun deleteMessage(chatId: Long, messageId: Long): Boolean = try {
+        call(shortClient, "deleteMessage", buildJsonObject {
+            put("chat_id", chatId)
+            put("message_id", messageId)
+        }).jsonPrimitive.boolean
+    } catch (_: Throwable) {
+        false
+    }
+
     /** Resolve a file_id to a downloadable file_path (Telegram returns it under .result.file_path). */
     suspend fun getFile(fileId: String): JsonObject =
         call(shortClient, "getFile", buildJsonObject { put("file_id", fileId) }).jsonObject

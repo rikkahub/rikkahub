@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -218,34 +219,134 @@ class TelegramBotService : Service() {
         }
         chatService.sendMessage(convId, parts)
 
-        // Wait for the generation Job to become null (pipeline finished). Re-tickle the
-        // Telegram typing indicator every ~4 seconds while we wait so it stays visible.
+        // Live streaming: send a placeholder reply, then edit it in place every ~1.5s with
+        // the latest accumulated assistant text + tool-call summary so the user sees real-time
+        // progress on Telegram (matching how the in-app chat already streams). The typing
+        // indicator continues to show up between edits as a UX backstop.
+        val placeholderId: Long? = try {
+            val res = client.sendMessage(
+                chatId = m.chatId,
+                text = STREAM_PLACEHOLDER,
+                replyToMessageId = m.messageId,
+            )
+            res["message_id"]?.jsonPrimitive?.longOrNull
+        } catch (e: Throwable) {
+            android.util.Log.w(TAG, "handleIncoming: placeholder send failed", e)
+            null
+        }
+
         val typingJob = scope.launch {
             while (kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive == true) {
                 try { client.sendChatAction(m.chatId, "typing") } catch (_: Throwable) {}
                 delay(4_000)
             }
         }
+        val editJob = if (placeholderId != null) scope.launch {
+            var lastSent = ""
+            while (kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive == true) {
+                delay(STREAM_EDIT_INTERVAL_MS)
+                val rendered = renderAssistantStream(convId, finalizing = false)
+                if (rendered.isBlank() || rendered == lastSent) continue
+                // Edits are capped at ~4096 chars; truncate live edits, the final send will
+                // chunk anything longer.
+                val capped = if (rendered.length > MAX_CHARS) rendered.substring(0, MAX_CHARS) + "..." else rendered
+                val ok = try {
+                    client.editMessageText(m.chatId, placeholderId, capped) != null
+                } catch (_: Throwable) { false }
+                if (ok) lastSent = rendered
+            }
+        } else null
+
         try {
             chatService.getGenerationJobStateFlow(convId).first { it == null }
         } catch (e: Throwable) {
             android.util.Log.w(TAG, "handleIncoming: generation flow ended with error", e)
         } finally {
             typingJob.cancel()
+            editJob?.cancel()
         }
 
-        val reply = readLatestAssistantText(convId)
-        android.util.Log.i(TAG, "handleIncoming: replying ${reply.length} chars to chat=${m.chatId}")
-        if (reply.isNotBlank()) {
-            sendChunked(m.chatId, reply, replyTo = m.messageId)
-        } else {
-            // Don't leave the user staring at nothing — tell them generation produced no text
-            // (most often the LLM only made tool calls and didn't add a final user-facing text).
-            try {
-                client.sendMessage(m.chatId, "(no reply text — tool ran but produced no message)")
-            } catch (_: Throwable) {}
+        val finalReply = renderAssistantStream(convId, finalizing = true)
+        android.util.Log.i(TAG, "handleIncoming: finalizing ${finalReply.length} chars to chat=${m.chatId}")
+
+        when {
+            finalReply.isBlank() -> {
+                // Nothing to say. If we have a placeholder, replace it with a fallback note;
+                // otherwise send a fresh message so the user is not left waiting silently.
+                val fallback = "(no reply text - tool ran but produced no message)"
+                if (placeholderId != null) {
+                    try { client.editMessageText(m.chatId, placeholderId, fallback) } catch (_: Throwable) {}
+                } else {
+                    try { client.sendMessage(m.chatId, fallback) } catch (_: Throwable) {}
+                }
+            }
+            placeholderId != null && finalReply.length <= MAX_CHARS -> {
+                // Final fits in one message; just edit the placeholder one last time.
+                try { client.editMessageText(m.chatId, placeholderId, finalReply) } catch (_: Throwable) {}
+            }
+            else -> {
+                // Final reply overflowed Telegram's per-message limit. Drop the placeholder
+                // (delete or fold it into the first chunk) and send chunked.
+                if (placeholderId != null) {
+                    try { client.deleteMessage(m.chatId, placeholderId) } catch (_: Throwable) {}
+                }
+                sendChunked(m.chatId, finalReply, replyTo = m.messageId)
+            }
         }
         chatRepo.touch(m.chatId, System.currentTimeMillis())
+    }
+
+    /**
+     * Render the latest assistant turn for Telegram display. Combines text content with a
+     * compact tool-call summary so the user can see what the bot ran end-to-end. Used both
+     * for the periodic live edit and for the final send.
+     */
+    private suspend fun renderAssistantStream(convId: kotlin.uuid.Uuid, finalizing: Boolean): String {
+        val conv = conversationRepo.getConversationById(convId) ?: return ""
+        val lastAssistant = conv.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+            ?: return ""
+        val text = assistantTextOf(lastAssistant).trim()
+        val toolSummary = assistantToolSummary(lastAssistant)
+        val streamMarker = if (!finalizing && text.isNotEmpty()) " $STREAM_TICK" else ""
+        return buildString {
+            if (toolSummary.isNotEmpty()) {
+                append(toolSummary)
+                if (text.isNotEmpty()) append("\n\n")
+            }
+            if (text.isNotEmpty()) append(text)
+            if (streamMarker.isNotEmpty()) append(streamMarker)
+        }.trimEnd()
+    }
+
+    /**
+     * Compact one-line "tool: name(args) -> summary" entries for every tool the assistant
+     * ran in this turn. Skips internal-only tools whose details add noise (e.g. ask_user
+     * which surfaces its own UI). Falls back to "(running)" for not-yet-completed calls so
+     * the live edit shows progress.
+     */
+    private fun assistantToolSummary(m: UIMessage): String {
+        val tools = m.parts.filterIsInstance<UIMessagePart.Tool>()
+        if (tools.isEmpty()) return ""
+        return buildString {
+            append("🔧 Tools:\n")  // wrench emoji + Tools:
+            for (t in tools) {
+                append(" - ")
+                append(t.toolName)
+                val argSummary = t.input.take(60).replace("\n", " ").trim()
+                if (argSummary.isNotEmpty()) append("(").append(argSummary).append(")")
+                if (!t.isExecuted) {
+                    append(" ... running")
+                } else {
+                    val outText = t.output.filterIsInstance<UIMessagePart.Text>()
+                        .joinToString("") { it.text }
+                        .take(80)
+                        .replace("\n", " ")
+                        .trim()
+                    if (outText.isNotEmpty()) append(" -> ").append(outText)
+                }
+                append('\n')
+            }
+        }.trimEnd()
     }
 
     /** Returns (conversationId, wasCreated). wasCreated=true means the LLM hasn't seen
@@ -359,6 +460,17 @@ class TelegramBotService : Service() {
          *  lock is auto-released in finally before each next cycle so a longer hang cannot
          *  leak it. */
         const val WAKELOCK_TIMEOUT_MS: Long = 75_000L
+
+        /** Initial placeholder text the bot posts before streaming begins. */
+        const val STREAM_PLACEHOLDER = "..."
+
+        /** Trailing tick the live edit appends so the user can tell the bot is mid-stream
+         *  versus finished. The final edit drops it. */
+        const val STREAM_TICK = "▌"
+
+        /** Telegram silently rate-limits edits around 1/sec; 1500ms gives steady progress
+         *  without tripping the limiter. */
+        const val STREAM_EDIT_INTERVAL_MS: Long = 1_500L
 
         /** Set whenever the service is alive AND its long-poll loop is running. */
         @Volatile var isRunning: Boolean = false

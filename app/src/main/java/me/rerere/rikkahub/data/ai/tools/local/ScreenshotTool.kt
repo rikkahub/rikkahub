@@ -32,9 +32,11 @@ fun takeScreenshotTool(context: Context): Tool = Tool(
     name = "take_screenshot",
     description = """
         Capture a screenshot of the device's current display via the AccessibilityService and
-        return it as an image attachment so you can see what's on screen. Saves a PNG to the
-        app cache. Secure surfaces (banking apps, DRM video, password fields) come back as a
-        graceful error. Rate-limited by the OS to ~1 per second.
+        return it as an image attachment so you can see exactly what is on screen. The image
+        is delivered to your next turn as a vision input - inspect it before deciding the
+        next tap or swipe. Saves a PNG to the app cache. Secure surfaces (banking apps, DRM
+        video, password fields) come back as a graceful error. Rate-limited by the OS to ~1
+        per second.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
