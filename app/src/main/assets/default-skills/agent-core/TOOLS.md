@@ -52,7 +52,7 @@ Every tool the agent can call, grouped by capability surface. Each entry lists: 
 
 ## Screen automation (Phase 4)
 
-Always read the screen *before* gesturing. The right pattern is `read_window_tree` → choose target → `click_node` (or `tap` if you know coordinates).
+Always read the screen *before* gesturing. The right pattern is `read_window_tree` → choose target → `click_node` / `set_text` (or `tap` if you know coordinates).
 
 - **`tap`** — single tap at absolute pixels.
 - **`long_press`** — same as tap but with a hold duration (default 600ms, range 100-5000).
@@ -60,13 +60,16 @@ Always read the screen *before* gesturing. The right pattern is `read_window_tre
 - **`scroll`** — direction up/down/left/right; falls back to swipe gesture if no scrollable container is found.
 - **`read_window_tree`** — current foreground window. Default mode filters to interactive nodes; pass `verbose:true` for the full tree (large; use sparingly). 500-node default cap.
 - **`find_node`** / **`click_node`** — selector by `text` / `content_description` / `view_id_resource_name`. `nth` disambiguates when multiple match. `click_node` walks up the parent chain to find a clickable ancestor automatically.
+- **`set_text`** — type into an editable input (URL bar, search field, form input). Locate the field with the same selector axes as `find_node`. **Does not work for terminals** like Termux that render to a Surface — for those, use `termux_run_command`.
 - **`global_action`** — system gestures: `back`, `home`, `recents`, `notifications`, `quick_settings`, `lock_screen`, `power_dialog`.
-- **`take_screenshot`** — captures current display, returned as a vision-input image part. Secure surfaces (DRM, banking, password fields) error out gracefully. ~1/sec OS rate limit.
+- **`take_screenshot`** — captures current display, returned as a vision-input image part on your next turn. Secure surfaces (DRM, banking, password fields) error out gracefully. ~1/sec OS rate limit.
+- **`wake_screen`** — turns the display on if it was off. Call this before `launch_app` or any gesture when the device may be asleep. Reports `keyguard_secure:true` if a real PIN is set; in that case the user must unlock manually before automation can continue.
 
 ## App launcher
 
-- **`launch_app`** — open any installed app by package name. Use this to bring Termux / Settings / Chrome / etc. to the foreground before screen automation.
+- **`launch_app`** — open any installed app by package name. Auto-wakes the screen if it was off and reports `woke_screen:true`. Use this to bring Termux / Settings / Chrome / etc. to the foreground before screen automation.
 - **`list_installed_apps`** — discover available package names. Filter by substring; defaults to user-installed apps only.
+- **`termux_run_command`** — run a shell command in Termux without typing. Bypasses the keyboard / accessibility limitation for terminals. **Setup the user must do once:** in Termux, edit `~/.termux/termux.properties`, add `allow-external-apps=true`, then restart Termux. After that you can call `termux_run_command(command="pkg update && pkg upgrade -y")` and the command runs in a real session. Return value confirms intent dispatch only — to read the command's output, take a screenshot of Termux a moment later or have the user paste it.
 
 ## SSH
 

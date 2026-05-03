@@ -29,8 +29,10 @@ Tools return structured `{error, recovery, ...}` envelopes when state is degrade
 | Envelope | What it means | What you do |
 | --- | --- | --- |
 | `error: "AccessibilityService not active"` | Screen-automation tools all fail until enabled | Tell user once, deep-link them via the app's UI hint, then stop trying screen tools this turn. |
-| `error: "no_active_window"` | Transient — animations / lock screen / screen-off | Wait one turn, retry, or ask the user to wake the device. |
-| `error: "wrong_foreground_app", current: ...` | Some other app is in the foreground | Call `launch_app` first, then retry. |
+| `error: "no_active_window"` | Transient — animations / lock screen / screen-off | Call `wake_screen` first; if `keyguard_secure:true`, ask the user to unlock. Otherwise retry one turn later. |
+| `error: "wrong_foreground_app", current: ...` | Some other app is in the foreground | Call `launch_app` first (it will auto-wake), then retry. |
+| `error: "node_not_editable"` | `set_text` target is not an input field | If the surface is Termux or a terminal, switch to `termux_run_command`. Otherwise re-locate the actual input. |
+| `error: "termux_not_installed"` / `"termux_permission_denied"` | Termux missing or `allow-external-apps` not set | Surface the recovery hint to the user verbatim — it tells them exactly what to fix. |
 | `error: "screenshot_unavailable", reason: "secure_surface"` | DRM / banking / password — never recoverable this session | Don't keep retrying. Tell the user what surface you can see instead. |
 | `error: "rate_limited"` | OS throttle on screenshot (~1/sec) | Wait, then retry. |
 | `recovery: "Enable RikkaHub in Settings ..."` | Some grant flow is missing | Surface the recovery hint to the user verbatim — it tells them exactly what to enable. |

@@ -219,3 +219,124 @@ fun clickNodeTool(): Tool = Tool(
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
+
+/**
+ * Type text into an editable accessibility node by selector. Works on standard input fields
+ * (URL bars, search boxes, form fields, IME-driven text views). Does NOT work on terminals
+ * like Termux because they render to a Surface and do not expose editable nodes; for Termux
+ * use termux_run_command instead.
+ */
+fun setTextTool(): Tool = Tool(
+    name = "set_text",
+    description = """
+        Type or replace text in an editable input field on screen. Find the field by selector
+        (text / content_description / view_id_resource_name). Works for URL bars, search boxes,
+        form fields. Does NOT work for terminals like Termux that render natively - for Termux
+        run shell commands directly via termux_run_command. Returns {success, set_to, ...} or
+        a structured error.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("by", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray { add("text"); add("content_description"); add("view_id_resource_name") })
+                    put("description", "Selector axis to find the editable node")
+                })
+                put("value", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Selector value to match against")
+                })
+                put("text", buildJsonObject {
+                    put("type", "string")
+                    put("description", "The text to set on the matched node")
+                })
+                put("package_name", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional foreground package guard")
+                })
+                put("nth", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Zero-based index when multiple nodes match (default 0)")
+                })
+            },
+            required = listOf("by", "value", "text")
+        )
+    },
+    execute = { input ->
+        val (by, value, pkgFilter) = parseSelector(input)
+        val nth = input.jsonObject["nth"]?.jsonPrimitive?.intOrNull ?: 0
+        val newText = input.jsonObject["text"]?.jsonPrimitive?.contentOrNull
+        if (by == null || by !in ALLOWED_BY || value == null || newText == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    buildJsonObject {
+                        put("error", "by, value, and text are required; by must be one of [text, content_description, view_id_resource_name]")
+                    }.toString()
+                )
+            )
+        }
+        if (nth < 0) {
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    buildJsonObject { put("error", "nth must be >= 0") }.toString()
+                )
+            )
+        }
+        val payload = AccessibilityServiceHandle.withService { svc ->
+            val root = svc.rootInActiveWindow
+                ?: return@withService buildJsonObject { put("error", "no_active_window") }
+            val pkg = root.packageName?.toString().orEmpty()
+            if (pkgFilter != null && pkgFilter != pkg) {
+                return@withService buildJsonObject {
+                    put("error", "wrong_foreground_app")
+                    put("current", pkg)
+                }
+            }
+            val matches = findMatches(root, by, value)
+            if (matches.isEmpty()) {
+                return@withService buildJsonObject { put("error", "no_match") }
+            }
+            if (nth >= matches.size) {
+                return@withService buildJsonObject {
+                    put("error", "nth_out_of_range")
+                    put("available", matches.size)
+                }
+            }
+            val target = matches[nth]
+            // ACTION_SET_TEXT requires the node to be editable. Walk up the parent chain
+            // looking for one - some apps wrap their EditText in a non-editable container.
+            var editable: AccessibilityNodeInfo? = target
+            while (editable != null && !editable.isEditable) {
+                editable = editable.parent
+            }
+            if (editable == null) {
+                return@withService buildJsonObject {
+                    put("error", "node_not_editable")
+                    put("recovery", "The matched node is not an editable input. Terminals (Termux) render natively and do not expose editable nodes; use termux_run_command instead.")
+                }
+            }
+            val args = android.os.Bundle().apply {
+                putCharSequence(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    newText
+                )
+            }
+            val ok = editable.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            svc.appendLog(
+                ActionLogEntry(
+                    type = "set_text",
+                    paramsSummary = "$by=\"${value.take(30)}\" -> \"${newText.take(30)}\"",
+                    success = ok,
+                    timestampMs = System.currentTimeMillis(),
+                )
+            )
+            buildJsonObject {
+                put("success", ok)
+                if (!ok) put("reason", "action_rejected")
+                put("set_to", newText)
+            }
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    }
+)

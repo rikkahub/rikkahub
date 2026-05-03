@@ -548,13 +548,16 @@ class LocalTools(
             tools.add(readWindowTreeTool())
             tools.add(findNodeTool())
             tools.add(clickNodeTool())
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.setTextTool())
             tools.add(scrollTool())
             tools.add(globalActionTool())
             tools.add(takeScreenshotTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.wakeScreenTool(context))
         }
         if (options.contains(LocalToolOption.AppLauncher)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.launchAppTool(context))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.listInstalledAppsTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.termuxRunCommandTool(context))
         }
         return tools
     }

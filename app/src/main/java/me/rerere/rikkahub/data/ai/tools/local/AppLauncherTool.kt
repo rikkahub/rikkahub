@@ -63,6 +63,14 @@ fun launchAppTool(context: Context): Tool = Tool(
                 )
             )
         }
+        // Wake the screen if it's off; without this the activity launches behind the lock
+        // screen and any subsequent read_window_tree call will see no_active_window. We do
+        // not bypass a real PIN/biometric keyguard - that requires the user.
+        val wasOff = !ScreenWaker.isInteractive(context)
+        val woke = if (wasOff) ScreenWaker.wakeIfOff(context) else false
+        val keyLocked = ScreenWaker.isKeyguardLocked(context)
+        val keySecure = ScreenWaker.isKeyguardSecure(context)
+
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(intent)
@@ -71,6 +79,14 @@ fun launchAppTool(context: Context): Tool = Tool(
                     buildJsonObject {
                         put("success", true)
                         put("package", pkg)
+                        if (wasOff) put("woke_screen", woke)
+                        if (keyLocked) {
+                            put("keyguard_locked", true)
+                            put("keyguard_secure", keySecure)
+                            if (keySecure) {
+                                put("warn", "Screen is woken but PIN/biometric keyguard is up. The user must unlock for the launched app to be visible and drivable.")
+                            }
+                        }
                     }.toString()
                 )
             )
