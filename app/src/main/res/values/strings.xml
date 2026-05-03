@@ -1075,5 +1075,8 @@
 
   <!-- Phase 4 — Screen automation -->
   <string name="accessibility_service_summary">Lets RikkaHub tap, swipe, scroll, read screen content, and take screenshots when the LLM uses the Screen automation tools.</string>
+  <string name="assistant_page_local_tools_section_screen_automation">Screen automation</string>
+  <string name="assistant_page_local_tools_screen_automation_title">Screen automation</string>
+  <string name="assistant_page_local_tools_screen_automation_desc">Let the LLM tap, swipe, scroll, read on-screen content, and take screenshots via Android\'s accessibility service.</string>
 </resources>
 

@@ -640,6 +640,29 @@ private fun AssistantLocalToolContent(
                 }
             )
         }
+
+        Text(
+            text = stringResource(R.string.assistant_page_local_tools_section_screen_automation),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+        )
+        CardGroup {
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_screen_automation_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_screen_automation_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.ScreenAutomation),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.ScreenAutomation, it) },
+                        requiresAccessibilityService = true,
+                    )
+                }
+            )
+        }
     }
 }
 
