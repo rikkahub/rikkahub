@@ -33,6 +33,11 @@
   <uses-permission
       android:name="android.permission.QUERY_ALL_PACKAGES"
       tools:ignore="QueryAllPackagesPermission" />
+  <!-- Custom permission Termux's RunCommandService gates access by. Without this declaration
+       ActivityManager rejects our intent with "Permission Denial requires
+       com.termux.permission.RUN_COMMAND" before Termux even sees it. The user still needs
+       allow-external-apps=true in ~/.termux/termux.properties on their side. -->
+  <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
   <uses-feature
     android:name="android.hardware.camera"

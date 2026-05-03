@@ -162,11 +162,16 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
                 )
             )
         } catch (t: SecurityException) {
+            // Two distinct failure modes both surface as SecurityException:
+            //   1. Our app's manifest is missing com.termux.permission.RUN_COMMAND (rare;
+            //      shipped manifest declares it now).
+            //   2. The user has not enabled allow-external-apps in Termux's properties
+            //      (most common; user-side fix).
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
                         put("error", "termux_permission_denied")
-                        put("recovery", "Termux must allow external apps. Open Termux, edit ~/.termux/termux.properties to include 'allow-external-apps=true', then restart Termux (kill + reopen).")
+                        put("recovery", "Open Termux, then run: mkdir -p ~/.termux && echo 'allow-external-apps=true' >> ~/.termux/termux.properties. Force-stop Termux from app info and reopen it. Then retry.")
                         put("reason", t.message ?: "SecurityException")
                     }.toString()
                 )
