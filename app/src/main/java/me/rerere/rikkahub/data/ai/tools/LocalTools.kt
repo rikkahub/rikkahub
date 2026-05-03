@@ -142,6 +142,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
     @Serializable @SerialName("app_launcher")      data object AppLauncher       : LocalToolOption()
     @Serializable @SerialName("termux")            data object Termux            : LocalToolOption()
+    @Serializable @SerialName("notification_listener") data object NotificationListener : LocalToolOption()
 }
 
 class LocalTools(

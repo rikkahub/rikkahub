@@ -157,6 +157,16 @@
         android:resource="@xml/accessibility_service_config" />
     </service>
 
+    <service
+      android:name=".service.RikkaNotificationListenerService"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+      android:exported="true"
+      android:label="@string/app_name">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+      </intent-filter>
+    </service>
+
     <receiver
       android:name=".service.CronBootReceiver"
       android:enabled="true"
