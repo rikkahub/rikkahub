@@ -60,6 +60,7 @@ import androidx.core.net.toFile
 import androidx.core.net.toUri
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -307,8 +308,17 @@ private fun MessagePartsBlock(
             }
     }
 
+    // 过滤不可见的注入 parts（metadata 中标记 injection_visible=false 的文本部分）
+    fun isPartVisible(part: UIMessagePart): Boolean {
+        val metadata = part.metadata ?: return true
+        if (metadata !is JsonObject) return true
+        val visible = metadata["injection_visible"] ?: return true
+        return visible.jsonPrimitive.content.toBoolean()
+    }
+    val visibleParts = parts.filter(::isPartVisible)
+
     // Render parts in original order (group thinking/tool as chain-of-thought)
-    val groupedParts = remember(parts) { parts.groupMessageParts() }
+    val groupedParts = remember(visibleParts) { visibleParts.groupMessageParts() }
     groupedParts.fastForEach { block ->
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {
