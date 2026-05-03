@@ -282,7 +282,7 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
                     UIMessagePart.Text(
                         buildJsonObject {
                             put("error", "termux_not_installed")
-                            put("recovery", "Install Termux from F-Droid (https://f-droid.org/packages/com.termux). Play Store version is unmaintained.")
+                            put("recovery", "Install Termux from the official GitHub releases page: https://github.com/termux/termux-app/releases . Do not use the Play Store or F-Droid build - those are unmaintained.")
                         }.toString()
                     )
                 )

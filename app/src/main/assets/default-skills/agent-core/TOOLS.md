@@ -75,6 +75,11 @@ Always read the screen *before* gesturing. The right pattern is `read_window_tre
 - **`termux_run_command`** — run a shell command in Termux. **Default mode captures output**: the command runs in the background and `stdout` / `stderr` / `exit_code` come back in the JSON envelope so you can reason on them. Examples: *"is python installed?"* → run `which python3 || echo missing`, read stdout, decide. *"how big is my home dir?"* → `du -sh ~`. Pass `interactive=true` for a visible session that the user can watch (no output capture in that mode — only useful when the user wants to see live output or run an interactive program like `nano`).
   - Setup the user must do once: in Termux run `mkdir -p ~/.termux && echo 'allow-external-apps=true' >> ~/.termux/termux.properties`, then force-stop Termux and reopen it. The toggle row in the assistant Local-tools page has a state indicator (red/orange/yellow/green) and a "tap to verify" affordance that runs an end-to-end smoke test — once it goes green capture mode works.
   - Errors return structured envelopes: `termux_not_installed`, `termux_permission_not_granted`, `termux_permission_denied` (allow-external-apps missing), `timeout`. The recovery field tells the user exactly what to fix; surface it verbatim.
+  - **Install source:** ONLY recommend the official GitHub releases page at `https://github.com/termux/termux-app/releases`. Do NOT recommend the Play Store or F-Droid — those builds are unmaintained and have known incompatibilities with newer Android versions. Same applies to addons (Termux:API, Termux:Boot, Termux:Styling, Termux:X11): GitHub releases only.
+
+## Detecting Termux addons
+
+Termux:API, Termux:Boot, etc. are real installed packages but have **no launcher icon** — they show up only when `list_installed_apps` is called with a `filter` (or `include_no_launcher=true`). Each row carries `has_launcher: bool`; addons return `has_launcher: false` but `package` and `label` are still set, which is enough to confirm presence. The user reporting that `termux-vibrate` or any other `termux-api`-prefixed command works in Termux is conclusive proof that Termux:API is installed even if your earlier `list_installed_apps` call missed it — trust the user.
 
 ## SSH
 

@@ -106,18 +106,20 @@ fun launchAppTool(context: Context): Tool = Tool(
 fun listInstalledAppsTool(context: Context): Tool = Tool(
     name = "list_installed_apps",
     description = """
-        List installed apps that have a launcher activity (i.e. the apps the user can see in
-        their app drawer). Returns an array of {package, label} objects. Use this to discover
-        the package name to pass to launch_app. Optional filter narrows the result by case-
-        insensitive substring match against label OR package name. user_only=true (default)
-        excludes system apps; pass false to include them.
+        List installed apps. Default mode shows apps with a launcher activity (the ones the
+        user sees in their app drawer). When `filter` is provided OR `include_no_launcher`
+        is true, ALSO returns service-only addons that have no launcher icon - critical for
+        detecting things like Termux:API (com.termux.api), Termux:Boot, etc., which are real
+        installed packages but have no app-drawer entry. Each row carries
+        {label, package, has_launcher}. Use this to discover the package name for launch_app
+        or to confirm a specific addon package is present.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("filter", buildJsonObject {
                     put("type", "string")
-                    put("description", "Optional case-insensitive substring to match against label or package")
+                    put("description", "Optional case-insensitive substring to match against label or package. Setting this auto-includes addon packages (no launcher activity).")
                 })
                 put("user_only", buildJsonObject {
                     put("type", "boolean")
@@ -126,6 +128,10 @@ fun listInstalledAppsTool(context: Context): Tool = Tool(
                 put("limit", buildJsonObject {
                     put("type", "integer")
                     put("description", "Cap on the number of returned apps (default 200)")
+                })
+                put("include_no_launcher", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "If true, also returns packages that have no launcher activity (service-only addons). Auto-true when filter is non-empty.")
                 })
             }
         )
@@ -137,15 +143,26 @@ fun listInstalledAppsTool(context: Context): Tool = Tool(
             ?.toBooleanStrictOrNull() ?: true
         val limit = input.jsonObject["limit"]?.jsonPrimitive?.contentOrNull
             ?.toIntOrNull()?.coerceIn(1, 1000) ?: 200
+        val includeNoLauncher = (input.jsonObject["include_no_launcher"]?.jsonPrimitive?.contentOrNull
+            ?.toBooleanStrictOrNull() ?: false) || filter != null
 
         val pm = context.packageManager
+
+        // Set of packages that DO have a launcher activity. Used to set has_launcher on each
+        // row regardless of whether we walked them via the launcher query or the full
+        // package list.
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         @Suppress("DEPRECATION")
-        val resolved = pm.queryIntentActivities(launcherIntent, 0)
+        val launcherResolved = pm.queryIntentActivities(launcherIntent, 0)
+        val launcherPkgs = launcherResolved.mapNotNull { it.activityInfo?.packageName }.toHashSet()
 
+        data class Row(val label: String, val pkg: String, val hasLauncher: Boolean)
+
+        val rows = mutableListOf<Row>()
         val seen = mutableSetOf<String>()
-        val rows = mutableListOf<Pair<String, String>>()
-        for (info in resolved) {
+
+        // 1) Walk launcher apps first so we get clean labels via ResolveInfo.loadLabel.
+        for (info in launcherResolved) {
             val pkg = info.activityInfo?.packageName ?: continue
             if (pkg in seen) continue
             seen.add(pkg)
@@ -163,18 +180,45 @@ fun listInstalledAppsTool(context: Context): Tool = Tool(
             if (filter != null && !label.lowercase().contains(filter) && !pkg.lowercase().contains(filter)) {
                 continue
             }
-            rows.add(label to pkg)
+            rows.add(Row(label, pkg, hasLauncher = true))
             if (rows.size >= limit) break
         }
-        rows.sortBy { it.first.lowercase() }
+
+        // 2) If asked, also walk the full installed-package list and pick up addons without
+        //    a launcher activity. Termux:API (com.termux.api), Termux:Boot, dialer addons,
+        //    etc. only show up here.
+        if (rows.size < limit && includeNoLauncher) {
+            @Suppress("DEPRECATION")
+            val all = try { pm.getInstalledPackages(0) } catch (_: Throwable) { emptyList() }
+            for (pkgInfo in all) {
+                val pkg = pkgInfo.packageName ?: continue
+                if (pkg in seen) continue
+                seen.add(pkg)
+                val appInfo = pkgInfo.applicationInfo ?: continue
+                if (userOnly) {
+                    val isSystem = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                    val isUpdated = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+                    if (isSystem && !isUpdated) continue
+                }
+                val label = appInfo.loadLabel(pm)?.toString().orEmpty()
+                if (filter != null && !label.lowercase().contains(filter) && !pkg.lowercase().contains(filter)) {
+                    continue
+                }
+                rows.add(Row(label, pkg, hasLauncher = pkg in launcherPkgs))
+                if (rows.size >= limit) break
+            }
+        }
+
+        rows.sortWith(compareBy({ it.label.lowercase() }, { it.pkg }))
 
         val payload = buildJsonObject {
             put("count", rows.size)
             put("apps", buildJsonArray {
-                rows.forEach { (label, pkg) ->
+                rows.forEach { row ->
                     addJsonObject {
-                        put("label", label)
-                        put("package", pkg)
+                        put("label", row.label)
+                        put("package", row.pkg)
+                        put("has_launcher", row.hasLauncher)
                     }
                 }
             })
