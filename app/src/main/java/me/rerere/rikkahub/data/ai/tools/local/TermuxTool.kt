@@ -51,6 +51,25 @@ private const val MAX_RETURNED_STDERR = 2_000
 internal object TermuxIntegration {
     enum class State { NOT_INSTALLED, NO_PERMISSION, READY }
 
+    /**
+     * Process-scoped timestamp of the last successful end-to-end smoke test. The toggle row
+     * in the assistant Local-tools page reads this so the green indicator persists across
+     * navigations within the session — without it the dot would reset to orange every time
+     * the user left and re-entered the page. Resets on app restart, which is acceptable
+     * since re-verifying is one tap.
+     */
+    @Volatile
+    var lastVerifiedOkAtMs: Long = 0L
+        private set
+
+    fun markVerifiedOk() {
+        lastVerifiedOkAtMs = System.currentTimeMillis()
+    }
+
+    fun clearVerified() {
+        lastVerifiedOkAtMs = 0L
+    }
+
     fun state(ctx: Context): State {
         val pm = ctx.packageManager
         val installed = try {

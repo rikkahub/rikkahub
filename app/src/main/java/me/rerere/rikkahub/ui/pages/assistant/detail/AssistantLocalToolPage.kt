@@ -922,9 +922,12 @@ private fun TermuxStatusRowSubtitle(enabled: Boolean) {
     val staticState = remember(resumeTick) { TermuxIntegration.state(ctx) }
 
     var verifying by remember { mutableStateOf(false) }
-    var lastVerifiedOkAt by remember { mutableStateOf(0L) }
     var lastVerifyError by remember { mutableStateOf<String?>(null) }
 
+    // Reads the process-scoped timestamp from TermuxIntegration so a successful verify
+    // earlier in this session keeps the dot green even after the user navigates off the
+    // page and returns. resumeTick triggers a recompute on every onResume.
+    val lastVerifiedOkAt = remember(resumeTick) { TermuxIntegration.lastVerifiedOkAtMs }
     val verifiedRecently = lastVerifiedOkAt > 0 &&
         (System.currentTimeMillis() - lastVerifiedOkAt) < 60L * 60 * 1000
 
@@ -959,30 +962,36 @@ private fun TermuxStatusRowSubtitle(enabled: Boolean) {
                     verifying = false
                     when (result) {
                         TermuxIntegration.VerifyResult.Ok -> {
-                            lastVerifiedOkAt = System.currentTimeMillis()
+                            TermuxIntegration.markVerifiedOk()
+                            resumeTick++  // force recompose so verifiedRecently flips
                             toaster.show(ctx.getString(R.string.assistant_page_local_tools_termux_verify_ok))
                         }
                         TermuxIntegration.VerifyResult.AllowExternalAppsMissing -> {
-                            lastVerifiedOkAt = 0L
+                            TermuxIntegration.clearVerified()
+                            resumeTick++
                             lastVerifyError = ctx.getString(R.string.assistant_page_local_tools_termux_verify_props_missing)
                             toaster.show(lastVerifyError ?: "", type = ToastType.Error)
                         }
                         TermuxIntegration.VerifyResult.NoPermission -> {
-                            lastVerifiedOkAt = 0L
+                            TermuxIntegration.clearVerified()
+                            resumeTick++
                             lastVerifyError = ctx.getString(R.string.assistant_page_local_tools_termux_verify_no_permission)
                             toaster.show(lastVerifyError ?: "", type = ToastType.Error)
                         }
                         TermuxIntegration.VerifyResult.NotInstalled -> {
-                            lastVerifiedOkAt = 0L
+                            TermuxIntegration.clearVerified()
+                            resumeTick++
                             lastVerifyError = ctx.getString(R.string.assistant_page_local_tools_termux_status_not_installed)
                         }
                         is TermuxIntegration.VerifyResult.UnexpectedOutput -> {
-                            lastVerifiedOkAt = 0L
+                            TermuxIntegration.clearVerified()
+                            resumeTick++
                             lastVerifyError = ctx.getString(R.string.assistant_page_local_tools_termux_verify_unexpected, result.stdout.take(60))
                             toaster.show(lastVerifyError ?: "", type = ToastType.Error)
                         }
                         is TermuxIntegration.VerifyResult.OtherError -> {
-                            lastVerifiedOkAt = 0L
+                            TermuxIntegration.clearVerified()
+                            resumeTick++
                             lastVerifyError = result.message
                             toaster.show(result.message, type = ToastType.Error)
                         }
