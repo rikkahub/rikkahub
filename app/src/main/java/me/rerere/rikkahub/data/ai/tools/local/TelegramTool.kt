@@ -328,8 +328,8 @@ fun telegramSetCommandsTool(client: TelegramBotClient): Tool = Tool(
             if (c.isNullOrBlank() || d.isNullOrBlank()) null else c to d
         }
         textPart(safeApi { buildJsonObject {
-            put("success", true)
-            put("result", client.setMyCommands(list))
+            put("success", client.setMyCommands(list))
+            put("count", list.size)
         } })
     }
 )
@@ -353,8 +353,7 @@ fun telegramDeleteCommandsTool(client: TelegramBotClient): Tool = Tool(
     parameters = { InputSchema.Obj(properties = buildJsonObject {}) },
     execute = {
         textPart(safeApi { buildJsonObject {
-            put("success", true)
-            put("result", client.deleteMyCommands())
+            put("success", client.deleteMyCommands())
         } })
     }
 )

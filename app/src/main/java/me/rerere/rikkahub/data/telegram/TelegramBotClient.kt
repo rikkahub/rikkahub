@@ -95,12 +95,14 @@ class TelegramBotClient(
     }).jsonObject
 
     /** Show the "typing..." indicator in the user's Telegram chat. Auto-clears after ~5s on
-     *  Telegram's side, so callers should re-send periodically while doing long work. */
-    suspend fun sendChatAction(chatId: Long, action: String = "typing"): JsonObject =
+     *  Telegram's side, so callers should re-send periodically while doing long work.
+     *  Telegram returns a bare Bool for this method — calling .jsonObject on a JsonPrimitive
+     *  throws, which is why earlier revisions silently swallowed every typing-indicator call. */
+    suspend fun sendChatAction(chatId: Long, action: String = "typing"): Boolean =
         call(shortClient, "sendChatAction", buildJsonObject {
             put("chat_id", chatId)
             put("action", action)
-        }).jsonObject
+        }).jsonPrimitive.boolean
 
     suspend fun sendPhoto(chatId: Long, file: File, caption: String? = null): JsonObject =
         callMultipart(shortClient, "sendPhoto", chatId, "photo", file, "image/jpeg", caption)
@@ -108,7 +110,9 @@ class TelegramBotClient(
     suspend fun sendDocument(chatId: Long, file: File, caption: String? = null): JsonObject =
         callMultipart(shortClient, "sendDocument", chatId, "document", file, "application/octet-stream", caption)
 
-    suspend fun setMyCommands(commands: List<Pair<String, String>>): JsonObject =
+    /** Telegram returns Bool for setMyCommands / deleteMyCommands. Calling .jsonObject on a
+     *  JsonPrimitive throws — that bug surfaced as "issues setting /commands". */
+    suspend fun setMyCommands(commands: List<Pair<String, String>>): Boolean =
         call(shortClient, "setMyCommands", buildJsonObject {
             put("commands", buildJsonArray {
                 commands.forEach { (cmd, desc) ->
@@ -118,13 +122,13 @@ class TelegramBotClient(
                     }
                 }
             })
-        }).jsonObject
+        }).jsonPrimitive.boolean
 
     suspend fun getMyCommands(): JsonArray =
         call(shortClient, "getMyCommands", buildJsonObject {}).jsonArray
 
-    suspend fun deleteMyCommands(): JsonObject =
-        call(shortClient, "deleteMyCommands", buildJsonObject {}).jsonObject
+    suspend fun deleteMyCommands(): Boolean =
+        call(shortClient, "deleteMyCommands", buildJsonObject {}).jsonPrimitive.boolean
 
     /* ------------ low-level dispatch ------------ */
 
