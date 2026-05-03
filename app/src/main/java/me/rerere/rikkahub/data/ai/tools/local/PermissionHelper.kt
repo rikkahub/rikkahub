@@ -58,4 +58,11 @@ object PermissionHelper {
     fun accessibilitySettingsIntent(): Intent =
         Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    fun hasNotificationListener(ctx: Context): Boolean =
+        NotificationListenerHandle.isEnabledInSettings(ctx)
+
+    fun notificationListenerSettingsIntent(): Intent =
+        Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
