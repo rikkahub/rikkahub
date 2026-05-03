@@ -140,6 +140,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("ssh")             data object Ssh            : LocalToolOption()
     @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
+    @Serializable @SerialName("app_launcher")      data object AppLauncher       : LocalToolOption()
 }
 
 class LocalTools(
@@ -550,6 +551,10 @@ class LocalTools(
             tools.add(scrollTool())
             tools.add(globalActionTool())
             tools.add(takeScreenshotTool(context))
+        }
+        if (options.contains(LocalToolOption.AppLauncher)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.launchAppTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.listInstalledAppsTool(context))
         }
         return tools
     }

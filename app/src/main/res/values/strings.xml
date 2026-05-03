@@ -1078,6 +1078,8 @@
   <string name="assistant_page_local_tools_section_screen_automation">Screen automation</string>
   <string name="assistant_page_local_tools_screen_automation_title">Screen automation</string>
   <string name="assistant_page_local_tools_screen_automation_desc">Let the LLM tap, swipe, scroll, read on-screen content, and take screenshots via Android\'s accessibility service.</string>
+  <string name="assistant_page_local_tools_app_launcher_title">App launcher</string>
+  <string name="assistant_page_local_tools_app_launcher_desc">Open installed apps by package name (e.g. Termux, Settings) and list available apps. Pairs with screen automation for full UI control.</string>
   <string name="setting_page_accessibility">Accessibility</string>
   <string name="setting_page_accessibility_desc">Status, recent actions, and screenshot diagnostics for the screen-automation service.</string>
   <string name="setting_page_accessibility_status_section">Status</string>

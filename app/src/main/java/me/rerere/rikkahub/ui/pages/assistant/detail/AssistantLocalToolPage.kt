@@ -662,6 +662,20 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_app_launcher_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_app_launcher_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.AppLauncher),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.AppLauncher, it) },
+                    )
+                }
+            )
         }
     }
 }
