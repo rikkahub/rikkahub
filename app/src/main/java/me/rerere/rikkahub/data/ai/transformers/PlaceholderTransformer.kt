@@ -162,21 +162,45 @@ object PlaceholderTransformer : InputMessageTransformer, KoinComponent {
         ctx: TransformerContext,
         settingsStore: SettingsStore
     ): String {
-        var result = text
-
-        val ctx = PlaceholderCtx(
+        return resolveText(
+            text = text,
             context = ctx.context,
             settingsStore = settingsStore,
             model = ctx.model,
             assistant = ctx.assistant
         )
+    }
+
+    /**
+     * 将文本中的占位符替换为实际值
+     *
+     * @param text 原文本
+     * @param context Android Context
+     * @param settingsStore 设置存储
+     * @param model 当前模型
+     * @param assistant 当前助手
+     * @return 替换后的文本
+     */
+    fun resolveText(
+        text: String,
+        context: android.content.Context,
+        settingsStore: SettingsStore,
+        model: me.rerere.ai.provider.Model,
+        assistant: Assistant
+    ): String {
+        val ctx = PlaceholderCtx(
+            context = context,
+            settingsStore = settingsStore,
+            model = model,
+            assistant = assistant
+        )
+        var result = text
         defaultProvider.placeholders.forEach { (key, placeholderInfo) ->
             val value = placeholderInfo.resolver(ctx)
             result = result
                 .replace(oldValue = "{{$key}}", newValue = value, ignoreCase = true)
                 .replace(oldValue = "{$key}", newValue = value, ignoreCase = true)
         }
-
         return result
     }
 }

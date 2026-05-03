@@ -1,14 +1,19 @@
 package me.rerere.rikkahub.data.ai.transformers
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.InjectionPosition
+import me.rerere.rikkahub.data.model.InMessagePosition
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.isTriggered
+import me.rerere.rikkahub.data.datastore.SettingsStore
 
 /**
  * 提示词注入转换器
@@ -101,7 +106,8 @@ internal fun collectInjections(
  */
 internal fun applyInjections(
     messages: List<UIMessage>,
-    byPosition: Map<InjectionPosition, List<PromptInjection>>
+    byPosition: Map<InjectionPosition, List<PromptInjection>>,
+    transformInjectedContent: ((String) -> String)? = null,
 ): List<UIMessage> {
     val result = messages.toMutableList()
 
@@ -201,6 +207,45 @@ internal fun applyInjections(
         }
     }
 
+    // 处理 IN_MESSAGE：注入到最后一条用户消息的内容内部（作为 parts 的一部分）
+    val inMessageInjections = byPosition[InjectionPosition.IN_MESSAGE]
+    if (!inMessageInjections.isNullOrEmpty()) {
+        val lastUserIndex = result.indexOfLast { it.role == MessageRole.USER }
+        if (lastUserIndex >= 0) {
+            val lastUserMessage = result[lastUserIndex]
+
+            // 按 inMessagePosition 分组：BEFORE 和 AFTER
+            val beforeParts = mutableListOf<UIMessagePart>()
+            val afterParts = mutableListOf<UIMessagePart>()
+
+            inMessageInjections
+                .sortedByDescending { it.priority }
+                .forEach { injection ->
+                    val content = transformInjectedContent?.invoke(injection.content) ?: injection.content
+                    val metadata = if (!injection.visibleInHistory) {
+                        JsonObject(mapOf("injection_visible" to JsonPrimitive(false)))
+                    } else {
+                        null
+                    }
+                    val textPart = UIMessagePart.Text(content, metadata = metadata)
+                    val pos = injection.inMessagePosition ?: InMessagePosition.AFTER
+                    when (pos) {
+                        InMessagePosition.BEFORE -> beforeParts.add(textPart)
+                        InMessagePosition.AFTER -> afterParts.add(textPart)
+                    }
+                }
+
+            if (beforeParts.isNotEmpty() || afterParts.isNotEmpty()) {
+                val newParts = buildList {
+                    addAll(beforeParts)
+                    addAll(lastUserMessage.parts)
+                    addAll(afterParts)
+                }
+                result[lastUserIndex] = lastUserMessage.copy(parts = newParts)
+            }
+        }
+    }
+
     return result
 }
 
@@ -247,4 +292,59 @@ internal fun findSafeInsertIndex(messages: List<UIMessage>, targetIndex: Int): I
     }
 
     return index
+}
+
+/**
+ * 应用 persistToHistory=true 的注入到消息列表
+ *
+ * 用于在保存前将需要持久化的注入内容写入消息，以提高 KV Cache 命中率。
+ * 当 persistToHistory=true 时，注入内容会保存到对话历史中。
+ *
+ * @param messages 消息列表
+ * @param assistant 当前助手配置
+ * @param modeInjections 模式注入列表
+ * @param lorebooks 世界书列表
+ * @return 应用了持久化注入的消息列表
+ */
+fun applyPersistInjections(
+    messages: List<UIMessage>,
+    assistant: Assistant,
+    modeInjections: List<PromptInjection.ModeInjection>,
+    lorebooks: List<Lorebook>,
+    context: android.content.Context? = null,
+    model: Model? = null,
+    settingsStore: SettingsStore? = null,
+): List<UIMessage> {
+    // 收集所有注入
+    val allInjections = collectInjections(
+        messages = messages,
+        assistant = assistant,
+        modeInjections = modeInjections,
+        lorebooks = lorebooks
+    )
+
+    // 只保留 persistToHistory=true 的注入
+    val persistInjections = allInjections.filter { it.persistToHistory }
+    if (persistInjections.isEmpty()) return messages
+
+    // 按位置和优先级分组
+    val byPosition = persistInjections
+        .sortedByDescending { it.priority }
+        .groupBy { it.position }
+
+    val transformInjectedContent = if (context != null && model != null && settingsStore != null) {
+        { content: String ->
+            PlaceholderTransformer.resolveText(
+                text = content,
+                context = context,
+                settingsStore = settingsStore,
+                model = model,
+                assistant = assistant
+            )
+        }
+    } else {
+        null
+    }
+
+    return applyInjections(messages, byPosition, transformInjectedContent = transformInjectedContent)
 }
