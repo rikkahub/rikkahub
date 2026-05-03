@@ -141,6 +141,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
     @Serializable @SerialName("app_launcher")      data object AppLauncher       : LocalToolOption()
+    @Serializable @SerialName("termux")            data object Termux            : LocalToolOption()
 }
 
 class LocalTools(
@@ -557,6 +558,8 @@ class LocalTools(
         if (options.contains(LocalToolOption.AppLauncher)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.launchAppTool(context))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.listInstalledAppsTool(context))
+        }
+        if (options.contains(LocalToolOption.Termux)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.termuxRunCommandTool(context))
         }
         return tools

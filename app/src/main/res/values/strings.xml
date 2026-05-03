@@ -1080,6 +1080,17 @@
   <string name="assistant_page_local_tools_screen_automation_desc">Let the LLM tap, swipe, scroll, read on-screen content, and take screenshots via Android\'s accessibility service.</string>
   <string name="assistant_page_local_tools_app_launcher_title">App launcher</string>
   <string name="assistant_page_local_tools_app_launcher_desc">Open installed apps by package name (e.g. Termux, Settings) and list available apps. Pairs with screen automation for full UI control.</string>
+  <string name="assistant_page_local_tools_termux_title">Termux integration</string>
+  <string name="assistant_page_local_tools_termux_status_not_installed">Termux not installed - install from F-Droid</string>
+  <string name="assistant_page_local_tools_termux_status_no_permission">Toggle on to grant the RUN_COMMAND permission</string>
+  <string name="assistant_page_local_tools_termux_status_untested">Run shell commands and read output</string>
+  <string name="assistant_page_local_tools_termux_status_ok">Connected - commands run with captured output</string>
+  <string name="assistant_page_local_tools_termux_verify">tap to verify</string>
+  <string name="assistant_page_local_tools_termux_verifying">Verifying integration…</string>
+  <string name="assistant_page_local_tools_termux_verify_ok">Termux integration verified.</string>
+  <string name="assistant_page_local_tools_termux_verify_props_missing">Termux did not respond. Open Termux and run: mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties — then force-stop Termux and reopen it.</string>
+  <string name="assistant_page_local_tools_termux_verify_no_permission">RUN_COMMAND permission not granted. Toggle Termux off then on to retry the system prompt.</string>
+  <string name="assistant_page_local_tools_termux_verify_unexpected">Termux replied but with unexpected output: %1$s</string>
   <string name="setting_page_accessibility">Accessibility</string>
   <string name="setting_page_accessibility_desc">Status, recent actions, and screenshot diagnostics for the screen-automation service.</string>
   <string name="setting_page_accessibility_status_section">Status</string>

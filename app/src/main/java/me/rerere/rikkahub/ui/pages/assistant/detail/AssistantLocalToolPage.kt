@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -39,6 +41,7 @@ import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
+import me.rerere.rikkahub.data.ai.tools.local.TermuxIntegration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -673,6 +676,22 @@ private fun AssistantLocalToolContent(
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.AppLauncher),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.AppLauncher, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_termux_title))
+                },
+                supportingContent = {
+                    TermuxStatusRowSubtitle(
+                        enabled = assistant.localTools.contains(LocalToolOption.Termux),
+                    )
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Termux),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Termux, it) },
                         // Termux's RUN_COMMAND service is gated behind a dangerous-level
                         // custom permission. Requesting it through the standard runtime flow
                         // pops the system dialog so termux_run_command works without an adb
@@ -874,5 +893,114 @@ private fun PermissionedSwitch(
                 modifier = Modifier.clickable { requestPermission() },
             )
         }
+    }
+}
+
+/**
+ * Subtitle row for the Termux toggle: shows a colored dot summarising the integration
+ * state plus a "Verify" affordance that runs an end-to-end smoke test (sends a tiny
+ * command through Termux and waits for the result). The dot is ONLY green after a
+ * successful verification within the last hour — that's the only signal that proves
+ * `allow-external-apps=true` is actually in effect, since we cannot read Termux's
+ * private home dir.
+ */
+@Composable
+private fun TermuxStatusRowSubtitle(enabled: Boolean) {
+    val ctx = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    var resumeTick by remember { mutableStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    val staticState = remember(resumeTick) { TermuxIntegration.state(ctx) }
+
+    var verifying by remember { mutableStateOf(false) }
+    var lastVerifiedOkAt by remember { mutableStateOf(0L) }
+    var lastVerifyError by remember { mutableStateOf<String?>(null) }
+
+    val verifiedRecently = lastVerifiedOkAt > 0 &&
+        (System.currentTimeMillis() - lastVerifiedOkAt) < 60L * 60 * 1000
+
+    val (dotColor, label) = when {
+        staticState == TermuxIntegration.State.NOT_INSTALLED ->
+            androidx.compose.ui.graphics.Color(0xFFEF4444) to stringResource(R.string.assistant_page_local_tools_termux_status_not_installed)
+        staticState == TermuxIntegration.State.NO_PERMISSION ->
+            androidx.compose.ui.graphics.Color(0xFFF59E0B) to stringResource(R.string.assistant_page_local_tools_termux_status_no_permission)
+        verifiedRecently ->
+            androidx.compose.ui.graphics.Color(0xFF22C55E) to stringResource(R.string.assistant_page_local_tools_termux_status_ok)
+        lastVerifyError != null ->
+            androidx.compose.ui.graphics.Color(0xFFEF4444) to (lastVerifyError ?: "")
+        else ->
+            androidx.compose.ui.graphics.Color(0xFFEAB308) to stringResource(R.string.assistant_page_local_tools_termux_status_untested)
+    }
+
+    val verifyHint = stringResource(R.string.assistant_page_local_tools_termux_verify)
+    val verifyingHint = stringResource(R.string.assistant_page_local_tools_termux_verifying)
+
+    val canVerify = !verifying && enabled && staticState == TermuxIntegration.State.READY
+
+    androidx.compose.foundation.layout.Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .let { if (canVerify) it.clickable {
+                if (verifying) return@clickable
+                verifying = true
+                lastVerifyError = null
+                scope.launch {
+                    val result = TermuxIntegration.verify(ctx)
+                    verifying = false
+                    when (result) {
+                        TermuxIntegration.VerifyResult.Ok -> {
+                            lastVerifiedOkAt = System.currentTimeMillis()
+                            toaster.show(ctx.getString(R.string.assistant_page_local_tools_termux_verify_ok))
+                        }
+                        TermuxIntegration.VerifyResult.AllowExternalAppsMissing -> {
+                            lastVerifiedOkAt = 0L
+                            lastVerifyError = ctx.getString(R.string.assistant_page_local_tools_termux_verify_props_missing)
+                            toaster.show(lastVerifyError ?: "", type = ToastType.Error)
+                        }
+                        TermuxIntegration.VerifyResult.NoPermission -> {
+                            lastVerifiedOkAt = 0L
+                            lastVerifyError = ctx.getString(R.string.assistant_page_local_tools_termux_verify_no_permission)
+                            toaster.show(lastVerifyError ?: "", type = ToastType.Error)
+                        }
+                        TermuxIntegration.VerifyResult.NotInstalled -> {
+                            lastVerifiedOkAt = 0L
+                            lastVerifyError = ctx.getString(R.string.assistant_page_local_tools_termux_status_not_installed)
+                        }
+                        is TermuxIntegration.VerifyResult.UnexpectedOutput -> {
+                            lastVerifiedOkAt = 0L
+                            lastVerifyError = ctx.getString(R.string.assistant_page_local_tools_termux_verify_unexpected, result.stdout.take(60))
+                            toaster.show(lastVerifyError ?: "", type = ToastType.Error)
+                        }
+                        is TermuxIntegration.VerifyResult.OtherError -> {
+                            lastVerifiedOkAt = 0L
+                            lastVerifyError = result.message
+                            toaster.show(result.message, type = ToastType.Error)
+                        }
+                    }
+                }
+            } else it }
+    ) {
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier.size(10.dp)
+        ) {
+            drawCircle(color = dotColor)
+        }
+        Text(
+            text = if (verifying) verifyingHint
+                   else if (canVerify && !verifiedRecently) "$label · $verifyHint"
+                   else label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
