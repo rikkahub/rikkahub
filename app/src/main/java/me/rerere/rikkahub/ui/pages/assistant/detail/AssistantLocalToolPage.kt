@@ -650,6 +650,7 @@ private fun PermissionedSwitch(
     requiredRuntimePerms: List<String> = emptyList(),
     requiresWriteSettings: Boolean = false,
     requiresDndAccess: Boolean = false,
+    requiresAccessibilityService: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val toaster = LocalToaster.current
@@ -696,6 +697,7 @@ private fun PermissionedSwitch(
                     val granted = when {
                         requiresWriteSettings -> PermissionHelper.hasWriteSettings(ctx)
                         requiresDndAccess -> PermissionHelper.hasDndAccess(ctx)
+                        requiresAccessibilityService -> PermissionHelper.hasAccessibilityService(ctx)
                         else -> false
                     }
                     pendingSpecialResume = false
@@ -705,6 +707,7 @@ private fun PermissionedSwitch(
                         val name = when {
                             requiresWriteSettings -> "WRITE_SETTINGS"
                             requiresDndAccess -> "DND access"
+                            requiresAccessibilityService -> "Accessibility service"
                             else -> ""
                         }
                         toaster.show(
@@ -723,6 +726,14 @@ private fun PermissionedSwitch(
 
     fun requestPermission() {
         when {
+            requiresAccessibilityService -> {
+                if (PermissionHelper.hasAccessibilityService(ctx)) {
+                    onCheckedChange(true)
+                } else {
+                    showDialog = true
+                }
+            }
+
             requiresWriteSettings -> {
                 if (PermissionHelper.hasWriteSettings(ctx)) {
                     onCheckedChange(true)
@@ -757,11 +768,12 @@ private fun PermissionedSwitch(
     // raw List<String> for structural equality across recomps, so passing the list
     // directly invalidated this remember on every parent recomp.
     val permsKey = remember(requiredRuntimePerms) { requiredRuntimePerms.joinToString(",") }
-    val permissionMissing = remember(checked, resumeTrigger, permsKey, requiresWriteSettings, requiresDndAccess) {
+    val permissionMissing = remember(checked, resumeTrigger, permsKey, requiresWriteSettings, requiresDndAccess, requiresAccessibilityService) {
         checked && when {
             requiredRuntimePerms.isNotEmpty() -> !PermissionHelper.hasRuntime(ctx, requiredRuntimePerms)
             requiresWriteSettings -> !PermissionHelper.hasWriteSettings(ctx)
             requiresDndAccess -> !PermissionHelper.hasDndAccess(ctx)
+            requiresAccessibilityService -> !PermissionHelper.hasAccessibilityService(ctx)
             else -> false
         }
     }
@@ -781,6 +793,7 @@ private fun PermissionedSwitch(
                     val intent = when {
                         requiresWriteSettings -> PermissionHelper.writeSettingsIntent(ctx)
                         requiresDndAccess -> PermissionHelper.dndAccessIntent(ctx)
+                        requiresAccessibilityService -> PermissionHelper.accessibilitySettingsIntent()
                         else -> null
                     }
                     if (intent != null) {
