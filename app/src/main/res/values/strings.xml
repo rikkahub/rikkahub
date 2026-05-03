@@ -115,6 +115,10 @@
   <string name="setting_page_telegram_stop">Stop</string>
   <string name="setting_page_telegram_no_token_toast">Set the bot token first.</string>
   <string name="setting_page_telegram_boot_note">When started, the bot also auto-starts on device boot.</string>
+  <string name="setting_page_telegram_battery_ok">Battery optimization: whitelisted</string>
+  <string name="setting_page_telegram_battery_needed">Battery optimization: not whitelisted - tap to fix</string>
+  <string name="setting_page_telegram_battery_desc">When the screen turns off, aggressive OEM ROMs (Xiaomi, OPPO, OnePlus, Vivo) cut network for non-whitelisted apps. The bot will only deliver during occasional maintenance windows. Tap to whitelist RikkaHub.</string>
+  <string name="setting_page_telegram_battery_already_ok">Already whitelisted from battery optimization.</string>
   <string name="assistant_page_local_tools_media_player_desc">Play and stop audio from a file path or URL.</string>
   <string name="assistant_page_local_tools_media_player_title">Media player</string>
   <string name="assistant_page_local_tools_media_scanner_desc">Notify Android\'s media scanner about new files so they appear in gallery/music apps.</string>

@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -258,6 +260,87 @@ fun SettingTelegramPage() {
                     )
                 }
             }
+
+            // Battery-optimization whitelist row. On OEM-aggressive ROMs the bot only stays
+            // responsive when the screen is off if the app is exempted from Doze.
+            item {
+                BatteryOptimizationCard()
+            }
         }
+    }
+}
+
+/**
+ * Surfaces whether the app is whitelisted from Doze battery optimizations and offers a
+ * one-tap deep-link to the system prompt. Re-checks state on every onResume so returning
+ * from system settings updates the row instantly.
+ */
+@Composable
+private fun BatteryOptimizationCard() {
+    val ctx = LocalContext.current
+    val toaster = LocalToaster.current
+    var resumeTick by remember { mutableStateOf(0) }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    val whitelisted = remember(resumeTick) {
+        me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
+            .ignoresBatteryOptimizations(ctx)
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { /* result ignored - re-checked via ON_RESUME */ }
+
+    CardGroup(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+    ) {
+        item(
+            onClick = {
+                if (whitelisted) {
+                    toaster.show(ctx.getString(R.string.setting_page_telegram_battery_already_ok))
+                    return@item
+                }
+                val intent = me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
+                    .requestIgnoreBatteryOptimizationsIntent(ctx)
+                try {
+                    launcher.launch(intent)
+                } catch (_: Throwable) {
+                    // Some OEMs reject ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS; fall back
+                    // to the system-wide list page where the user can find the app manually.
+                    launcher.launch(
+                        me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
+                            .batteryOptimizationsListIntent()
+                    )
+                }
+            },
+            headlineContent = {
+                Text(
+                    text = if (whitelisted)
+                        stringResource(R.string.setting_page_telegram_battery_ok)
+                    else
+                        stringResource(R.string.setting_page_telegram_battery_needed),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (whitelisted)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.error,
+                )
+            },
+            supportingContent = {
+                Text(
+                    text = stringResource(R.string.setting_page_telegram_battery_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+        )
     }
 }

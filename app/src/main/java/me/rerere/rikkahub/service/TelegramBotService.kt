@@ -116,9 +116,16 @@ class TelegramBotService : Service() {
         }
     }
 
-    /** Long-poll Telegram, dispatch messages, advance offset. */
+    /**
+     * Long-poll Telegram, dispatch messages, advance offset. Acquires a partial WakeLock
+     * around each getUpdates request so the CPU and network stay alive during Doze
+     * maintenance windows on OEM-aggressive ROMs (Xiaomi/OPPO/OnePlus/Vivo). Without this,
+     * the long-poll connection sits idle on a sleeping CPU and updates only arrive during
+     * the device's brief maintenance bursts.
+     */
     private suspend fun pollLoop() {
         android.util.Log.i(TAG, "pollLoop: starting")
+        val pm = applicationContext.getSystemService(android.os.PowerManager::class.java)
         var offset = 0L
         var cycle = 0L
         while (true) {
@@ -129,8 +136,15 @@ class TelegramBotService : Service() {
                 android.util.Log.w(TAG, "pollLoop: cfg unusable (token_set=${cfg?.token?.isNotBlank()} enabled=${cfg?.enabled}); stopping")
                 stopSelf(); return
             }
+            // Held only for the duration of one long-poll cycle. Released in finally so a
+            // crash during getUpdates does not leak the wakelock.
+            val wakeLock = pm?.newWakeLock(
+                android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                "rikkahub:telegram_long_poll",
+            )?.also { it.setReferenceCounted(false) }
             try {
                 cycle++
+                wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
                 val updates = client.getUpdates(offset, 30)
                 if (cycle <= 2 || updates.isNotEmpty()) {
                     android.util.Log.i(TAG, "pollLoop: cycle=$cycle offset=$offset updates=${updates.size}")
@@ -147,6 +161,8 @@ class TelegramBotService : Service() {
             } catch (e: Throwable) {
                 android.util.Log.e(TAG, "pollLoop: unexpected error in cycle=$cycle", e)
                 delay(5000)
+            } finally {
+                try { if (wakeLock?.isHeld == true) wakeLock.release() } catch (_: Throwable) {}
             }
         }
     }
@@ -337,6 +353,12 @@ class TelegramBotService : Service() {
         const val NOTIF_ID = 0xA1B2
 
         const val MAX_CHARS = 4000   // Telegram limit is 4096; leave headroom
+
+        /** Long-poll request can take ~50s server-side + a few seconds for the client to
+         *  handle inbound updates and dispatch them. 75s is comfortable headroom; the wake
+         *  lock is auto-released in finally before each next cycle so a longer hang cannot
+         *  leak it. */
+        const val WAKELOCK_TIMEOUT_MS: Long = 75_000L
 
         /** Set whenever the service is alive AND its long-poll loop is running. */
         @Volatile var isRunning: Boolean = false
