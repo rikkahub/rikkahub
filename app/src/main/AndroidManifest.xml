@@ -129,6 +129,19 @@
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 
+    <service
+      android:name=".service.RikkaAccessibilityService"
+      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+      android:exported="true"
+      android:label="@string/app_name">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/accessibility_service_config" />
+    </service>
+
     <receiver
       android:name=".service.CronBootReceiver"
       android:enabled="true"

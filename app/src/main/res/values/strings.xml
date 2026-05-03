@@ -1072,5 +1072,8 @@
 
   <string name="assistant_page_local_tools_fingerprint_title">Fingerprint</string>
   <string name="assistant_page_local_tools_fingerprint_desc">Show the system biometric prompt to verify the user\'s identity.</string>
+
+  <!-- Phase 4 — Screen automation -->
+  <string name="accessibility_service_summary">Lets RikkaHub tap, swipe, scroll, read screen content, and take screenshots when the LLM uses the Screen automation tools.</string>
 </resources>
 

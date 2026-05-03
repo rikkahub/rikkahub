@@ -130,6 +130,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("cron_jobs")       data object CronJobs       : LocalToolOption()
     @Serializable @SerialName("ssh")             data object Ssh            : LocalToolOption()
     @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
+    @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
 }
 
 class LocalTools(
