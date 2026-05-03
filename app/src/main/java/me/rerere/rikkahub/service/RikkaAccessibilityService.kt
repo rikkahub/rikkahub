@@ -167,8 +167,10 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Captures a screenshot of the given display. Suspends until callback fires; returns the
-     * Bitmap (or null on failure). Caller must recycle when done.
+     * Captures a screenshot of the given display. Suspends until callback fires; returns
+     * ScreenshotOutcome.Success(softwareBitmap) or Failure(reason). The success bitmap is a
+     * software bitmap (ARGB_8888) — caller MUST call bitmap.recycle() when done to free
+     * native memory. Returns Failure("api_too_low") on Android < 11 (API 30).
      */
     suspend fun captureScreenshot(displayId: Int): ScreenshotOutcome {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
@@ -181,9 +183,12 @@ class RikkaAccessibilityService : AccessibilityService() {
                 object : TakeScreenshotCallback {
                     override fun onSuccess(result: ScreenshotResult) {
                         try {
-                            val bmp = Bitmap.wrapHardwareBuffer(result.hardwareBuffer, result.colorSpace)
-                                ?.copy(Bitmap.Config.ARGB_8888, false)
-                            result.hardwareBuffer.close()
+                            val bmp = try {
+                                Bitmap.wrapHardwareBuffer(result.hardwareBuffer, result.colorSpace)
+                                    ?.copy(Bitmap.Config.ARGB_8888, false)
+                            } finally {
+                                result.hardwareBuffer.close()
+                            }
                             if (cont.isActive) {
                                 cont.resume(
                                     if (bmp != null) ScreenshotOutcome.Success(bmp)
