@@ -67,6 +67,7 @@ import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.applyPersistInjections
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -125,6 +126,7 @@ class ChatService(
     private val memoryRepository: MemoryRepository,
     private val generationHandler: GenerationHandler,
     private val templateTransformer: TemplateTransformer,
+    private val promptInjectionTransformer: PromptInjectionTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
     val mcpManager: McpManager,
@@ -556,8 +558,18 @@ class ChatService(
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
+                        // 应用 persistToHistory=true 的注入
+                        val messagesToSave = applyPersistInjections(
+                            messages = chunk.messages,
+                            assistant = settings.getCurrentAssistant(),
+                            modeInjections = settings.modeInjections,
+                            lorebooks = settings.lorebooks,
+                            context = context,
+                            model = model,
+                            settingsStore = settingsStore
+                        )
                         val updatedConversation = getConversationFlow(conversationId).value
-                            .updateCurrentMessages(chunk.messages)
+                            .updateCurrentMessages(messagesToSave)
                         updateConversation(conversationId, updatedConversation)
 
                         // 如果应用不在前台，发送 Live Update 通知
