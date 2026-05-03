@@ -130,6 +130,25 @@ class TelegramBotClient(
     suspend fun deleteMyCommands(): Boolean =
         call(shortClient, "deleteMyCommands", buildJsonObject {}).jsonPrimitive.boolean
 
+    /** Resolve a file_id to a downloadable file_path (Telegram returns it under .result.file_path). */
+    suspend fun getFile(fileId: String): JsonObject =
+        call(shortClient, "getFile", buildJsonObject { put("file_id", fileId) }).jsonObject
+
+    /** Download a Telegram-hosted file by its relative file_path (returned from getFile). */
+    suspend fun downloadFile(filePath: String, dest: File): Unit = withContext(Dispatchers.IO) {
+        val url = "https://api.telegram.org/file/bot${tokenProvider()}/$filePath"
+        val req = Request.Builder().url(url).get().build()
+        shortClient.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                throw IOException("downloadFile $filePath -> HTTP ${resp.code}")
+            }
+            val body = resp.body ?: throw IOException("downloadFile $filePath -> empty body")
+            body.byteStream().use { input ->
+                dest.outputStream().use { out -> input.copyTo(out) }
+            }
+        }
+    }
+
     /* ------------ low-level dispatch ------------ */
 
     private suspend fun call(client: OkHttpClient, method: String, body: JsonObject): kotlinx.serialization.json.JsonElement {
@@ -199,13 +218,14 @@ class TelegramBotClient(
     }
 }
 
-/** Convenience: pull msg id, chat id, sender id, and text out of an Update.message. */
+/** Convenience: pull msg id, chat id, sender id, text, and any inbound photo file IDs. */
 data class TelegramIncomingMessage(
     val updateId: Long,
     val messageId: Long,
     val chatId: Long,
     val senderId: Long?,
     val text: String,
+    val photoFileIds: List<String> = emptyList(),
 )
 
 fun parseIncoming(update: JsonObject): TelegramIncomingMessage? {
@@ -214,6 +234,21 @@ fun parseIncoming(update: JsonObject): TelegramIncomingMessage? {
     val messageId = msg["message_id"]?.jsonPrimitive?.longOrNull ?: return null
     val chatId = msg["chat"]?.jsonObject?.get("id")?.jsonPrimitive?.longOrNull ?: return null
     val senderId = msg["from"]?.jsonObject?.get("id")?.jsonPrimitive?.longOrNull
-    val text = msg["text"]?.jsonPrimitive?.contentOrNull ?: return null
-    return TelegramIncomingMessage(updateId, messageId, chatId, senderId, text)
+
+    // Telegram sends photo as an array of PhotoSize entries, ordered smallest -> largest.
+    // Take the last entry (highest resolution) from a single inbound photo. Multi-photo
+    // messages arrive as separate "media group" updates, so this single-array shape is enough.
+    val photoFileIds = msg["photo"]?.jsonArray?.lastOrNull()?.jsonObject
+        ?.get("file_id")?.jsonPrimitive?.contentOrNull?.let { listOf(it) }
+        ?: emptyList()
+
+    // Captions ride alongside photos. Plain-text messages use the "text" field.
+    val caption = msg["caption"]?.jsonPrimitive?.contentOrNull
+    val plain = msg["text"]?.jsonPrimitive?.contentOrNull
+    val text = caption ?: plain ?: ""
+
+    // Drop the update only if there is nothing actionable: neither text nor a photo.
+    if (text.isEmpty() && photoFileIds.isEmpty()) return null
+
+    return TelegramIncomingMessage(updateId, messageId, chatId, senderId, text, photoFileIds)
 }

@@ -18,6 +18,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -170,7 +172,7 @@ class TelegramBotService : Service() {
         }
 
         val (convId, wasCreated) = lookupOrCreateConversation(cfg, m.chatId)
-        android.util.Log.i(TAG, "handleIncoming: routing to conv=$convId wasCreated=$wasCreated text='${m.text.take(80)}'")
+        android.util.Log.i(TAG, "handleIncoming: routing to conv=$convId wasCreated=$wasCreated text='${m.text.take(80)}' photos=${m.photoFileIds.size}")
         // UX: tell Telegram "the bot is typing" so the user sees activity while we generate.
         try { client.sendChatAction(m.chatId, "typing") } catch (_: Throwable) {}
         chatService.initializeConversation(convId)
@@ -188,7 +190,17 @@ class TelegramBotService : Service() {
         } else {
             m.text
         }
-        chatService.sendMessage(convId, listOf(UIMessagePart.Text(text)))
+        // Download any inbound photos to the app cache and attach as UIMessagePart.Image so
+        // the assistant's vision pipeline can see them (FileEncoder reads file:// only).
+        val imageParts = downloadInboundPhotos(m.photoFileIds)
+        val parts = buildList<UIMessagePart> {
+            addAll(imageParts)
+            // Only emit a Text part when there is actual content; an empty text triggers
+            // the "no reply" UX downstream and confuses the LLM.
+            if (text.isNotEmpty()) add(UIMessagePart.Text(text))
+            else if (imageParts.isNotEmpty()) add(UIMessagePart.Text("(photo)"))
+        }
+        chatService.sendMessage(convId, parts)
 
         // Wait for the generation Job to become null (pipeline finished). Re-tickle the
         // Telegram typing indicator every ~4 seconds while we wait so it stays visible.
@@ -256,6 +268,40 @@ class TelegramBotService : Service() {
 
     private fun assistantTextOf(m: UIMessage): String =
         m.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
+
+    /**
+     * Resolve each Telegram photo file_id to a downloaded file in the app cache, then return
+     * UIMessagePart.Image entries pointing at file:// URIs. Failures on individual photos are
+     * logged and skipped (so a transient network blip on one image does not drop the whole
+     * message).
+     */
+    private suspend fun downloadInboundPhotos(fileIds: List<String>): List<UIMessagePart.Image> {
+        if (fileIds.isEmpty()) return emptyList()
+        val dir = java.io.File(cacheDir, "telegram-incoming").apply { mkdirs() }
+        // Prune anything older than 24h to keep cache bounded.
+        val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
+        dir.listFiles()?.forEach { f -> if (f.lastModified() < cutoff) f.delete() }
+
+        val out = mutableListOf<UIMessagePart.Image>()
+        for (fileId in fileIds) {
+            try {
+                val info = client.getFile(fileId)
+                val filePath = info["file_path"]?.jsonPrimitive?.contentOrNull
+                if (filePath == null) {
+                    android.util.Log.w(TAG, "downloadInboundPhotos: getFile returned no file_path for id=$fileId")
+                    continue
+                }
+                val ext = filePath.substringAfterLast('.', "jpg")
+                val dest = java.io.File(dir, "tg-${System.currentTimeMillis()}-${fileId.takeLast(8)}.$ext")
+                client.downloadFile(filePath, dest)
+                out.add(UIMessagePart.Image(url = "file://${dest.absolutePath}"))
+                android.util.Log.i(TAG, "downloadInboundPhotos: saved ${dest.name} (${dest.length()} bytes)")
+            } catch (e: Throwable) {
+                android.util.Log.w(TAG, "downloadInboundPhotos: failed for $fileId", e)
+            }
+        }
+        return out
+    }
 
     /** Telegram caps a single sendMessage at 4096 chars; split on newlines where possible. */
     private suspend fun sendChunked(chatId: Long, text: String, replyTo: Long?) {
