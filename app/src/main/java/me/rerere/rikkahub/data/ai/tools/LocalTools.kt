@@ -23,19 +23,25 @@ import me.rerere.rikkahub.data.ai.tools.local.audioInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.batteryTool
 import me.rerere.rikkahub.data.ai.tools.local.callLogTool
 import me.rerere.rikkahub.data.ai.tools.local.cameraPhotoTool
+import me.rerere.rikkahub.data.ai.tools.local.clickNodeTool
 import me.rerere.rikkahub.data.ai.tools.local.downloadTool
 import me.rerere.rikkahub.data.ai.tools.local.fingerprintTool
+import me.rerere.rikkahub.data.ai.tools.local.findNodeTool
 import me.rerere.rikkahub.data.ai.tools.local.getBrightnessTool
 import me.rerere.rikkahub.data.ai.tools.local.getVolumeTool
+import me.rerere.rikkahub.data.ai.tools.local.globalActionTool
 import me.rerere.rikkahub.data.ai.tools.local.listContactsTool
 import me.rerere.rikkahub.data.ai.tools.local.listSensorsTool
 import me.rerere.rikkahub.data.ai.tools.local.listSmsInboxTool
 import me.rerere.rikkahub.data.ai.tools.local.locationTool
+import me.rerere.rikkahub.data.ai.tools.local.longPressTool
 import me.rerere.rikkahub.data.ai.tools.local.mediaScannerTool
 import me.rerere.rikkahub.data.ai.tools.local.micRecorderTool
 import me.rerere.rikkahub.data.ai.tools.local.notificationTool
 import me.rerere.rikkahub.data.ai.tools.local.playMediaTool
 import me.rerere.rikkahub.data.ai.tools.local.readSensorTool
+import me.rerere.rikkahub.data.ai.tools.local.readWindowTreeTool
+import me.rerere.rikkahub.data.ai.tools.local.scrollTool
 import me.rerere.rikkahub.data.ai.tools.local.searchContactsTool
 import me.rerere.rikkahub.data.ai.tools.local.searchSmsTool
 import me.rerere.rikkahub.data.ai.tools.local.setBrightnessTool
@@ -44,6 +50,9 @@ import me.rerere.rikkahub.data.ai.tools.local.shareTool
 import me.rerere.rikkahub.data.ai.tools.local.speechToTextTool
 import me.rerere.rikkahub.data.ai.tools.local.stopMediaTool
 import me.rerere.rikkahub.data.ai.tools.local.storageTool
+import me.rerere.rikkahub.data.ai.tools.local.swipeTool
+import me.rerere.rikkahub.data.ai.tools.local.takeScreenshotTool
+import me.rerere.rikkahub.data.ai.tools.local.tapTool
 import me.rerere.rikkahub.data.ai.tools.local.telephonyInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.toastTool
 import me.rerere.rikkahub.data.ai.tools.local.torchTool
@@ -530,6 +539,17 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.data.ai.tools.local.deleteJobTool(scheduledJobRepository, cronJobScheduler))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.pauseJobTool(scheduledJobRepository, cronJobScheduler))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.resumeJobTool(scheduledJobRepository, cronJobScheduler))
+        }
+        if (options.contains(LocalToolOption.ScreenAutomation)) {
+            tools.add(tapTool())
+            tools.add(longPressTool())
+            tools.add(swipeTool())
+            tools.add(readWindowTreeTool())
+            tools.add(findNodeTool())
+            tools.add(clickNodeTool())
+            tools.add(scrollTool())
+            tools.add(globalActionTool())
+            tools.add(takeScreenshotTool(context))
         }
         return tools
     }
