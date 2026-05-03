@@ -133,6 +133,59 @@ class SkillManager(
         return target.delete()
     }
 
+    /**
+     * Copy any default skills bundled in `assets/default-skills/<name>/` into the user's
+     * filesDir on first launch, but only if they have not already been installed before.
+     * "Before" is tracked with a sentinel marker file inside each seeded skill so subsequent
+     * launches skip the copy without checking individual file mtimes — and so the user can
+     * delete a default skill and we will not silently re-install it.
+     */
+    fun seedDefaultSkillsIfNeeded() {
+        val assetRoot = "default-skills"
+        val assetMgr = context.assets
+        val skillNames = try {
+            assetMgr.list(assetRoot).orEmpty()
+        } catch (e: Exception) {
+            Log.w(TAG, "seedDefaultSkillsIfNeeded: cannot list assets", e)
+            return
+        }
+        for (skillName in skillNames) {
+            val targetDir = SkillPaths.resolveSkillDir(getSkillsDir(), skillName) ?: continue
+            val sentinel = targetDir.resolve(".seeded")
+            if (sentinel.exists()) continue
+            // The user may have manually installed and then deleted the skill. Detect that
+            // case by checking whether the directory exists at all — if it does and there is
+            // no sentinel, the user owns it; do not overwrite. If the directory does not
+            // exist, this is a fresh install and we can seed.
+            if (targetDir.exists() && targetDir.listFiles()?.isNotEmpty() == true) continue
+            try {
+                copyAssetSkill(assetRoot, skillName, targetDir)
+                sentinel.writeText(System.currentTimeMillis().toString())
+                Log.i(TAG, "seedDefaultSkillsIfNeeded: seeded $skillName")
+            } catch (e: Exception) {
+                Log.w(TAG, "seedDefaultSkillsIfNeeded: failed to seed $skillName", e)
+            }
+        }
+    }
+
+    private fun copyAssetSkill(assetRoot: String, skillName: String, targetDir: File) {
+        val assetMgr = context.assets
+        targetDir.mkdirs()
+        val children = assetMgr.list("$assetRoot/$skillName").orEmpty()
+        for (child in children) {
+            val source = "$assetRoot/$skillName/$child"
+            val nested = assetMgr.list(source).orEmpty()
+            if (nested.isNotEmpty()) {
+                copyAssetSkill("$assetRoot/$skillName", child, targetDir.resolve(child))
+                continue
+            }
+            val outFile = targetDir.resolve(child)
+            assetMgr.open(source).use { input ->
+                outFile.outputStream().use { out -> input.copyTo(out) }
+            }
+        }
+    }
+
     fun resolveSkillFile(skillName: String, relativePath: String): File? {
         val skillDir = resolveSkillDir(skillName) ?: return null
         return SkillPaths.resolveSkillFile(skillDir, relativePath)

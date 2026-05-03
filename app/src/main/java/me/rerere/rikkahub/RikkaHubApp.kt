@@ -83,6 +83,11 @@ class RikkaHubApp : Application() {
         // auto-revive it after a process kill; we need to bring it back ourselves.
         startTelegramBotIfEnabled()
 
+        // Copy any default skills bundled in assets/default-skills/* into the user's skills
+        // dir on first launch. SkillManager guards via a per-skill .seeded sentinel so this
+        // is a one-time install — user edits / deletes are respected on subsequent launches.
+        seedDefaultSkillsIfNeeded()
+
         // Increment launch count
         incrementLaunchCount()
 
@@ -112,6 +117,16 @@ class RikkaHubApp : Application() {
                 }
             }.onFailure {
                 Log.e(TAG, "startTelegramBotIfEnabled failed", it)
+            }
+        }
+    }
+
+    private fun seedDefaultSkillsIfNeeded() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<me.rerere.rikkahub.data.files.SkillManager>().seedDefaultSkillsIfNeeded()
+            }.onFailure {
+                Log.e(TAG, "seedDefaultSkillsIfNeeded failed", it)
             }
         }
     }
