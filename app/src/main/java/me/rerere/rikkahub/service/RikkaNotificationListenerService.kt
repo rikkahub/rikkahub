@@ -1,5 +1,231 @@
 package me.rerere.rikkahub.service
 
+import android.app.Notification
+import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.data.notifications.NotificationEntry
+import me.rerere.rikkahub.data.notifications.NotificationListenerPreferences
+import me.rerere.rikkahub.data.telegram.TelegramBotClient
+import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
+import org.koin.android.ext.android.inject
 
-class RikkaNotificationListenerService : NotificationListenerService()
+private const val TAG = "RikkaNListener"
+private const val RING_SIZE = 100
+private const val MAX_TEXT_BYTES = 4096
+
+/**
+ * Reads notifications from every app the user has granted us access to. Maintains an
+ * in-memory ring buffer (100 entries) for LLM lookup AND auto-forwards whitelisted
+ * packages' notifications to the default Telegram chat as a plain text summary.
+ *
+ * Bound by the OS once the user enables RikkaHub in Settings -> Notification access.
+ * The companion singleton lets tool factories reach the live instance synchronously.
+ */
+class RikkaNotificationListenerService : NotificationListenerService() {
+
+    private val whitelistPrefs: NotificationListenerPreferences by inject()
+    private val telegramPrefs: TelegramBotPreferences by inject()
+    private val telegramClient: TelegramBotClient by inject()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val _bound = MutableStateFlow(false)
+    val bound = _bound.asStateFlow()
+
+    private val _recent = MutableStateFlow<List<NotificationEntry>>(emptyList())
+    val recent = _recent.asStateFlow()
+
+    // Tracks the last (key -> "title|text" hash) we forwarded so progressive updates of
+    // the same notification don't spam Telegram.
+    private val lastForwarded = HashMap<String, Int>()
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        instance = this
+        _bound.value = true
+        Log.i(TAG, "listener connected")
+    }
+
+    override fun onListenerDisconnected() {
+        instance = null
+        _bound.value = false
+        lastForwarded.clear()
+        Log.i(TAG, "listener disconnected")
+        super.onListenerDisconnected()
+    }
+
+    override fun onDestroy() {
+        instance = null
+        _bound.value = false
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        sbn ?: return
+        val entry = sbn.toEntry(packageManager) ?: return
+        if (shouldDrop(entry)) return
+
+        // Append / replace by key (dedup updates of the same notification).
+        appendToRing(entry)
+
+        // Auto-route to Telegram if package is whitelisted and a default chat is set.
+        scope.launch { tryForwardToTelegram(entry) }
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        // Intentionally empty - the ring buffer is "history", removed notifications stay
+        // visible to the LLM's history lookup.
+    }
+
+    private fun appendToRing(entry: NotificationEntry) {
+        val cur = _recent.value
+        val withoutOld = cur.filterNot { it.key == entry.key }
+        val next = (withoutOld + entry).takeLast(RING_SIZE)
+        _recent.value = next
+    }
+
+    private suspend fun tryForwardToTelegram(entry: NotificationEntry) {
+        val cfg = try { whitelistPrefs.current() } catch (_: Throwable) { return }
+        if (entry.packageName !in cfg.whitelist) return
+
+        val tg = try { telegramPrefs.current() } catch (_: Throwable) { return }
+        val chatId = tg.defaultChatId ?: return
+        if (!tg.enabled) return
+
+        val signature = (entry.title + "|" + entry.text).hashCode()
+        if (lastForwarded[entry.key] == signature) return  // identical update; skip
+        lastForwarded[entry.key] = signature
+
+        val body = buildString {
+            append("🔔 [").append(entry.label).append("] ")
+            if (entry.title.isNotBlank()) append(entry.title)
+            if (entry.text.isNotBlank()) {
+                if (entry.title.isNotBlank()) append('\n')
+                append(entry.text)
+            }
+        }.take(3500)
+
+        try {
+            telegramClient.sendMessage(chatId, body)
+        } catch (e: Throwable) {
+            Log.w(TAG, "auto-route failed for ${entry.packageName}", e)
+        }
+    }
+
+    /**
+     * Best-effort dismiss by key. Returns true on dispatch (the OS does the rest), false
+     * if the key is not in the currently active set.
+     */
+    fun dismissByKey(key: String): Boolean {
+        val active = activeNotifications ?: return false
+        if (active.none { it.key == key }) return false
+        cancelNotification(key)
+        return true
+    }
+
+    /**
+     * Fire one of a notification's action PendingIntents. Lookup precedence:
+     * 1. action_title (case-insensitive, exact match)
+     * 2. action_index (0-based)
+     */
+    fun triggerAction(key: String, actionIndex: Int?, actionTitle: String?): TriggerResult {
+        val sbn = activeNotifications?.firstOrNull { it.key == key }
+            ?: return TriggerResult.NotFound
+        val actions = sbn.notification.actions ?: emptyArray()
+        if (actions.isEmpty()) return TriggerResult.NoAction
+
+        val matched: Notification.Action = when {
+            !actionTitle.isNullOrBlank() ->
+                actions.firstOrNull { it.title?.toString()?.equals(actionTitle, ignoreCase = true) == true }
+            actionIndex != null -> actions.getOrNull(actionIndex)
+            else -> null
+        } ?: return TriggerResult.NoAction
+
+        val remoteInputs = matched.remoteInputs
+        if (remoteInputs != null && remoteInputs.isNotEmpty()) {
+            return TriggerResult.RequiresInput(matched.title?.toString().orEmpty())
+        }
+
+        val pi = matched.actionIntent ?: return TriggerResult.NoAction
+        return try {
+            pi.send()
+            TriggerResult.Success(matched.title?.toString().orEmpty())
+        } catch (t: Throwable) {
+            TriggerResult.SendFailed(t.message ?: t::class.java.simpleName)
+        }
+    }
+
+    fun listActive(): List<NotificationEntry> {
+        val active = activeNotifications ?: return emptyList()
+        return active.mapNotNull { it.toEntry(packageManager) }.filterNot { shouldDrop(it) }
+    }
+
+    sealed class TriggerResult {
+        data class Success(val actionTitle: String) : TriggerResult()
+        data object NotFound : TriggerResult()
+        data object NoAction : TriggerResult()
+        data class RequiresInput(val actionTitle: String) : TriggerResult()
+        data class SendFailed(val reason: String) : TriggerResult()
+    }
+
+    private fun shouldDrop(entry: NotificationEntry): Boolean {
+        if (entry.packageName == BuildConfig.APPLICATION_ID) return true
+        if (entry.packageName == "com.android.systemui") return true
+        if (entry.title.isEmpty() && entry.text.isEmpty()) return true
+        return false
+    }
+
+    companion object {
+        @Volatile
+        var instance: RikkaNotificationListenerService? = null
+            private set
+    }
+}
+
+private fun StatusBarNotification.toEntry(pm: PackageManager): NotificationEntry? {
+    val n = notification ?: return null
+    val extras = n.extras ?: return null
+
+    fun extraText(): String {
+        val direct = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        if (direct.isNotEmpty()) return direct.take(MAX_TEXT_BYTES)
+        val big = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty()
+        if (big.isNotEmpty()) return big.take(MAX_TEXT_BYTES)
+        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+        if (lines != null && lines.isNotEmpty()) {
+            return lines.joinToString("\n") { it.toString() }.take(MAX_TEXT_BYTES)
+        }
+        return ""
+    }
+
+    val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+    val text = extraText()
+    val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+    val label = try {
+        pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+    } catch (_: Throwable) {
+        packageName
+    }
+    val actionTitles = n.actions?.mapNotNull { it.title?.toString() } ?: emptyList()
+    return NotificationEntry(
+        key = key,
+        packageName = packageName,
+        label = label,
+        title = title,
+        text = text,
+        subText = subText,
+        postTimeMs = postTime,
+        actionTitles = actionTitles,
+    )
+}
