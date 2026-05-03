@@ -464,6 +464,36 @@ class ChatCompletionsAPI(
                                 "content",
                                 tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
                         })
+                        // Image lift: ChatCompletions tool messages are text-only, so any
+                        // UIMessagePart.Image returned by the tool would be invisible to a
+                        // vision-capable model otherwise. Emit a follow-up user message that
+                        // carries those images so the model actually sees them on its next
+                        // turn (e.g. take_screenshot, take_photo, etc.).
+                        val toolImages = tool.output.filterIsInstance<UIMessagePart.Image>()
+                        if (toolImages.isNotEmpty()) {
+                            add(buildJsonObject {
+                                put("role", "user")
+                                putJsonArray("content") {
+                                    add(buildJsonObject {
+                                        put("type", "text")
+                                        put("text", "[Tool ${tool.toolName} produced the image(s) below.]")
+                                    })
+                                    toolImages.forEach { part ->
+                                        add(buildJsonObject {
+                                            part.encodeBase64().onSuccess { encodedImage ->
+                                                put("type", "image_url")
+                                                put("image_url", buildJsonObject {
+                                                    put("url", encodedImage.base64)
+                                                })
+                                            }.onFailure {
+                                                put("type", "text")
+                                                put("text", "(image encode failed: ${it.message})")
+                                            }
+                                        })
+                                    }
+                                }
+                            })
+                        }
                     }
                 }
             }

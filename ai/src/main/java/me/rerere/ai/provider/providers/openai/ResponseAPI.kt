@@ -371,6 +371,20 @@ class ResponseAPI(
                                 "output",
                                 tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
                         })
+                        // Image lift: function_call_output is text-only, so a tool that
+                        // returns UIMessagePart.Image (take_screenshot, take_photo, etc.)
+                        // would otherwise be invisible to vision-capable models. Inject
+                        // those images as a follow-up user content item.
+                        val toolImages = tool.output.filterIsInstance<UIMessagePart.Image>()
+                        if (toolImages.isNotEmpty()) {
+                            addContentItem(
+                                MessageRole.USER,
+                                buildList {
+                                    add(UIMessagePart.Text("[Tool ${tool.toolName} produced the image(s) below.]"))
+                                    addAll(toolImages)
+                                }
+                            )
+                        }
                     }
                 }
             }
