@@ -129,8 +129,31 @@ internal suspend fun runCommandCapture(
     val resultAction = "${ctx.packageName}.TERMUX_RESULT_${UUID.randomUUID()}"
     val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, intent: Intent) {
-            val bundle = intent.getBundleExtra(EXTRA_RESULT_BUNDLE) ?: Bundle()
-            if (resultDeferred.isActive) resultDeferred.complete(bundle)
+            // Termux's RunCommandService fires the PendingIntent *twice* in 0.118.x:
+            // - once almost immediately as a "started" / acknowledgement broadcast with
+            //   intent.extras == null
+            // - again when the command actually completes, this time with a "result" Bundle
+            //   containing stdout / stderr / exitCode.
+            // FLAG_ONE_SHOT used to consume the first empty fire and the real one was
+            // never delivered. Now we ignore empty broadcasts and only complete the
+            // deferred when we see a usable payload.
+            val keys = intent.extras?.keySet()?.joinToString(",")
+            val bundle = intent.getBundleExtra(EXTRA_RESULT_BUNDLE)
+            android.util.Log.i(
+                "RikkaTermux",
+                "broadcast: action=${intent.action} hasExtras=${intent.extras != null} extraKeys=[$keys] hasResultBundle=${bundle != null}",
+            )
+            if (bundle == null && intent.extras == null) return  // empty ack, wait for real fire
+            if (bundle != null) {
+                android.util.Log.i(
+                    "RikkaTermux",
+                    "result bundle keys=${bundle.keySet().joinToString(",")} stdout='${bundle.getString(RESULT_KEY_STDOUT, "<null>").take(200)}' stderr='${bundle.getString(RESULT_KEY_STDERR, "<null>").take(200)}' exit=${bundle.getInt(RESULT_KEY_EXIT_CODE, -999)} err=${bundle.getInt(RESULT_KEY_ERR, -999)} errmsg='${bundle.getString(RESULT_KEY_ERRMSG, "<null>")}'",
+                )
+            }
+            // Some Termux variants put the keys directly on the broadcast intent rather than
+            // nested under "result". Support both shapes by falling back to flat extras.
+            val effective = bundle ?: intent.extras ?: Bundle()
+            if (resultDeferred.isActive) resultDeferred.complete(effective)
         }
     }
     val filter = IntentFilter(resultAction)
@@ -147,7 +170,10 @@ internal suspend fun runCommandCapture(
             ctx,
             resultAction.hashCode(),
             resultIntent,
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
+            // Termux fires this PendingIntent twice (started ack + final result). Using
+            // FLAG_ONE_SHOT used to consume the ack and lose the real result; FLAG_MUTABLE
+            // lets Termux append its own extras to the intent it sends.
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
     } catch (t: Throwable) {
         try { ctx.unregisterReceiver(receiver) } catch (_: Throwable) {}
@@ -170,8 +196,13 @@ internal suspend fun runCommandCapture(
         if (bundle == null) {
             CaptureResult.Timeout
         } else {
-            val errCode = bundle.getInt(RESULT_KEY_ERR, 0)
-            if (errCode != 0) {
+            // Per the Termux RUN_COMMAND wiki: `err = -1` (= Activity.RESULT_OK) means
+            // "no internal error" — i.e. the success sentinel. Any value other than -1
+            // is an actual Termux internal failure (service start failed, manual exit,
+            // OS killed it, etc). Earlier revisions inverted this and rejected the
+            // success path because err=-1 != 0.
+            val errCode = bundle.getInt(RESULT_KEY_ERR, -1)
+            if (errCode != -1) {
                 val errMsg = bundle.getString(RESULT_KEY_ERRMSG).orEmpty()
                 if (errMsg.contains("PermissionDenied", ignoreCase = true) ||
                     errMsg.contains("not allowed", ignoreCase = true)
