@@ -84,6 +84,10 @@ class TelegramBotService : Service() {
         if (pollJob?.isActive != true) {
             pollJob = scope.launch { pollLoop() }
         }
+        // Refresh the slash-command menu Telegram shows users every time the bot starts
+        // (and any time the BUILT_IN_COMMANDS list changes between releases). Idempotent
+        // and cheap; failures are logged but not fatal.
+        scope.launch { registerBuiltInCommandsWithTelegram() }
         isRunning = true
         // START_NOT_STICKY: don't auto-revive; revival without a fresh foreground ticket would
         // crash with the same exception. The boot receiver, RikkaHubApp.onCreate, and the user
@@ -180,12 +184,10 @@ class TelegramBotService : Service() {
             android.util.Log.w(TAG, "handleIncoming: dropping — sender=$sender chat=${m.chatId} not in whitelist=${cfg.whitelist}")
             return
         }
-        // Built-in /reset and /new — clear the chat→conversation mapping so the next message
-        // starts a fresh thread. The LLM never sees these.
-        if (m.text.trim() in setOf("/reset", "/new")) {
-            chatRepo.deleteByChatId(m.chatId)
-            try { client.sendMessage(m.chatId, "✓ Conversation reset") } catch (_: Throwable) {}
-            return
+        // Built-in slash commands. These are handled entirely on-device — they never reach
+        // the LLM, never spend tokens, and resolve in single-digit milliseconds.
+        if (m.text.startsWith("/")) {
+            if (handleBuiltInCommand(cfg, m)) return
         }
 
         val (convId, wasCreated) = lookupOrCreateConversation(cfg, m.chatId)
@@ -448,6 +450,215 @@ class TelegramBotService : Service() {
         return out
     }
 
+    /**
+     * Dispatch a built-in slash command. Returns true when the message was handled by the
+     * app (no LLM round-trip), false if the command is unknown and should fall through to
+     * the LLM. Built-in commands NEVER spend tokens.
+     */
+    private suspend fun handleBuiltInCommand(
+        cfg: me.rerere.rikkahub.data.telegram.TelegramBotConfig,
+        m: TelegramIncomingMessage,
+    ): Boolean {
+        val raw = m.text.trim()
+        // Allow the "@botname" suffix Telegram appends in groups.
+        val withoutMention = raw.replace(Regex("@\\w+"), "").trim()
+        val tokens = withoutMention.split(Regex("\\s+"), limit = 2)
+        val cmd = tokens[0].lowercase()
+        val arg = tokens.getOrNull(1)?.trim().orEmpty()
+
+        return when (cmd) {
+            "/start" -> { sendStart(m.chatId); true }
+            "/help", "/?" -> { sendHelp(m.chatId); true }
+            "/new", "/reset", "/clear" -> { handleResetCommand(m.chatId); true }
+            "/stop", "/cancel" -> { handleStopCommand(m.chatId); true }
+            "/status" -> { handleStatusCommand(m.chatId); true }
+            "/model" -> { handleModelCommand(m.chatId, arg); true }
+            "/ratelimit" -> { handleRateLimitCommand(m.chatId, arg); true }
+            else -> false
+        }
+    }
+
+    private suspend fun sendStart(chatId: Long) {
+        val msg = """
+            👋 RikkaHub agent online.
+
+            Send any message to talk to the model. Built-in commands:
+            /help - list all commands
+            /new - start a fresh conversation
+            /stop - cancel the current generation
+            /status - show current model + assistant
+            /model - show or switch chat model
+            /ratelimit - show or set the assistant's max output tokens
+        """.trimIndent()
+        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
+    }
+
+    private suspend fun sendHelp(chatId: Long) {
+        val msg = buildString {
+            appendLine("Built-in commands (handled directly by the app, no LLM):")
+            appendLine()
+            BUILT_IN_COMMANDS.forEach { (c, d) ->
+                appendLine("/${c.padEnd(11)} - $d")
+            }
+            appendLine()
+            appendLine("Anything else is sent to the LLM as usual.")
+        }
+        try { client.sendMessage(chatId, msg.trim()) } catch (_: Throwable) {}
+    }
+
+    private suspend fun handleResetCommand(chatId: Long) {
+        chatRepo.deleteByChatId(chatId)
+        try { client.sendMessage(chatId, "✓ Conversation reset.") } catch (_: Throwable) {}
+    }
+
+    private suspend fun handleStopCommand(chatId: Long) {
+        val mapping = chatRepo.getByChatId(chatId)
+        if (mapping == null) {
+            try { client.sendMessage(chatId, "Nothing to stop - no active conversation for this chat.") } catch (_: Throwable) {}
+            return
+        }
+        val convId = try { Uuid.parse(mapping.conversationId) } catch (_: Throwable) {
+            try { client.sendMessage(chatId, "Could not resolve conversation id.") } catch (_: Throwable) {}
+            return
+        }
+        chatService.stopGeneration(convId)
+        try { client.sendMessage(chatId, "⏹ Generation stopped.") } catch (_: Throwable) {}
+    }
+
+    private suspend fun handleStatusCommand(chatId: Long) {
+        val s = settingsStore.settingsFlow.value
+        val assistant = s.getCurrentAssistant()
+        val effectiveModelId = assistant.chatModelId ?: s.chatModelId
+        val model = s.providers.flatMap { it.models }.firstOrNull { it.id == effectiveModelId }
+        val msg = buildString {
+            appendLine("Bot status:")
+            appendLine("- Service: ${if (isRunning) "running" else "stopped"}")
+            appendLine("- Assistant: ${assistant.name.ifBlank { "(default)" }}")
+            appendLine("- Model: ${model?.displayName ?: model?.modelId ?: "(none configured)"}")
+            appendLine("- Max output tokens: ${assistant.maxTokens?.toString() ?: "(provider default)"}")
+            appendLine("- Whitelist size: ${cfgSafe()?.whitelist?.size ?: 0}")
+        }
+        try { client.sendMessage(chatId, msg.trim()) } catch (_: Throwable) {}
+    }
+
+    private suspend fun cfgSafe(): me.rerere.rikkahub.data.telegram.TelegramBotConfig? = try {
+        prefs.current()
+    } catch (_: Throwable) { null }
+
+    private suspend fun handleModelCommand(chatId: Long, arg: String) {
+        val s = settingsStore.settingsFlow.value
+        val assistant = s.getCurrentAssistant()
+        val allModels = s.providers
+            .filter { it.enabled }
+            .flatMap { p -> p.models.map { p to it } }
+            .filter { (_, m) -> m.type == me.rerere.ai.provider.ModelType.CHAT }
+
+        if (arg.isBlank()) {
+            // No arg - show current + list available
+            val effectiveModelId = assistant.chatModelId ?: s.chatModelId
+            val current = allModels.firstOrNull { (_, m) -> m.id == effectiveModelId }
+            val msg = buildString {
+                appendLine("Current model: ${current?.second?.displayName ?: current?.second?.modelId ?: "(unset)"}")
+                if (current != null) appendLine("Provider: ${current.first.name}")
+                appendLine()
+                if (allModels.isEmpty()) {
+                    appendLine("No chat models configured. Add a provider in the app settings first.")
+                } else {
+                    appendLine("Available chat models (use /model <name> to switch):")
+                    allModels.take(50).forEach { (p, m) ->
+                        appendLine("- ${m.displayName.ifBlank { m.modelId }}  [${p.name}]")
+                    }
+                    if (allModels.size > 50) appendLine("... and ${allModels.size - 50} more")
+                }
+            }
+            try { client.sendMessage(chatId, msg.trim()) } catch (_: Throwable) {}
+            return
+        }
+
+        val needle = arg.lowercase()
+        val match = allModels.firstOrNull { (_, m) ->
+            m.displayName.equals(arg, ignoreCase = true) || m.modelId.equals(arg, ignoreCase = true)
+        } ?: allModels.firstOrNull { (_, m) ->
+            m.displayName.lowercase().contains(needle) || m.modelId.lowercase().contains(needle)
+        }
+        if (match == null) {
+            try {
+                client.sendMessage(chatId, "No chat model matches \"$arg\". Send /model with no argument to see the list.")
+            } catch (_: Throwable) {}
+            return
+        }
+
+        val (provider, model) = match
+        // Update the assistant's chatModelId so the next turn uses this model.
+        settingsStore.update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map {
+                    if (it.id == assistant.id) it.copy(chatModelId = model.id) else it
+                }
+            )
+        }
+        try {
+            client.sendMessage(
+                chatId,
+                "✓ Switched assistant \"${assistant.name.ifBlank { "default" }}\" to model \"${model.displayName.ifBlank { model.modelId }}\" [${provider.name}]."
+            )
+        } catch (_: Throwable) {}
+    }
+
+    private suspend fun handleRateLimitCommand(chatId: Long, arg: String) {
+        val s = settingsStore.settingsFlow.value
+        val assistant = s.getCurrentAssistant()
+        if (arg.isBlank()) {
+            val current = assistant.maxTokens?.toString() ?: "(provider default - unlimited within model context)"
+            try {
+                client.sendMessage(
+                    chatId,
+                    "Max output tokens for assistant \"${assistant.name.ifBlank { "default" }}\": $current\nUse /ratelimit <number> to set, or /ratelimit clear to remove the cap."
+                )
+            } catch (_: Throwable) {}
+            return
+        }
+        val newCap: Int? = when {
+            arg.equals("clear", ignoreCase = true) || arg.equals("none", ignoreCase = true) ||
+                arg.equals("off", ignoreCase = true) || arg.equals("0", ignoreCase = true) -> null
+            else -> arg.toIntOrNull()?.takeIf { it in 1..200_000 }
+        }
+        if (arg.toIntOrNull() != null && newCap == null) {
+            try { client.sendMessage(chatId, "Value out of range. Use 1..200000, or 'clear' to remove the cap.") } catch (_: Throwable) {}
+            return
+        }
+        if (arg.toIntOrNull() == null && newCap != null) {
+            // Defensive — should not happen given the when above.
+            try { client.sendMessage(chatId, "Could not parse \"$arg\". Use a number or 'clear'.") } catch (_: Throwable) {}
+            return
+        }
+        settingsStore.update { settings ->
+            settings.copy(
+                assistants = settings.assistants.map {
+                    if (it.id == assistant.id) it.copy(maxTokens = newCap) else it
+                }
+            )
+        }
+        val msg = if (newCap == null) "✓ Removed max-token cap on assistant \"${assistant.name.ifBlank { "default" }}\"."
+        else "✓ Max output tokens for assistant \"${assistant.name.ifBlank { "default" }}\" set to $newCap."
+        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
+    }
+
+    /**
+     * Push the canonical built-in command list to Telegram so the user sees them in the
+     * autocomplete menu when typing "/". Called once on bot service start. Failures are
+     * non-fatal.
+     */
+    private suspend fun registerBuiltInCommandsWithTelegram() {
+        try {
+            val list = BUILT_IN_COMMANDS.map { (c, d) -> c to d }
+            val ok = client.setMyCommands(list)
+            android.util.Log.i(TAG, "registerBuiltInCommandsWithTelegram: setMyCommands ok=$ok")
+        } catch (e: Throwable) {
+            android.util.Log.w(TAG, "registerBuiltInCommandsWithTelegram failed", e)
+        }
+    }
+
     companion object {
         const val TAG = "TelegramBotService"
         const val CHANNEL_ID = "rikkahub_telegram_bot"
@@ -471,6 +682,24 @@ class TelegramBotService : Service() {
         /** Telegram silently rate-limits edits around 1/sec; 1500ms gives steady progress
          *  without tripping the limiter. */
         const val STREAM_EDIT_INTERVAL_MS: Long = 1_500L
+
+        /**
+         * The single source of truth for the bot's built-in slash-command menu. Each entry
+         * is (command-without-slash, description shown in Telegram's autocomplete menu).
+         * Order matches what the user sees when they tap "/" in the chat.
+         *
+         * Telegram caps each description at 256 chars and the command at 32 chars; keep
+         * descriptions short.
+         */
+        val BUILT_IN_COMMANDS: List<Pair<String, String>> = listOf(
+            "start" to "Show a quick welcome and the most useful commands",
+            "help" to "List every built-in slash command",
+            "new" to "Start a fresh conversation (clears history)",
+            "stop" to "Cancel the current generation immediately",
+            "status" to "Show service state, current model, assistant, and rate limit",
+            "model" to "Show or switch the chat model. Usage: /model [name]",
+            "ratelimit" to "Show or set the assistant's max output tokens. Usage: /ratelimit [number|clear]",
+        )
 
         /** Set whenever the service is alive AND its long-poll loop is running. */
         @Volatile var isRunning: Boolean = false
