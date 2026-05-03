@@ -51,4 +51,11 @@ object PermissionHelper {
     /** Fallback page for users who declined the prompt; shows the system-wide list. */
     fun batteryOptimizationsListIntent(): Intent =
         Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+
+    fun hasAccessibilityService(ctx: Context): Boolean =
+        AccessibilityServiceHandle.isEnabledInSettings(ctx)
+
+    fun accessibilitySettingsIntent(): Intent =
+        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
