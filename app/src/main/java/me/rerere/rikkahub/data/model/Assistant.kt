@@ -120,6 +120,30 @@ enum class InjectionPosition {
 
     @SerialName("at_depth")
     AT_DEPTH,               // 在指定深度位置插入（从最新消息往前数）
+
+    @SerialName("in_message")
+    IN_MESSAGE,             // 注入到消息内容内部（作为 parts 的一部分）
+}
+
+/**
+ * 消息内注入位置
+ */
+@Serializable
+enum class InMessagePosition {
+    @SerialName("before")
+    BEFORE,  // 注入到消息内容之前
+
+    @SerialName("after")
+    AFTER    // 注入到消息内容之后（默认）
+}
+
+/**
+ * 注入内容类型
+ */
+@Serializable
+enum class InjectionContentType {
+    @SerialName("text")
+    TEXT  // 文本类型，未来可扩展 IMAGE 等
 }
 
 /**
@@ -138,6 +162,10 @@ sealed class PromptInjection {
     abstract val content: String
     abstract val injectDepth: Int  // 当 position 为 AT_DEPTH 时使用，表示从最新消息往前数的位置
     abstract val role: MessageRole  // 注入角色：USER 或 ASSISTANT
+    abstract val inMessagePosition: InMessagePosition?  // position=IN_MESSAGE 时使用，旧版为 null
+    abstract val contentType: InjectionContentType       // 内容类型，默认 TEXT
+    abstract val persistToHistory: Boolean               // 是否保存注入内容到历史，默认 false
+    abstract val visibleInHistory: Boolean               // 持久化后是否在 UI 中可见，默认 true
 
     /**
      * 模式注入 - 基于开关状态触发
@@ -153,6 +181,10 @@ sealed class PromptInjection {
         override val content: String = "",
         override val injectDepth: Int = 4,
         override val role: MessageRole = MessageRole.USER,
+        override val inMessagePosition: InMessagePosition? = null,
+        override val contentType: InjectionContentType = InjectionContentType.TEXT,
+        override val persistToHistory: Boolean = false,
+        override val visibleInHistory: Boolean = true,
     ) : PromptInjection()
 
     /**
@@ -169,6 +201,10 @@ sealed class PromptInjection {
         override val content: String = "",
         override val injectDepth: Int = 4,
         override val role: MessageRole = MessageRole.USER,
+        override val inMessagePosition: InMessagePosition? = null,
+        override val contentType: InjectionContentType = InjectionContentType.TEXT,
+        override val persistToHistory: Boolean = false,
+        override val visibleInHistory: Boolean = true,
         val keywords: List<String> = emptyList(),  // 触发关键词
         val useRegex: Boolean = false,             // 是否使用正则匹配
         val caseSensitive: Boolean = false,        // 大小写敏感
