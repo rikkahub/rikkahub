@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.net.toUri
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -15,6 +16,23 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.service.RikkaAccessibilityService
+
+private suspend fun waitForForegroundPackage(
+    expectedPkg: String,
+    timeoutMs: Long = 2500,
+    stepMs: Long = 150,
+): String? {
+    val deadline = System.currentTimeMillis() + timeoutMs
+    var current: String? = null
+    while (System.currentTimeMillis() < deadline) {
+        val svc = RikkaAccessibilityService.instance ?: return null
+        current = svc.rootInActiveWindow?.packageName?.toString()
+        if (current == expectedPkg) return current
+        delay(stepMs)
+    }
+    return current
+}
 
 /**
  * Launches an installed app by package name. Useful when the LLM needs to bring a specific
@@ -75,11 +93,41 @@ fun launchAppTool(context: Context): Tool = Tool(
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(intent)
+            // Confirm the launched app actually took focus. If the user is physically
+            // in another app (e.g. RikkaHub's own chat), the launch can be silently
+            // ignored and subsequent screen-automation calls will loop on
+            // wrong_foreground_app. Only meaningful when AccessibilityService is bound;
+            // when unbound we cannot verify and report confirmed_foreground:false.
+            val accessibilityRunning = RikkaAccessibilityService.instance != null
+            val finalForeground: String? = if (accessibilityRunning && !keyLocked) {
+                waitForForegroundPackage(pkg)
+            } else null
+            val confirmed = finalForeground == pkg
+            if (accessibilityRunning && !keyLocked && !confirmed) {
+                return@Tool listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("error", "launch_did_not_focus")
+                            put("requested", pkg)
+                            put("current_foreground", finalForeground.orEmpty())
+                            put(
+                                "recovery",
+                                "The launch intent was dispatched but the OS did not move ${pkg} to the foreground within 2.5s. The user is likely actively viewing another app (often RikkaHub itself) — do NOT pass package_name to read_window_tree on this turn. Either ask the user to switch to ${pkg}, or call read_window_tree with no package_name guard so you can see whatever IS currently on screen."
+                            )
+                            if (wasOff) put("woke_screen", woke)
+                        }.toString()
+                    )
+                )
+            }
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
                         put("success", true)
                         put("package", pkg)
+                        put("confirmed_foreground", confirmed)
+                        if (!accessibilityRunning) {
+                            put("note", "AccessibilityService not bound — could not verify foreground. Treat success as best-effort.")
+                        }
                         if (wasOff) put("woke_screen", woke)
                         if (keyLocked) {
                             put("keyguard_locked", true)

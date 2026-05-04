@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.location.Location
 import android.location.LocationManager
+import android.util.Log
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.LocationServices
@@ -22,8 +23,13 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 
-private fun errorPayload(message: String): JsonObject =
-    buildJsonObject { put("error", message) }
+private const val TAG_LOC = "LocationTool"
+
+private fun errorPayload(message: String, recovery: String? = null): JsonObject =
+    buildJsonObject {
+        put("error", message)
+        if (recovery != null) put("recovery", recovery)
+    }
 
 private fun JsonObjectBuilder.putLocation(loc: Location, providerName: String) {
     put("latitude", loc.latitude)
@@ -99,55 +105,88 @@ fun locationTool(context: Context): Tool = Tool(
                         false
                     }
                     if (!gpsEnabled && !networkEnabled) {
-                        errorPayload("location services disabled")
+                        errorPayload(
+                            "location services disabled",
+                            "Ask the user to enable Location in Settings → Location."
+                        )
                     } else {
-                        val gmsAvailable = GoogleApiAvailability.getInstance()
-                            .isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
-                        if (gmsAvailable) {
-                            try {
-                                val client = LocationServices
-                                    .getFusedLocationProviderClient(context)
-                                val loc: Location? = withTimeoutOrNull(timeoutMs.toLong()) {
+                        val gmsAvailable = try {
+                            GoogleApiAvailability.getInstance()
+                                .isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
+                        } catch (t: Throwable) {
+                            Log.w(TAG_LOC, "GMS availability check failed", t)
+                            false
+                        }
+
+                        // Cheap path first: ask whichever cached fix the system already has.
+                        // On any phone that has used location at all today, this returns
+                        // instantly and we skip the slow getCurrentLocation flow entirely.
+                        val cachedNow: Location? = try {
+                            if (gmsAvailable) {
+                                val client = LocationServices.getFusedLocationProviderClient(context)
+                                client.lastLocation.await()
+                            } else null
+                        } catch (t: Throwable) {
+                            Log.w(TAG_LOC, "fused lastLocation failed", t)
+                            null
+                        }
+                            ?: try { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: SecurityException) { null }
+                            ?: try { lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: SecurityException) { null }
+                            ?: try { lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) } catch (_: SecurityException) { null }
+
+                        // If we have a fresh cached fix (< 2 min) just return it. Saves the
+                        // 30s timeout dance for cases where the OS already knows where we are.
+                        val cachedAgeMs = cachedNow?.let { System.currentTimeMillis() - it.time }
+                        if (cachedNow != null && cachedAgeMs != null && cachedAgeMs < 120_000) {
+                            Log.i(TAG_LOC, "returning fresh cached fix age=${cachedAgeMs}ms provider=${cachedNow.provider}")
+                            buildJsonObject {
+                                putLocation(cachedNow, cachedNow.provider ?: "cached")
+                                put("cached", true)
+                                put("age_ms", cachedAgeMs)
+                            }
+                        } else if (gmsAvailable) {
+                            // No fresh cache — request a fresh fix via Fused. Bounded by
+                            // timeoutMs; on timeout, fall back to whatever (older) cached fix
+                            // we have rather than failing outright.
+                            val fresh: Location? = try {
+                                val client = LocationServices.getFusedLocationProviderClient(context)
+                                withTimeoutOrNull(timeoutMs.toLong()) {
                                     client.getCurrentLocation(priority, null).await()
                                 }
-                                when {
-                                    loc != null -> buildJsonObject { putLocation(loc, "fused") }
-                                    else -> {
-                                        // Fresh fix timed out — fall back to whatever cached
-                                        // fix we have (from any provider). A 10-minute-old
-                                        // location is still vastly more useful than "no idea".
-                                        val cached: Location? = try {
-                                            client.lastLocation.await()
-                                        } catch (_: Throwable) { null }
-                                            ?: lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                                            ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                                        if (cached != null) {
-                                            buildJsonObject {
-                                                putLocation(cached, "fused_cached")
-                                                put("cached", true)
-                                                put("age_ms", System.currentTimeMillis() - cached.time)
-                                            }
-                                        } else {
-                                            errorPayload("no fix yet — try near a window or outdoors")
-                                        }
-                                    }
+                            } catch (t: Throwable) {
+                                Log.w(TAG_LOC, "getCurrentLocation failed", t)
+                                null
+                            }
+                            when {
+                                fresh != null -> buildJsonObject { putLocation(fresh, "fused") }
+                                cachedNow != null -> buildJsonObject {
+                                    putLocation(cachedNow, cachedNow.provider ?: "cached")
+                                    put("cached", true)
+                                    put("age_ms", cachedAgeMs ?: -1L)
+                                    put("note", "fresh fix timed out after ${timeoutMs}ms; returning last known")
                                 }
-                            } catch (_: SecurityException) {
-                                errorPayload("permission ACCESS_FINE_LOCATION not granted")
+                                else -> {
+                                    Log.w(TAG_LOC, "no fix at all (gms): timeout=${timeoutMs}ms gps=$gpsEnabled net=$networkEnabled")
+                                    errorPayload(
+                                        "no fix yet",
+                                        "No location available. Try moving near a window / outdoors, or ask the user to open a maps app once to seed the location cache."
+                                    )
+                                }
                             }
                         } else {
-                            try {
-                                val loc: Location? =
-                                    lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                                        ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                                when {
-                                    loc == null -> errorPayload("no fix available")
-                                    else -> buildJsonObject {
-                                        putLocation(loc, loc.provider ?: "unknown")
-                                    }
+                            // No Google Play Services — direct LocationManager only.
+                            if (cachedNow != null) {
+                                buildJsonObject {
+                                    putLocation(cachedNow, cachedNow.provider ?: "lm")
+                                    put("cached", true)
+                                    if (cachedAgeMs != null) put("age_ms", cachedAgeMs)
                                 }
-                            } catch (_: SecurityException) {
-                                errorPayload("permission ACCESS_FINE_LOCATION not granted")
+                            } else {
+                                Log.w(TAG_LOC, "no fix at all (no gms): gps=$gpsEnabled net=$networkEnabled")
+                                errorPayload(
+                                    "no fix available",
+                                    "Google Play Services unavailable and no cached fix. Ask the user to open a maps app once, or enable Wi-Fi to allow network-based location."
+                                )
                             }
                         }
                     }
