@@ -1109,5 +1109,7 @@
   <string name="setting_page_accessibility_action_ago_seconds">%1$ds ago</string>
   <string name="setting_page_accessibility_action_ago_minutes">%1$dm ago</string>
   <string name="setting_page_accessibility_action_ago_hours">%1$dh ago</string>
+  <string name="setting_page_notifications">Notifications</string>
+  <string name="setting_page_notifications_desc">Notification access status, recent activity log, and the per-app whitelist that auto-forwards to Telegram.</string>
 </resources>
 

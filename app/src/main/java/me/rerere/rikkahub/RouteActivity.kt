@@ -99,6 +99,7 @@ import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAccessibilityPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
+import me.rerere.rikkahub.ui.pages.setting.SettingNotificationsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
@@ -432,6 +433,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingAccessibilityPage()
                             }
 
+                            entry<Screen.SettingNotifications> {
+                                SettingNotificationsPage()
+                            }
+
                             entry<Screen.Developer> {
                                 DeveloperPage()
                             }
@@ -619,6 +624,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingAccessibility : Screen
+
+    @Serializable
+    data object SettingNotifications : Screen
 
     @Serializable
     data object Developer : Screen

@@ -265,6 +265,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_page_accessibility_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_accessibility)) },
                     )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingNotifications) },
+                        leadingContent = { Icon(HugeIcons.Alert01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_notifications_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_notifications)) },
+                    )
                 }
             }
 
