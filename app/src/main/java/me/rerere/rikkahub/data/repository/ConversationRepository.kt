@@ -334,10 +334,42 @@ class ConversationRepository(
             while (true) {
                 val page = try {
                     messageNodeDAO.getNodesOfConversationPaged(conversationId, pageSize, offset)
-                } catch (e: SQLiteBlobTooBigException) {
-                    e.printStackTrace()
-                    offset += pageSize
-                    continue
+                } catch (e: Exception) {
+                    // requery SQLite throws IllegalStateException ("Couldn't read row 0 column 0")
+                    // while standard Android SQLite throws SQLiteBlobTooBigException when a row
+                    // is too large for the CursorWindow. Fall back to one-at-a-time loading so
+                    // only the oversized node is skipped rather than the entire page.
+                    if (e is SQLiteBlobTooBigException || e is IllegalStateException) {
+                        e.printStackTrace()
+                        for (singleOffset in offset until offset + pageSize) {
+                            val singlePage = try {
+                                messageNodeDAO.getNodesOfConversationPaged(conversationId, 1, singleOffset)
+                            } catch (inner: Exception) {
+                                if (inner is SQLiteBlobTooBigException || inner is IllegalStateException) {
+                                    inner.printStackTrace()
+                                    continue
+                                }
+                                throw inner
+                            }
+                            if (singlePage.isEmpty()) break
+                            val entity = singlePage.first()
+                            runCatching {
+                                val messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages)
+                                val nodeId = Uuid.parse(entity.id)
+                                nodes.add(
+                                    MessageNode(
+                                        id = nodeId,
+                                        messages = messages,
+                                        selectIndex = entity.selectIndex,
+                                        isFavorite = favoriteNodeIds.contains(nodeId)
+                                    )
+                                )
+                            }.onFailure { it.printStackTrace() }
+                        }
+                        offset += pageSize
+                        continue
+                    }
+                    throw e
                 }
                 if (page.isEmpty()) break
                 page.forEach { entity ->
