@@ -25,6 +25,38 @@ from your phone.
 
 ## What's added on top of upstream
 
+### On-device LLM provider — AICore (Gemini Nano)
+A first-class provider for Android's AICore (Gemini Nano via ML Kit GenAI). Runs inference
+entirely on-device — no API key, no network. Surfaced at the top of Settings → Providers
+with two synthetic models (`Gemini Nano FAST` / `Gemini Nano FULL`) and a release-stage
+toggle (STABLE / PREVIEW; defaults to PREVIEW since that's what most current beta channels
+have feature-gated). Requires Pixel 8/9/10 with the AICore app **plus** enrolment in the
+GenAI Prompt-API early-access program (separate opt-in — without it the device returns
+ErrorCode 606 / FEATURE_NOT_FOUND).
+
+Tool calling works via prompt engineering: the provider injects a compact
+"emit `<tool_call>{...}</tool_call>` markup" protocol into the system prefix, a streaming
+parser extracts the tags, and dispatched tools feed `<tool_result>` blocks back into the
+next inference round. The same agent tools (Termux, screen automation, telephony, SSH, cron,
+Telegram bot — everything in this fork) work on-device too. Cloud providers (OpenAI / Google
+/ Claude) keep using their native function-calling APIs — no changes to that path.
+
+Auto-foregrounds RikkaHub before each inference because Google blocks AICore from running
+when the calling app is backgrounded. JSON-shape repair on Nano's malformed output (`}>`
+to `}}`, primitive `input` strings auto-wrapped under the tool's first required parameter)
+keeps the tool dispatch loop robust.
+
+### Permission center
+New Settings → Permissions page that auto-discovers every `<uses-permission>` the app
+declares plus virtual rows for the AccessibilityService and Notification Listener service
+bindings. Each row classifies itself (services / special access / runtime / auto-granted)
+and renders a tap-to-grant button wired to the right system flow — runtime perms via
+`ActivityResultContracts.RequestPermission`, special-access perms via the matching
+`Settings.ACTION_MANAGE_*` deep-link, with auto-refresh on resume so status updates the
+moment you return from the system page. Future-proof: new manifest perms appear here
+without code changes, and the friendly-label dictionary covers all currently-used
+dangerous perms.
+
 ### 35 native Android device tools
 All implemented natively from the Android SDK — no third-party app dependencies. Each tool is
 opt-in per-assistant, behind the same eager-permission flow as upstream's existing tools.
