@@ -18,6 +18,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
@@ -36,6 +40,7 @@ import me.rerere.rikkahub.data.repository.TelegramChatRepository
 import me.rerere.rikkahub.data.telegram.TelegramApiException
 import me.rerere.rikkahub.data.telegram.TelegramBotClient
 import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
+import me.rerere.rikkahub.data.telegram.TelegramHtmlRenderer
 import me.rerere.rikkahub.data.telegram.TelegramIncomingMessage
 import me.rerere.rikkahub.data.telegram.parseIncoming
 import org.koin.android.ext.android.inject
@@ -61,6 +66,16 @@ class TelegramBotService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
+
+    /**
+     * Per-chat serialization for non-built-in messages. The poll loop launches each
+     * inbound message in its own coroutine (so it can return to getUpdates immediately
+     * and pick up /stop while a long generation is in flight), but two LLM round-trips
+     * for the same chat must NOT interleave. Built-in slash commands skip this mutex
+     * entirely so /stop and /new run the moment they arrive.
+     */
+    private val chatMutexes = java.util.concurrent.ConcurrentHashMap<Long, Mutex>()
+    private fun mutexFor(chatId: Long): Mutex = chatMutexes.getOrPut(chatId) { Mutex() }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -161,7 +176,19 @@ class TelegramBotService : Service() {
                     val incoming = parseIncoming(u) ?: continue
                     android.util.Log.i(TAG, "pollLoop: dispatching message ${incoming.messageId} from chat=${incoming.chatId} sender=${incoming.senderId}")
                     offset = incoming.updateId + 1
-                    handleIncoming(cfg, incoming)
+                    // Launch in its own coroutine so the poll loop returns to getUpdates
+                    // without waiting for the LLM round-trip. This is what lets /stop work
+                    // while a long generation is in flight: the new message gets its own
+                    // coroutine, runs the built-in fast-path, and calls stopGeneration
+                    // before the held mutex even matters. Per-chat ordering is preserved
+                    // by mutexFor() inside handleIncoming for non-built-in messages.
+                    scope.launch {
+                        try {
+                            handleIncoming(cfg, incoming)
+                        } catch (e: Throwable) {
+                            android.util.Log.e(TAG, "handleIncoming threw for message ${incoming.messageId}", e)
+                        }
+                    }
                 }
             } catch (e: TelegramApiException) {
                 android.util.Log.e(TAG, "pollLoop: telegram api error ${e.errorCode}: ${e.description}", e)
@@ -188,11 +215,31 @@ class TelegramBotService : Service() {
             return
         }
         // Built-in slash commands. These are handled entirely on-device — they never reach
-        // the LLM, never spend tokens, and resolve in single-digit milliseconds.
+        // the LLM, never spend tokens, and resolve in single-digit milliseconds. Critically,
+        // they are NOT serialized behind any in-flight LLM call: that's what makes /stop
+        // and /new actually responsive while a long generation is running.
         if (m.text.startsWith("/")) {
             if (handleBuiltInCommand(cfg, m)) return
         }
 
+        // Non-built-in messages run the LLM and must be serialized per-chat so two model
+        // turns from the same chat don't interleave. Built-ins above ran without this lock
+        // by design — that's the whole point of the fix.
+        mutexFor(m.chatId).withLock {
+            handleLlmTurn(cfg, m)
+        }
+    }
+
+    /**
+     * Body of an LLM-bound turn. Extracted from handleIncoming so the per-chat mutex wraps
+     * exactly the section that owns the conversation/generation state. While this runs the
+     * poll loop is still free to receive new messages and dispatch /stop into its own
+     * coroutine, which calls chatService.stopGeneration(convId) and unblocks us.
+     */
+    private suspend fun handleLlmTurn(
+        cfg: me.rerere.rikkahub.data.telegram.TelegramBotConfig,
+        m: TelegramIncomingMessage,
+    ) {
         val (convId, wasCreated) = lookupOrCreateConversation(cfg, m.chatId)
         android.util.Log.i(TAG, "handleIncoming: routing to conv=$convId wasCreated=$wasCreated text='${m.text.take(80)}' photos=${m.photoFileIds.size}")
         // UX: tell Telegram "the bot is typing" so the user sees activity while we generate.
@@ -250,17 +297,45 @@ class TelegramBotService : Service() {
         }
         val editJob = if (placeholderId != null) scope.launch {
             var lastSent = ""
+            var lastEditAtMs = 0L
             while (kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive == true) {
-                delay(STREAM_EDIT_INTERVAL_MS)
+                // Sleep in short steps so a fast burst of new content (long token chunk
+                // landing all at once) can wake the loop early via the burst threshold,
+                // instead of being stuck behind the full timer cadence.
+                val pollSliceMs = 80L
+                var sliceWaitedMs = 0L
+                while (sliceWaitedMs < STREAM_EDIT_INTERVAL_MS) {
+                    delay(pollSliceMs)
+                    sliceWaitedMs += pollSliceMs
+                    val peek = renderAssistantStream(convId, finalizing = false, baselineMessageCount)
+                    val grew = peek.length - lastSent.length
+                    if (grew >= STREAM_EDIT_BURST_THRESHOLD_CHARS) {
+                        // Big jump: stop sleeping, edit now. Still respect the floor so we
+                        // don't race past Telegram's 1/sec cap during a really long burst.
+                        val sinceLast = System.currentTimeMillis() - lastEditAtMs
+                        if (sinceLast >= STREAM_EDIT_MIN_GAP_MS) break
+                    }
+                }
                 val rendered = renderAssistantStream(convId, finalizing = false, baselineMessageCount)
                 if (rendered.isBlank() || rendered == lastSent) continue
-                // Edits are capped at ~4096 chars; truncate live edits, the final send will
-                // chunk anything longer.
-                val capped = if (rendered.length > MAX_CHARS) rendered.substring(0, MAX_CHARS) + "..." else rendered
+                // Edits are capped at ~4096 chars; truncate live edits, the final send
+                // will chunk anything longer.
+                val cappedRaw = if (rendered.length > MAX_CHARS) rendered.substring(0, MAX_CHARS) + "..." else rendered
+                val capped = TelegramHtmlRenderer.render(cappedRaw)
                 val ok = try {
-                    client.editMessageText(m.chatId, placeholderId, capped) != null
-                } catch (_: Throwable) { false }
-                if (ok) lastSent = rendered
+                    client.editMessageText(m.chatId, placeholderId, capped, parseMode = PARSE_MODE_HTML) != null
+                } catch (_: Throwable) {
+                    // HTML parse rejected by Telegram (e.g. malformed code block from a
+                    // mid-stream truncation). Fall back to a plain-text retry so the user
+                    // still sees an updated bubble instead of a frozen one.
+                    try {
+                        client.editMessageText(m.chatId, placeholderId, TelegramHtmlRenderer.stripHtml(capped), parseMode = null) != null
+                    } catch (_: Throwable) { false }
+                }
+                if (ok) {
+                    lastSent = rendered
+                    lastEditAtMs = System.currentTimeMillis()
+                }
             }
         } else null
 
@@ -297,7 +372,7 @@ class TelegramBotService : Service() {
             }
             placeholderId != null && finalReply.length <= MAX_CHARS -> {
                 // Final fits in one message; just edit the placeholder one last time.
-                try { client.editMessageText(m.chatId, placeholderId, finalReply) } catch (_: Throwable) {}
+                editPlaceholderHtmlWithFallback(m.chatId, placeholderId, finalReply)
             }
             else -> {
                 // Final reply overflowed Telegram's per-message limit. Drop the placeholder
@@ -388,13 +463,23 @@ class TelegramBotService : Service() {
         finalizing: Boolean,
         baselineMessageCount: Int,
     ): String {
-        val conv = conversationRepo.getConversationById(convId) ?: return ""
+        // Read from the LIVE in-memory state, not the persisted DB row. The DB only gets
+        // updated when generation finishes (or at occasional checkpoints), so reading via
+        // conversationRepo.getConversationById here meant every live edit saw the same
+        // pre-generation snapshot, the "blank or unchanged" guard skipped the edit, and
+        // the placeholder only updated once at the end. The StateFlow exposed by
+        // ChatService is the same source the in-app chat already streams from.
+        val conv = chatService.getConversationFlow(convId).value
         val turnMessages = conv.currentMessages.drop(baselineMessageCount)
         val lastAssistant = turnMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
             ?: return ""
-        val text = stripMarkdownForTelegram(assistantTextOf(lastAssistant)).trim()
+        // Markdown is preserved here — TelegramHtmlRenderer further down the pipeline
+        // converts it to Telegram-flavoured HTML. Stripping markdown locally would defeat
+        // bold / italic / code rendering.
+        val text = assistantTextOf(lastAssistant).trim()
         val toolSummary = assistantToolSummary(lastAssistant)
         val streamMarker = if (!finalizing && text.isNotEmpty()) " $STREAM_TICK" else ""
+        val tokenFooter = if (finalizing) tokenUsageFooter(lastAssistant) else ""
         return buildString {
             if (toolSummary.isNotEmpty()) {
                 append(toolSummary)
@@ -402,31 +487,133 @@ class TelegramBotService : Service() {
             }
             if (text.isNotEmpty()) append(text)
             if (streamMarker.isNotEmpty()) append(streamMarker)
+            if (tokenFooter.isNotEmpty()) {
+                append("\n\n")
+                append(tokenFooter)
+            }
         }.trimEnd()
     }
 
     /**
-     * Compact, human-readable summary of every tool the assistant ran this turn. Earlier
-     * revisions dumped truncated JSON which read like a stack trace; now we only show:
-     *   - a status icon (✅ success / ⚠️ non-zero exit / ❌ error / 🔄 running)
-     *   - the tool name
-     *   - a single short outcome hint extracted from the JSON output (count / error /
-     *     success / first key) — never the raw JSON.
+     * Two-tier tool summary:
+     *   - Earlier tools: one-line "icon name — hint" each (current compact format).
+     *   - Latest tool (the one running OR most recently completed): expanded with its
+     *     args and a truncated output preview, so the user can see what's happening NOW
+     *     without scrolling. Previous revisions only ever showed the one-liner, which
+     *     hid all the context that makes tool runs interesting.
+     *
+     * Output is markdown — code blocks use triple backticks so the downstream
+     * TelegramHtmlRenderer turns them into <pre><code>…</code></pre>.
      */
     private fun assistantToolSummary(m: UIMessage): String {
         val tools = m.parts.filterIsInstance<UIMessagePart.Tool>()
         if (tools.isEmpty()) return ""
         return buildString {
             append("🔧 Tools used:\n")
-            for (t in tools) {
+            tools.forEachIndexed { idx, t ->
                 val outText = t.output.filterIsInstance<UIMessagePart.Text>()
                     .joinToString("") { it.text }
                 val (icon, hint) = classifyToolOutput(t.isExecuted, outText)
-                append(icon).append(' ').append(t.toolName)
-                if (hint.isNotEmpty()) append(" — ").append(hint)
-                append('\n')
+                val isLast = idx == tools.lastIndex
+                if (!isLast) {
+                    // Earlier tool: compact one-liner.
+                    append(icon).append(' ').append(t.toolName)
+                    if (hint.isNotEmpty()) append(" — ").append(hint)
+                    append('\n')
+                } else {
+                    // Latest tool: expanded view with args + truncated output.
+                    append(icon).append(' ').append(t.toolName)
+                    if (hint.isNotEmpty()) append(" — ").append(hint)
+                    append('\n')
+                    val argsBlock = formatArgsForDisplay(t.input)
+                    if (argsBlock.isNotEmpty()) {
+                        append("```\nin: ").append(argsBlock).append("\n```\n")
+                    }
+                    val outBlock = formatOutputForDisplay(outText, executed = t.isExecuted)
+                    if (outBlock.isNotEmpty()) {
+                        append("```\nout: ").append(outBlock).append("\n```")
+                    }
+                }
             }
         }.trimEnd()
+    }
+
+    /**
+     * Trim a tool's input JSON for display. Empty / "{}" args render as nothing so we
+     * don't waste a code-block on a noise line. Anything longer than 200 chars gets
+     * tail-elided.
+     */
+    private fun formatArgsForDisplay(rawInput: String): String {
+        val trimmed = rawInput.trim()
+        if (trimmed.isEmpty() || trimmed == "{}" || trimmed == "null") return ""
+        val limit = 200
+        return if (trimmed.length > limit) trimmed.substring(0, limit) + "…" else trimmed
+    }
+
+    /**
+     * Trim a tool's output for display. Returns "running…" while the tool is still in
+     * flight (no output yet). Truncates to ~300 chars; long stdout / large JSON blobs
+     * are surface-rendered, not full-rendered.
+     */
+    private fun formatOutputForDisplay(outText: String, executed: Boolean): String {
+        if (!executed) return "running…"
+        val trimmed = outText.trim()
+        if (trimmed.isEmpty()) return ""
+        val limit = 300
+        return if (trimmed.length > limit) trimmed.substring(0, limit) + "…" else trimmed
+    }
+
+    /**
+     * Token-usage footer for the final reply. Mirrors the in-app ChatMessageNerdLine:
+     * input tokens (with cached annotation if any), output tokens, tok/s, wall-clock.
+     * Returns empty string when usage is missing or the user has disabled the in-app
+     * setting — same gate the in-app uses, so the bot honours the user's preference.
+     */
+    private fun tokenUsageFooter(m: UIMessage): String {
+        val usage = m.usage ?: return ""
+        val show = settingsStore.settingsFlow.value.displaySetting.showTokenUsage
+        if (!show) return ""
+        val parts = mutableListOf<String>()
+        val input = if (usage.cachedTokens > 0) {
+            "${compactNumber(usage.promptTokens)}↑ (${compactNumber(usage.cachedTokens)} cached)"
+        } else {
+            "${compactNumber(usage.promptTokens)}↑"
+        }
+        parts.add(input)
+        parts.add("${compactNumber(usage.completionTokens)}↓")
+        // tok/s + duration: only when both timestamps and a positive duration exist.
+        val finishedAt = m.finishedAt
+        val createdAt = m.createdAt
+        if (finishedAt != null) {
+            val zone = TimeZone.currentSystemDefault()
+            val durMs = finishedAt.toInstant(zone).toEpochMilliseconds() -
+                createdAt.toInstant(zone).toEpochMilliseconds()
+            if (durMs > 0 && usage.completionTokens > 0) {
+                val tps = usage.completionTokens.toDouble() / durMs.toDouble() * 1000.0
+                parts.add(String.format(java.util.Locale.US, "%.1f tok/s", tps))
+            }
+            if (durMs > 0) {
+                parts.add(formatDurationCompact(durMs))
+            }
+        }
+        return "📊 " + parts.joinToString(" · ")
+    }
+
+    /** 1234 → "1.2K", 12_345_678 → "12.3M". Below 1000 returns the raw number. */
+    private fun compactNumber(n: Int): String {
+        if (n < 1_000) return n.toString()
+        if (n < 1_000_000) return String.format(java.util.Locale.US, "%.1fK", n / 1_000.0)
+        return String.format(java.util.Locale.US, "%.1fM", n / 1_000_000.0)
+    }
+
+    /** 1234 → "1.2s", 65_432 → "1m05s", 3_725_000 → "1h02m". */
+    private fun formatDurationCompact(ms: Long): String {
+        val totalSec = ms / 1000
+        return when {
+            totalSec < 60 -> String.format(java.util.Locale.US, "%.1fs", ms / 1000.0)
+            totalSec < 3600 -> String.format(java.util.Locale.US, "%dm%02ds", totalSec / 60, totalSec % 60)
+            else -> String.format(java.util.Locale.US, "%dh%02dm", totalSec / 3600, (totalSec % 3600) / 60)
+        }
     }
 
     /**
@@ -439,34 +626,6 @@ class TelegramBotService : Service() {
     private fun trimShellPrefix(line: String): String {
         val rx = Regex("""^(?:/[^:]*?bash|sh|/bin/[a-z]+):\s*line\s+\d+:\s*""")
         return rx.replaceFirst(line, "")
-    }
-
-    /**
-     * Strips the most common Markdown emphasis / inline-code markers so the bot's reply on
-     * Telegram renders as clean text instead of literal asterisks. We deliberately do NOT
-     * use parse_mode=Markdown on the wire because Telegram's parser is strict about
-     * escaping and a single stray underscore breaks the whole message; stripping in our
-     * own code is more predictable.
-     *
-     *  **bold**  -> bold
-     *  __bold__  -> bold
-     *  `code`    -> code
-     *  ``` ... ``` -> the contents (markers dropped)
-     *
-     * Single * and _ for emphasis collide with list bullets / identifier names so we leave
-     * those alone.
-     */
-    private fun stripMarkdownForTelegram(s: String): String {
-        if (s.isEmpty()) return s
-        var out = s
-        // Triple-backtick fenced code blocks: drop the fences but keep contents.
-        out = Regex("```[a-zA-Z0-9_+-]*\\n?([\\s\\S]*?)```").replace(out) { it.groupValues[1].trim('\n') }
-        // Bold / strong with double-asterisks or double-underscores.
-        out = Regex("\\*\\*([^*]+?)\\*\\*").replace(out, "$1")
-        out = Regex("__([^_]+?)__").replace(out, "$1")
-        // Inline code with single backticks.
-        out = Regex("`([^`\\n]+?)`").replace(out, "$1")
-        return out
     }
 
     /**
@@ -606,13 +765,39 @@ class TelegramBotService : Service() {
     private suspend fun sendChunked(chatId: Long, text: String, replyTo: Long?) {
         val chunks = chunk(text, MAX_CHARS)
         for ((idx, chunk) in chunks.withIndex()) {
-            try {
+            val html = TelegramHtmlRenderer.render(chunk)
+            val sent = try {
                 client.sendMessage(
                     chatId = chatId,
-                    text = chunk,
-                    parseMode = null,   // markdown is finicky on Telegram; send plain
+                    text = html,
+                    parseMode = PARSE_MODE_HTML,
                     replyToMessageId = if (idx == 0) replyTo else null,
                 )
+                true
+            } catch (_: Throwable) { false }
+            if (!sent) {
+                // HTML parse failed (truncation may have split a tag). Retry as plain text.
+                try {
+                    client.sendMessage(
+                        chatId = chatId,
+                        text = TelegramHtmlRenderer.stripHtml(html).ifBlank { chunk },
+                        parseMode = null,
+                        replyToMessageId = if (idx == 0) replyTo else null,
+                    )
+                } catch (_: Throwable) { /* best effort */ }
+            }
+        }
+    }
+
+    /** Final-edit helper that mirrors the live edit's HTML-with-fallback behaviour. */
+    private suspend fun editPlaceholderHtmlWithFallback(chatId: Long, placeholderId: Long, finalReply: String) {
+        val html = TelegramHtmlRenderer.render(finalReply)
+        val ok = try {
+            client.editMessageText(chatId, placeholderId, html, parseMode = PARSE_MODE_HTML) != null
+        } catch (_: Throwable) { false }
+        if (!ok) {
+            try {
+                client.editMessageText(chatId, placeholderId, TelegramHtmlRenderer.stripHtml(html).ifBlank { finalReply }, parseMode = null)
             } catch (_: Throwable) { /* best effort */ }
         }
     }
@@ -708,6 +893,15 @@ class TelegramBotService : Service() {
     }
 
     private suspend fun handleResetCommand(chatId: Long) {
+        // Cancel any in-flight generation for the OLD conversation before unmapping it.
+        // Otherwise the stuck turn keeps burning tokens even after /new — the user thinks
+        // they got a clean slate while the model is still churning on the previous prompt.
+        val existing = chatRepo.getByChatId(chatId)
+        if (existing != null) {
+            runCatching { Uuid.parse(existing.conversationId) }.getOrNull()?.let { convId ->
+                runCatching { chatService.stopGeneration(convId) }
+            }
+        }
         chatRepo.deleteByChatId(chatId)
         val (modelName, _) = activeModelDisplay()
         val msg = """
@@ -929,9 +1123,22 @@ class TelegramBotService : Service() {
          *  versus finished. The final edit drops it. */
         const val STREAM_TICK = "▌"
 
-        /** Telegram silently rate-limits edits around 1/sec; 1500ms gives steady progress
-         *  without tripping the limiter. */
-        const val STREAM_EDIT_INTERVAL_MS: Long = 1_500L
+        /** Timer-driven cadence for live edits. 600ms feels close to typing without
+         *  tripping Telegram's edit limiter when paired with the gap floor below. */
+        const val STREAM_EDIT_INTERVAL_MS: Long = 600L
+
+        /** Hard floor between any two edits to the same placeholder, regardless of why
+         *  the edit was triggered (timer or burst). Telegram returns 429 if you go faster. */
+        const val STREAM_EDIT_MIN_GAP_MS: Long = 400L
+
+        /** When the rendered text grows by at least this many characters since the last
+         *  edit, fire an edit immediately instead of waiting for the next timer tick.
+         *  Makes long token bursts feel instant. */
+        const val STREAM_EDIT_BURST_THRESHOLD_CHARS: Int = 80
+
+        /** parse_mode value for outbound LLM-generated messages. We render through
+         *  TelegramHtmlRenderer first so the body uses Telegram's tiny HTML subset. */
+        const val PARSE_MODE_HTML: String = "HTML"
 
         /**
          * Process-scoped per-chat ring of recently-handled slash commands. Used to inject
