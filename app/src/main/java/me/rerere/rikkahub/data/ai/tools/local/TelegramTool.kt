@@ -297,10 +297,16 @@ fun telegramSendDocumentTool(prefs: TelegramBotPreferences, client: TelegramBotC
     }
 )
 
-/** Replace the bot's slash-commands menu (the autocomplete you see when typing / in the chat). */
-fun telegramSetCommandsTool(client: TelegramBotClient): Tool = Tool(
+/** Add to / update the bot's slash-commands autocomplete menu. */
+fun telegramSetCommandsTool(prefs: TelegramBotPreferences, client: TelegramBotClient): Tool = Tool(
     name = "telegram_set_commands",
-    description = "Replace the bot's /commands menu shown to users in the Telegram chat. Pass an array of {command, description} entries. The actual handling of slash commands is done by the LLM — this just controls the autocomplete list users see.".trimIndent().replace("\n", " "),
+    description = """
+        Add custom commands to the Telegram /commands autocomplete menu. The built-in
+        commands (/start, /help, /new, /stop, /status, /model, /ratelimit) are ALWAYS
+        preserved — this tool merges your additions on top of them rather than replacing
+        the whole menu, so the user never loses their built-in surface. Entries whose
+        command name collides with a built-in are dropped (built-ins can't be shadowed).
+    """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -322,14 +328,38 @@ fun telegramSetCommandsTool(client: TelegramBotClient): Tool = Tool(
     },
     execute = { input ->
         val arr = input.jsonObject["commands"]?.jsonArray ?: error("commands is required")
-        val list = arr.map { it.jsonObject }.mapNotNull { o ->
-            val c = o["command"]?.jsonPrimitive?.contentOrNull
+        val userList = arr.map { it.jsonObject }.mapNotNull { o ->
+            val c = o["command"]?.jsonPrimitive?.contentOrNull?.removePrefix("/")
             val d = o["description"]?.jsonPrimitive?.contentOrNull
             if (c.isNullOrBlank() || d.isNullOrBlank()) null else c to d
         }
+        // Built-ins are reserved — strip any user entry that collides on name. Then
+        // dedupe within the user list (last wins). This is what makes the tool safe to
+        // call without the model knowing the built-in list — Telegram's setMyCommands is
+        // a full REPLACE, so without this merge a single innocuous /weather call would
+        // wipe /start /help /new /stop /status /model /ratelimit.
+        val builtinNames = TelegramBotService.BUILT_IN_COMMANDS.map { it.first }.toSet()
+        // Merge with any previously-persisted custom commands so the model can ADD a
+        // command without wiping ones it added in earlier turns. Latest wins on name
+        // conflict (re-saving a command updates its description).
+        val existing = prefs.current().customCommands
+        val deduped = linkedMapOf<String, String>()
+        for ((c, d) in existing) deduped[c] = d
+        for ((c, d) in userList) if (c.lowercase() !in builtinNames) deduped[c] = d
+        val customList = deduped.toList()
+        // Persist FIRST so a subsequent app restart re-registers the same set via the
+        // bot service's startup hook. THEN push to Telegram.
+        prefs.update { it.copy(customCommands = customList) }
+        val merged = TelegramBotService.BUILT_IN_COMMANDS + customList
+        val skipped = userList.size - userList.count { it.first.lowercase() !in builtinNames }
         textPart(safeApi { buildJsonObject {
-            put("success", client.setMyCommands(list))
-            put("count", list.size)
+            put("success", client.setMyCommands(merged))
+            put("builtin_count", TelegramBotService.BUILT_IN_COMMANDS.size)
+            put("custom_count", customList.size)
+            put("total", merged.size)
+            if (skipped > 0) {
+                put("note", "Skipped $skipped entry(ies) that collided with built-in command names. Built-ins are reserved.")
+            }
         } })
     }
 )
@@ -346,14 +376,19 @@ fun telegramGetCommandsTool(client: TelegramBotClient): Tool = Tool(
     }
 )
 
-/** Clear all /commands. */
-fun telegramDeleteCommandsTool(client: TelegramBotClient): Tool = Tool(
+/** Reset the menu to just the built-in commands (clears any custom additions). */
+fun telegramDeleteCommandsTool(prefs: TelegramBotPreferences, client: TelegramBotClient): Tool = Tool(
     name = "telegram_delete_commands",
-    description = "Clear the bot's /commands menu entirely.".trimIndent().replace("\n", " "),
+    description = "Reset the bot's /commands menu to ONLY the built-in commands (/start, /help, /new, /stop, /status, /model, /ratelimit). This drops any custom commands previously added via telegram_set_commands (including across restarts — the persistent store is cleared). Built-ins themselves cannot be removed.".trimIndent().replace("\n", " "),
     parameters = { InputSchema.Obj(properties = buildJsonObject {}) },
     execute = {
+        // Drop persisted custom commands BEFORE re-pushing so a crash between the two
+        // doesn't leave a phantom registered on Telegram with no record locally.
+        prefs.update { it.copy(customCommands = emptyList()) }
         textPart(safeApi { buildJsonObject {
-            put("success", client.deleteMyCommands())
+            put("success", client.setMyCommands(TelegramBotService.BUILT_IN_COMMANDS))
+            put("kept", TelegramBotService.BUILT_IN_COMMANDS.size)
+            put("note", "Custom commands cleared. Built-in commands are preserved.")
         } })
     }
 )

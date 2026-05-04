@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.Alert01
+import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
@@ -259,6 +260,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Telegram, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_telegram_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_telegram)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingToolApprovals) },
+                        leadingContent = { Icon(HugeIcons.Tick01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_tool_approvals_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_tool_approvals)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingAccessibility) },

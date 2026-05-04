@@ -130,6 +130,7 @@ class ChatService(
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
+    private val toolApprovalPreferences: me.rerere.rikkahub.data.preferences.ToolApprovalPreferences,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -385,12 +386,19 @@ class ChatService(
 
     // ---- 处理工具调用审批 ----
 
+    /** Scope of an "approve" decision. Once = this single tool call only. ChatScope =
+     *  every future call of the same tool name in this conversation (until /new). Always =
+     *  every future call of this tool name across the whole app, persisted to disk. */
+    enum class ApprovalScope { Once, ChatScope, Always }
+
     fun handleToolApproval(
         conversationId: Uuid,
         toolCallId: String,
         approved: Boolean,
         reason: String = "",
         answer: String? = null,
+        scope: ApprovalScope = ApprovalScope.Once,
+        toolName: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
@@ -402,6 +410,17 @@ class ChatService(
                     answer != null -> ToolApprovalState.Answered(answer)
                     approved -> ToolApprovalState.Approved
                     else -> ToolApprovalState.Denied(reason)
+                }
+                // Record the broader-scope grant BEFORE we resume generation, so the
+                // GenerationHandler's auto-approval check sees the new entry on its next
+                // pass over the messages. Caller passes [toolName] when scope != Once.
+                if (approved && toolName != null) {
+                    when (scope) {
+                        ApprovalScope.Once -> Unit
+                        ApprovalScope.ChatScope -> me.rerere.rikkahub.data.ai.tools
+                            .ToolApprovalAllowList.grantForChat(conversationId, toolName)
+                        ApprovalScope.Always -> toolApprovalPreferences.grantAlways(toolName)
+                    }
                 }
 
                 // Update the tool approval state
@@ -489,6 +508,15 @@ class ChatService(
                 settings = settings,
                 model = model,
                 processingStatus = session.processingStatus,
+                isToolAutoApproved = { toolName ->
+                    // "Allow for this chat" (in-memory, per-conversation) OR "Always Allow"
+                    // (DataStore-backed, across the whole app). The Once-grant lives in
+                    // the message itself as ToolApprovalState.Approved, so it's already
+                    // handled by the regular Pending → Approved transition.
+                    me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
+                        .isAllowedForChat(conversationId, toolName) ||
+                        toolApprovalPreferences.current().contains(toolName)
+                },
                 messages = conversation.currentMessages.let {
                     if (messageRange != null) {
                         it.subList(messageRange.start, messageRange.endInclusive + 1)

@@ -102,6 +102,12 @@
   <string name="assistant_page_local_tools_telegram_desc">Run the assistant as a Telegram bot — send/receive messages, files, manage /commands. Configured entirely via tools (set token, whitelist, default chat, then enable). Foreground service handles long-poll.</string>
   <string name="setting_page_telegram">Telegram bot</string>
   <string name="setting_page_telegram_desc">Run the LLM as a Telegram bot — chat with it remotely from any device.</string>
+  <string name="setting_page_tool_approvals">Tool approvals</string>
+  <string name="setting_page_tool_approvals_desc">Tools you\'ve permanently granted via "Always Allow". Revoke any time.</string>
+  <string name="setting_page_tool_approvals_header">Tools below run without asking, ever, on this device. Revoke if you no longer trust the model with this capability.</string>
+  <string name="setting_page_tool_approvals_empty">No tools have been "Always Allow"-granted yet. The bot will ask before running any side-effecting tool.</string>
+  <string name="setting_page_tool_approvals_revoke">Revoke</string>
+  <string name="setting_page_tool_approvals_revoke_all">Revoke all</string>
   <string name="setting_page_telegram_token">Bot token</string>
   <string name="setting_page_telegram_token_desc">From @BotFather. The bot must be stopped to edit.</string>
   <string name="setting_page_telegram_default_chat">Default chat</string>

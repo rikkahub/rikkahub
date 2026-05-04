@@ -142,7 +142,7 @@ private fun JsonElement?.getStringContent(key: String): String? =
 fun ChainOfThoughtScope.ChatMessageToolStep(
     tool: UIMessagePart.Tool,
     loading: Boolean = false,
-    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
     val isAskUser = tool.toolName == ToolNames.ASK_USER
@@ -250,9 +250,44 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         },
         extra = if (isPending && onToolApproval != null) {
             {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                // Four-button row: Allow / Always Allow / Allow for this chat / Deny.
+                // Order matches the Telegram inline-keyboard layout so the user sees the
+                // same mental model on both surfaces.
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilledTonalIconButton(
+                        onClick = { onToolApproval(
+                            tool.toolCallId, true, "",
+                            me.rerere.rikkahub.service.ChatService.ApprovalScope.Once,
+                            tool.toolName,
+                        ) },
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Tick01,
+                            contentDescription = stringResource(R.string.chat_message_tool_approve),
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                    FilledTonalIconButton(
+                        onClick = { onToolApproval(
+                            tool.toolCallId, true, "",
+                            me.rerere.rikkahub.service.ChatService.ApprovalScope.Always,
+                            tool.toolName,
+                        ) },
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Text("∞", style = MaterialTheme.typography.labelMedium)
+                    }
+                    FilledTonalIconButton(
+                        onClick = { onToolApproval(
+                            tool.toolCallId, true, "",
+                            me.rerere.rikkahub.service.ChatService.ApprovalScope.ChatScope,
+                            tool.toolName,
+                        ) },
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Text("💬", style = MaterialTheme.typography.labelSmall)
+                    }
                     FilledTonalIconButton(
                         onClick = { showDenyDialog = true },
                         modifier = Modifier.size(28.dp),
@@ -260,17 +295,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                         Icon(
                             imageVector = HugeIcons.Cancel01,
                             contentDescription = stringResource(R.string.chat_message_tool_deny),
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                    FilledTonalIconButton(
-                        onClick = { onToolApproval(tool.toolCallId, true, "") },
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Tick01,
-                            contentDescription = stringResource(R.string.chat_message_tool_approve),
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(14.dp),
                         )
                     }
                 }
@@ -401,7 +426,11 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             onDismiss = { showDenyDialog = false },
             onConfirm = { reason ->
                 showDenyDialog = false
-                onToolApproval(tool.toolCallId, false, reason)
+                onToolApproval(
+                    tool.toolCallId, false, reason,
+                    me.rerere.rikkahub.service.ChatService.ApprovalScope.Once,
+                    tool.toolName,
+                )
             }
         )
     }

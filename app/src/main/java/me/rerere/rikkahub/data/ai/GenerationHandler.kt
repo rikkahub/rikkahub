@@ -140,6 +140,12 @@ class GenerationHandler(
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 32,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        // Returns true when the user has pre-approved [toolName] for this turn (e.g.
+        // "Allow for this chat" or "Always Allow" granted earlier). When true, the loop
+        // below skips the Pending flip and lets the tool execute. ChatService injects the
+        // closure that reads ToolApprovalAllowList + ToolApprovalPreferences. Default
+        // returns false so callers that don't care still get vanilla approval gating.
+        isToolAutoApproved: suspend (toolName: String) -> Boolean = { false },
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -263,11 +269,45 @@ class GenerationHandler(
                     break
                 }
 
-                // Check for tools that need approval
+                // Check for tools that need approval. Pre-resolve "is this tool name on the
+                // user's allow-list?" so the .map below stays synchronous (isToolAutoApproved
+                // is suspend; we can't call it from inside .map directly).
+                val autoApprovedToolNames = mutableSetOf<String>()
+                for (t in tools) {
+                    val toolDef = toolsInternal.find { it.name == t.toolName }
+                    if (
+                        toolDef?.needsApproval == true &&
+                        t.approvalState is ToolApprovalState.Auto &&
+                        isToolAutoApproved(t.toolName)
+                    ) {
+                        autoApprovedToolNames.add(t.toolName)
+                    }
+                }
                 var hasPendingApproval = false
                 val updatedTools = tools.map { tool ->
                     val toolDef = toolsInternal.find { it.name == tool.toolName }
+                    // HARDLINE check: certain command patterns (rm -rf /, mkfs, shutdown,
+                    // fork bomb, …) are blocked unconditionally — even "Always Allow"
+                    // can't override. We check BEFORE the auto-approval lookup so a
+                    // permanently-allowed termux/ssh tool still can't smuggle one of
+                    // these through. Result: tool is marked Denied with the hardline
+                    // reason, the regular Denied branch downstream emits an error
+                    // envelope to the model without executing.
+                    val hardlineReason = me.rerere.rikkahub.data.ai.tools
+                        .HardlineCommandGuard.checkTool(tool.toolName, tool.input)
                     when {
+                        hardlineReason != null && tool.approvalState is ToolApprovalState.Auto -> {
+                            Log.w(TAG, "hardline-blocked ${tool.toolName}: $hardlineReason")
+                            tool.copy(approvalState = ToolApprovalState.Denied(
+                                "blocked by safety floor (hardline): $hardlineReason. " +
+                                    "This command cannot run via the agent under any " +
+                                    "circumstances. If the user genuinely needs it, they " +
+                                    "should run it themselves in a terminal outside the agent."
+                            ))
+                        }
+                        // Tool needs approval AND user has pre-approved → leave as Auto so
+                        // the loop body executes it without prompting.
+                        toolDef?.needsApproval == true && tool.toolName in autoApprovedToolNames -> tool
                         // Tool needs approval and state is Auto -> set to Pending
                         toolDef?.needsApproval == true && tool.approvalState is ToolApprovalState.Auto -> {
                             hasPendingApproval = true

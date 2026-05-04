@@ -10,6 +10,17 @@ data class TelegramBotConfig(
     val whitelist: Set<Long> = emptySet(),
     /** Stringified UUID of the assistant that handles inbound messages. Null == use the user's current assistant. */
     val assistantId: String? = null,
+    /**
+     * Custom slash commands added by the LLM via telegram_set_commands. Built-in commands
+     * (/start, /help, /new, /stop, /status, /model, /ratelimit) are NOT in this list —
+     * they're hard-coded and always re-registered on bot startup. This list is what we
+     * MERGE with the built-ins every time the Telegram menu is refreshed, so custom
+     * commands the user asked the model to add survive app restarts.
+     *
+     * (commandName-without-slash, description) pairs. Stored as "name|description" lines
+     * in DataStore for simplicity (no JSON serializer dep needed for one tiny field).
+     */
+    val customCommands: List<Pair<String, String>> = emptyList(),
 ) {
     val isUsable: Boolean get() = token.isNotBlank() && enabled
 }
