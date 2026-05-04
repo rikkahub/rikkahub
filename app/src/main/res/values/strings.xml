@@ -1109,6 +1109,11 @@
   <string name="setting_page_accessibility_action_ago_seconds">%1$ds ago</string>
   <string name="setting_page_accessibility_action_ago_minutes">%1$dm ago</string>
   <string name="setting_page_accessibility_action_ago_hours">%1$dh ago</string>
+  <string name="setting_page_accessibility_overlay_section">Activity overlay</string>
+  <string name="setting_page_accessibility_overlay_granted">Display over other apps: Granted</string>
+  <string name="setting_page_accessibility_overlay_not_granted">Display over other apps: Not granted</string>
+  <string name="setting_page_accessibility_overlay_help">Shows a small \"The agent is working\" pill at the top of the screen while the agent is automating, so you always know when it is driving the UI. Optional but recommended.</string>
+  <string name="setting_page_accessibility_overlay_open_settings">Grant Display over other apps</string>
   <string name="setting_page_notifications">Notifications</string>
   <string name="setting_page_notifications_desc">Notification access status, recent activity log, and the per-app whitelist that auto-forwards to Telegram.</string>
   <string name="setting_page_notifications_status_section">Status</string>

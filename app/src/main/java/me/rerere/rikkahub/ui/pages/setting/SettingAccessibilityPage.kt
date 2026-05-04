@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,13 +17,19 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.runtime.DisposableEffect
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,6 +76,20 @@ fun SettingAccessibilityPage() {
 
     val captureOkFmt = stringResource(R.string.setting_page_accessibility_capture_ok_toast)
     val captureFailFmt = stringResource(R.string.setting_page_accessibility_capture_fail_toast)
+
+    // Re-check overlay permission on resume so the row updates immediately after the user
+    // returns from the system settings deep-link.
+    var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                overlayGranted = Settings.canDrawOverlays(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         topBar = {
@@ -121,6 +144,43 @@ fun SettingAccessibilityPage() {
                         Text(stringResource(R.string.setting_page_accessibility_open_settings))
                     },
                 )
+            }
+
+            // Activity overlay card
+            Text(
+                text = stringResource(R.string.setting_page_accessibility_overlay_section),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+            )
+            CardGroup {
+                if (overlayGranted) {
+                    item(
+                        headlineContent = {
+                            Text(stringResource(R.string.setting_page_accessibility_overlay_granted))
+                        }
+                    )
+                } else {
+                    item(
+                        headlineContent = {
+                            Text(stringResource(R.string.setting_page_accessibility_overlay_not_granted))
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.setting_page_accessibility_overlay_help))
+                        }
+                    )
+                    item(
+                        onClick = {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        },
+                        headlineContent = {
+                            Text(stringResource(R.string.setting_page_accessibility_overlay_open_settings))
+                        },
+                    )
+                }
             }
 
             // Diagnostics card
