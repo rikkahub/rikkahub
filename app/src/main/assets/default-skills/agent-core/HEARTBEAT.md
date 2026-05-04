@@ -39,6 +39,19 @@ Tools return structured `{error, recovery, ...}` envelopes when state is degrade
 | `recovery: "Enable RikkaHub in Settings ..."` | Some grant flow is missing | Surface the recovery hint to the user verbatim — it tells them exactly what to enable. |
 | `error: "notification_listener_not_bound"` | Listener service unbound | Surface the recovery hint verbatim. The user must enable RikkaHub in Settings → Notification access. |
 | `error: "requires_input"` (from notification_action_click) | The action needs typed input (RemoteInput) | Fall back to launch_app + set_text + click_node via screen automation. |
+| `error: "loop_detected"` (from any tool) | The host app blocked your call because you repeated this exact tool with identical args 3+ times in this turn without progress | STOP retrying. Either change args meaningfully, switch to a different tool, or reply to the user with what you have. The `recovery` field tells you exactly what to try. |
+
+## Loop avoidance — token-cost discipline
+
+**Hard rule:** every tool call costs the user money. If a tool returns the same result twice in a row, calling it a third time will return `loop_detected` and you will have wasted three turns. Specific anti-patterns to avoid:
+
+- **Browser typing:** Never drive Chrome's URL bar with `set_text`. The accessibility tree's editable target is unstable across Chrome's launch overlay, the Suggestions panel, and the omnibox. For searches use `open_url("https://www.google.com/search?q=…")`; for direct visits use `open_url("https://example.com")`. One tool call, done.
+- **Terminal typing:** Never `set_text` into Termux. Use `termux_run_command` with capture mode.
+- **Selector retries:** If `click_node(by=text, value="Send")` returned `no_match`, calling it again with the SAME `value` won't suddenly succeed. Try a different selector axis (`view_id_resource_name` if the app exposes one) or a different value.
+- **Self-diagnostic spam:** Don't call `notification_status` / `telegram_status` mid-task "to make sure" — they are diagnostic tools, only useful when something already returned a not-bound envelope.
+- **Re-reads with no action between:** After a successful `tap` / `click_node` / `swipe`, give the OS one beat before re-reading the tree. Reading the tree N times for the same on-screen state is wasted budget.
+
+When in doubt, stop early and reply with what you have. Let the user redirect. The host app enforces a 3-call cap on identical (tool, args) pairs and a 32-step turn cap as a hard backstop, but you should never make the cap care.
 
 ## Initial heartbeat (cold start of a Telegram conversation)
 

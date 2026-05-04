@@ -69,6 +69,14 @@ Always read the screen *before* gesturing. The right pattern is `read_window_tre
 
 - **`launch_app`** — open any installed app by package name. Auto-wakes the screen if it was off and reports `woke_screen:true`. Use this to bring Termux / Settings / Chrome / any installed app to the foreground before screen automation.
 - **`list_installed_apps`** — discover available package names. Filter by substring; defaults to user-installed apps only.
+- **`open_url`** — hand a URL to the system's default handler. **Strongly preferred over `launch_app` + screen automation when the user's request maps cleanly to a URL.** Examples:
+  - "search hello in chrome" → `open_url("https://www.google.com/search?q=hello")` — done in one tool call. Do NOT try to drive Chrome's URL bar via `set_text`; it is unreliable and you will loop.
+  - "open google.com" → `open_url("https://google.com")`
+  - "call 555-1234" → `open_url("tel:555-1234")`
+  - "show 1600 Amphitheatre Pkwy on a map" → `open_url("geo:0,0?q=1600+Amphitheatre+Pkwy")`
+  - "email foo@bar.com" → `open_url("mailto:foo@bar.com")`
+
+  Pass `package_name` to force a specific browser; otherwise the system default opens.
 
 ## Termux integration
 

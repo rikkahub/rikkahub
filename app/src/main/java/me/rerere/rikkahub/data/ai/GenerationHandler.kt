@@ -57,6 +57,18 @@ sealed interface GenerationChunk {
     ) : GenerationChunk
 }
 
+private const val TAG_GH_LOOP = "GenHandlerLoop"
+
+/**
+ * If the model calls the same tool with the same exact JSON args this many times within a
+ * single user turn, we refuse the next execution and inject a "loop_detected" envelope. The
+ * threshold is INCLUSIVE of the prior occurrences, so a value of 3 means: first call runs,
+ * second call runs, third call runs — fourth identical call is blocked. Picked low enough
+ * that runaway loops can't drain the user's API tokens but high enough to allow legitimate
+ * retries (a notification key going stale between read and dismiss, etc.).
+ */
+private const val LOOP_GUARD_REPEAT_THRESHOLD = 3
+
 class GenerationHandler(
     private val context: Context,
     private val providerManager: ProviderManager,
@@ -74,7 +86,7 @@ class GenerationHandler(
         assistant: Assistant,
         memories: List<AssistantMemory>? = null,
         tools: List<Tool> = emptyList(),
-        maxSteps: Int = 256,
+        maxSteps: Int = 32,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
@@ -262,7 +274,48 @@ class GenerationHandler(
                     }
 
                     else -> {
-                        // Auto or Approved - execute the tool
+                        // Auto or Approved - execute the tool, but first check whether the
+                        // model has already called this exact tool with these exact args
+                        // multiple times in this turn. If so, refuse to spend another round-
+                        // trip and return a structured "you are looping" envelope so the
+                        // model has to either change strategy or hand back to the user.
+                        // This is the cost safety net: without it a stuck model can chew
+                        // through an entire model context (and the user's tokens) on the
+                        // same screen.
+                        val signature = tool.toolName + "::" + tool.input
+                        val priorOccurrences = messages
+                            .flatMap { it.getTools() }
+                            .count { it.isExecuted && it.toolName + "::" + it.input == signature }
+                        if (priorOccurrences >= LOOP_GUARD_REPEAT_THRESHOLD) {
+                            Log.w(TAG, "generateText: loop-guard tripped on $signature (${priorOccurrences + 1} repeat); injecting bail-out envelope")
+                            executedTools += tool.copy(
+                                output = listOf(
+                                    UIMessagePart.Text(
+                                        json.encodeToString(
+                                            buildJsonObject {
+                                                put("error", JsonPrimitive("loop_detected"))
+                                                put(
+                                                    "recovery", JsonPrimitive(
+                                                        "You have already called ${tool.toolName} with identical arguments " +
+                                                            "${priorOccurrences} time(s) in this turn without making progress. " +
+                                                            "Stop retrying. Either: (a) change the args meaningfully, (b) try a " +
+                                                            "different tool that addresses the underlying request, or (c) hand " +
+                                                            "back to the user with what you have so far. Examples: for 'search " +
+                                                            "X in chrome' use open_url(\"https://www.google.com/search?q=X\") " +
+                                                            "instead of fighting Chrome's URL bar via set_text; for terminal " +
+                                                            "tasks use termux_run_command instead of typing into Termux."
+                                                    )
+                                                )
+                                            }
+                                        )
+                                    )
+                                )
+                            )
+                            // Skip the actual execution. The next generation step will see
+                            // this envelope and (if the model is well-prompted by the skill
+                            // docs) will pivot to a different approach.
+                            return@forEach
+                        }
                         runCatching {
                             val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
                                 ?: error("Tool ${tool.toolName} not found")

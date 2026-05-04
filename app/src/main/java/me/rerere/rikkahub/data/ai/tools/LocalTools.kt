@@ -565,6 +565,7 @@ class LocalTools(
         if (options.contains(LocalToolOption.AppLauncher)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.launchAppTool(context))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.listInstalledAppsTool(context))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.openUrlTool(context))
         }
         if (options.contains(LocalToolOption.Termux)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.termuxRunCommandTool(context))

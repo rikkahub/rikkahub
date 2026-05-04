@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.tools.local
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import androidx.core.net.toUri
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -224,5 +225,110 @@ fun listInstalledAppsTool(context: Context): Tool = Tool(
             })
         }
         listOf(UIMessagePart.Text(payload.toString()))
+    }
+)
+
+/**
+ * Hand a URL to whatever app is registered as the system handler for it (browsers for
+ * http/https, the dialer for tel:, the maps app for geo:, etc.). Massively cheaper than
+ * driving Chrome's URL bar via accessibility set_text — for a "search hello in chrome"
+ * request, just call open_url("https://www.google.com/search?q=hello") and the browser
+ * lands directly on the results page.
+ *
+ * The package_name override exists for cases where the user explicitly names a non-default
+ * browser; otherwise the system shows whatever default is configured.
+ */
+fun openUrlTool(context: Context): Tool = Tool(
+    name = "open_url",
+    description = """
+        Open a URL in the system's default handler app (browser for http/https, dialer for
+        tel:, maps for geo:, mailto: for email, etc.). Strongly preferred over
+        launch_app + screen automation when the user asks you to "search X in chrome",
+        "open google.com", "call this number", "show me this address on a map", or any
+        request that maps cleanly to a URL — typing into a browser URL bar via accessibility
+        is unreliable and slow. Optionally pass package_name to force a specific app
+        (e.g. com.android.chrome) when multiple handlers exist. Auto-wakes the screen if
+        it was off.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("url", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Full URL with scheme. http(s):// for web, tel: for phone, geo:lat,lng for maps, mailto: for email.")
+                })
+                put("package_name", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional: force a specific handler app (e.g. com.android.chrome). Omit for system default.")
+                })
+            },
+            required = listOf("url")
+        )
+    },
+    execute = { input ->
+        val url = input.jsonObject["url"]?.jsonPrimitive?.contentOrNull
+        if (url.isNullOrBlank()) {
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    buildJsonObject { put("error", "url is required") }.toString()
+                )
+            )
+        }
+        val pkg = input.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
+
+        val wasOff = !ScreenWaker.isInteractive(context)
+        val woke = if (wasOff) ScreenWaker.wakeIfOff(context) else false
+        val keyLocked = ScreenWaker.isKeyguardLocked(context)
+        val keySecure = ScreenWaker.isKeyguardSecure(context)
+
+        val intent = Intent(Intent.ACTION_VIEW, url.toUri()).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (pkg != null) setPackage(pkg)
+        }
+        // Resolve before dispatch so we can return a useful error when no app handles the URL
+        // scheme (e.g. mailto: without a mail client installed).
+        val resolved = context.packageManager.resolveActivity(intent, 0)
+        if (resolved == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    buildJsonObject {
+                        put("error", "no_handler")
+                        put("recovery", "No installed app handles this URL scheme. Try a different URL or install an appropriate app first.")
+                        put("url", url)
+                        if (pkg != null) put("package", pkg)
+                    }.toString()
+                )
+            )
+        }
+        try {
+            context.startActivity(intent)
+            listOf(
+                UIMessagePart.Text(
+                    buildJsonObject {
+                        put("success", true)
+                        put("url", url)
+                        put("handler", resolved.activityInfo?.packageName ?: "")
+                        if (wasOff) put("woke_screen", woke)
+                        if (keyLocked) {
+                            put("keyguard_locked", true)
+                            put("keyguard_secure", keySecure)
+                            if (keySecure) {
+                                put("warn", "Screen is woken but PIN/biometric keyguard is up. The user must unlock for the URL handler to be visible.")
+                            }
+                        }
+                    }.toString()
+                )
+            )
+        } catch (t: Throwable) {
+            listOf(
+                UIMessagePart.Text(
+                    buildJsonObject {
+                        put("error", "open_failed")
+                        put("reason", t.message ?: t::class.java.simpleName)
+                    }.toString()
+                )
+            )
+        }
     }
 )
