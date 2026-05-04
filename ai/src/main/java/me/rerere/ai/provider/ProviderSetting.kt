@@ -280,12 +280,17 @@ sealed class ProviderSetting {
     }
 
     companion object {
+        // Types presented to the user when adding / converting a provider. AICore is
+        // intentionally NOT in this list: it is a singleton built-in (one per device,
+        // synthesized from the AICore system app), so the "type segmented row" inside
+        // the Add-Provider dialog and ProviderConfigure should not offer it as a choice.
+        // Including it overflowed the dialog width and wrapped the OpenAI / Google labels
+        // onto two lines on a Pixel 10 Pro.
         val Types by lazy {
             listOf(
                 OpenAI::class,
                 Google::class,
                 Claude::class,
-                AICore::class,
             )
         }
     }
