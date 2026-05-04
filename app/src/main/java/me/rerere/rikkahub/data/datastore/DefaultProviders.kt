@@ -20,6 +20,18 @@ import kotlin.uuid.Uuid
 val DEFAULT_AUTO_MODEL_ID = Uuid.parse("b7055fb4-39f9-4042-a88a-0d80ed76cf08")
 
 val DEFAULT_PROVIDERS = listOf(
+    ProviderSetting.AICore(
+        // On-device provider sits at the top of the list so the agent's primary surface for
+        // privacy-conscious / offline use is the first thing users see. Self-disables on
+        // devices without AICore beta — the requirement tags on the card make that clear.
+        builtIn = true,
+        description = {
+            Text("Runs Gemini Nano on-device through Android AICore. Requires AICore beta on a supported Pixel device.")
+        },
+        shortDescription = {
+            Text("On-device — no API key, no network")
+        },
+    ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("a8d2d463-e8c0-41f2-b89e-f5eb8e716cce"),
         name = "RikkaHub",
@@ -286,15 +298,5 @@ val DEFAULT_PROVIDERS = listOf(
                 }
             )
         }
-    ),
-    ProviderSetting.AICore(
-        // Synthetic on-device provider. Self-disables on devices without AICore beta.
-        builtIn = true,
-        description = {
-            Text("Runs Gemini Nano on-device through Android AICore. Requires AICore beta on a supported Pixel device.")
-        },
-        shortDescription = {
-            Text("On-device — no API key, no network")
-        },
     ),
 )

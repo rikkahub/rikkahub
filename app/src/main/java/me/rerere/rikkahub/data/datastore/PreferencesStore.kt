@@ -243,10 +243,20 @@ class SettingsStore(
             var providers = it.providers.ifEmpty {
                 DEFAULT_PROVIDERS.filter { p -> p.id !in deletedDefaultIds }
             }.toMutableList()
+            // For existing installs that pre-date the on-device AICore provider being
+            // promoted to first-place, hoist it to the top so the user does not have to
+            // scroll past every legacy aggregator to find it.
+            val aicoreIndex = providers.indexOfFirst { it is ProviderSetting.AICore }
+            if (aicoreIndex > 0) {
+                val aicoreRow = providers.removeAt(aicoreIndex)
+                providers.add(0, aicoreRow)
+            }
             DEFAULT_PROVIDERS.forEach { defaultProvider ->
                 if (defaultProvider.id in deletedDefaultIds) return@forEach
                 if (providers.none { it.id == defaultProvider.id }) {
-                    providers.add(defaultProvider.copyProvider())
+                    // New default (e.g. AICore on first run after upgrade) goes to the
+                    // top of the list so users discover it immediately.
+                    providers.add(0, defaultProvider.copyProvider())
                 }
             }
             providers = providers.map { provider ->
