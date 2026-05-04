@@ -60,6 +60,27 @@ class TelegramBotClient(
 
     private fun base() = "https://api.telegram.org/bot${tokenProvider()}"
 
+    /**
+     * Replace the live bot token in any string with "***REDACTED***". Used at the boundary
+     * of every network call so the token can't escape into a stack trace, IOException
+     * message, or crash report. OkHttp generally doesn't include the request URL in its
+     * IOException messages, but better safe than sorry — a wrong logging interceptor or a
+     * future OkHttp change could otherwise expose the token.
+     */
+    private fun redactToken(s: String?): String {
+        if (s.isNullOrEmpty()) return s.orEmpty()
+        val token = try { tokenProvider() } catch (_: Throwable) { "" }
+        return if (token.isNotBlank() && s.contains(token)) s.replace(token, "***REDACTED***") else s
+    }
+
+    /** Like [redactToken] but produces a fresh IOException so the (immutable) message is scrubbed. */
+    private fun redactException(e: IOException): IOException {
+        val msg = e.message
+        val token = try { tokenProvider() } catch (_: Throwable) { "" }
+        if (token.isBlank() || msg == null || !msg.contains(token)) return e
+        return IOException(redactToken(msg), e.cause)
+    }
+
     /** Verify the token by calling getMe. Returns the bot info JSON. */
     suspend fun getMe(): JsonObject = call(shortClient, "getMe", buildJsonObject {}).jsonObject
 
@@ -71,9 +92,12 @@ class TelegramBotClient(
         val body = buildJsonObject {
             put("offset", offset)
             put("timeout", timeoutSec)
+            // Only ask Telegram for what we actually handle. Earlier we requested
+            // callback_query too, but the service has no inline-keyboard surface yet, so
+            // every callback_query that landed sat in the queue (parseIncoming returned
+            // null for it) and risked re-delivery on every poll cycle.
             put("allowed_updates", buildJsonArray {
                 add("message")
-                add("callback_query")
             })
         }
         val res = call(pollClient, "getUpdates", body)
@@ -172,14 +196,18 @@ class TelegramBotClient(
     suspend fun downloadFile(filePath: String, dest: File): Unit = withContext(Dispatchers.IO) {
         val url = "https://api.telegram.org/file/bot${tokenProvider()}/$filePath"
         val req = Request.Builder().url(url).get().build()
-        shortClient.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) {
-                throw IOException("downloadFile $filePath -> HTTP ${resp.code}")
+        try {
+            shortClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IOException("downloadFile $filePath -> HTTP ${resp.code}")
+                }
+                val body = resp.body ?: throw IOException("downloadFile $filePath -> empty body")
+                body.byteStream().use { input ->
+                    dest.outputStream().use { out -> input.copyTo(out) }
+                }
             }
-            val body = resp.body ?: throw IOException("downloadFile $filePath -> empty body")
-            body.byteStream().use { input ->
-                dest.outputStream().use { out -> input.copyTo(out) }
-            }
+        } catch (e: IOException) {
+            throw redactException(e)
         }
     }
 
@@ -233,7 +261,10 @@ class TelegramBotClient(
         suspendCancellableCoroutine { cont ->
             enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
-                    if (cont.isActive) cont.resumeWithException(e)
+                    // Redact the token from any IOException OkHttp surfaces. OkHttp doesn't
+                    // typically include the URL in its messages, but a SocketTimeoutException
+                    // chain or a debug interceptor could, and the URL contains the bot token.
+                    if (cont.isActive) cont.resumeWithException(redactException(e))
                 }
                 override fun onResponse(call: Call, response: Response) {
                     response.use { r ->
@@ -241,7 +272,7 @@ class TelegramBotClient(
                             try {
                                 cont.resume(r.body?.string() ?: "")
                             } catch (e: IOException) {
-                                cont.resumeWithException(e)
+                                cont.resumeWithException(redactException(e))
                             }
                         }
                     }

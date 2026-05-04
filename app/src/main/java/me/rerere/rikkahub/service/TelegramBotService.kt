@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -126,17 +127,41 @@ class TelegramBotService : Service() {
                 CHANNEL_ID, "Telegram bot", NotificationManager.IMPORTANCE_LOW
             ))
         }
-        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Telegram bot listening")
-            .setContentText("Routing inbound messages to RikkaHub")
-            .setSmallIcon(R.drawable.ic_notif_telegram)
-            .setOngoing(true)
-            .build()
+        val notif = buildForegroundNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(NOTIF_ID, notif)
         }
+    }
+
+    /**
+     * Build the foreground notification. If the strict whitelist has rejected at least one
+     * sender, surface the most recent rejected sender_id in the body so the user has a way
+     * to bootstrap an empty whitelist without spelunking through logcat.
+     */
+    private fun buildForegroundNotification(): android.app.Notification {
+        val rejected = RejectedSenderLog.latest()
+        val body = if (rejected != null) {
+            "Rejected sender ${rejected.senderId} (chat ${rejected.chatId}). Add to whitelist if that was you."
+        } else {
+            "Routing inbound messages to RikkaHub"
+        }
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Telegram bot listening")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setSmallIcon(R.drawable.ic_notif_telegram)
+            .setOngoing(true)
+            .build()
+    }
+
+    /** Re-render the notification in place. Cheap (single NotificationManager call). */
+    private fun updateForegroundNotification() {
+        try {
+            val nm = getSystemService(NotificationManager::class.java) ?: return
+            nm.notify(NOTIF_ID, buildForegroundNotification())
+        } catch (_: Throwable) { /* notifications can fail in restricted contexts; non-fatal */ }
     }
 
     /**
@@ -173,9 +198,16 @@ class TelegramBotService : Service() {
                     android.util.Log.i(TAG, "pollLoop: cycle=$cycle offset=$offset updates=${updates.size}")
                 }
                 for (u in updates.map { it as kotlinx.serialization.json.JsonObject }) {
+                    // Bump the offset BEFORE deciding whether to dispatch this update.
+                    // Without this, any update parseIncoming returns null for (callback_query,
+                    // edited_message, content-less message, etc.) keeps its update_id, so
+                    // Telegram returns the same update on the next getUpdates and the loop
+                    // re-processes it forever. This caused an infinite re-poll the first
+                    // time a non-message update slipped past the allowed_updates filter.
+                    val updateId = u["update_id"]?.jsonPrimitive?.longOrNull
+                    if (updateId != null && updateId >= offset) offset = updateId + 1
                     val incoming = parseIncoming(u) ?: continue
                     android.util.Log.i(TAG, "pollLoop: dispatching message ${incoming.messageId} from chat=${incoming.chatId} sender=${incoming.senderId}")
-                    offset = incoming.updateId + 1
                     // Launch in its own coroutine so the poll loop returns to getUpdates
                     // without waiting for the LLM round-trip. This is what lets /stop work
                     // while a long generation is in flight: the new message gets its own
@@ -210,8 +242,19 @@ class TelegramBotService : Service() {
             android.util.Log.w(TAG, "handleIncoming: dropping — no sender id")
             return
         }
-        if (cfg.whitelist.isNotEmpty() && sender !in cfg.whitelist && m.chatId !in cfg.whitelist) {
+        // Strict whitelist: nobody is allowed unless their sender_id (or the chat_id, for
+        // group routing) appears in cfg.whitelist. An empty whitelist drops everything —
+        // that matches the UI's "Empty = nobody" promise. Without this, a freshly-enabled
+        // bot whose owner forgot to fill in the whitelist would happily accept messages
+        // from any random Telegram user who knows the bot's @username.
+        if (sender !in cfg.whitelist && m.chatId !in cfg.whitelist) {
             android.util.Log.w(TAG, "handleIncoming: dropping — sender=$sender chat=${m.chatId} not in whitelist=${cfg.whitelist}")
+            // Stash the rejected sender so the foreground notification + UI can surface it.
+            // First-time setup needs SOME way to discover the user's own chat_id, since
+            // BotFather doesn't give it to you and the strict-whitelist policy means you
+            // can't "just send a message and check the logs" anymore.
+            RejectedSenderLog.record(sender, m.chatId)
+            updateForegroundNotification()
             return
         }
         // Built-in slash commands. These are handled entirely on-device — they never reach
@@ -319,8 +362,10 @@ class TelegramBotService : Service() {
                 val rendered = renderAssistantStream(convId, finalizing = false, baselineMessageCount)
                 if (rendered.isBlank() || rendered == lastSent) continue
                 // Edits are capped at ~4096 chars; truncate live edits, the final send
-                // will chunk anything longer.
-                val cappedRaw = if (rendered.length > MAX_CHARS) rendered.substring(0, MAX_CHARS) + "..." else rendered
+                // will chunk anything longer. truncateForLiveEdit prefers a paragraph
+                // boundary and balances any unclosed triple-backtick fence so the HTML
+                // renderer doesn't end up producing a `<pre>` with no closing tag.
+                val cappedRaw = truncateForLiveEdit(rendered, MAX_CHARS)
                 val capped = TelegramHtmlRenderer.render(cappedRaw)
                 val ok = try {
                     client.editMessageText(m.chatId, placeholderId, capped, parseMode = PARSE_MODE_HTML) != null
@@ -352,8 +397,12 @@ class TelegramBotService : Service() {
         } catch (e: Throwable) {
             android.util.Log.w(TAG, "handleIncoming: generation flow ended with error", e)
         } finally {
-            typingJob.cancel()
-            editJob?.cancel()
+            // cancelAndJoin (vs plain cancel) waits for any in-flight HTTP edit to actually
+            // finish unwinding before we send the final edit. Without joining, an in-flight
+            // streaming edit could land AFTER the final edit and clobber the placeholder
+            // back to an intermediate "running…" state that never refreshes.
+            try { typingJob.cancelAndJoin() } catch (_: Throwable) {}
+            try { editJob?.cancelAndJoin() } catch (_: Throwable) {}
         }
 
         val finalReply = renderAssistantStream(convId, finalizing = true, baselineMessageCount)
@@ -802,6 +851,29 @@ class TelegramBotService : Service() {
         }
     }
 
+    /**
+     * Truncate a streaming render to fit Telegram's per-message char cap, while keeping the
+     * markdown well-formed enough for the HTML renderer downstream:
+     *  - Prefer cutting at the last newline within the trailing 400 chars before the cap,
+     *    so we don't slice through a word or a tag.
+     *  - If the cut leaves an odd number of triple-backtick fences, append "\n```" to close
+     *    the open fence — otherwise the renderer treats the rest of the message as a code
+     *    block, which then falls back to plain text on Telegram's parse.
+     *  - Always append "…" to signal truncation to the user.
+     */
+    private fun truncateForLiveEdit(s: String, max: Int): String {
+        if (s.length <= max) return s
+        val window = 400
+        val hardCut = max - 4   // headroom for "…" and a possible "\n```"
+        val searchFrom = (hardCut - window).coerceAtLeast(0)
+        val nl = s.lastIndexOf('\n', hardCut).let { if (it >= searchFrom) it else hardCut }
+        var sub = s.substring(0, nl)
+        // If we sit inside an unclosed ``` fence, close it so HTML render stays valid.
+        val fenceCount = Regex("```").findAll(sub).count()
+        if (fenceCount % 2 == 1) sub += "\n```"
+        return "$sub\n…"
+    }
+
     private fun chunk(s: String, n: Int): List<String> {
         if (s.length <= n) return listOf(s)
         val out = mutableListOf<String>()
@@ -1139,6 +1211,23 @@ class TelegramBotService : Service() {
         /** parse_mode value for outbound LLM-generated messages. We render through
          *  TelegramHtmlRenderer first so the body uses Telegram's tiny HTML subset. */
         const val PARSE_MODE_HTML: String = "HTML"
+
+        /**
+         * Process-scoped log of the most recently rejected (non-whitelisted) sender. The
+         * foreground notification reads this so a user who enabled the bot with an empty
+         * whitelist can DM the bot once, see the rejection in the notification, and copy
+         * their chat_id into the whitelist UI. Without this you'd have to dig through
+         * logcat to discover your own Telegram chat_id.
+         */
+        data class RejectedSender(val senderId: Long, val chatId: Long, val atMs: Long)
+        object RejectedSenderLog {
+            @Volatile private var last: RejectedSender? = null
+            fun record(senderId: Long, chatId: Long) {
+                last = RejectedSender(senderId, chatId, System.currentTimeMillis())
+            }
+            fun latest(): RejectedSender? = last
+            fun clear() { last = null }
+        }
 
         /**
          * Process-scoped per-chat ring of recently-handled slash commands. Used to inject
