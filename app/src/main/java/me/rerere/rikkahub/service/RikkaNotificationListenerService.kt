@@ -110,10 +110,13 @@ class RikkaNotificationListenerService : NotificationListenerService() {
         val chatId = tg.defaultChatId ?: return
         if (!tg.enabled) return
 
-        // Drop forwards for packages the agent itself just kicked off (Termux session-counter
-        // flaps from termux_run_command, etc) so the user does not receive Telegram pings
-        // for work they themselves told the agent to do.
-        if (me.rerere.rikkahub.data.ai.AgentTurnTracker.isFreshlyTouched(entry.packageName)) {
+        // Drop forwards for *ongoing* (foreground-service) notifications from packages the
+        // agent itself just kicked off — Termux's "X sessions" pill flaps every time we run
+        // a command, and the user does not need a Telegram ping for each. Non-ongoing
+        // notifications (e.g. a termux-notification the user explicitly asked the agent
+        // to send) still go through.
+        if (entry.ongoing &&
+            me.rerere.rikkahub.data.ai.AgentTurnTracker.isFreshlyTouched(entry.packageName)) {
             return
         }
 
@@ -243,6 +246,7 @@ private fun StatusBarNotification.toEntry(pm: PackageManager): NotificationEntry
         packageName
     }
     val actionTitles = n.actions?.mapNotNull { it.title?.toString() } ?: emptyList()
+    val ongoing = (n.flags and Notification.FLAG_ONGOING_EVENT) != 0
     return NotificationEntry(
         key = key,
         packageName = packageName,
@@ -252,5 +256,6 @@ private fun StatusBarNotification.toEntry(pm: PackageManager): NotificationEntry
         subText = subText,
         postTimeMs = postTime,
         actionTitles = actionTitles,
+        ongoing = ongoing,
     )
 }

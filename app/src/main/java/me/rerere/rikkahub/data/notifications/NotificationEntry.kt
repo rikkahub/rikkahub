@@ -14,4 +14,6 @@ data class NotificationEntry(
     val subText: String,
     val postTimeMs: Long,
     val actionTitles: List<String>,
+    /** True for foreground-service / persistent notifications (FLAG_ONGOING_EVENT). */
+    val ongoing: Boolean = false,
 )
