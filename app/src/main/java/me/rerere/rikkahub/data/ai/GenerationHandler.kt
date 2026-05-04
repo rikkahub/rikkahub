@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.onStart
 import me.rerere.rikkahub.service.AgentOverlay
 import me.rerere.rikkahub.service.RikkaAccessibilityService
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -77,6 +78,49 @@ private const val TAG_GH_LOOP = "GenHandlerLoop"
  */
 private const val LOOP_GUARD_REPEAT_THRESHOLD = 3
 
+/**
+ * Wall-clock budget for a single user turn. The maxSteps cap is per-step, but a stuck
+ * agent loop with diverse-args tool calls can still chew through hours and 100k+ tokens.
+ * 5 minutes is generous for legitimate multi-tool turns (download + install + screenshot
+ * + verify) and brutal for runaway loops.
+ */
+private const val TURN_WALL_CLOCK_BUDGET_MS = 5L * 60L * 1000L
+
+/**
+ * Max number of times the loop guard can trip in a single turn before we force-end the
+ * turn entirely. Prevents the "model keeps trying different tools, each gets loop-detected"
+ * pattern that produced the 27-step / 141K-token disaster: one trip means the model is
+ * confused; six trips means it's not coming back.
+ */
+private const val MAX_LOOP_GUARD_TRIPS_PER_TURN = 6
+
+/**
+ * Some read-only tools measure a real-time signal where re-calling after a TTL is
+ * legitimate (battery drains, screens change, sensors update). For these, the loop guard
+ * lets identical calls through if the most recent identical call is older than the TTL.
+ * Without this, asking the model "what's the battery now?" after a previous reading just
+ * regurgitates the stale value and the user has no idea.
+ *
+ * Tools NOT in this map are treated as side-effecting / idempotent-input: re-calling with
+ * identical args is a loop, not a refresh. Add new freshness-sensitive tools here.
+ */
+private val FRESHNESS_TTL_MS_BY_TOOL: Map<String, Long> = mapOf(
+    "get_battery_status" to 30_000L,
+    "get_audio_info" to 30_000L,
+    "get_telephony_info" to 30_000L,
+    "get_wifi_info" to 30_000L,
+    "get_storage_info" to 60_000L,
+    "get_brightness" to 10_000L,
+    "get_volume" to 10_000L,
+    "get_location" to 30_000L,
+    "get_time_info" to 5_000L,
+    "read_sensor" to 5_000L,
+    "take_screenshot" to 5_000L,
+    "read_window_tree" to 5_000L,
+    "list_active_notifications" to 5_000L,
+    "list_jobs" to 60_000L,
+)
+
 class GenerationHandler(
     private val context: Context,
     private val providerManager: ProviderManager,
@@ -102,7 +146,29 @@ class GenerationHandler(
 
         var messages: List<UIMessage> = messages
 
+        val turnStartMs = android.os.SystemClock.elapsedRealtime()
+        var loopGuardTripCount = 0
+
         for (stepIndex in 0 until maxSteps) {
+            // Wall-clock cap: any single user turn that has been running longer than the
+            // budget is force-ended, regardless of whether the model wants more steps.
+            // This is the second line of defence after maxSteps; without it a model that
+            // discovers many distinct tool calls (each within the loop guard) can still
+            // run for hours.
+            val elapsedMs = android.os.SystemClock.elapsedRealtime() - turnStartMs
+            if (elapsedMs > TURN_WALL_CLOCK_BUDGET_MS) {
+                Log.w(TAG, "generateText: wall-clock cap (${TURN_WALL_CLOCK_BUDGET_MS}ms) hit at step #$stepIndex; force-ending turn")
+                break
+            }
+            // Repeated loop-guard trips mean the model is flailing: it bumps into the
+            // guard, picks a different tool, that one also gets guarded, and so on. After
+            // N trips we just stop — the model is not going to recover, and every extra
+            // step is paid for in tokens.
+            if (loopGuardTripCount >= MAX_LOOP_GUARD_TRIPS_PER_TURN) {
+                Log.w(TAG, "generateText: loop-guard tripped $loopGuardTripCount times this turn; force-ending")
+                break
+            }
+
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
 
             val toolsInternal = buildList {
@@ -291,11 +357,34 @@ class GenerationHandler(
                         // through an entire model context (and the user's tokens) on the
                         // same screen.
                         val signature = tool.toolName + "::" + tool.input
-                        val priorOccurrences = messages
-                            .flatMap { it.getTools() }
-                            .count { it.isExecuted && it.toolName + "::" + it.input == signature }
-                        if (priorOccurrences >= LOOP_GUARD_REPEAT_THRESHOLD) {
-                            Log.w(TAG, "generateText: loop-guard tripped on $signature (${priorOccurrences + 1} repeat); injecting bail-out envelope")
+                        // Pair each prior matching tool with its parent message so we can
+                        // tell HOW LONG AGO the most recent identical call ran (needed for
+                        // the freshness-TTL bypass below).
+                        val priorMatching = messages.flatMap { msg ->
+                            msg.parts.filterIsInstance<UIMessagePart.Tool>()
+                                .filter { it.isExecuted && it.toolName + "::" + it.input == signature }
+                                .map { it to msg }
+                        }
+                        val priorOccurrences = priorMatching.size
+                        // Freshness-TTL bypass: read-only tools that measure a real-time
+                        // signal (battery, screenshot, sensors) get a TTL window after
+                        // which an identical call is treated as a refresh, not a loop.
+                        // Without this, the model's "/battery" gets loop_detected and the
+                        // user sees the stale earlier reading served as if fresh.
+                        val ttlMs = FRESHNESS_TTL_MS_BY_TOOL[tool.toolName]
+                        val mostRecentCallEpochMs = if (ttlMs != null && priorMatching.isNotEmpty()) {
+                            priorMatching.maxOf { (_, msg) ->
+                                val ts = msg.finishedAt ?: msg.createdAt
+                                ts.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+                            }
+                        } else 0L
+                        val ageMs = if (mostRecentCallEpochMs > 0L) {
+                            System.currentTimeMillis() - mostRecentCallEpochMs
+                        } else Long.MAX_VALUE
+                        val ttlBypass = ttlMs != null && ageMs >= ttlMs
+                        if (priorOccurrences >= LOOP_GUARD_REPEAT_THRESHOLD && !ttlBypass) {
+                            loopGuardTripCount++
+                            Log.w(TAG, "generateText: loop-guard tripped on $signature (${priorOccurrences + 1} repeat, trip #$loopGuardTripCount this turn); injecting bail-out envelope")
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(
