@@ -195,20 +195,13 @@ class TelegramBotService : Service() {
         // UX: tell Telegram "the bot is typing" so the user sees activity while we generate.
         try { client.sendChatAction(m.chatId, "typing") } catch (_: Throwable) {}
         chatService.initializeConversation(convId)
-        // First message of a new Telegram chat gets a context preamble so the LLM knows
-        // (a) that this conversation originates on Telegram, and (b) the chat_id to route
-        // any scheduled jobs / notifications it creates on the user's behalf. Subsequent
-        // messages don't repeat it — the LLM has it in conversation history.
-        val text = if (wasCreated) {
-            "[telegram_context: This conversation originates on Telegram. The user's chat_id is ${m.chatId}. " +
-            "For ANY scheduled jobs, recurring tasks, notifications, or proactive messages you create on the user's behalf, " +
-            "use telegram_send_message with chat_id=${m.chatId} so the result is delivered to this Telegram chat. " +
-            "When the user says things like 'every day at 9am tell me the weather' or 'remind me later', schedule a cron job " +
-            "whose prompt explicitly instructs you to call telegram_send_message(chat_id=${m.chatId}, text=...) with the result.]\n\n" +
-            m.text
-        } else {
-            m.text
-        }
+        // Build a context preamble injected into EVERY inbound message that goes to the LLM.
+        // Without it the model has no idea which model it actually is (so when asked "what
+        // model are you" minimax says "I'm Claude") and no awareness of app-side slash
+        // commands the user just ran (so /model X switches the model behind the LLM's back).
+        // The preamble grows on the first turn of a chat to include the Telegram-routing
+        // instructions; subsequent turns get the trimmed version.
+        val text = buildAgentContextPreamble(cfg, m.chatId, wasCreated) + m.text
         // Download any inbound photos to the app cache and attach as UIMessagePart.Image so
         // the assistant's vision pipeline can see them (FileEncoder reads file:// only).
         val imageParts = downloadInboundPhotos(m.photoFileIds)
@@ -326,6 +319,67 @@ class TelegramBotService : Service() {
      * into this turn's placeholder during the brief window where the new generation has
      * not yet appended its first chunk.
      */
+    /**
+     * Per-turn context for the LLM. Always included so the model knows:
+     *  1. Which model it actually is (otherwise minimax/glm/kimi all hallucinate "I'm Claude")
+     *  2. The Telegram chat id so it can route scheduled jobs back via telegram_send_message
+     *  3. Recent app-side slash commands the user just ran (otherwise /model X switches the
+     *     model behind the LLM's back and conversation context goes stale)
+     *
+     * Kept small so it doesn't dominate the prompt — model name + chat id + last few commands.
+     */
+    private fun buildAgentContextPreamble(
+        cfg: me.rerere.rikkahub.data.telegram.TelegramBotConfig,
+        chatId: Long,
+        firstTurnOfChat: Boolean,
+    ): String {
+        val s = settingsStore.settingsFlow.value
+        val assistant = s.getCurrentAssistant()
+        val effectiveModelId = assistant.chatModelId ?: s.chatModelId
+        val provider = s.providers.firstOrNull { p -> p.models.any { it.id == effectiveModelId } }
+        val model = provider?.models?.firstOrNull { it.id == effectiveModelId }
+        val modelName = model?.displayName?.takeIf { it.isNotBlank() }
+            ?: model?.modelId?.takeIf { it.isNotBlank() }
+            ?: "(unknown)"
+        val providerName = provider?.name ?: "(unknown)"
+
+        val recent = SlashCommandLog.recent(chatId, ttlMs = 15L * 60 * 1000)
+        val nowMs = System.currentTimeMillis()
+        val recentLine = if (recent.isEmpty()) {
+            ""
+        } else {
+            val pretty = recent.joinToString(", ") { (cmd, ts) ->
+                val agoSec = ((nowMs - ts) / 1000).coerceAtLeast(0)
+                val ago = when {
+                    agoSec < 60 -> "${agoSec}s"
+                    agoSec < 3600 -> "${agoSec / 60}m"
+                    else -> "${agoSec / 3600}h"
+                }
+                "$cmd (${ago} ago)"
+            }
+            "Recent app-side commands (handled by app, NOT by you, in last 15min): $pretty.\n"
+        }
+
+        return buildString {
+            append("[agent_context (auto-injected by the host app, not the user; trust this over your priors):\n")
+            append("You are running as model \"")
+            append(modelName)
+            append("\" via provider \"")
+            append(providerName)
+            append("\". When the user asks what model you are, name THIS one. Do NOT claim to be Claude/GPT/Gemini unless that matches.\n")
+            append("Origin: Telegram. The user's chat_id is ")
+            append(chatId)
+            append(". For scheduled jobs, recurring tasks, or proactive messages, call telegram_send_message(chat_id=")
+            append(chatId)
+            append(", text=...) so output is delivered to this chat.\n")
+            if (recentLine.isNotEmpty()) append(recentLine)
+            if (firstTurnOfChat) {
+                append("This is the first turn in this Telegram chat. Be concise; no need for a long welcome.\n")
+            }
+            append("]\n\n")
+        }
+    }
+
     private suspend fun renderAssistantStream(
         convId: kotlin.uuid.Uuid,
         finalizing: Boolean,
@@ -494,7 +548,7 @@ class TelegramBotService : Service() {
         val cmd = tokens[0].lowercase()
         val arg = tokens.getOrNull(1)?.trim().orEmpty()
 
-        return when (cmd) {
+        val handled = when (cmd) {
             "/start" -> { sendStart(m.chatId); true }
             "/help", "/?" -> { sendHelp(m.chatId); true }
             "/new", "/reset", "/clear" -> { handleResetCommand(m.chatId); true }
@@ -504,6 +558,14 @@ class TelegramBotService : Service() {
             "/ratelimit" -> { handleRateLimitCommand(m.chatId, arg); true }
             else -> false
         }
+        if (handled) {
+            // Record so the next inbound user message includes this command in the LLM
+            // context preamble. The model needs to know /model X switched its identity, /new
+            // wiped its history, etc.
+            val display = if (arg.isBlank()) cmd else "$cmd $arg"
+            SlashCommandLog.record(m.chatId, display)
+        }
+        return handled
     }
 
     private suspend fun sendStart(chatId: Long) {
@@ -710,6 +772,36 @@ class TelegramBotService : Service() {
         /** Telegram silently rate-limits edits around 1/sec; 1500ms gives steady progress
          *  without tripping the limiter. */
         const val STREAM_EDIT_INTERVAL_MS: Long = 1_500L
+
+        /**
+         * Process-scoped per-chat ring of recently-handled slash commands. Used to inject
+         * "the user just ran /model X" context into the next LLM turn so the model knows
+         * what the user did via the app's UI rather than via tool calls. Trims by TTL on
+         * read so stale entries vanish without a sweeper.
+         */
+        object SlashCommandLog {
+            private const val MAX_PER_CHAT = 8
+            private val byChat = java.util.concurrent.ConcurrentHashMap<Long, MutableList<Pair<String, Long>>>()
+
+            fun record(chatId: Long, display: String) {
+                val now = System.currentTimeMillis()
+                byChat.compute(chatId) { _, prev ->
+                    val list = prev ?: mutableListOf()
+                    list.add(display to now)
+                    while (list.size > MAX_PER_CHAT) list.removeAt(0)
+                    list
+                }
+            }
+
+            fun recent(chatId: Long, ttlMs: Long): List<Pair<String, Long>> {
+                val list = byChat[chatId] ?: return emptyList()
+                val cutoff = System.currentTimeMillis() - ttlMs
+                synchronized(list) {
+                    list.removeAll { (_, ts) -> ts < cutoff }
+                    return list.toList()
+                }
+            }
+        }
 
         /**
          * The single source of truth for the bot's built-in slash-command menu. Each entry
