@@ -10,6 +10,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import me.rerere.rikkahub.service.ActionLogEntry
 
 private const val DEFAULT_SWIPE_MS = 300L
@@ -40,6 +41,7 @@ fun swipeTool(): Tool = Tool(
         )
     },
     execute = { input ->
+        AgentTurnTracker.recordAutomationAction()
         val sx = numOrNull(input, "start_x")
         val sy = numOrNull(input, "start_y")
         val ex = numOrNull(input, "end_x")

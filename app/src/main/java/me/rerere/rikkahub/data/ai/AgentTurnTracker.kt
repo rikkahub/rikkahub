@@ -12,10 +12,12 @@ package me.rerere.rikkahub.data.ai
 object AgentTurnTracker {
     @Volatile private var navigatedAway: Boolean = false
     @Volatile private var destination: String? = null
+    @Volatile private var didAutomate: Boolean = false
 
     fun reset() {
         navigatedAway = false
         destination = null
+        didAutomate = false
     }
 
     fun recordNavigatedAway(packageName: String?) {
@@ -23,6 +25,17 @@ object AgentTurnTracker {
         if (!packageName.isNullOrBlank()) destination = packageName
     }
 
+    /**
+     * Called by automation tools (tap, click_node, set_text, swipe, scroll, global_action)
+     * when they perform an action against another app. Distinguishes "the agent opened X
+     * and used it" (auto-return makes sense) from "the agent opened X for the user to use"
+     * (auto-return would yank the user out of where they want to be).
+     */
+    fun recordAutomationAction() {
+        didAutomate = true
+    }
+
     fun didNavigateAway(): Boolean = navigatedAway
+    fun didAutomate(): Boolean = didAutomate
     fun lastDestination(): String? = destination
 }

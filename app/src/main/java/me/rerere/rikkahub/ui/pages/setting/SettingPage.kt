@@ -56,6 +56,7 @@ import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.Megaphone01
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.ServerStack01
+import me.rerere.hugeicons.stroke.Shield01
 import me.rerere.hugeicons.stroke.Telegram
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share04
@@ -270,6 +271,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Alert01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_notifications_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_notifications)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingPermissions) },
+                        leadingContent = { Icon(HugeIcons.Shield01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_permissions_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_permissions)) },
                     )
                 }
             }

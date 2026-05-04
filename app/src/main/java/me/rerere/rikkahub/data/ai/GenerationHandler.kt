@@ -402,6 +402,11 @@ class GenerationHandler(
      */
     private fun handleAutoReturnAfterTurn() {
         if (!AgentTurnTracker.didNavigateAway()) return
+        // Only auto-return when the agent actually drove the destination app via screen
+        // automation (tap, click_node, set_text, swipe, scroll, global_action). A pure
+        // "open Chrome and stay there" request is just launch_app + a text reply — yanking
+        // the user back to RikkaHub in that case defeats the purpose of the request.
+        if (!AgentTurnTracker.didAutomate()) return
         val destination = AgentTurnTracker.lastDestination()
         val currentForeground = RikkaAccessibilityService.instance
             ?.rootInActiveWindow?.packageName?.toString()

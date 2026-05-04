@@ -13,6 +13,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import me.rerere.rikkahub.service.ActionLogEntry
 
 private val ALLOWED_BY = setOf("text", "content_description", "view_id_resource_name")
@@ -149,6 +150,7 @@ fun clickNodeTool(): Tool = Tool(
         )
     },
     execute = { input ->
+        AgentTurnTracker.recordAutomationAction()
         val (by, value, pkgFilter) = parseSelector(input)
         val nth = input.jsonObject["nth"]?.jsonPrimitive?.intOrNull ?: 0
         if (by == null || by !in ALLOWED_BY || value == null) {
@@ -264,6 +266,7 @@ fun setTextTool(): Tool = Tool(
         )
     },
     execute = { input ->
+        AgentTurnTracker.recordAutomationAction()
         val (by, value, pkgFilter) = parseSelector(input)
         val nth = input.jsonObject["nth"]?.jsonPrimitive?.intOrNull ?: 0
         val newText = input.jsonObject["text"]?.jsonPrimitive?.contentOrNull

@@ -1114,6 +1114,15 @@
   <string name="setting_page_accessibility_overlay_not_granted">Display over other apps: Not granted</string>
   <string name="setting_page_accessibility_overlay_help">Shows a small \"The agent is working\" pill at the top of the screen while the agent is automating, so you always know when it is driving the UI. Optional but recommended.</string>
   <string name="setting_page_accessibility_overlay_open_settings">Grant Display over other apps</string>
+  <string name="setting_page_permissions">Permissions</string>
+  <string name="setting_page_permissions_desc">Auto-discovered list of every permission RikkaHub uses, with a one-tap grant button for each.</string>
+  <string name="setting_page_permissions_group_services">Services and integrations</string>
+  <string name="setting_page_permissions_group_special">Special access</string>
+  <string name="setting_page_permissions_group_runtime">Runtime permissions</string>
+  <string name="setting_page_permissions_group_auto">Auto-granted</string>
+  <string name="setting_page_permissions_status_granted">GRANTED</string>
+  <string name="setting_page_permissions_status_auto_granted">AUTO</string>
+  <string name="setting_page_permissions_status_denied">TAP TO GRANT</string>
   <string name="setting_page_notifications">Notifications</string>
   <string name="setting_page_notifications_desc">Notification access status, recent activity log, and the per-app whitelist that auto-forwards to Telegram.</string>
   <string name="setting_page_notifications_status_section">Status</string>

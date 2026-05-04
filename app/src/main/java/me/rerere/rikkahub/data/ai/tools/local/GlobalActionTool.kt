@@ -11,6 +11,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import me.rerere.rikkahub.service.ActionLogEntry
 
 private val ACTION_MAP: Map<String, Int> = mapOf(
@@ -43,6 +44,7 @@ fun globalActionTool(): Tool = Tool(
         )
     },
     execute = { input ->
+        AgentTurnTracker.recordAutomationAction()
         val action = input.jsonObject["action"]?.jsonPrimitive?.contentOrNull
         val code = action?.let { ACTION_MAP[it] }
         if (action == null || code == null) {

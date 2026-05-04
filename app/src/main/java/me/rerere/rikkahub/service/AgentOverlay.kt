@@ -78,7 +78,9 @@ object AgentOverlay {
             android.graphics.PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = (24 * app.resources.displayMetrics.density).toInt()
+            // Far enough below the status bar / camera punch-hole that the pill never
+            // overlaps the system clock or notch on edge-to-edge devices.
+            y = (64 * app.resources.displayMetrics.density).toInt()
         }
         try {
             wm.addView(tv, params)

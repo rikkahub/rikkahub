@@ -15,6 +15,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import me.rerere.rikkahub.service.ActionLogEntry
 import me.rerere.rikkahub.service.RikkaAccessibilityService
 
@@ -74,6 +75,7 @@ fun scrollTool(): Tool = Tool(
         )
     },
     execute = { input ->
+        AgentTurnTracker.recordAutomationAction()
         val direction = input.jsonObject["direction"]?.jsonPrimitive?.contentOrNull
         if (direction == null || direction !in ALLOWED_DIRECTIONS) {
             return@Tool listOf(

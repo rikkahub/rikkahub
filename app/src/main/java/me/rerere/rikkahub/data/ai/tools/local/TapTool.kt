@@ -10,6 +10,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import me.rerere.rikkahub.service.ActionLogEntry
 
 private const val DEFAULT_LONG_PRESS_MS = 600L
@@ -42,6 +43,7 @@ fun tapTool(): Tool = Tool(
         )
     },
     execute = { input ->
+        AgentTurnTracker.recordAutomationAction()
         val x = coordOrError(input, "x")
         val y = coordOrError(input, "y")
         if (x == null || y == null) {
@@ -102,6 +104,7 @@ fun longPressTool(): Tool = Tool(
         )
     },
     execute = { input ->
+        AgentTurnTracker.recordAutomationAction()
         val x = coordOrError(input, "x")
         val y = coordOrError(input, "y")
         if (x == null || y == null) {
