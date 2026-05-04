@@ -37,6 +37,50 @@ opt-in per-assistant, behind the same eager-permission flow as upstream's existi
 | **Personal data** | location, contacts (search + list), call log, sms inbox (list + search), camera photo, mic recorder, speech-to-text, fingerprint |
 | **Media** | media player (play + stop), media scanner, download file, write text file (saves arbitrary content to public Downloads via MediaStore) |
 
+### Screen automation (11 tools)
+Full AccessibilityService-backed driver so the LLM can actually operate apps, not just read their
+data. One toggle in Settings → Assistant → Local Tools → Screen automation; one separate page at
+Settings → Accessibility for service status, recent-actions log, and a diagnostic-screenshot
+button.
+
+| Tool | What |
+|---|---|
+| `tap`, `long_press`, `swipe`, `scroll` | absolute-pixel gestures + scrollable-node-aware scroll |
+| `read_window_tree` | filtered active-window tree (visible + interactive nodes), 500-node cap, `verbose:true` for full dump |
+| `find_node`, `click_node`, `set_text` | by `text` / `content_description` / `view_id_resource_name`, with `nth` disambiguation; `click_node` walks the parent chain to a clickable ancestor; `set_text` types into editable inputs (URL bars, search, forms — not terminals) |
+| `global_action` | system gestures: back, home, recents, notifications, quick_settings, lock_screen, power_dialog |
+| `take_screenshot` | `AccessibilityService.takeScreenshot()` (Android 11+), returned as a vision-input image part on the next LLM turn (also lifts cleanly into OpenAI tool-result follow-up so vision models actually receive it) |
+| `wake_screen` | turns the display on if it was off; `launch_app` auto-calls this when needed and reports keyguard state |
+
+### App launcher + Termux integration (3 tools)
+- `launch_app(package_name)` — opens any installed app; auto-wakes the screen if off; reports
+  keyguard state so the LLM knows whether automation can continue.
+- `list_installed_apps(filter?, include_no_launcher?)` — discovers package names; sees both
+  drawer apps and launcher-less addon packages (e.g. Termux:API) when a filter is given.
+- `termux_run_command` — runs shell commands in Termux **with output captured** via Termux's
+  `RUN_COMMAND_PENDING_INTENT`. Default mode returns `stdout` / `stderr` / `exit_code` so the
+  model can reason on the result; `interactive=true` opens a visible session instead. Settings
+  → Assistant → Local Tools → Termux integration row has a live indicator (red / orange /
+  yellow / green) and a "tap to verify" smoke test that confirms `allow-external-apps=true` is
+  in effect before you trust capture mode.
+
+### Notification awareness (5 tools)
+The agent can read your notifications and (optionally) auto-forward whitelisted apps to your
+default Telegram chat — so when you're away from the phone, the bot can summarise that WhatsApp
+ping or Gmail notification automatically.
+
+- `list_recent_notifications` — 100-entry in-memory ring buffer, filter by package or timestamp.
+- `list_active_notifications` — only ones currently in the shade.
+- `dismiss_notification(key)` — `cancelNotification(key)` on a live notification.
+- `notification_action_click(key, action_index | action_title)` — fire a notification's action
+  button (Reply, Mark as Read, etc.); returns `requires_input` for RemoteInput actions so the
+  LLM falls back cleanly to screen automation.
+- `notification_status` — service bound? whitelist size? default Telegram chat configured?
+
+Settings → Notifications has the live status row, a deep-link to the system notification-access
+toggle, the recent-activity log, and an **app picker** with a Switch per app (search, "show only
+whitelisted" filter chip, auto-saves on toggle). Empty whitelist by default = nothing forwarded.
+
 ### SSH client (8 tools)
 - One-shot exec: `ssh_exec` with inline credentials
 - Saved hosts (Room-persisted, secrets stored locally): `save_ssh_host`, `list_ssh_hosts`, `delete_ssh_host`, `ssh_exec_saved`
@@ -53,21 +97,47 @@ opt-in per-assistant, behind the same eager-permission flow as upstream's existi
 
 ### Fully-fledged Telegram bot (14 tools + a settings page)
 - Foreground long-poll service routes inbound Telegram messages into the existing chat pipeline
-  with full tool access, then sends the assistant's reply back (chunked at 4000 chars, with
-  re-tickled `typing` indicator while generating)
-- Per-Telegram-chat conversation memory in Room — multi-turn context preserved across messages,
-  `/reset` to start fresh
-- Outbound: `telegram_send_message`, `telegram_send_photo`, `telegram_send_document`
-- Manage Telegram's `/commands` menu directly: `telegram_set_commands`, `telegram_get_commands`,
-  `telegram_delete_commands` (the actual command behavior is LLM-driven)
-- Whitelist enforcement (empty whitelist = bot ignores everyone — safe default)
-- Direct OkHttp Telegram Bot API client (no third-party bot framework)
-- Survives reboot via boot receiver, survives app cold-start via Application.onCreate
-- Settings → Telegram bot page for token / whitelist / default chat config (mirrors the existing
-  WebServer settings page pattern exactly)
+  with full tool access. **Live-streaming reply**: the bot posts a placeholder, then edits it
+  in place every ~1.5s with the assistant's accumulating text + a `🔧 Tools used:` summary
+  (icon + tool name + concise outcome hint, no JSON dumping). Final edit replaces the
+  placeholder; overflow >4000 chars splits cleanly into chunks.
+- Per-Telegram-chat conversation memory in Room — multi-turn context preserved across messages.
+- **Built-in slash commands handled directly by the app, no LLM round-trip**: `/start`, `/help`,
+  `/new`, `/stop`, `/status`, `/model [name]`, `/ratelimit [n|clear]`. Auto-registered with
+  Telegram's autocomplete menu on bot start.
+- **Per-turn agent_context preamble** injected on every inbound message — tells the LLM what
+  model it actually is (so a fresh `/model` switch doesn't get answered with "I'm Claude" by
+  whichever model is now active), the chat_id for routing scheduled-job output back, and the
+  last few app-side slash commands the user just ran.
+- **Inbound photos** are downloaded to the app cache and routed to the LLM as
+  `UIMessagePart.Image` parts so vision-capable models can see what you sent.
+- **Doze-aware**: `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission + a one-tap whitelist row in
+  the Telegram settings page (because OEM-aggressive ROMs — Xiaomi, OPPO, OnePlus, Vivo, Nothing
+  OS — kill background network when the screen turns off otherwise). Plus a partial WakeLock
+  around each long-poll cycle so the CPU stays awake during Doze maintenance windows.
+- Outbound: `telegram_send_message`, `telegram_send_photo`, `telegram_send_document`.
+- Manage Telegram's `/commands` menu: `telegram_set_commands`, `telegram_get_commands`,
+  `telegram_delete_commands`.
+- Whitelist enforcement (empty whitelist = bot ignores everyone — safe default).
+- Direct OkHttp Telegram Bot API client (no third-party bot framework).
+- Survives reboot via boot receiver, survives app cold-start via `RikkaHubApp.onCreate`.
+- Settings → Telegram bot page for token / whitelist / default chat config + the battery
+  optimization whitelist row.
 - **Context-aware routing:** the LLM knows when a conversation comes from Telegram and
   automatically schedules cron jobs that deliver back via Telegram, without the user needing
-  to say "Telegram" explicitly
+  to say "Telegram" explicitly.
+
+### Default agent skill (auto-installed)
+First app launch seeds an `agent-core` skill at the user's Skills folder with three files:
+
+- `SOUL.md` — agent persona / posture (calm, action-oriented, plain-voice, no AI-hedging).
+- `HEARTBEAT.md` — periodic awareness loop (when to check device state, recent notifications,
+  battery, etc.; how to handle each structured `{error, recovery}` envelope).
+- `TOOLS.md` — full reference of every tool surface the LLM has, organised by category, with
+  when-to-use hints and gotchas.
+
+Skill files live under the user's filesDir and can be edited in-app via Settings → Skills; user
+edits are respected on subsequent launches via a `.seeded` sentinel.
 
 ### The killer combo
 > "Every weekday at 9am, ssh to my server, check disk usage, telegram me a summary."
@@ -100,13 +170,15 @@ cd rikkahub-agent
 Tech stack: same as upstream — Kotlin, Jetpack Compose, Koin DI, Room, DataStore, OkHttp/SSE,
 Material 3, kotlinx.serialization, kotlinx.coroutines. New deps for this fork: `mwiede/jsch`
 (SSH client, maintained Android-friendly fork of JSch), `play-services-location` (Fused
-Location), `androidx.biometric` (BiometricPrompt).
+Location), `androidx.biometric` (BiometricPrompt). Coil 3 (already in upstream) is reused for
+in-picker app icons.
 
 ## Configuring the new features
 
 - **Per-assistant tool toggles** — Settings → Assistants → tap an assistant → Local Tools.
-  Six sections: Built-in (upstream), Device info, Output, Hardware control, Personal data,
-  Media, plus a Network section for SSH and Telegram.
+  Sections: Built-in (upstream), Device info, Output, Hardware control, Personal data
+  (incl. Notification awareness), Media, Automation (cron jobs), Network (SSH, Telegram bot),
+  Screen automation (incl. App launcher + Termux integration with the live verify indicator).
 
 ### Setting up the Telegram bot
 
@@ -183,9 +255,14 @@ The fork is opinionated about preserving Rikka's UX:
 
 ## Status
 
-Shipped: Android device tools (Phases 1+2), SSH full feature, Telegram bot full feature, and
-persistent cron jobs. Still on the roadmap: privileged tools (sms send, notification listener,
-NFC, USB), AccessibilityService screen automation, and on-device inference via Google AI Edge.
+Shipped: Android device tools (Phases 1+2 — 35 tools), SSH full feature, Telegram bot with
+live-streaming replies + slash commands, persistent cron jobs, **screen automation
+(AccessibilityService — 11 tools)**, **app launcher + Termux integration with output capture**,
+**notification awareness with auto-route to Telegram**, default `agent-core` skill auto-seeded
+on first launch.
+
+Still on the roadmap: remaining privileged tools (SMS send, NFC, USB, Wallpaper, Keystore,
+Infrared) and on-device inference via Google AI Edge.
 
 ## Contributing & license
 
