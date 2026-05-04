@@ -77,6 +77,18 @@ Always read the screen *before* gesturing. The right pattern is `read_window_tre
   - Errors return structured envelopes: `termux_not_installed`, `termux_permission_not_granted`, `termux_permission_denied` (allow-external-apps missing), `timeout`. The recovery field tells the user exactly what to fix; surface it verbatim.
   - **Install source:** ONLY recommend the official GitHub releases page at `https://github.com/termux/termux-app/releases`. Do NOT recommend the Play Store or F-Droid — those builds are unmaintained and have known incompatibilities with newer Android versions. Same applies to addons (Termux:API, Termux:Boot, Termux:Styling, Termux:X11): GitHub releases only.
 
+## Notification awareness
+
+When `notification_listener` is enabled, the bound listener service maintains a 100-entry ring buffer of recent notifications and (optionally) auto-forwards whitelisted packages to the user's default Telegram chat.
+
+- **`list_recent_notifications`** — historical lookup. Filter by `package_name`, `since_unix_ms`, or `limit` (default 50). Returns the ring buffer; entries persist until evicted by the 100-cap or until the process dies. Use this when the user asks "what was that ping a minute ago".
+- **`list_active_notifications`** — only the notifications still being shown by their owning apps right now. Use this when you intend to act on something the user can see in the shade (dismiss it, click an action).
+- **`dismiss_notification`** — `cancelNotification(key)`. Only works on currently active notifications; ring-buffer keys for already-dismissed notifications return `not_found`.
+- **`notification_action_click`** — fire one of a notification's action buttons. Pass `action_index` (0-based) OR `action_title` (case-insensitive). If the action requires text input (e.g. WhatsApp Reply with RemoteInput), returns `requires_input` — fall back to `launch_app` + `set_text` + `click_node` from screen automation.
+- **`notification_status`** — service bound, ring buffer size, whitelist size, default Telegram chat configured.
+
+The auto-route forwarder is fire-and-forget — it formats the notification as `🔔 [App] Title: Text` and calls Telegram directly without an LLM round-trip. Empty whitelist by default; the user opts apps in via Settings → Notifications.
+
 ## Detecting Termux addons
 
 Termux:API, Termux:Boot, etc. are real installed packages but have **no launcher icon** — they show up only when `list_installed_apps` is called with a `filter` (or `include_no_launcher=true`). Each row carries `has_launcher: bool`; addons return `has_launcher: false` but `package` and `label` are still set, which is enough to confirm presence. The user reporting that `termux-vibrate` or any other `termux-api`-prefixed command works in Termux is conclusive proof that Termux:API is installed even if your earlier `list_installed_apps` call missed it — trust the user.
