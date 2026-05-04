@@ -56,11 +56,21 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
     ): Flow<MessageChunk> = flow {
         val (preference, generativeModel) = openClient(providerSetting, params.model)
         try {
-            val status: Int = generativeModel.checkStatus()
+            val status: Int = try {
+                generativeModel.checkStatus()
+            } catch (t: Throwable) {
+                Log.w(TAG, "checkStatus threw", t)
+                error(translateAICoreError(t))
+            }
             if (status != FeatureStatus.AVAILABLE) {
                 error(unavailableMessage(status))
             }
-            generativeModel.warmup()
+            try {
+                generativeModel.warmup()
+            } catch (t: Throwable) {
+                Log.w(TAG, "warmup threw", t)
+                error(translateAICoreError(t))
+            }
 
             val prompt = formatPromptFromMessages(messages)
             val temperature = (params.temperature ?: 0.7f).coerceIn(0f, 1f)
@@ -70,29 +80,34 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
             }
 
             var streamId = "aicore-${System.currentTimeMillis()}"
-            generativeModel.generateContentStream(request).collect { response ->
-                val candidate = response.candidates.firstOrNull()
-                val deltaText = candidate?.text.orEmpty()
-                val finishReason = candidate?.finishReason?.toString()
-                emit(
-                    MessageChunk(
-                        id = streamId,
-                        model = params.model.modelId,
-                        choices = listOf(
-                            UIMessageChoice(
-                                index = 0,
-                                delta = UIMessage(
-                                    role = MessageRole.ASSISTANT,
-                                    parts = if (deltaText.isNotEmpty()) {
-                                        listOf(UIMessagePart.Text(deltaText))
-                                    } else emptyList(),
-                                ),
-                                message = null,
-                                finishReason = finishReason,
-                            )
-                        ),
+            try {
+                generativeModel.generateContentStream(request).collect { response ->
+                    val candidate = response.candidates.firstOrNull()
+                    val deltaText = candidate?.text.orEmpty()
+                    val finishReason = candidate?.finishReason?.toString()
+                    emit(
+                        MessageChunk(
+                            id = streamId,
+                            model = params.model.modelId,
+                            choices = listOf(
+                                UIMessageChoice(
+                                    index = 0,
+                                    delta = UIMessage(
+                                        role = MessageRole.ASSISTANT,
+                                        parts = if (deltaText.isNotEmpty()) {
+                                            listOf(UIMessagePart.Text(deltaText))
+                                        } else emptyList(),
+                                    ),
+                                    message = null,
+                                    finishReason = finishReason,
+                                )
+                            ),
+                        )
                     )
-                )
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "generateContentStream threw", t)
+                error(translateAICoreError(t))
             }
         } finally {
             try { generativeModel.close() } catch (t: Throwable) {
@@ -191,6 +206,22 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
         FeatureStatus.DOWNLOADING ->
             "AICore model is still downloading. Wait for the download to complete and retry."
         else -> "AICore is unavailable (status=$status)."
+    }
+
+    /**
+     * Maps AICore's raw error messages to a user-actionable hint. The most common one we hit
+     * on launch is `ErrorCode 606 - FEATURE_NOT_FOUND` which means the device has the AICore
+     * system app installed but is not enrolled in the GenAI Prompt-API early-access channel.
+     */
+    private fun translateAICoreError(t: Throwable): String {
+        val msg = (t.message ?: t::class.java.simpleName)
+        return when {
+            msg.contains("606") || msg.contains("FEATURE_NOT_FOUND", ignoreCase = true) ->
+                "AICore prompt-API not enrolled on this device. Install the AICore app from the Play Store, then enrol in the GenAI Prompt-API early-access program at https://goo.gle/aicore-prompt-eap and reboot. Raw: $msg"
+            msg.contains("PREPARATION_ERROR", ignoreCase = true) ->
+                "AICore is still preparing the model. Wait 30s and retry, or open Settings → Apps → AICore → Storage and clear cache. Raw: $msg"
+            else -> "AICore error: $msg"
+        }
     }
 
     /**
