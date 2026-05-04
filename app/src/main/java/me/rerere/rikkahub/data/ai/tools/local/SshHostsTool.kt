@@ -1,9 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
 import android.content.Context
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -186,11 +183,9 @@ fun sshExecSavedTool(context: Context, repo: SshHostRepository): Tool = Tool(
                 buildJsonObject { put("error", "saved host has no usable credentials") }.toString()
             ))
         }
-        val payload = withTimeoutOrNull(timeoutSec * 1000L) {
-            withContext(Dispatchers.IO) {
-                execOneShot(context, h.host, h.port, h.user, auth, command, timeoutSec * 1000)
-            }
-        } ?: buildJsonObject { put("error", "timeout") }
+        val payload = runCancellableSshOp(timeoutSec * 1000L) { sessionRef ->
+            execOneShot(context, h.host, h.port, h.user, auth, command, timeoutSec * 1000, sessionRef)
+        }
         listOf(UIMessagePart.Text(payload.toString()))
     }
 )
