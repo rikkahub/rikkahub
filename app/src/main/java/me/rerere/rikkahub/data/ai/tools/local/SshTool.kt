@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
 import android.content.Context
+import android.util.Log
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
@@ -19,7 +20,40 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.util.Properties
+
+private const val TAG_SSH = "SshTool"
+
+/**
+ * Resolves [host] to an IPv4 address string. JSch / `InetAddress.getByName(host)` returns the
+ * AAAA record first when both v4 and v6 are present, and JSch's `Socket(addr, port)` does NOT
+ * implement Happy Eyeballs — it sits on the IPv6 SYN until the connect timeout fires, even
+ * when the server only listens on IPv4. Termux's OpenSSH races both stacks in parallel and
+ * never sees this failure mode, which is why `ssh user@host` from Termux works while our
+ * direct JSch path on the same Pixel times out.
+ *
+ * Returns null if [host] is already a literal IP, if no IPv4 record exists, or if DNS fails.
+ * Caller falls back to the original [host] string in that case.
+ */
+private fun resolveToIPv4(host: String): String? {
+    // Fast path: literal IPs go through unchanged.
+    if (runCatching { InetAddress.getByName(host) }.getOrNull() is Inet4Address) return null
+    if (runCatching { InetAddress.getByName(host) }.getOrNull() is Inet6Address &&
+        host.contains(':')) return null
+    return try {
+        val addrs = InetAddress.getAllByName(host)
+        val v4 = addrs.firstOrNull { it is Inet4Address }
+        v4?.hostAddress?.also {
+            Log.i(TAG_SSH, "resolveToIPv4: $host -> $it (skipping ${addrs.size - 1} other records)")
+        }
+    } catch (t: Throwable) {
+        Log.w(TAG_SSH, "resolveToIPv4: $host failed", t)
+        null
+    }
+}
 
 /**
  * Auth bundle. Either [password] or [privateKey] must be non-blank for connect to succeed.
@@ -64,7 +98,17 @@ internal fun openSshSession(
         val passBytes = auth.passphrase?.toByteArray(Charsets.UTF_8)
         jsch.addIdentity("rikkahub-ssh-key-${System.nanoTime()}", keyBytes, null, passBytes)
     }
-    val session = jsch.getSession(user, host, port)
+    // Force IPv4 resolution before handing the address to JSch. Solves the "ssh works in
+    // Termux but times out in our app" Pixel-only failure: Android's DnsResolver returns
+    // AAAA first and JSch sits on the IPv6 SYN for the full timeout instead of falling
+    // back to v4. setHostKeyAlias keeps known_hosts comparisons keyed by the human-readable
+    // hostname so trust-on-first-use still works the same.
+    val ipv4 = resolveToIPv4(host)
+    val effectiveHost = ipv4 ?: host
+    val session = jsch.getSession(user, effectiveHost, port)
+    if (ipv4 != null && ipv4 != host) {
+        session.setHostKeyAlias(host)
+    }
     if (!auth.password.isNullOrBlank()) session.setPassword(auth.password)
     session.setConfig(Properties().apply {
         // accept-new: trust on first use, fail if a known host's key changes
