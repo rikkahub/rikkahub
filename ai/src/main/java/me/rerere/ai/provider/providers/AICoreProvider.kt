@@ -97,7 +97,7 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
             }
 
             val streamId = "aicore-${System.currentTimeMillis()}"
-            val parser = ToolTagParser()
+            val parser = ToolTagParser(params.tools)
             try {
                 generativeModel.generateContentStream(request).collect { response ->
                     val candidate = response.candidates.firstOrNull()
@@ -327,12 +327,19 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
 private fun buildAiCoreMiniSystemPrefix(tools: List<Tool>): String = buildString {
     appendLine("You are RikkaHub's on-device agent (Gemini Nano).")
     if (tools.isNotEmpty()) {
-        appendLine("To call a tool, output exactly: <tool_call>{\"name\":\"<n>\",\"input\":<json>}</tool_call>")
-        appendLine("After the call, you will see a <tool_result> block. Read it, then either call another tool or reply to the user.")
-        appendLine("One tool per turn. Be concise.")
+        appendLine("To call a tool, output a single line in this exact shape:")
+        appendLine("<tool_call>{\"name\":\"<tool_name>\",\"input\":{<params>}}</tool_call>")
+        appendLine("Rules:")
+        appendLine("- `input` MUST be a JSON OBJECT, never a string.")
+        appendLine("- Match braces carefully: outer `{}`, inner `{}` for input. End with `}}</tool_call>`.")
+        appendLine("- NEVER write a <tool_result> block yourself — the system emits that after running the tool. Stop after </tool_call> and wait.")
+        appendLine("- One tool per turn. Be concise.")
+        appendLine("Examples:")
+        appendLine("<tool_call>{\"name\":\"termux_run_command\",\"input\":{\"command\":\"echo hello\"}}</tool_call>")
+        appendLine("<tool_call>{\"name\":\"launch_app\",\"input\":{\"package_name\":\"com.android.chrome\"}}</tool_call>")
+        appendLine("<tool_call>{\"name\":\"open_url\",\"input\":{\"url\":\"https://google.com\"}}</tool_call>")
         appendLine("Tools:")
         for (tool in tools) {
-            // 1-line description only. Schema is dropped to fit Nano's context.
             val desc = tool.description.lineSequence().firstOrNull()?.trim().orEmpty()
             append("- ").append(tool.name).append(": ").appendLine(desc.take(140))
         }
@@ -361,7 +368,7 @@ private fun truncateForAiCore(messages: List<UIMessage>, keepTail: Int = 6): Lis
  * parse the JSON body. Plain text outside any tag is flushed as it arrives so the user
  * sees streaming output for normal Q&A turns.
  */
-private class ToolTagParser {
+private class ToolTagParser(private val tools: List<Tool> = emptyList()) {
     private val buffer = StringBuilder()
     private var inToolCall = false
     private var pendingFinishReason: String? = null
@@ -426,16 +433,79 @@ private class ToolTagParser {
     }
 
     private fun parseToolCallBody(body: String): UIMessagePart.Tool? = try {
-        val obj: JsonObject = Json.parseToJsonElement(body) as JsonObject
+        val obj: JsonObject = parseLenient(body) ?: return null
         val name = (obj["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return null
-        val input = obj["input"]?.toString() ?: "{}"
+        // Coerce `input` into a valid JSON-object string. Gemini Nano sometimes emits the
+        // input as a primitive string ("input":"echo hello") instead of an object — when
+        // that happens, wrap it under the tool's first-required parameter so the tool's
+        // execute body finds the value where it expects.
+        val rawInput = obj["input"]
+        val inputJson: String = when (rawInput) {
+            null, is kotlinx.serialization.json.JsonNull -> "{}"
+            is JsonObject -> rawInput.toString()
+            is kotlinx.serialization.json.JsonPrimitive -> wrapPrimitiveInput(name, rawInput.content)
+            else -> rawInput.toString()
+        }
         UIMessagePart.Tool(
             toolCallId = "aicore-tool-${System.nanoTime()}",
             toolName = name,
-            input = input,
+            input = inputJson,
             output = emptyList(),
         )
     } catch (_: Throwable) {
         null
+    }
+
+    /**
+     * The model emitted `"input": "<string>"` instead of an object. Look up the named tool's
+     * schema, find its first required property, and wrap the string under that key. Falls
+     * back to "command" since the most common offenders (termux_run_command) take a single
+     * `command` param.
+     */
+    private fun wrapPrimitiveInput(toolName: String, value: String): String {
+        val key = inferPrimaryParamKey(toolName) ?: "command"
+        return buildJsonObject {
+            put(key, kotlinx.serialization.json.JsonPrimitive(value))
+        }.toString()
+    }
+
+    private fun inferPrimaryParamKey(toolName: String): String? {
+        val tool = tools.firstOrNull { it.name == toolName } ?: return null
+        val schema = runCatching { tool.parameters() }.getOrNull() as? InputSchema.Obj
+            ?: return null
+        schema.required?.firstOrNull()?.let { return it }
+        return schema.properties.keys.firstOrNull()
+    }
+
+    /**
+     * Parses [body] as a JSON object, repairing the most common malformations Gemini Nano
+     * makes — wrong closing punctuation (`}>` instead of `}}`), unbalanced braces (one `}`
+     * short), or trailing commas. Returns null only when no amount of repair makes the text
+     * parse, in which case the caller surfaces the raw markup as text so the user sees what
+     * the model tried to emit.
+     */
+    private fun parseLenient(body: String): JsonObject? {
+        val candidates = buildList {
+            add(body)
+            // `}>` → `}}` (off-by-one closing)
+            add(body.replace(Regex("""\}\s*>\s*$"""), "}}"))
+            add(body.replace("}>", "}}"))
+            // Trailing `,}` and `,]` — strip stray commas
+            add(body.replace(Regex(""",\s*\}"""), "}").replace(Regex(""",\s*\]"""), "]"))
+            // Unbalanced braces — pad with `}` until balanced
+            run {
+                val opens = body.count { it == '{' }
+                val closes = body.count { it == '}' }
+                if (opens > closes) add(body + "}".repeat(opens - closes))
+            }
+        }
+        for (variant in candidates.distinct()) {
+            try {
+                return Json.parseToJsonElement(variant) as? JsonObject ?: continue
+            } catch (_: Throwable) {
+                // try next repair
+            }
+        }
+        return null
     }
 }
