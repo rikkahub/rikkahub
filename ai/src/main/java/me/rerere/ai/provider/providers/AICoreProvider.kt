@@ -1,7 +1,11 @@
 package me.rerere.ai.provider.providers
 
+import android.app.ActivityManager
 import android.content.Context
+import android.content.Intent
+import android.os.Process
 import android.util.Log
+import kotlinx.coroutines.delay
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
@@ -62,6 +66,14 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = flow {
+        // Google policy: AICore inference only runs while the calling app is in the
+        // foreground (otherwise throws ErrorCode 30). When a turn fires from the Telegram
+        // bot, a cron job, or any path where RikkaHub is backgrounded, briefly bring our
+        // own UI to the foreground so the inference can proceed. Best-effort: if the OS
+        // refuses (locked screen, recent BAL restrictions), the call will surface the
+        // translated error.
+        ensureAppForeground(context)
+
         val (preference, generativeModel) = openClient(providerSetting, params.model)
         try {
             val status: Int = try {
@@ -264,10 +276,56 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
         return when {
             msg.contains("606") || msg.contains("FEATURE_NOT_FOUND", ignoreCase = true) ->
                 "AICore prompt-API not enrolled on this device. Install the AICore app from the Play Store, then enrol in the GenAI Prompt-API early-access program at https://goo.gle/aicore-prompt-eap and reboot. Raw: $msg"
+            msg.contains("ErrorCode 30", ignoreCase = true) ||
+            msg.contains("Background usage is blocked", ignoreCase = true) ->
+                "AICore is foreground-only (Google policy). RikkaHub tried to bring its UI " +
+                "forward but the system blocked it (probably because the screen is locked or " +
+                "another app holds focus). Unlock and reopen RikkaHub, or pick a cloud model " +
+                "for background tasks. Raw: $msg"
             msg.contains("PREPARATION_ERROR", ignoreCase = true) ->
                 "AICore is still preparing the model. Wait 30s and retry, or open Settings → Apps → AICore → Storage and clear cache. Raw: $msg"
             else -> "AICore error: $msg"
         }
+    }
+
+    /**
+     * AICore (Gemini Nano) refuses to run when the calling app is in the background. If we
+     * detect that we're backgrounded — typical when the Telegram bot service or a cron
+     * worker fires a turn — fire the launcher Intent for our own package and poll until the
+     * process is back in the foreground. Bounded by [maxWaitMs] so we never block forever.
+     *
+     * Returns once the app is foreground, or after the timeout (in which case the inference
+     * call will probably fail and surface the translated background-blocked error).
+     */
+    private suspend fun ensureAppForeground(ctx: Context, maxWaitMs: Long = 2500L) {
+        if (isAppForeground(ctx)) return
+        Log.i(TAG, "ensureAppForeground: launching ${ctx.packageName} to clear AICore background block")
+        val launchIntent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+            ?: return
+        launchIntent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+        )
+        try {
+            ctx.startActivity(launchIntent)
+        } catch (t: Throwable) {
+            Log.w(TAG, "ensureAppForeground: startActivity threw", t)
+            return
+        }
+        val deadline = System.currentTimeMillis() + maxWaitMs
+        while (System.currentTimeMillis() < deadline) {
+            if (isAppForeground(ctx)) return
+            delay(100)
+        }
+        Log.w(TAG, "ensureAppForeground: timed out waiting for foreground transition")
+    }
+
+    private fun isAppForeground(ctx: Context): Boolean {
+        val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            ?: return false
+        val myPid = Process.myPid()
+        val proc = am.runningAppProcesses?.firstOrNull { it.pid == myPid } ?: return false
+        return proc.importance ==
+            ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
     }
 
     /**
