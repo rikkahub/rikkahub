@@ -254,9 +254,13 @@ class SettingsStore(
             DEFAULT_PROVIDERS.forEach { defaultProvider ->
                 if (defaultProvider.id in deletedDefaultIds) return@forEach
                 if (providers.none { it.id == defaultProvider.id }) {
-                    // New default (e.g. AICore on first run after upgrade) goes to the
-                    // top of the list so users discover it immediately.
-                    providers.add(0, defaultProvider.copyProvider())
+                    // AICore is the only built-in we hoist to the top — other defaults
+                    // continue to append at the end so existing users see no reordering.
+                    if (defaultProvider is ProviderSetting.AICore) {
+                        providers.add(0, defaultProvider.copyProvider())
+                    } else {
+                        providers.add(defaultProvider.copyProvider())
+                    }
                 }
             }
             providers = providers.map { provider ->

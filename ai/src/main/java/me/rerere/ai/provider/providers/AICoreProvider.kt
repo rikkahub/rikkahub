@@ -80,12 +80,13 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
                 error(translateAICoreError(t))
             }
 
-            val systemPrefix = buildString {
-                val baseSystem = buildSystemPrefix(messages)
-                if (baseSystem.isNotBlank()) appendLine(baseSystem).appendLine()
-                if (params.tools.isNotEmpty()) appendLine(buildToolProtocolPrompt(params.tools))
-            }.trim()
-            val prompt = formatPromptFromMessages(messages)
+            // Gemini Nano has a small context window (~4k tokens). The full agent-core skill
+            // bundle (~3k tokens of voice/posture/tool docs) used by the cloud providers
+            // overflows it, so we build a MINI version specifically for AICore: terse tool
+            // descriptions, no skill prose, no examples. Cloud providers continue to use the
+            // full agent-core via the assistant's enabledSkills.
+            val systemPrefix = buildAiCoreMiniSystemPrefix(params.tools)
+            val prompt = formatPromptFromMessages(truncateForAiCore(messages))
             val temperature = (params.temperature ?: 0.7f).coerceIn(0f, 1f)
             val request = generateContentRequest(TextPart(prompt)) {
                 this.temperature = temperature
@@ -270,18 +271,6 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
     }
 
     /**
-     * Concatenates all SYSTEM-role messages into a single system instruction string the ML
-     * Kit prompt API can attach via [PromptPrefix]. Without this the AICore model would have
-     * no idea which app it is running in or what its persona is — replies would be pure
-     * generic Q&A.
-     */
-    private fun buildSystemPrefix(messages: List<UIMessage>): String = messages
-        .filter { it.role == MessageRole.SYSTEM }
-        .flatMap { it.parts.filterIsInstance<UIMessagePart.Text>() }
-        .joinToString("\n\n") { it.text.trim() }
-        .trim()
-
-    /**
      * Flattens the conversation into a single text prompt the ML Kit GenAI surface expects.
      * SYSTEM messages are NOT included here — they go in the [PromptPrefix] instead. Tool
      * calls and image/audio parts are collapsed to text since the prompt-API at this version
@@ -328,45 +317,38 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
 }
 
 /**
- * Builds the system-prefix block that teaches the model the tool-call protocol. ML Kit's
- * prompt API has no native function-calling at v1.0.0-beta2, so we rely on the model
- * emitting `<tool_call>{...}</tool_call>` markup, which [ToolTagParser] then parses out
- * of the stream and converts into structured [UIMessagePart.Tool] parts.
- *
- * Gemini Nano follows the protocol reliably for the vast majority of turns; if it emits
- * malformed JSON the parser falls back to streaming the text as plain output.
+ * Mini system prefix for AICore. Gemini Nano's context window is ~4k tokens — the full
+ * agent-core skill prose plus JSON schemas would overflow it on the first turn. This
+ * builds a compact alternative: identity line, tool-call protocol, and one-line tool
+ * descriptions (no schemas). The user's enabled agent-core skill is intentionally NOT
+ * included; cloud providers (OpenAI / Google / Claude) still consume it via the normal
+ * system-message path.
  */
-private fun buildToolProtocolPrompt(tools: List<Tool>): String = buildString {
-    appendLine("You are running inside RikkaHub, an Android on-device agent.")
-    appendLine()
-    appendLine("You have access to the following tools. To call one, output exactly:")
-    appendLine("<tool_call>{\"name\": \"<tool_name>\", \"input\": <json args>}</tool_call>")
-    appendLine("After the call, the system will reply with a <tool_result> block. Read the")
-    appendLine("result, decide your next step, and either call another tool or reply with a")
-    appendLine("plain-text answer to the user. Do NOT explain that you are calling a tool —")
-    appendLine("just emit the tool_call block and wait. Use one tool per turn unless the")
-    appendLine("task obviously needs multiple sequential calls.")
-    appendLine()
-    appendLine("Available tools:")
-    tools.forEach { tool ->
-        append("- ").append(tool.name).append(": ").append(tool.description.trim()).appendLine()
-        val schema = runCatching { tool.parameters() }.getOrNull()
-        if (schema is InputSchema.Obj) {
-            val schemaJson = buildJsonObject {
-                put("type", "object")
-                putJsonObject("properties") {
-                    schema.properties.forEach { (k, v) -> put(k, v) }
-                }
-                schema.required?.let { req ->
-                    put("required", kotlinx.serialization.json.JsonArray(
-                        req.map { kotlinx.serialization.json.JsonPrimitive(it) }
-                    ))
-                }
-            }
-            append("  schema: ").appendLine(schemaJson.toString())
+private fun buildAiCoreMiniSystemPrefix(tools: List<Tool>): String = buildString {
+    appendLine("You are RikkaHub's on-device agent (Gemini Nano).")
+    if (tools.isNotEmpty()) {
+        appendLine("To call a tool, output exactly: <tool_call>{\"name\":\"<n>\",\"input\":<json>}</tool_call>")
+        appendLine("After the call, you will see a <tool_result> block. Read it, then either call another tool or reply to the user.")
+        appendLine("One tool per turn. Be concise.")
+        appendLine("Tools:")
+        for (tool in tools) {
+            // 1-line description only. Schema is dropped to fit Nano's context.
+            val desc = tool.description.lineSequence().firstOrNull()?.trim().orEmpty()
+            append("- ").append(tool.name).append(": ").appendLine(desc.take(140))
         }
     }
 }.trim()
+
+/**
+ * Trims the conversation history so the prompt stays under Nano's context window. Keeps
+ * the latest [keepTail] messages and drops the rest. SYSTEM messages are dropped entirely
+ * because the AICore mini prefix replaces them. Tool exchanges within the kept tail are
+ * preserved so the model can continue an in-progress task.
+ */
+private fun truncateForAiCore(messages: List<UIMessage>, keepTail: Int = 6): List<UIMessage> {
+    val nonSystem = messages.filter { it.role != MessageRole.SYSTEM }
+    return if (nonSystem.size <= keepTail) nonSystem else nonSystem.takeLast(keepTail)
+}
 
 /**
  * Streaming parser that walks the AICore output token-by-token, splitting it into plain
