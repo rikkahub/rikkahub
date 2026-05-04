@@ -1,12 +1,20 @@
 package me.rerere.rikkahub.data.ai
 
 import android.content.Context
+import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
+import me.rerere.rikkahub.service.AgentOverlay
+import me.rerere.rikkahub.service.RikkaAccessibilityService
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
@@ -373,7 +381,56 @@ class GenerationHandler(
             )
         }
 
-    }.flowOn(Dispatchers.IO)
+    }
+        .onStart {
+            // Reset per-turn navigation tracking and surface the overlay so the user
+            // sees that automation is happening even when the agent runs from Telegram.
+            AgentTurnTracker.reset()
+            AgentOverlay.show(context)
+        }
+        .onCompletion {
+            AgentOverlay.hide(context)
+            handleAutoReturnAfterTurn()
+        }
+        .flowOn(Dispatchers.IO)
+
+    /**
+     * If the agent navigated away from RikkaHub during this turn (launch_app / open_url) and
+     * the user is still on that destination, bring RikkaHub back to the foreground so the
+     * user is not stranded inside Chrome / Termux / etc. If the user manually switched apps
+     * mid-turn, we skip the auto-return and surface a Toast explaining the safety behavior.
+     */
+    private fun handleAutoReturnAfterTurn() {
+        if (!AgentTurnTracker.didNavigateAway()) return
+        val destination = AgentTurnTracker.lastDestination()
+        val currentForeground = RikkaAccessibilityService.instance
+            ?.rootInActiveWindow?.packageName?.toString()
+
+        val userSwitchedAway = destination != null
+            && currentForeground != null
+            && currentForeground != destination
+            && currentForeground != context.packageName
+
+        if (userSwitchedAway) {
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(
+                    context.applicationContext,
+                    "RikkaHub: skipped auto-return because you switched apps. (Safety feature)",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            return
+        }
+
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: return
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        try {
+            context.startActivity(intent)
+        } catch (t: Throwable) {
+            Log.w(TAG, "auto-return launch failed", t)
+        }
+    }
 
     private suspend fun generateInternal(
         assistant: Assistant,

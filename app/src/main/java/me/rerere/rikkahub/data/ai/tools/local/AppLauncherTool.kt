@@ -16,6 +16,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import me.rerere.rikkahub.service.RikkaAccessibilityService
 
 private suspend fun waitForForegroundPackage(
@@ -119,6 +120,7 @@ fun launchAppTool(context: Context): Tool = Tool(
                     )
                 )
             }
+            AgentTurnTracker.recordNavigatedAway(pkg)
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
@@ -351,6 +353,7 @@ fun openUrlTool(context: Context): Tool = Tool(
         }
         try {
             context.startActivity(intent)
+            AgentTurnTracker.recordNavigatedAway(resolved.activityInfo?.packageName)
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {

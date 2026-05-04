@@ -49,6 +49,13 @@ class RikkaNotificationListenerService : NotificationListenerService() {
     // the same notification don't spam Telegram.
     private val lastForwarded = HashMap<String, Int>()
 
+    // Tracks the very last (package + title + text) we forwarded across ALL keys. Persistent
+    // notifications (Termux, music players, etc.) sometimes flap between identical content
+    // under different StatusBarNotification keys; per-key dedup misses those, so this
+    // global dedup catches "exact same payload as the previous forward" regardless of key.
+    @Volatile private var lastForwardedGlobalSig: Int = 0
+    @Volatile private var lastForwardedGlobalAtMs: Long = 0L
+
     override fun onListenerConnected() {
         super.onListenerConnected()
         instance = this
@@ -106,6 +113,17 @@ class RikkaNotificationListenerService : NotificationListenerService() {
         val signature = (entry.title + "|" + entry.text).hashCode()
         if (lastForwarded[entry.key] == signature) return  // identical update; skip
         lastForwarded[entry.key] = signature
+
+        // Global dedup: if the previous forward (any key) had the exact same package + title
+        // + text within the last 5 minutes, skip. Catches Termux's persistent notification
+        // re-posting identical content under shifting keys.
+        val globalSig = (entry.packageName + "|" + entry.title + "|" + entry.text).hashCode()
+        val now = System.currentTimeMillis()
+        if (globalSig == lastForwardedGlobalSig && (now - lastForwardedGlobalAtMs) < 5 * 60_000) {
+            return
+        }
+        lastForwardedGlobalSig = globalSig
+        lastForwardedGlobalAtMs = now
 
         val body = buildString {
             append("🔔 [").append(entry.label).append("] ")
