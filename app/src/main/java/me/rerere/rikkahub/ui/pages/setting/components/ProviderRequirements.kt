@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.setting.components
 
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.ui.components.ui.TagType
+import kotlin.collections.listOf
 
 /**
  * A user-facing precondition the provider needs before it can actually run inference. Rendered
@@ -22,11 +23,16 @@ data class ProviderRequirement(
          * providers — everything is server-side, just an API key).
          */
         fun from(provider: ProviderSetting): List<ProviderRequirement> = when (provider) {
-            // When the on-device AICore provider lands (see
-            // docs/superpowers/specs/2026-05-04-aicore-provider-design.md) it returns:
-            //   ProviderRequirement("Requires AICore beta", TagType.WARNING)
-            // plus a "Not supported on this device" entry when checkStatus() is UNAVAILABLE.
-            // Until then, all current subtypes have no extra preconditions.
+            is ProviderSetting.AICore -> listOf(
+                ProviderRequirement(
+                    label = "Requires AICore beta",
+                    severity = TagType.WARNING,
+                ),
+                ProviderRequirement(
+                    label = "Pixel 8 / 9 / 10",
+                    severity = TagType.INFO,
+                ),
+            )
             else -> emptyList()
         }
     }

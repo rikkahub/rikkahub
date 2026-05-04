@@ -96,6 +96,9 @@ class SettingsStore(
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
+        // IDs of built-in providers the user explicitly deleted; the re-seed pass
+        // skips these so deletions are sticky across app restarts.
+        val DELETED_BUILTIN_PROVIDER_IDS = stringPreferencesKey("deleted_builtin_provider_ids")
 
         // 助手
         val SELECT_ASSISTANT = stringPreferencesKey("select_assistant")
@@ -180,6 +183,14 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
+                deletedBuiltInProviderIds = preferences[DELETED_BUILTIN_PROVIDER_IDS]
+                    ?.let { raw ->
+                        runCatching {
+                            JsonInstant.decodeFromString<Set<String>>(raw)
+                                .mapNotNull { runCatching { Uuid.parse(it) }.getOrNull() }
+                                .toSet()
+                        }.getOrNull()
+                    } ?: emptySet(),
                 assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
@@ -228,8 +239,12 @@ class SettingsStore(
             )
         }
         .map {
-            var providers = it.providers.ifEmpty { DEFAULT_PROVIDERS }.toMutableList()
+            val deletedDefaultIds = it.deletedBuiltInProviderIds
+            var providers = it.providers.ifEmpty {
+                DEFAULT_PROVIDERS.filter { p -> p.id !in deletedDefaultIds }
+            }.toMutableList()
             DEFAULT_PROVIDERS.forEach { defaultProvider ->
+                if (defaultProvider.id in deletedDefaultIds) return@forEach
                 if (providers.none { it.id == defaultProvider.id }) {
                     providers.add(defaultProvider.copyProvider())
                 }
@@ -280,6 +295,10 @@ class SettingsStore(
                         )
 
                         is ProviderSetting.Claude -> provider.copy(
+                            models = provider.models.distinctBy { model -> model.id }
+                        )
+
+                        is ProviderSetting.AICore -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
                     }
@@ -350,6 +369,9 @@ class SettingsStore(
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
+            preferences[DELETED_BUILTIN_PROVIDER_IDS] = JsonInstant.encodeToString(
+                settings.deletedBuiltInProviderIds.map { it.toString() }.toSet()
+            )
 
             preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
             preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
@@ -481,6 +503,12 @@ data class Settings(
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
+    /**
+     * IDs of built-in providers the user explicitly removed via long-press. The re-seed
+     * pass on settings load skips these so deletions stick across app restarts. Without
+     * this gate, deleting a default provider would just re-add it on next read.
+     */
+    val deletedBuiltInProviderIds: Set<Uuid> = emptySet(),
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
     val assistantTags: List<Tag> = emptyList(),
     val searchServices: List<SearchServiceOptions> = listOf(SearchServiceOptions.DEFAULT),

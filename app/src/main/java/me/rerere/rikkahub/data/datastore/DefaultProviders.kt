@@ -287,4 +287,14 @@ val DEFAULT_PROVIDERS = listOf(
             )
         }
     ),
+    ProviderSetting.AICore(
+        // Synthetic on-device provider. Self-disables on devices without AICore beta.
+        builtIn = true,
+        description = {
+            Text("Runs Gemini Nano on-device through Android AICore. Requires AICore beta on a supported Pixel device.")
+        },
+        shortDescription = {
+            Text("On-device — no API key, no network")
+        },
+    ),
 )
