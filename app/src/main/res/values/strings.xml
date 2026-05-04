@@ -1080,6 +1080,8 @@
   <string name="assistant_page_local_tools_screen_automation_desc">Let the LLM tap, swipe, scroll, read on-screen content, and take screenshots via Android\'s accessibility service.</string>
   <string name="assistant_page_local_tools_app_launcher_title">App launcher</string>
   <string name="assistant_page_local_tools_app_launcher_desc">Open installed apps by package name (e.g. Termux, Settings) and list available apps. Pairs with screen automation for full UI control.</string>
+  <string name="assistant_page_local_tools_notifications_title">Notification awareness</string>
+  <string name="assistant_page_local_tools_notifications_desc">Let the LLM read incoming notifications from other apps. Whitelisted apps also auto-forward to your default Telegram chat. Configure in Settings -&gt; Notifications.</string>
   <string name="assistant_page_local_tools_termux_title">Termux integration</string>
   <string name="assistant_page_local_tools_termux_status_not_installed">Termux not installed - install from github.com/termux/termux-app/releases</string>
   <string name="assistant_page_local_tools_termux_status_no_permission">Toggle on to grant the RUN_COMMAND permission</string>

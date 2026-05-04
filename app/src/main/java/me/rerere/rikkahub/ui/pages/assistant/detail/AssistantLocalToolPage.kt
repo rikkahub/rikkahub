@@ -533,6 +533,21 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_notifications_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_notifications_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.NotificationListener),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.NotificationListener, it) },
+                        requiresNotificationListener = true,
+                    )
+                }
+            )
         }
 
         // Media section
@@ -712,6 +727,7 @@ private fun PermissionedSwitch(
     requiresWriteSettings: Boolean = false,
     requiresDndAccess: Boolean = false,
     requiresAccessibilityService: Boolean = false,
+    requiresNotificationListener: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val toaster = LocalToaster.current
@@ -759,6 +775,7 @@ private fun PermissionedSwitch(
                         requiresWriteSettings -> PermissionHelper.hasWriteSettings(ctx)
                         requiresDndAccess -> PermissionHelper.hasDndAccess(ctx)
                         requiresAccessibilityService -> PermissionHelper.hasAccessibilityService(ctx)
+                        requiresNotificationListener -> PermissionHelper.hasNotificationListener(ctx)
                         else -> false
                     }
                     pendingSpecialResume = false
@@ -769,6 +786,7 @@ private fun PermissionedSwitch(
                             requiresWriteSettings -> "WRITE_SETTINGS"
                             requiresDndAccess -> "DND access"
                             requiresAccessibilityService -> "Accessibility service"
+                            requiresNotificationListener -> "Notification access"
                             else -> ""
                         }
                         toaster.show(
@@ -787,6 +805,14 @@ private fun PermissionedSwitch(
 
     fun requestPermission() {
         when {
+            requiresNotificationListener -> {
+                if (PermissionHelper.hasNotificationListener(ctx)) {
+                    onCheckedChange(true)
+                } else {
+                    showDialog = true
+                }
+            }
+
             requiresAccessibilityService -> {
                 if (PermissionHelper.hasAccessibilityService(ctx)) {
                     onCheckedChange(true)
@@ -829,12 +855,13 @@ private fun PermissionedSwitch(
     // raw List<String> for structural equality across recomps, so passing the list
     // directly invalidated this remember on every parent recomp.
     val permsKey = remember(requiredRuntimePerms) { requiredRuntimePerms.joinToString(",") }
-    val permissionMissing = remember(checked, resumeTrigger, permsKey, requiresWriteSettings, requiresDndAccess, requiresAccessibilityService) {
+    val permissionMissing = remember(checked, resumeTrigger, permsKey, requiresWriteSettings, requiresDndAccess, requiresAccessibilityService, requiresNotificationListener) {
         checked && when {
             requiredRuntimePerms.isNotEmpty() -> !PermissionHelper.hasRuntime(ctx, requiredRuntimePerms)
             requiresWriteSettings -> !PermissionHelper.hasWriteSettings(ctx)
             requiresDndAccess -> !PermissionHelper.hasDndAccess(ctx)
             requiresAccessibilityService -> !PermissionHelper.hasAccessibilityService(ctx)
+            requiresNotificationListener -> !PermissionHelper.hasNotificationListener(ctx)
             else -> false
         }
     }
@@ -855,6 +882,7 @@ private fun PermissionedSwitch(
                         requiresWriteSettings -> PermissionHelper.writeSettingsIntent(ctx)
                         requiresDndAccess -> PermissionHelper.dndAccessIntent(ctx)
                         requiresAccessibilityService -> PermissionHelper.accessibilitySettingsIntent()
+                        requiresNotificationListener -> PermissionHelper.notificationListenerSettingsIntent()
                         else -> null
                     }
                     if (intent != null) {
