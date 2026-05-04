@@ -62,7 +62,11 @@ class CronJobWorker(
                 // ignore — generation either finished or was cancelled
             }
 
-            postNotification(job.name, conv.id.toString())
+            // No success notification: the cron prompt itself is responsible for whatever the
+            // user wants to see (post_notification, telegram_send_message, etc). A blanket
+            // "Scheduled job ran" on top of that produces a duplicate ping which the user
+            // hits as a confusing two-notification bug. Failure path still notifies because
+            // otherwise a silently-broken cron would have zero feedback.
         }.onFailure {
             postNotification(job.name, errorMessage = it.message ?: it::class.simpleName ?: "error")
         }
