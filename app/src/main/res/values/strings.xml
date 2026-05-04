@@ -1119,10 +1119,17 @@
   <string name="setting_page_notifications_default_chat_set">Default Telegram chat: %1$s</string>
   <string name="setting_page_notifications_default_chat_unset">Default Telegram chat: not set (auto-route disabled)</string>
   <string name="setting_page_notifications_whitelist_section">Auto-route whitelist</string>
-  <string name="setting_page_notifications_whitelist_help">Apps whose notifications auto-forward to your default Telegram chat. Empty = nothing forwarded. Comma-separated package names.</string>
-  <string name="setting_page_notifications_whitelist_label">Whitelisted packages</string>
-  <string name="setting_page_notifications_whitelist_save">Save whitelist</string>
-  <string name="setting_page_notifications_whitelist_saved_toast">Whitelist saved (%1$d entries)</string>
+  <string name="setting_page_notifications_whitelist_help">Apps whose notifications auto-forward to your default Telegram chat. Empty = nothing forwarded. Toggle each app on or off in the picker.</string>
+  <string name="setting_page_notifications_whitelist_label">Whitelisted apps</string>
+  <string name="setting_page_notifications_whitelist_summary_zero">No apps whitelisted</string>
+  <string name="setting_page_notifications_whitelist_summary_n">%1$d app whitelisted</string>
+  <string name="setting_page_notifications_whitelist_summary_n_plural">%1$d apps whitelisted</string>
+  <string name="setting_page_notifications_whitelist_manage">Manage whitelisted apps</string>
+  <string name="setting_page_notifications_whitelist_picker_title">Whitelisted apps</string>
+  <string name="setting_page_notifications_whitelist_picker_search">Search apps</string>
+  <string name="setting_page_notifications_whitelist_picker_show_only_selected">Show only whitelisted</string>
+  <string name="setting_page_notifications_whitelist_picker_done">Done</string>
+  <string name="setting_page_notifications_whitelist_picker_empty">No installed apps match your filter.</string>
   <string name="setting_page_notifications_recent_section">Recent activity</string>
   <string name="setting_page_notifications_recent_empty">No notifications captured yet.</string>
   <string name="setting_page_notifications_action_ago_seconds">%1$ds ago</string>
