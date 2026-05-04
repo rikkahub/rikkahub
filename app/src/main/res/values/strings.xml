@@ -1111,5 +1111,22 @@
   <string name="setting_page_accessibility_action_ago_hours">%1$dh ago</string>
   <string name="setting_page_notifications">Notifications</string>
   <string name="setting_page_notifications_desc">Notification access status, recent activity log, and the per-app whitelist that auto-forwards to Telegram.</string>
+  <string name="setting_page_notifications_status_section">Status</string>
+  <string name="setting_page_notifications_status_connected">Service: Connected</string>
+  <string name="setting_page_notifications_status_not_connected">Service: Not connected</string>
+  <string name="setting_page_notifications_status_help">RikkaHub needs notification access to read incoming notifications. Open Settings → Notification access → Notification access and enable RikkaHub.</string>
+  <string name="setting_page_notifications_open_settings">Open Notification access settings</string>
+  <string name="setting_page_notifications_default_chat_set">Default Telegram chat: %1$s</string>
+  <string name="setting_page_notifications_default_chat_unset">Default Telegram chat: not set (auto-route disabled)</string>
+  <string name="setting_page_notifications_whitelist_section">Auto-route whitelist</string>
+  <string name="setting_page_notifications_whitelist_help">Apps whose notifications auto-forward to your default Telegram chat. Empty = nothing forwarded. Comma-separated package names.</string>
+  <string name="setting_page_notifications_whitelist_label">Whitelisted packages</string>
+  <string name="setting_page_notifications_whitelist_save">Save whitelist</string>
+  <string name="setting_page_notifications_whitelist_saved_toast">Whitelist saved (%1$d entries)</string>
+  <string name="setting_page_notifications_recent_section">Recent activity</string>
+  <string name="setting_page_notifications_recent_empty">No notifications captured yet.</string>
+  <string name="setting_page_notifications_action_ago_seconds">%1$ds ago</string>
+  <string name="setting_page_notifications_action_ago_minutes">%1$dm ago</string>
+  <string name="setting_page_notifications_action_ago_hours">%1$dh ago</string>
 </resources>
 
