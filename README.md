@@ -15,8 +15,8 @@
   <p>
     <a href="https://github.com/rikkahub/rikkahub">Upstream</a> ·
     <a href="https://github.com/ExTV/rikkahub-agent">This fork</a> ·
-    <a href="#getting-started">Getting started</a> ·
-    <a href="#what-can-it-do">What can it do</a>
+    <a href="https://github.com/ExTV/rikkahub-agent/releases">Releases</a> ·
+    <a href="#getting-started">Getting started</a>
   </p>
 </div>
 
@@ -104,19 +104,20 @@ cards. All preserved exactly as upstream.
 
 ## Getting started
 
-### Download the APK (recommended)
+A brand-new install does *nothing extra* by default — it behaves exactly like
+vanilla RikkaHub until you opt in. Here's the order that actually works.
 
-Grab the latest signed APK from the
-[**Releases page**](https://github.com/ExTV/rikkahub-agent/releases).
+### 1. Install the app
 
-1. Download the `rikkahub-agent-*-universal-debug.apk` from the most recent release.
-2. **If you have an older agent-fork build installed, uninstall it first** —
-   signatures may not match.
-3. Open the APK on your device and allow install from this source.
-4. Launch RikkaHub Agent and head to **Settings → Permissions** to grant
-   whatever you want enabled.
+**Recommended — download the APK** from the
+[Releases page](https://github.com/ExTV/rikkahub-agent/releases). Grab the
+latest `rikkahub-agent-*-universal-debug.apk`, allow install from unknown
+sources when prompted, and open it.
 
-### Build from source
+> **If you have an older agent-fork build installed, uninstall it first** —
+> the signing keys may differ between releases.
+
+**Or build from source:**
 
 ```bash
 git clone https://github.com/ExTV/rikkahub-agent.git
@@ -127,20 +128,54 @@ cd rikkahub-agent
 You'll need a `google-services.json` at `app/google-services.json` — either
 your own from the Firebase console, or stub it out for local debug builds.
 
-### Set up the Telegram bot (under 2 minutes)
+### 2. Add an LLM provider
 
-1. Open Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot`,
-   follow the prompts, and copy the **bot token**.
+First launch lands you in an empty chat. The app needs an LLM behind it
+before anything works.
+
+Open **Settings → Providers**, pick a provider (OpenAI, Google Gemini,
+Anthropic, or any OpenAI-compatible endpoint), and paste your API key.
+Then choose a model from the chat header.
+
+> **Pixel 8 / 9 / 10 owners** can use the built-in **AICore** provider
+> instead — it runs Gemini Nano fully on-device, no API key, no network.
+> It requires the AICore app from the Play Store *and* enrolment in
+> Google's GenAI Prompt-API early-access program. See the
+> [latest release notes](https://github.com/ExTV/rikkahub-agent/releases/latest)
+> for the exact steps.
+
+At this point you have a normal RikkaHub chat. Everything below is opt-in.
+
+### 3. Turn on the agent features you want
+
+The fork's extra abilities live behind per-assistant tool toggles.
+
+Open **Settings → Assistants → (tap your assistant) → Local Tools**. You'll
+see categorized switches: device info, hardware control, personal data,
+screen automation, SSH, Telegram bot, scheduled jobs, and more. Flip on
+only what you actually want.
+
+The first time the assistant uses a tool that needs a system permission
+(location, contacts, accessibility, notification access, etc.), Android
+will ask you to grant it. If you'd rather pre-grant everything in advance,
+open **Settings → Permissions** — every permission the app uses is listed
+there with a one-tap grant button.
+
+### 4. (Optional) Talk to your assistant from anywhere via Telegram
+
+If you enabled the **Telegram bot** tool in step 3, you can chat with your
+assistant remotely.
+
+1. Message [@BotFather](https://t.me/BotFather), send `/newbot`, follow the
+   prompts, and copy the **bot token**.
 2. Message [@userinfobot](https://t.me/userinfobot), send `/start`, and copy
    your **numeric Telegram user id**.
-3. In RikkaHub, open any assistant → **Local Tools** → **Network** → turn on
-   **Telegram bot**.
 
 Now pick one of two paths:
 
 **Path A — let the assistant configure itself**
 
-Just chat with the assistant:
+Just chat with the assistant inside RikkaHub:
 
 > *Set up the Telegram bot. Token is `<your token>`. My user id is
 > `<your user id>`. Set me as the default chat. Enable the bot.*
@@ -149,23 +184,27 @@ It'll handle the rest.
 
 **Path B — configure manually**
 
-Settings → **Telegram bot** → paste token → set default chat → add your user id
-to the allowlist → tap **Start**.
+Settings → **Telegram bot** → paste token → set default chat → add your user
+id to the allowlist → tap **Start**.
 
-DM your bot. You should get a reply.
-
-That's it. Reboots, app kills, battery saver — the bot survives all of them.
+DM your bot. You should get a reply. Reboots, app kills, battery saver —
+the bot survives all of them.
 
 ## How the safety model works
 
 Everything new is opt-in:
 
-- New tools live behind toggles inside each assistant's settings.
-- Side-effecting actions (messages, remote commands, file writes) require
-  either a per-tool toggle or in-the-moment user approval.
-- The Telegram bot ignores everyone unless you explicitly allowlist them.
+- All new tools start **off**. They live behind switches inside each
+  assistant's Local Tools page.
+- Side-effecting actions (sending messages, modifying remote machines,
+  writing files) require either an explicit per-tool toggle or
+  in-the-moment user approval.
+- The Telegram bot ignores everyone unless you explicitly allowlist their
+  user id.
 - The notification forwarder ships with an empty whitelist — nothing leaves
-  your phone until you pick the apps.
+  your phone until you pick the apps to forward.
+- Permissions for sensitive surfaces (location, contacts, accessibility) are
+  granted by you, on Android's terms, the first time a tool needs them.
 
 If you don't turn anything on, nothing changes from upstream behavior.
 
