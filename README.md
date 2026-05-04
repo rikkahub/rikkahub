@@ -104,7 +104,19 @@ cards. All preserved exactly as upstream.
 
 ## Getting started
 
-### Install
+### Download the APK (recommended)
+
+Grab the latest signed APK from the
+[**Releases page**](https://github.com/ExTV/rikkahub-agent/releases).
+
+1. Download the `rikkahub-agent-*-universal-debug.apk` from the most recent release.
+2. **If you have an older agent-fork build installed, uninstall it first** —
+   signatures may not match.
+3. Open the APK on your device and allow install from this source.
+4. Launch RikkaHub Agent and head to **Settings → Permissions** to grant
+   whatever you want enabled.
+
+### Build from source
 
 ```bash
 git clone https://github.com/ExTV/rikkahub-agent.git
