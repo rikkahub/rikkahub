@@ -391,7 +391,7 @@ class TelegramBotService : Service() {
         val turnMessages = conv.currentMessages.drop(baselineMessageCount)
         val lastAssistant = turnMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
             ?: return ""
-        val text = assistantTextOf(lastAssistant).trim()
+        val text = stripMarkdownForTelegram(assistantTextOf(lastAssistant)).trim()
         val toolSummary = assistantToolSummary(lastAssistant)
         val streamMarker = if (!finalizing && text.isNotEmpty()) " $STREAM_TICK" else ""
         return buildString {
@@ -429,6 +429,46 @@ class TelegramBotService : Service() {
     }
 
     /**
+     * Drops the noisy "/data/data/com.termux/files/usr/bin/bash: line N: " prefix that
+     * Termux's bash adds to every stderr line. Without this every shell error reads:
+     *   "/data/data/com.termux/files/usr/bin/bash: line 1: npm: command not found"
+     * which buries the actual signal ("npm: command not found"). Best-effort regex; if no
+     * match, returns the line unchanged.
+     */
+    private fun trimShellPrefix(line: String): String {
+        val rx = Regex("""^(?:/[^:]*?bash|sh|/bin/[a-z]+):\s*line\s+\d+:\s*""")
+        return rx.replaceFirst(line, "")
+    }
+
+    /**
+     * Strips the most common Markdown emphasis / inline-code markers so the bot's reply on
+     * Telegram renders as clean text instead of literal asterisks. We deliberately do NOT
+     * use parse_mode=Markdown on the wire because Telegram's parser is strict about
+     * escaping and a single stray underscore breaks the whole message; stripping in our
+     * own code is more predictable.
+     *
+     *  **bold**  -> bold
+     *  __bold__  -> bold
+     *  `code`    -> code
+     *  ``` ... ``` -> the contents (markers dropped)
+     *
+     * Single * and _ for emphasis collide with list bullets / identifier names so we leave
+     * those alone.
+     */
+    private fun stripMarkdownForTelegram(s: String): String {
+        if (s.isEmpty()) return s
+        var out = s
+        // Triple-backtick fenced code blocks: drop the fences but keep contents.
+        out = Regex("```[a-zA-Z0-9_+-]*\\n?([\\s\\S]*?)```").replace(out) { it.groupValues[1].trim('\n') }
+        // Bold / strong with double-asterisks or double-underscores.
+        out = Regex("\\*\\*([^*]+?)\\*\\*").replace(out, "$1")
+        out = Regex("__([^_]+?)__").replace(out, "$1")
+        // Inline code with single backticks.
+        out = Regex("`([^`\\n]+?)`").replace(out, "$1")
+        return out
+    }
+
+    /**
      * Picks a status icon + one-line hint for a single tool result. Reads only well-known
      * envelope keys (success / error / exit_code / count / reason / file_path) so the
      * summary stays consistent across tools. Returns ("🔄", "running") for in-flight calls.
@@ -458,7 +498,9 @@ class TelegramBotService : Service() {
         val exit = obj["exit_code"]?.jsonPrimitive?.intOrNull
         if (exit != null && exit != 0) {
             val stderr = obj["stderr"]?.jsonPrimitive?.contentOrNull?.lineSequence()
-                ?.firstOrNull { it.isNotBlank() }?.take(80)
+                ?.firstOrNull { it.isNotBlank() }
+                ?.let { trimShellPrefix(it) }
+                ?.take(80)
             return "⚠️" to ("exit $exit" + (if (!stderr.isNullOrBlank()) " · $stderr" else ""))
         }
         if (explicitFalse) {
@@ -474,7 +516,9 @@ class TelegramBotService : Service() {
             ?: (obj["apps"] as? kotlinx.serialization.json.JsonArray)?.size
             ?: (obj["nodes"] as? kotlinx.serialization.json.JsonArray)?.size
         val stdoutSnippet = obj["stdout"]?.jsonPrimitive?.contentOrNull
-            ?.lineSequence()?.firstOrNull { it.isNotBlank() }?.take(80)
+            ?.lineSequence()?.firstOrNull { it.isNotBlank() }
+            ?.let { trimShellPrefix(it) }
+            ?.take(80)
         val filePath = obj["file_path"]?.jsonPrimitive?.contentOrNull
         val hint = when {
             count != null -> if (count == 1) "1 result" else "$count results"
