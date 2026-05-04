@@ -21,6 +21,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import java.util.UUID
 
 private const val TERMUX_PACKAGE = "com.termux"
@@ -349,6 +350,13 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
             }
             TermuxIntegration.State.READY -> Unit  // proceed
         }
+
+        // Mark Termux + Termux:API as freshly touched by the agent so the notification
+        // listener stops forwarding their persistent foreground notifications ("0 sessions",
+        // "1 session", "2 sessions") to the user's Telegram chat for the duration of the
+        // turn plus a short grace window. The user knows the agent is running Termux work;
+        // they don't need a Telegram ping for every session counter flap.
+        AgentTurnTracker.touchPackage(TERMUX_PACKAGE, "com.termux.api")
 
         // Prepend a noninteractive preamble for `command` mode so apt/pkg upgrades don't
         // hang waiting for "keep your existing config?" debconf prompts. Only applies to

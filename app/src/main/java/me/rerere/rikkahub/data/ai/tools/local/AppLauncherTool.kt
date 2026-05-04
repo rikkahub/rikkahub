@@ -121,6 +121,7 @@ fun launchAppTool(context: Context): Tool = Tool(
                 )
             }
             AgentTurnTracker.recordNavigatedAway(pkg)
+            AgentTurnTracker.touchPackage(pkg)
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
@@ -353,7 +354,9 @@ fun openUrlTool(context: Context): Tool = Tool(
         }
         try {
             context.startActivity(intent)
-            AgentTurnTracker.recordNavigatedAway(resolved.activityInfo?.packageName)
+            val handlerPkg = resolved.activityInfo?.packageName
+            AgentTurnTracker.recordNavigatedAway(handlerPkg)
+            if (!handlerPkg.isNullOrBlank()) AgentTurnTracker.touchPackage(handlerPkg)
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {

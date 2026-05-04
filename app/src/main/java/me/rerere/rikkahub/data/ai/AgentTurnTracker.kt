@@ -14,10 +14,21 @@ object AgentTurnTracker {
     @Volatile private var destination: String? = null
     @Volatile private var didAutomate: Boolean = false
 
+    /**
+     * Per-package timestamp recording the last time the agent itself interacted with a
+     * package (launch_app, open_url, termux_run_command). The notification listener checks
+     * this before forwarding to Telegram so a user driving the agent does not get spammed
+     * with status pings from the very work the agent just kicked off (Termux's "1 session"
+     * counter is the canonical offender).
+     */
+    private val touchedPackages = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     fun reset() {
         navigatedAway = false
         destination = null
         didAutomate = false
+        // Don't clear touchedPackages — the suppression window outlives the turn so the
+        // last few flaps after the turn ends also get filtered.
     }
 
     fun recordNavigatedAway(packageName: String?) {
@@ -38,4 +49,22 @@ object AgentTurnTracker {
     fun didNavigateAway(): Boolean = navigatedAway
     fun didAutomate(): Boolean = didAutomate
     fun lastDestination(): String? = destination
+
+    /** Marks [packageName] (and any pkg in [extras]) as freshly touched by the agent. */
+    fun touchPackage(packageName: String, vararg extras: String) {
+        val now = System.currentTimeMillis()
+        touchedPackages[packageName] = now
+        extras.forEach { touchedPackages[it] = now }
+    }
+
+    /**
+     * True if the agent itself touched [packageName] within [withinMs]. Used by the
+     * notification listener to drop forward-to-Telegram for packages the user did not
+     * interact with — the agent did, and the resulting status notifications are not new
+     * information for the user.
+     */
+    fun isFreshlyTouched(packageName: String, withinMs: Long = 60_000L): Boolean {
+        val ts = touchedPackages[packageName] ?: return false
+        return System.currentTimeMillis() - ts < withinMs
+    }
 }

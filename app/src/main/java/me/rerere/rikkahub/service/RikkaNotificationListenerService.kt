@@ -110,6 +110,13 @@ class RikkaNotificationListenerService : NotificationListenerService() {
         val chatId = tg.defaultChatId ?: return
         if (!tg.enabled) return
 
+        // Drop forwards for packages the agent itself just kicked off (Termux session-counter
+        // flaps from termux_run_command, etc) so the user does not receive Telegram pings
+        // for work they themselves told the agent to do.
+        if (me.rerere.rikkahub.data.ai.AgentTurnTracker.isFreshlyTouched(entry.packageName)) {
+            return
+        }
+
         val signature = (entry.title + "|" + entry.text).hashCode()
         if (lastForwarded[entry.key] == signature) return  // identical update; skip
         lastForwarded[entry.key] = signature
