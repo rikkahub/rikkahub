@@ -19,6 +19,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.core.MessageRole
@@ -403,34 +405,85 @@ class TelegramBotService : Service() {
     }
 
     /**
-     * Compact one-line "tool: name(args) -> summary" entries for every tool the assistant
-     * ran in this turn. Skips internal-only tools whose details add noise (e.g. ask_user
-     * which surfaces its own UI). Falls back to "(running)" for not-yet-completed calls so
-     * the live edit shows progress.
+     * Compact, human-readable summary of every tool the assistant ran this turn. Earlier
+     * revisions dumped truncated JSON which read like a stack trace; now we only show:
+     *   - a status icon (✅ success / ⚠️ non-zero exit / ❌ error / 🔄 running)
+     *   - the tool name
+     *   - a single short outcome hint extracted from the JSON output (count / error /
+     *     success / first key) — never the raw JSON.
      */
     private fun assistantToolSummary(m: UIMessage): String {
         val tools = m.parts.filterIsInstance<UIMessagePart.Tool>()
         if (tools.isEmpty()) return ""
         return buildString {
-            append("🔧 Tools:\n")  // wrench emoji + Tools:
+            append("🔧 Tools used:\n")
             for (t in tools) {
-                append(" - ")
-                append(t.toolName)
-                val argSummary = t.input.take(60).replace("\n", " ").trim()
-                if (argSummary.isNotEmpty()) append("(").append(argSummary).append(")")
-                if (!t.isExecuted) {
-                    append(" ... running")
-                } else {
-                    val outText = t.output.filterIsInstance<UIMessagePart.Text>()
-                        .joinToString("") { it.text }
-                        .take(80)
-                        .replace("\n", " ")
-                        .trim()
-                    if (outText.isNotEmpty()) append(" -> ").append(outText)
-                }
+                val outText = t.output.filterIsInstance<UIMessagePart.Text>()
+                    .joinToString("") { it.text }
+                val (icon, hint) = classifyToolOutput(t.isExecuted, outText)
+                append(icon).append(' ').append(t.toolName)
+                if (hint.isNotEmpty()) append(" — ").append(hint)
                 append('\n')
             }
         }.trimEnd()
+    }
+
+    /**
+     * Picks a status icon + one-line hint for a single tool result. Reads only well-known
+     * envelope keys (success / error / exit_code / count / reason / file_path) so the
+     * summary stays consistent across tools. Returns ("🔄", "running") for in-flight calls.
+     */
+    private fun classifyToolOutput(executed: Boolean, raw: String): Pair<String, String> {
+        if (!executed) return "🔄" to "running"
+        if (raw.isBlank()) return "✅" to ""
+        // The output is conventionally a single JSON object string. Best-effort parse;
+        // if it's not JSON we fall back to a length-capped preview.
+        val obj = runCatching {
+            kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonObject
+        }.getOrNull()
+        if (obj == null) {
+            val preview = raw.take(80).replace("\n", " ").trim()
+            return "✅" to preview
+        }
+        // Error envelope wins: error key OR success:false.
+        val errorVal = obj["error"]?.jsonPrimitive?.contentOrNull
+        if (!errorVal.isNullOrBlank()) {
+            val reason = obj["reason"]?.jsonPrimitive?.contentOrNull
+            val tail = if (!reason.isNullOrBlank()) "$errorVal ($reason)" else errorVal
+            return "❌" to tail.take(100)
+        }
+        val successPrim = obj["success"]?.jsonPrimitive?.contentOrNull
+        val explicitFalse = successPrim == "false"
+        // Exit-code based: shell tools surface a numeric exit_code. Non-zero is a soft fail.
+        val exit = obj["exit_code"]?.jsonPrimitive?.intOrNull
+        if (exit != null && exit != 0) {
+            val stderr = obj["stderr"]?.jsonPrimitive?.contentOrNull?.lineSequence()
+                ?.firstOrNull { it.isNotBlank() }?.take(80)
+            return "⚠️" to ("exit $exit" + (if (!stderr.isNullOrBlank()) " · $stderr" else ""))
+        }
+        if (explicitFalse) {
+            val reason = obj["reason"]?.jsonPrimitive?.contentOrNull
+            return "❌" to ("failed" + (if (!reason.isNullOrBlank()) " ($reason)" else ""))
+        }
+        // Success path: surface the most informative scalar we can find without dumping JSON.
+        val count = obj["count"]?.jsonPrimitive?.intOrNull
+            ?: obj["total_in_buffer"]?.jsonPrimitive?.intOrNull
+            ?: (obj["jobs"] as? kotlinx.serialization.json.JsonArray)?.size
+            ?: (obj["notifications"] as? kotlinx.serialization.json.JsonArray)?.size
+            ?: (obj["matches"] as? kotlinx.serialization.json.JsonArray)?.size
+            ?: (obj["apps"] as? kotlinx.serialization.json.JsonArray)?.size
+            ?: (obj["nodes"] as? kotlinx.serialization.json.JsonArray)?.size
+        val stdoutSnippet = obj["stdout"]?.jsonPrimitive?.contentOrNull
+            ?.lineSequence()?.firstOrNull { it.isNotBlank() }?.take(80)
+        val filePath = obj["file_path"]?.jsonPrimitive?.contentOrNull
+        val hint = when {
+            count != null -> if (count == 1) "1 result" else "$count results"
+            !stdoutSnippet.isNullOrBlank() -> stdoutSnippet
+            !filePath.isNullOrBlank() -> "saved ${filePath.substringAfterLast('/')}"
+            successPrim == "true" -> "ok"
+            else -> ""
+        }
+        return "✅" to hint
     }
 
     /** Returns (conversationId, wasCreated). wasCreated=true means the LLM hasn't seen
@@ -569,40 +622,103 @@ class TelegramBotService : Service() {
     }
 
     private suspend fun sendStart(chatId: Long) {
+        val (modelName, _) = activeModelDisplay()
         val msg = """
-            👋 RikkaHub agent online.
+            👋 Hey - RikkaHub agent here, running $modelName.
 
-            Send any message to talk to the model. Built-in commands:
-            /help - list all commands
-            /new - start a fresh conversation
-            /stop - cancel the current generation
-            /status - show current model + assistant
-            /model - show or switch chat model
-            /ratelimit - show or set the assistant's max output tokens
+            Just talk to me normally. Or use one of these:
+
+            🧠 /model — show or switch the chat model
+            🆕 /new — start a fresh conversation
+            🛑 /stop — cancel the current generation
+            📊 /status — show what's running right now
+            ⚡ /ratelimit — set the max-output-tokens cap
+            ❓ /help — full command reference
         """.trimIndent()
         try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
     }
 
     private suspend fun sendHelp(chatId: Long) {
+        // Per-command emoji prefix so the menu reads at a glance instead of as a wall of text.
+        val icons = mapOf(
+            "start" to "👋",
+            "help" to "❓",
+            "new" to "🆕",
+            "stop" to "🛑",
+            "status" to "📊",
+            "model" to "🧠",
+            "ratelimit" to "⚡",
+        )
         val msg = buildString {
-            appendLine("Built-in commands (handled directly by the app, no LLM):")
+            appendLine("📖 Built-in commands (handled by the app, no LLM cost):")
             appendLine()
             BUILT_IN_COMMANDS.forEach { (c, d) ->
-                appendLine("/${c.padEnd(11)} - $d")
+                val icon = icons[c] ?: "•"
+                appendLine("$icon /$c — $d")
             }
             appendLine()
-            appendLine("Anything else is sent to the LLM as usual.")
+            append("Anything else is sent to the model as usual.")
         }
-        try { client.sendMessage(chatId, msg.trim()) } catch (_: Throwable) {}
+        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
     }
 
     private suspend fun handleResetCommand(chatId: Long) {
         chatRepo.deleteByChatId(chatId)
-        // The reset itself is just an app-side state wipe (no LLM round-trip), but the user
-        // expects the bot to feel "present" right after - currently /new only emits the
-        // confirmation tick, then they have to send another message before hearing anything
-        // back. Tack a canned greeting onto the same reply with the active model's name so
-        // the bot gets to introduce itself in this fresh chat without spending tokens.
+        val (modelName, _) = activeModelDisplay()
+        val msg = """
+            🆕 Fresh conversation started.
+
+            I'm running $modelName. What's up?
+        """.trimIndent()
+        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
+    }
+
+    private suspend fun handleStopCommand(chatId: Long) {
+        val mapping = chatRepo.getByChatId(chatId)
+        if (mapping == null) {
+            try { client.sendMessage(chatId, "🛑 Nothing to stop — no active conversation in this chat.") } catch (_: Throwable) {}
+            return
+        }
+        val convId = try { Uuid.parse(mapping.conversationId) } catch (_: Throwable) {
+            try { client.sendMessage(chatId, "🛑 Could not resolve the conversation id. Try /new.") } catch (_: Throwable) {}
+            return
+        }
+        chatService.stopGeneration(convId)
+        try { client.sendMessage(chatId, "🛑 Generation cancelled. Send a new message when you're ready.") } catch (_: Throwable) {}
+    }
+
+    private suspend fun handleStatusCommand(chatId: Long) {
+        val s = settingsStore.settingsFlow.value
+        val assistant = s.getCurrentAssistant()
+        val effectiveModelId = assistant.chatModelId ?: s.chatModelId
+        val provider = s.providers.firstOrNull { p -> p.models.any { it.id == effectiveModelId } }
+        val model = provider?.models?.firstOrNull { it.id == effectiveModelId }
+        val modelLabel = model?.displayName?.takeIf { it.isNotBlank() }
+            ?: model?.modelId?.takeIf { it.isNotBlank() }
+            ?: "(none configured)"
+        val providerLabel = provider?.name ?: "(no provider)"
+        val tokenLabel = assistant.maxTokens?.let { "$it tokens" } ?: "provider default"
+        val cfg = cfgSafe()
+        val whitelistCount = cfg?.whitelist?.size ?: 0
+        val whitelistLabel = if (whitelistCount == 1) "1 chat" else "$whitelistCount chats"
+
+        val msg = buildString {
+            appendLine("📊 RikkaHub agent status")
+            appendLine()
+            appendLine("${if (isRunning) "🟢" else "🔴"} Service: ${if (isRunning) "running" else "stopped"}")
+            appendLine("👤 Assistant: ${assistant.name.ifBlank { "(default)" }}")
+            appendLine("🧠 Model: $modelLabel ($providerLabel)")
+            appendLine("⚡ Max output tokens: $tokenLabel")
+            append("✅ Whitelist: $whitelistLabel")
+        }
+        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
+    }
+
+    /**
+     * (label, providerName) for the assistant's currently active chat model. Falls back to
+     * sensible placeholders so callers can string-format without null guards.
+     */
+    private fun activeModelDisplay(): Pair<String, String> {
         val s = settingsStore.settingsFlow.value
         val assistant = s.getCurrentAssistant()
         val effectiveModelId = assistant.chatModelId ?: s.chatModelId
@@ -611,42 +727,8 @@ class TelegramBotService : Service() {
         val modelName = model?.displayName?.takeIf { it.isNotBlank() }
             ?: model?.modelId?.takeIf { it.isNotBlank() }
             ?: "the active model"
-        val msg = """
-            ✓ Conversation reset.
-
-            Hi - fresh start. I'm running $modelName. What can I do for you?
-        """.trimIndent()
-        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
-    }
-
-    private suspend fun handleStopCommand(chatId: Long) {
-        val mapping = chatRepo.getByChatId(chatId)
-        if (mapping == null) {
-            try { client.sendMessage(chatId, "Nothing to stop - no active conversation for this chat.") } catch (_: Throwable) {}
-            return
-        }
-        val convId = try { Uuid.parse(mapping.conversationId) } catch (_: Throwable) {
-            try { client.sendMessage(chatId, "Could not resolve conversation id.") } catch (_: Throwable) {}
-            return
-        }
-        chatService.stopGeneration(convId)
-        try { client.sendMessage(chatId, "⏹ Generation stopped.") } catch (_: Throwable) {}
-    }
-
-    private suspend fun handleStatusCommand(chatId: Long) {
-        val s = settingsStore.settingsFlow.value
-        val assistant = s.getCurrentAssistant()
-        val effectiveModelId = assistant.chatModelId ?: s.chatModelId
-        val model = s.providers.flatMap { it.models }.firstOrNull { it.id == effectiveModelId }
-        val msg = buildString {
-            appendLine("Bot status:")
-            appendLine("- Service: ${if (isRunning) "running" else "stopped"}")
-            appendLine("- Assistant: ${assistant.name.ifBlank { "(default)" }}")
-            appendLine("- Model: ${model?.displayName ?: model?.modelId ?: "(none configured)"}")
-            appendLine("- Max output tokens: ${assistant.maxTokens?.toString() ?: "(provider default)"}")
-            appendLine("- Whitelist size: ${cfgSafe()?.whitelist?.size ?: 0}")
-        }
-        try { client.sendMessage(chatId, msg.trim()) } catch (_: Throwable) {}
+        val providerName = provider?.name ?: ""
+        return modelName to providerName
     }
 
     private suspend fun cfgSafe(): me.rerere.rikkahub.data.telegram.TelegramBotConfig? = try {
@@ -662,21 +744,37 @@ class TelegramBotService : Service() {
             .filter { (_, m) -> m.type == me.rerere.ai.provider.ModelType.CHAT }
 
         if (arg.isBlank()) {
-            // No arg - show current + list available
+            // No arg — show current + list available, grouped by provider so the answer reads
+            // at a glance. Currently-active model gets a ✅ marker; everything else gets ◯.
             val effectiveModelId = assistant.chatModelId ?: s.chatModelId
             val current = allModels.firstOrNull { (_, m) -> m.id == effectiveModelId }
             val msg = buildString {
-                appendLine("Current model: ${current?.second?.displayName ?: current?.second?.modelId ?: "(unset)"}")
-                if (current != null) appendLine("Provider: ${current.first.name}")
+                if (current != null) {
+                    val name = current.second.displayName.ifBlank { current.second.modelId }
+                    appendLine("🧠 Current model: $name (${current.first.name})")
+                } else {
+                    appendLine("🧠 Current model: not set")
+                }
                 appendLine()
                 if (allModels.isEmpty()) {
                     appendLine("No chat models configured. Add a provider in the app settings first.")
                 } else {
-                    appendLine("Available chat models (use /model <name> to switch):")
-                    allModels.take(50).forEach { (p, m) ->
-                        appendLine("- ${m.displayName.ifBlank { m.modelId }}  [${p.name}]")
+                    appendLine("Available — use /model <name> to switch:")
+                    val capped = allModels.take(50)
+                    val byProvider = capped.groupBy({ it.first }, { it.second })
+                    byProvider.forEach { (p, models) ->
+                        appendLine()
+                        appendLine("${p.name}:")
+                        models.forEach { m ->
+                            val marker = if (m.id == effectiveModelId) "✅" else "◯"
+                            val name = m.displayName.ifBlank { m.modelId }
+                            appendLine("  $marker $name")
+                        }
                     }
-                    if (allModels.size > 50) appendLine("... and ${allModels.size - 50} more")
+                    if (allModels.size > 50) {
+                        appendLine()
+                        appendLine("…and ${allModels.size - 50} more.")
+                    }
                 }
             }
             try { client.sendMessage(chatId, msg.trim()) } catch (_: Throwable) {}
@@ -691,7 +789,7 @@ class TelegramBotService : Service() {
         }
         if (match == null) {
             try {
-                client.sendMessage(chatId, "No chat model matches \"$arg\". Send /model with no argument to see the list.")
+                client.sendMessage(chatId, "🧠 No chat model matches \"$arg\". Send /model with no argument to see the list.")
             } catch (_: Throwable) {}
             return
         }
@@ -706,10 +804,8 @@ class TelegramBotService : Service() {
             )
         }
         try {
-            client.sendMessage(
-                chatId,
-                "✓ Switched assistant \"${assistant.name.ifBlank { "default" }}\" to model \"${model.displayName.ifBlank { model.modelId }}\" [${provider.name}]."
-            )
+            val name = model.displayName.ifBlank { model.modelId }
+            client.sendMessage(chatId, "🔄 Switched to $name (${provider.name}).")
         } catch (_: Throwable) {}
     }
 
@@ -717,13 +813,14 @@ class TelegramBotService : Service() {
         val s = settingsStore.settingsFlow.value
         val assistant = s.getCurrentAssistant()
         if (arg.isBlank()) {
-            val current = assistant.maxTokens?.toString() ?: "(provider default - unlimited within model context)"
-            try {
-                client.sendMessage(
-                    chatId,
-                    "Max output tokens for assistant \"${assistant.name.ifBlank { "default" }}\": $current\nUse /ratelimit <number> to set, or /ratelimit clear to remove the cap."
-                )
-            } catch (_: Throwable) {}
+            val current = assistant.maxTokens?.let { "$it tokens" } ?: "provider default (unlimited within model context)"
+            val msg = """
+                ⚡ Max output tokens: $current
+
+                To set a cap: /ratelimit <number>
+                To remove: /ratelimit clear
+            """.trimIndent()
+            try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
             return
         }
         val newCap: Int? = when {
@@ -732,12 +829,12 @@ class TelegramBotService : Service() {
             else -> arg.toIntOrNull()?.takeIf { it in 1..200_000 }
         }
         if (arg.toIntOrNull() != null && newCap == null) {
-            try { client.sendMessage(chatId, "Value out of range. Use 1..200000, or 'clear' to remove the cap.") } catch (_: Throwable) {}
+            try { client.sendMessage(chatId, "⚡ Value out of range. Use 1..200000, or 'clear' to remove the cap.") } catch (_: Throwable) {}
             return
         }
         if (arg.toIntOrNull() == null && newCap != null) {
             // Defensive — should not happen given the when above.
-            try { client.sendMessage(chatId, "Could not parse \"$arg\". Use a number or 'clear'.") } catch (_: Throwable) {}
+            try { client.sendMessage(chatId, "⚡ Could not parse \"$arg\". Use a number or 'clear'.") } catch (_: Throwable) {}
             return
         }
         settingsStore.update { settings ->
@@ -747,8 +844,8 @@ class TelegramBotService : Service() {
                 }
             )
         }
-        val msg = if (newCap == null) "✓ Removed max-token cap on assistant \"${assistant.name.ifBlank { "default" }}\"."
-        else "✓ Max output tokens for assistant \"${assistant.name.ifBlank { "default" }}\" set to $newCap."
+        val msg = if (newCap == null) "⚡ Max-token cap removed."
+        else "⚡ Max output tokens set to $newCap."
         try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
     }
 
