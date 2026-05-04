@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.util.Log
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.JSch
@@ -38,6 +41,28 @@ private const val TAG_SSH = "SshTool"
  * Returns null if [host] is already a literal IP, if no IPv4 record exists, or if DNS fails.
  * Caller falls back to the original [host] string in that case.
  */
+/**
+ * Returns the first WiFi-transport [Network] when the device has one, or null. Used to bind
+ * the SSH socket to WiFi explicitly when the OS's "active network" is something else
+ * (cellular, VPN). On stock Pixel Android with WiFi up but a private LAN IP target, the OS
+ * sometimes routes apps via cellular even though the WiFi has the LAN they actually need.
+ * Termux uses raw Linux sockets which sidestep that routing layer entirely, which is why
+ * `ssh user@host` from Termux reaches a LAN IP that JSch from our process cannot.
+ */
+private fun firstWifiNetwork(ctx: Context): Network? {
+    val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        ?: return null
+    return cm.allNetworks.firstOrNull { net ->
+        val caps = cm.getNetworkCapabilities(net) ?: return@firstOrNull false
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    } ?: cm.allNetworks.firstOrNull { net ->
+        // Fallback: any WiFi network even without internet capability — useful for purely
+        // local-LAN destinations (NAS, lab boxes) where the WiFi has no upstream.
+        cm.getNetworkCapabilities(net)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+    }
+}
+
 private fun resolveToIPv4(host: String): String? {
     // Fast path: literal IPs go through unchanged.
     if (runCatching { InetAddress.getByName(host) }.getOrNull() is Inet4Address) return null
@@ -92,6 +117,7 @@ internal fun openSshSession(
     user: String,
     auth: SshAuth,
     timeoutMs: Int,
+    network: Network? = null,
 ): Session {
     if (!auth.privateKey.isNullOrBlank()) {
         val keyBytes = auth.privateKey.toByteArray(Charsets.UTF_8)
@@ -115,8 +141,35 @@ internal fun openSshSession(
         setProperty("StrictHostKeyChecking", "accept-new")
         setProperty("PreferredAuthentications", "publickey,keyboard-interactive,password")
     })
+    // Bind JSch's internal sockets to a specific Network when one is supplied — same
+    // reasoning as the probe socket above. Without this, JSch's sockets go through
+    // Android's default-network selection which on some devices routes app traffic away
+    // from the WiFi LAN even though WiFi is up.
+    if (network != null) {
+        session.setSocketFactory(NetworkBoundSocketFactory(network))
+    }
     session.connect(timeoutMs)
     return session
+}
+
+/**
+ * JSch SocketFactory that binds every newly-created socket to a specific Android [Network].
+ * Used to keep SSH traffic on WiFi when Android's adaptive routing might otherwise send
+ * the app's outgoing connections via cellular or another transport.
+ */
+private class NetworkBoundSocketFactory(private val network: Network) : com.jcraft.jsch.SocketFactory {
+    override fun createSocket(host: String, port: Int): java.net.Socket {
+        val s = java.net.Socket()
+        try { network.bindSocket(s) } catch (_: Throwable) { /* best-effort */ }
+        s.connect(java.net.InetSocketAddress(host, port))
+        return s
+    }
+
+    override fun getInputStream(socket: java.net.Socket): java.io.InputStream =
+        socket.getInputStream()
+
+    override fun getOutputStream(socket: java.net.Socket): java.io.OutputStream =
+        socket.getOutputStream()
 }
 
 /** Run a single command on an open session. Returns a JSON object with exit_code/stdout/stderr. */
@@ -218,7 +271,13 @@ internal fun execOneShot(
     val probeStart = System.currentTimeMillis()
     val resolvedIp = resolveToIPv4(host)
     val probeTarget = resolvedIp ?: host
+    val wifi = firstWifiNetwork(context)
     val probe = java.net.Socket()
+    if (wifi != null) {
+        try { wifi.bindSocket(probe) } catch (t: Throwable) {
+            Log.w(TAG_SSH, "bindSocket to WiFi network failed", t)
+        }
+    }
     try {
         probe.connect(java.net.InetSocketAddress(probeTarget, port), 5_000)
     } catch (e: Throwable) {
@@ -228,6 +287,7 @@ internal fun execOneShot(
             put("host", host)
             put("ip", probeTarget)
             put("port", port)
+            put("bound_to_wifi", wifi != null)
             put("reason", "${e::class.java.simpleName}: ${e.message ?: "unknown"}")
             put("recovery", "Direct TCP from RikkaHub to $probeTarget:$port failed " +
                 "(${System.currentTimeMillis() - probeStart}ms). If Termux ssh from the " +
@@ -239,12 +299,12 @@ internal fun execOneShot(
     } finally {
         try { probe.close() } catch (_: Throwable) {}
     }
-    Log.i(TAG_SSH, "tcp probe ok in ${System.currentTimeMillis() - probeStart}ms")
+    Log.i(TAG_SSH, "tcp probe ok in ${System.currentTimeMillis() - probeStart}ms (wifi-bound=${wifi != null})")
 
     val jsch = newJSch(context)
     val handshakeStart = System.currentTimeMillis()
     val session = try {
-        openSshSession(jsch, host, port, user, auth, timeoutMs)
+        openSshSession(jsch, host, port, user, auth, timeoutMs, network = wifi)
     } catch (e: Throwable) {
         Log.w(TAG_SSH, "ssh handshake failed in ${System.currentTimeMillis() - handshakeStart}ms", e)
         return wrapConnectError(host, e)
