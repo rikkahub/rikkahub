@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
 import me.rerere.rikkahub.data.repository.SshHostRepository
 import me.rerere.rikkahub.data.repository.TelegramChatRepository
+import me.rerere.rikkahub.data.notifications.NotificationListenerPreferences
 import me.rerere.rikkahub.data.telegram.TelegramBotClient
 import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import me.rerere.rikkahub.service.ChatService
@@ -52,9 +53,10 @@ val appModule = module {
     single { TelegramChatRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().telegramChatDao()) }
     single { TelegramBotPreferences(get()) }
     single { TelegramBotClient { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") } }
+    single { NotificationListenerPreferences(get()) }
 
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {

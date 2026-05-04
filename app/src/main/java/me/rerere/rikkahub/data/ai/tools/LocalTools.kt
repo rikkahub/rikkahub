@@ -81,6 +81,11 @@ import me.rerere.rikkahub.data.ai.tools.local.sshExecSavedTool
 import me.rerere.rikkahub.data.ai.tools.local.sshExecTool
 import me.rerere.rikkahub.data.ai.tools.local.sshUploadTool
 import me.rerere.rikkahub.data.ai.tools.local.writeTextFileTool
+import me.rerere.rikkahub.data.ai.tools.local.dismissNotificationTool
+import me.rerere.rikkahub.data.ai.tools.local.listActiveNotificationsTool
+import me.rerere.rikkahub.data.ai.tools.local.listRecentNotificationsTool
+import me.rerere.rikkahub.data.ai.tools.local.notificationActionClickTool
+import me.rerere.rikkahub.data.ai.tools.local.notificationStatusTool
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.utils.readClipboardText
@@ -157,6 +162,7 @@ class LocalTools(
     private val sshHostRepository: me.rerere.rikkahub.data.repository.SshHostRepository,
     private val telegramBotPreferences: me.rerere.rikkahub.data.telegram.TelegramBotPreferences,
     private val telegramBotClient: me.rerere.rikkahub.data.telegram.TelegramBotClient,
+    private val notificationListenerPreferences: me.rerere.rikkahub.data.notifications.NotificationListenerPreferences,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -562,6 +568,13 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.Termux)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.termuxRunCommandTool(context))
+        }
+        if (options.contains(LocalToolOption.NotificationListener)) {
+            tools.add(listRecentNotificationsTool())
+            tools.add(listActiveNotificationsTool())
+            tools.add(dismissNotificationTool())
+            tools.add(notificationActionClickTool())
+            tools.add(notificationStatusTool(notificationListenerPreferences, telegramBotPreferences))
         }
         return tools
     }
