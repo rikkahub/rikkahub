@@ -42,25 +42,38 @@ private const val TAG_SSH = "SshTool"
  * Caller falls back to the original [host] string in that case.
  */
 /**
- * Returns the first WiFi-transport [Network] when the device has one, or null. Used to bind
- * the SSH socket to WiFi explicitly when the OS's "active network" is something else
- * (cellular, VPN). On stock Pixel Android with WiFi up but a private LAN IP target, the OS
- * sometimes routes apps via cellular even though the WiFi has the LAN they actually need.
- * Termux uses raw Linux sockets which sidestep that routing layer entirely, which is why
- * `ssh user@host` from Termux reaches a LAN IP that JSch from our process cannot.
+ * Returns every Network the device has, ordered for the SSH probe. Each entry is a
+ * (label, network-or-null) pair. The null entry means "do not bind — let Android pick the
+ * default route." We try the bound networks first because some phones' adaptive routing
+ * sends app traffic away from the WiFi LAN even when WiFi is up; on those phones the
+ * unbound default-route attempt would also fail. Devices on cellular only with no WiFi
+ * present still work because the unbound attempt routes via cellular as the system default.
+ *
+ * Ordering: WiFi-with-internet first, then any other WiFi, then ethernet, then cellular,
+ * then unbound. Each transport is only inserted once even if the device exposes multiple
+ * networks of the same kind.
  */
-private fun firstWifiNetwork(ctx: Context): Network? {
+private fun enumerateCandidateNetworks(ctx: Context): List<Pair<String, Network?>> {
     val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        ?: return null
-    return cm.allNetworks.firstOrNull { net ->
-        val caps = cm.getNetworkCapabilities(net) ?: return@firstOrNull false
-        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    } ?: cm.allNetworks.firstOrNull { net ->
-        // Fallback: any WiFi network even without internet capability — useful for purely
-        // local-LAN destinations (NAS, lab boxes) where the WiFi has no upstream.
-        cm.getNetworkCapabilities(net)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        ?: return listOf("default" to null)
+    val out = mutableListOf<Pair<String, Network?>>()
+    val seen = HashSet<String>()
+    fun add(label: String, n: Network?) {
+        if (label in seen) return
+        seen += label
+        out += label to n
     }
+    val all = try { cm.allNetworks.toList() } catch (_: Throwable) { emptyList() }
+    val byTransport: (Int) -> Network? = { t ->
+        all.firstOrNull { net ->
+            cm.getNetworkCapabilities(net)?.hasTransport(t) == true
+        }
+    }
+    byTransport(NetworkCapabilities.TRANSPORT_WIFI)?.let { add("wifi", it) }
+    byTransport(NetworkCapabilities.TRANSPORT_ETHERNET)?.let { add("ethernet", it) }
+    byTransport(NetworkCapabilities.TRANSPORT_CELLULAR)?.let { add("cellular", it) }
+    add("default", null)
+    return out
 }
 
 private fun resolveToIPv4(host: String): String? {
@@ -271,40 +284,54 @@ internal fun execOneShot(
     val probeStart = System.currentTimeMillis()
     val resolvedIp = resolveToIPv4(host)
     val probeTarget = resolvedIp ?: host
-    val wifi = firstWifiNetwork(context)
-    val probe = java.net.Socket()
-    if (wifi != null) {
-        try { wifi.bindSocket(probe) } catch (t: Throwable) {
-            Log.w(TAG_SSH, "bindSocket to WiFi network failed", t)
+    // Try every available transport: WiFi first (so LAN targets work on adaptive-routing
+    // phones), then any other Network the device has (cellular, ethernet, etc.). If none
+    // succeed, return a structured error with the per-network reasons. The chosen network
+    // is reused for the JSch handshake so JSch's internal sockets follow the same route.
+    val attempts = enumerateCandidateNetworks(context)
+    val probeFailures = mutableListOf<Pair<String, String>>()
+    var winningNetwork: Network? = null
+    for ((label, candidate) in attempts) {
+        val probe = java.net.Socket()
+        if (candidate != null) {
+            try { candidate.bindSocket(probe) } catch (t: Throwable) {
+                Log.w(TAG_SSH, "bindSocket to $label failed", t)
+            }
+        }
+        try {
+            probe.connect(java.net.InetSocketAddress(probeTarget, port), 5_000)
+            probe.close()
+            winningNetwork = candidate
+            Log.i(TAG_SSH, "tcp probe ok via $label in ${System.currentTimeMillis() - probeStart}ms")
+            break
+        } catch (e: Throwable) {
+            probeFailures += label to "${e::class.java.simpleName}: ${e.message ?: "unknown"}"
+            Log.w(TAG_SSH, "tcp probe via $label to $probeTarget:$port failed", e)
+            try { probe.close() } catch (_: Throwable) {}
         }
     }
-    try {
-        probe.connect(java.net.InetSocketAddress(probeTarget, port), 5_000)
-    } catch (e: Throwable) {
-        Log.w(TAG_SSH, "tcp probe to $probeTarget:$port failed", e)
+    if (winningNetwork == null && probeFailures.size == attempts.size) {
         return buildJsonObject {
             put("error", "tcp_unreachable")
             put("host", host)
             put("ip", probeTarget)
             put("port", port)
-            put("bound_to_wifi", wifi != null)
-            put("reason", "${e::class.java.simpleName}: ${e.message ?: "unknown"}")
-            put("recovery", "Direct TCP from RikkaHub to $probeTarget:$port failed " +
-                "(${System.currentTimeMillis() - probeStart}ms). If Termux ssh from the " +
-                "same device reaches this host, RikkaHub's process is being filtered. " +
-                "Check Settings → Network → Private DNS (try Off), any active VPN's " +
-                "per-app routing, and Settings → Apps → RikkaHub → Mobile data & Wi-Fi " +
-                "(enable Background data and Unrestricted data usage).")
+            put("attempts", buildJsonObject {
+                probeFailures.forEach { (label, reason) -> put(label, reason) }
+            })
+            put("recovery", "Direct TCP to $probeTarget:$port failed across every available " +
+                "network (${System.currentTimeMillis() - probeStart}ms total). If Termux ssh " +
+                "from the same device reaches this host, RikkaHub's process is being filtered. " +
+                "Check Settings → Network → Private DNS (try Off), any active VPN's per-app " +
+                "routing, and Settings → Apps → RikkaHub → Mobile data & Wi-Fi (enable " +
+                "Background data and Unrestricted data usage).")
         }
-    } finally {
-        try { probe.close() } catch (_: Throwable) {}
     }
-    Log.i(TAG_SSH, "tcp probe ok in ${System.currentTimeMillis() - probeStart}ms (wifi-bound=${wifi != null})")
 
     val jsch = newJSch(context)
     val handshakeStart = System.currentTimeMillis()
     val session = try {
-        openSshSession(jsch, host, port, user, auth, timeoutMs, network = wifi)
+        openSshSession(jsch, host, port, user, auth, timeoutMs, network = winningNetwork)
     } catch (e: Throwable) {
         Log.w(TAG_SSH, "ssh handshake failed in ${System.currentTimeMillis() - handshakeStart}ms", e)
         return wrapConnectError(host, e)
