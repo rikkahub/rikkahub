@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import android.net.Uri
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.rikkahub.ui.pages.setting.components.ProviderRequirement
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.DragDropHorizontal
 import me.rerere.hugeicons.stroke.Image02
@@ -604,6 +605,11 @@ private fun ProviderItem(
                     if (provider.name == "AiHubMix") {
                         Tag(type = TagType.INFO) {
                             Text("10% 优惠")
+                        }
+                    }
+                    ProviderRequirement.from(provider).forEach { req ->
+                        Tag(type = req.severity) {
+                            Text(req.label)
                         }
                     }
                 }
