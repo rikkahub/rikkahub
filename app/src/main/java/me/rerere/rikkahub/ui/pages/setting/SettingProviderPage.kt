@@ -11,6 +11,8 @@ import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Cancel01
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -95,6 +97,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var searchQuery by remember { mutableStateOf("") }
     val lazyListState = rememberLazyStaggeredGridState()
+    var providerToDelete by remember { mutableStateOf<ProviderSetting?>(null) }
     val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
         val newProviders = settings.providers.toMutableList().apply {
             add(to.index, removeAt(from.index))
@@ -231,11 +234,46 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                             },
                             onClick = {
                                 navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
+                            },
+                            onLongClick = {
+                                providerToDelete = provider
                             }
                         )
                     }
                 }
             }
+        }
+
+        providerToDelete?.let { target ->
+            AlertDialog(
+                onDismissRequest = { providerToDelete = null },
+                title = { Text(stringResource(R.string.setting_provider_delete_title)) },
+                text = {
+                    Text(stringResource(R.string.setting_provider_delete_body, target.name))
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            vm.updateSettings(
+                                settings.copy(
+                                    providers = settings.providers.filter { it.id != target.id }
+                                )
+                            )
+                            providerToDelete = null
+                        }
+                    ) {
+                        Text(
+                            text = stringResource(R.string.setting_provider_delete_confirm),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { providerToDelete = null }) {
+                        Text(stringResource(R.string.setting_provider_delete_cancel))
+                    }
+                },
+            )
         }
     }
 }
@@ -498,23 +536,25 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ProviderItem(
     provider: ProviderSetting,
     modifier: Modifier = Modifier,
     dragHandle: @Composable () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick,
+        ),
         colors = CardDefaults.cardColors(
             containerColor = if (provider.enabled) {
                 CustomColors.listItemColors.containerColor
             } else MaterialTheme.colorScheme.errorContainer,
         ),
-        onClick = {
-            onClick()
-        }
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
