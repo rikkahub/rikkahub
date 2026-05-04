@@ -211,12 +211,45 @@ internal fun execOneShot(
     command: String,
     timeoutMs: Int,
 ): JsonObject {
+    // Stage 1: low-level reachability probe. JSch's connect timeout fires at the END of the
+    // SSH handshake, so when the network is silently broken the LLM sees a 30s "timeout"
+    // with no clue why. Probing with a raw java.net.Socket first lets us tell the model
+    // exactly which layer is failing — DNS, TCP, or SSH.
+    val probeStart = System.currentTimeMillis()
+    val resolvedIp = resolveToIPv4(host)
+    val probeTarget = resolvedIp ?: host
+    val probe = java.net.Socket()
+    try {
+        probe.connect(java.net.InetSocketAddress(probeTarget, port), 5_000)
+    } catch (e: Throwable) {
+        Log.w(TAG_SSH, "tcp probe to $probeTarget:$port failed", e)
+        return buildJsonObject {
+            put("error", "tcp_unreachable")
+            put("host", host)
+            put("ip", probeTarget)
+            put("port", port)
+            put("reason", "${e::class.java.simpleName}: ${e.message ?: "unknown"}")
+            put("recovery", "Direct TCP from RikkaHub to $probeTarget:$port failed " +
+                "(${System.currentTimeMillis() - probeStart}ms). If Termux ssh from the " +
+                "same device reaches this host, RikkaHub's process is being filtered. " +
+                "Check Settings → Network → Private DNS (try Off), any active VPN's " +
+                "per-app routing, and Settings → Apps → RikkaHub → Mobile data & Wi-Fi " +
+                "(enable Background data and Unrestricted data usage).")
+        }
+    } finally {
+        try { probe.close() } catch (_: Throwable) {}
+    }
+    Log.i(TAG_SSH, "tcp probe ok in ${System.currentTimeMillis() - probeStart}ms")
+
     val jsch = newJSch(context)
+    val handshakeStart = System.currentTimeMillis()
     val session = try {
         openSshSession(jsch, host, port, user, auth, timeoutMs)
     } catch (e: Throwable) {
+        Log.w(TAG_SSH, "ssh handshake failed in ${System.currentTimeMillis() - handshakeStart}ms", e)
         return wrapConnectError(host, e)
     }
+    Log.i(TAG_SSH, "ssh session up in ${System.currentTimeMillis() - handshakeStart}ms")
     return try {
         runOnSession(session, command, timeoutMs)
     } catch (e: Throwable) {
