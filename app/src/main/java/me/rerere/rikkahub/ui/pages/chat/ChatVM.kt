@@ -231,10 +231,20 @@ class ChatVM(
     fun handleToolApproval(
         toolCallId: String,
         approved: Boolean,
-        reason: String = ""
+        reason: String = "",
+        scope: me.rerere.rikkahub.service.ChatService.ApprovalScope =
+            me.rerere.rikkahub.service.ChatService.ApprovalScope.Once,
+        toolName: String? = null,
     ) {
         analytics.logEvent("ai_tool_approval", null)
-        chatService.handleToolApproval(_conversationId, toolCallId, approved, reason)
+        chatService.handleToolApproval(
+            conversationId = _conversationId,
+            toolCallId = toolCallId,
+            approved = approved,
+            reason = reason,
+            scope = scope,
+            toolName = toolName,
+        )
     }
 
     fun handleToolAnswer(

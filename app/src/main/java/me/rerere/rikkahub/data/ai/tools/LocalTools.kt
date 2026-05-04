@@ -538,9 +538,9 @@ class LocalTools(
             tools.add(telegramSendMessageTool(telegramBotPreferences, telegramBotClient))
             tools.add(telegramSendPhotoTool(telegramBotPreferences, telegramBotClient))
             tools.add(telegramSendDocumentTool(telegramBotPreferences, telegramBotClient))
-            tools.add(telegramSetCommandsTool(telegramBotClient))
+            tools.add(telegramSetCommandsTool(telegramBotPreferences, telegramBotClient))
             tools.add(telegramGetCommandsTool(telegramBotClient))
-            tools.add(telegramDeleteCommandsTool(telegramBotClient))
+            tools.add(telegramDeleteCommandsTool(telegramBotPreferences, telegramBotClient))
         }
         if (options.contains(LocalToolOption.CronJobs)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.scheduleJobTool(scheduledJobRepository, cronJobScheduler, settingsStore))
@@ -577,6 +577,13 @@ class LocalTools(
             tools.add(notificationActionClickTool())
             tools.add(notificationStatusTool(notificationListenerPreferences, telegramBotPreferences))
         }
-        return tools
+        // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
+        // whether their op is destructive — ToolApprovalDefaults is the single source of
+        // truth, and the GenerationHandler / Telegram/in-app prompt path keys off needsApproval.
+        return tools.map { t ->
+            if (!t.needsApproval && ToolApprovalDefaults.requiresApproval(t.name)) {
+                t.copy(needsApproval = true)
+            } else t
+        }
     }
 }

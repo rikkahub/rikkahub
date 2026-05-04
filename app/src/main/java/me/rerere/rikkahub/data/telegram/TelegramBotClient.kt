@@ -92,12 +92,11 @@ class TelegramBotClient(
         val body = buildJsonObject {
             put("offset", offset)
             put("timeout", timeoutSec)
-            // Only ask Telegram for what we actually handle. Earlier we requested
-            // callback_query too, but the service has no inline-keyboard surface yet, so
-            // every callback_query that landed sat in the queue (parseIncoming returned
-            // null for it) and risked re-delivery on every poll cycle.
+            // We now handle callback_query updates for tool-approval inline keyboards.
+            // The poll-loop's offset bump catches and skips any other update type.
             put("allowed_updates", buildJsonArray {
                 add("message")
+                add("callback_query")
             })
         }
         val res = call(pollClient, "getUpdates", body)
@@ -110,13 +109,37 @@ class TelegramBotClient(
         parseMode: String? = null,
         replyToMessageId: Long? = null,
         disableWebPagePreview: Boolean = false,
+        replyMarkup: JsonObject? = null,
     ): JsonObject = call(shortClient, "sendMessage", buildJsonObject {
         put("chat_id", chatId)
         put("text", text)
         if (parseMode != null) put("parse_mode", parseMode)
         if (replyToMessageId != null) put("reply_to_message_id", replyToMessageId)
         if (disableWebPagePreview) put("disable_web_page_preview", true)
+        // reply_markup carries the inline keyboard JSON used for tool-approval prompts.
+        // Format: {"inline_keyboard": [[{"text": "...", "callback_data": "..."}, ...]]}.
+        // Telegram caps callback_data at 64 bytes per button.
+        if (replyMarkup != null) put("reply_markup", replyMarkup)
     }).jsonObject
+
+    /**
+     * Acknowledge a callback_query (inline-keyboard tap). Telegram REQUIRES this within
+     * ~15s of the callback or the user sees a perpetual loading spinner on the button.
+     * The optional [text] shows as a small toast over the chat for ~5s.
+     */
+    suspend fun answerCallbackQuery(
+        callbackQueryId: String,
+        text: String? = null,
+        showAlert: Boolean = false,
+    ): Boolean = try {
+        call(shortClient, "answerCallbackQuery", buildJsonObject {
+            put("callback_query_id", callbackQueryId)
+            if (text != null) put("text", text)
+            put("show_alert", showAlert)
+        }).jsonPrimitive.boolean
+    } catch (_: Throwable) {
+        false  // best-effort; the flow doesn't depend on the ack
+    }
 
     /** Show the "typing..." indicator in the user's Telegram chat. Auto-clears after ~5s on
      *  Telegram's side, so callers should re-send periodically while doing long work.
@@ -292,6 +315,29 @@ data class TelegramIncomingMessage(
     val text: String,
     val photoFileIds: List<String> = emptyList(),
 )
+
+/** Inline-keyboard button tap. We use these for tool-approval prompts only. */
+data class TelegramCallbackQuery(
+    val updateId: Long,
+    val callbackQueryId: String,
+    val chatId: Long,
+    val messageId: Long,
+    val senderId: Long?,
+    val data: String,
+)
+
+/** Returns the parsed callback_query if [update] is one, else null. */
+fun parseCallbackQuery(update: JsonObject): TelegramCallbackQuery? {
+    val updateId = update["update_id"]?.jsonPrimitive?.longOrNull ?: return null
+    val cq = update["callback_query"]?.jsonObject ?: return null
+    val cqId = cq["id"]?.jsonPrimitive?.contentOrNull ?: return null
+    val msg = cq["message"]?.jsonObject ?: return null
+    val messageId = msg["message_id"]?.jsonPrimitive?.longOrNull ?: return null
+    val chatId = msg["chat"]?.jsonObject?.get("id")?.jsonPrimitive?.longOrNull ?: return null
+    val senderId = cq["from"]?.jsonObject?.get("id")?.jsonPrimitive?.longOrNull
+    val data = cq["data"]?.jsonPrimitive?.contentOrNull ?: ""
+    return TelegramCallbackQuery(updateId, cqId, chatId, messageId, senderId, data)
+}
 
 fun parseIncoming(update: JsonObject): TelegramIncomingMessage? {
     val updateId = update["update_id"]?.jsonPrimitive?.longOrNull ?: return null

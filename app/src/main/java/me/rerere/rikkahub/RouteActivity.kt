@@ -430,6 +430,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingTelegramPage()
                             }
 
+                            entry<Screen.SettingToolApprovals> {
+                                me.rerere.rikkahub.ui.pages.setting.SettingToolApprovalsPage()
+                            }
+
                             entry<Screen.SettingAccessibility> {
                                 SettingAccessibilityPage()
                             }
@@ -626,6 +630,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingTelegram : Screen
+
+    @Serializable
+    data object SettingToolApprovals : Screen
 
     @Serializable
     data object SettingAccessibility : Screen
