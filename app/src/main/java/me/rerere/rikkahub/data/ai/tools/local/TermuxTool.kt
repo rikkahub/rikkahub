@@ -350,8 +350,15 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
             TermuxIntegration.State.READY -> Unit  // proceed
         }
 
+        // Prepend a noninteractive preamble for `command` mode so apt/pkg upgrades don't
+        // hang waiting for "keep your existing config?" debconf prompts. Only applies to
+        // the bash -c path; raw executable+arguments callers get no wrapping.
         val (resolvedExe, resolvedArgs) = if (rawCommand != null) {
-            "$TERMUX_BIN_DIR/bash" to arrayOf("-c", rawCommand)
+            val preamble = "export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a; " +
+                "apt(){ command apt -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' \"\$@\"; }; " +
+                "apt-get(){ command apt-get -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' \"\$@\"; }; " +
+                "export -f apt apt-get; "
+            "$TERMUX_BIN_DIR/bash" to arrayOf("-c", preamble + rawCommand)
         } else {
             val args = argumentsArr?.mapNotNull { it.jsonPrimitive.contentOrNull }
                 ?.toTypedArray()
