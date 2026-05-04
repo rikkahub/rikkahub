@@ -26,6 +26,7 @@ import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.db.entity.TelegramChatEntity
@@ -113,7 +114,7 @@ class TelegramBotService : Service() {
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Telegram bot listening")
             .setContentText("Routing inbound messages to RikkaHub")
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setSmallIcon(R.drawable.ic_notif_telegram)
             .setOngoing(true)
             .build()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
