@@ -237,7 +237,10 @@ sealed class ProviderSetting {
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        var releaseStage: AICoreReleaseStage = AICoreReleaseStage.STABLE,
+        // Defaults to PREVIEW because the STABLE feature ID is missing on most current
+        // AICore beta channels — PREVIEW is what actually resolves to a working model on
+        // Pixel 8/9/10 today. Users can flip back to STABLE once Google promotes it.
+        var releaseStage: AICoreReleaseStage = AICoreReleaseStage.PREVIEW,
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting = this // synthetic models, no add
         override fun editModel(model: Model): ProviderSetting {

@@ -269,12 +269,21 @@ class SettingsStore(
                     )
                 } else provider
             }.toMutableList()
-            val assistants = it.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
+            var assistants = it.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
             DEFAULT_ASSISTANTS.forEach { defaultAssistant ->
                 if (assistants.none { it.id == defaultAssistant.id }) {
                     assistants.add(defaultAssistant.copy())
                 }
             }
+            // One-shot upgrade for existing installs that pre-date the agent-core auto-load:
+            // if a default-IDed assistant has an empty enabledSkills, treat it as fresh and
+            // pin agent-core. Users who deliberately added other skills are untouched.
+            assistants = assistants.map { assistant ->
+                val isDefault = DEFAULT_ASSISTANTS.any { it.id == assistant.id }
+                if (isDefault && assistant.enabledSkills.isEmpty()) {
+                    assistant.copy(enabledSkills = setOf("agent-core"))
+                } else assistant
+            }.toMutableList()
             val ttsProviders = it.ttsProviders.ifEmpty { DEFAULT_TTS_PROVIDERS }.toMutableList()
             DEFAULT_TTS_PROVIDERS.forEach { defaultTTSProvider ->
                 if (ttsProviders.none { provider -> provider.id == defaultTTSProvider.id }) {
@@ -682,7 +691,12 @@ internal val DEFAULT_ASSISTANTS = listOf(
     Assistant(
         id = DEFAULT_ASSISTANT_ID,
         name = "",
-        systemPrompt = ""
+        systemPrompt = "",
+        // The agent-core skill bundle (SOUL/HEARTBEAT/TOOLS) ships with the app and is what
+        // teaches every model "you are running on RikkaHub, here are the tools, here is how
+        // to avoid loops". Auto-enabling it on default assistants means new users get an
+        // agent-aware model out of the box without having to discover the skill toggle.
+        enabledSkills = setOf("agent-core"),
     ),
     Assistant(
         id = Uuid.parse("3d47790c-c415-4b90-9388-751128adb0a0"),
@@ -701,7 +715,8 @@ internal val DEFAULT_ASSISTANTS = listOf(
             ## Hint
             - If the user does not specify a language, reply in the user's primary language.
             - Remember to use Markdown syntax for formatting, and use latex for mathematical expressions.
-        """.trimIndent()
+        """.trimIndent(),
+        enabledSkills = setOf("agent-core"),
     ),
 )
 

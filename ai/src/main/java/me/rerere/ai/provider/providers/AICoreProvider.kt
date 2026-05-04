@@ -7,12 +7,20 @@ import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.ModelPreference
 import com.google.mlkit.genai.prompt.ModelReleaseStage
+import com.google.mlkit.genai.prompt.PromptPrefix
 import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
 import com.google.mlkit.genai.prompt.generationConfig
 import com.google.mlkit.genai.prompt.modelConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
+import me.rerere.ai.core.InputSchema
+import me.rerere.ai.core.Tool
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.AICoreReleaseStage
 import me.rerere.ai.provider.AICORE_DEFAULT_MODELS
@@ -72,38 +80,75 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
                 error(translateAICoreError(t))
             }
 
+            val systemPrefix = buildString {
+                val baseSystem = buildSystemPrefix(messages)
+                if (baseSystem.isNotBlank()) appendLine(baseSystem).appendLine()
+                if (params.tools.isNotEmpty()) appendLine(buildToolProtocolPrompt(params.tools))
+            }.trim()
             val prompt = formatPromptFromMessages(messages)
             val temperature = (params.temperature ?: 0.7f).coerceIn(0f, 1f)
             val request = generateContentRequest(TextPart(prompt)) {
                 this.temperature = temperature
+                if (systemPrefix.isNotBlank()) {
+                    this.promptPrefix = PromptPrefix(systemPrefix)
+                }
                 params.topP?.let { /* topP not exposed in ML Kit GenAI prompt API */ }
             }
 
-            var streamId = "aicore-${System.currentTimeMillis()}"
+            val streamId = "aicore-${System.currentTimeMillis()}"
+            val parser = ToolTagParser()
             try {
                 generativeModel.generateContentStream(request).collect { response ->
                     val candidate = response.candidates.firstOrNull()
-                    val deltaText = candidate?.text.orEmpty()
-                    val finishReason = candidate?.finishReason?.toString()
-                    emit(
-                        MessageChunk(
-                            id = streamId,
-                            model = params.model.modelId,
-                            choices = listOf(
-                                UIMessageChoice(
-                                    index = 0,
-                                    delta = UIMessage(
-                                        role = MessageRole.ASSISTANT,
-                                        parts = if (deltaText.isNotEmpty()) {
-                                            listOf(UIMessagePart.Text(deltaText))
-                                        } else emptyList(),
-                                    ),
-                                    message = null,
-                                    finishReason = finishReason,
-                                )
-                            ),
+                    val rawDelta = candidate?.text.orEmpty()
+                    val rawFinish = candidate?.finishReason?.toString()
+                    val parts = parser.feed(rawDelta)
+                    if (parts.isNotEmpty()) {
+                        emit(
+                            MessageChunk(
+                                id = streamId,
+                                model = params.model.modelId,
+                                choices = listOf(
+                                    UIMessageChoice(
+                                        index = 0,
+                                        delta = UIMessage(
+                                            role = MessageRole.ASSISTANT,
+                                            parts = parts,
+                                        ),
+                                        message = null,
+                                        // If a tool tag was closed in this delta, signal
+                                        // tool_calls so the GenerationHandler dispatches the
+                                        // tool and resumes the conversation. Otherwise pass
+                                        // through whatever the model declared (usually null).
+                                        finishReason = parser.consumePendingFinishReason()
+                                            ?: rawFinish,
+                                    )
+                                ),
+                            )
                         )
-                    )
+                    } else if (rawFinish != null) {
+                        // No content in this chunk but stream closed. Flush any partial buffer
+                        // as text so it isn't dropped.
+                        val flushed = parser.flushPending()
+                        emit(
+                            MessageChunk(
+                                id = streamId,
+                                model = params.model.modelId,
+                                choices = listOf(
+                                    UIMessageChoice(
+                                        index = 0,
+                                        delta = UIMessage(
+                                            role = MessageRole.ASSISTANT,
+                                            parts = flushed,
+                                        ),
+                                        message = null,
+                                        finishReason = parser.consumePendingFinishReason()
+                                            ?: rawFinish,
+                                    )
+                                ),
+                            )
+                        )
+                    }
                 }
             } catch (t: Throwable) {
                 Log.w(TAG, "generateContentStream threw", t)
@@ -225,24 +270,190 @@ class AICoreProvider(private val context: Context) : Provider<ProviderSetting.AI
     }
 
     /**
+     * Concatenates all SYSTEM-role messages into a single system instruction string the ML
+     * Kit prompt API can attach via [PromptPrefix]. Without this the AICore model would have
+     * no idea which app it is running in or what its persona is — replies would be pure
+     * generic Q&A.
+     */
+    private fun buildSystemPrefix(messages: List<UIMessage>): String = messages
+        .filter { it.role == MessageRole.SYSTEM }
+        .flatMap { it.parts.filterIsInstance<UIMessagePart.Text>() }
+        .joinToString("\n\n") { it.text.trim() }
+        .trim()
+
+    /**
      * Flattens the conversation into a single text prompt the ML Kit GenAI surface expects.
-     * Mirrors the gallery reference implementation. Tool calls and image/audio parts are
-     * collapsed to text since the first cut is text-only.
+     * SYSTEM messages are NOT included here — they go in the [PromptPrefix] instead. Tool
+     * calls and image/audio parts are collapsed to text since the prompt-API at this version
+     * is text-only.
      */
     private fun formatPromptFromMessages(messages: List<UIMessage>): String = buildString {
         for (message in messages) {
+            if (message.role == MessageRole.SYSTEM) continue
             val role = when (message.role) {
-                MessageRole.SYSTEM -> "system"
+                MessageRole.SYSTEM -> continue
                 MessageRole.USER -> "user"
                 MessageRole.ASSISTANT -> "model"
                 MessageRole.TOOL -> "tool"
             }
-            val text = message.parts.filterIsInstance<UIMessagePart.Text>()
-                .joinToString("\n") { it.text }
+            // Concatenate text + tool-call envelopes + tool outputs so the model sees the
+            // full ReAct-style trace of "I called tap, here's the result, now I plan...".
+            val textBuilder = StringBuilder()
+            for (part in message.parts) {
+                when (part) {
+                    is UIMessagePart.Text -> textBuilder.append(part.text)
+                    is UIMessagePart.Tool -> {
+                        textBuilder.append("\n<tool_call>{\"name\":\"")
+                            .append(part.toolName).append("\",\"input\":")
+                            .append(part.input.ifBlank { "{}" })
+                            .append("}</tool_call>")
+                        val out = part.output.filterIsInstance<UIMessagePart.Text>()
+                            .joinToString("\n") { it.text }
+                        if (out.isNotBlank()) {
+                            textBuilder.append("\n<tool_result>")
+                                .append(out)
+                                .append("</tool_result>")
+                        }
+                    }
+                    else -> { /* ignore image / reasoning / etc. for the on-device prompt */ }
+                }
+            }
+            val text = textBuilder.toString().trim()
             if (text.isNotBlank()) {
                 append(role).append(": ").append(text).append('\n')
             }
         }
         append("model: ")
+    }
+}
+
+/**
+ * Builds the system-prefix block that teaches the model the tool-call protocol. ML Kit's
+ * prompt API has no native function-calling at v1.0.0-beta2, so we rely on the model
+ * emitting `<tool_call>{...}</tool_call>` markup, which [ToolTagParser] then parses out
+ * of the stream and converts into structured [UIMessagePart.Tool] parts.
+ *
+ * Gemini Nano follows the protocol reliably for the vast majority of turns; if it emits
+ * malformed JSON the parser falls back to streaming the text as plain output.
+ */
+private fun buildToolProtocolPrompt(tools: List<Tool>): String = buildString {
+    appendLine("You are running inside RikkaHub, an Android on-device agent.")
+    appendLine()
+    appendLine("You have access to the following tools. To call one, output exactly:")
+    appendLine("<tool_call>{\"name\": \"<tool_name>\", \"input\": <json args>}</tool_call>")
+    appendLine("After the call, the system will reply with a <tool_result> block. Read the")
+    appendLine("result, decide your next step, and either call another tool or reply with a")
+    appendLine("plain-text answer to the user. Do NOT explain that you are calling a tool —")
+    appendLine("just emit the tool_call block and wait. Use one tool per turn unless the")
+    appendLine("task obviously needs multiple sequential calls.")
+    appendLine()
+    appendLine("Available tools:")
+    tools.forEach { tool ->
+        append("- ").append(tool.name).append(": ").append(tool.description.trim()).appendLine()
+        val schema = runCatching { tool.parameters() }.getOrNull()
+        if (schema is InputSchema.Obj) {
+            val schemaJson = buildJsonObject {
+                put("type", "object")
+                putJsonObject("properties") {
+                    schema.properties.forEach { (k, v) -> put(k, v) }
+                }
+                schema.required?.let { req ->
+                    put("required", kotlinx.serialization.json.JsonArray(
+                        req.map { kotlinx.serialization.json.JsonPrimitive(it) }
+                    ))
+                }
+            }
+            append("  schema: ").appendLine(schemaJson.toString())
+        }
+    }
+}.trim()
+
+/**
+ * Streaming parser that walks the AICore output token-by-token, splitting it into plain
+ * text segments and complete `<tool_call>{...}</tool_call>` blocks. Tool calls are emitted
+ * as [UIMessagePart.Tool] with the raw JSON args; the GenerationHandler then dispatches
+ * the matching tool and feeds the result back on the next turn.
+ *
+ * Maintains an internal buffer because tags split across stream chunks. When we detect the
+ * opening `<tool_call>` we hold subsequent characters until we see the closing tag, then
+ * parse the JSON body. Plain text outside any tag is flushed as it arrives so the user
+ * sees streaming output for normal Q&A turns.
+ */
+private class ToolTagParser {
+    private val buffer = StringBuilder()
+    private var inToolCall = false
+    private var pendingFinishReason: String? = null
+
+    private val openTag = "<tool_call>"
+    private val closeTag = "</tool_call>"
+
+    fun feed(delta: String): List<UIMessagePart> {
+        if (delta.isEmpty()) return emptyList()
+        buffer.append(delta)
+        val out = mutableListOf<UIMessagePart>()
+        while (true) {
+            if (!inToolCall) {
+                val openIdx = buffer.indexOf(openTag)
+                if (openIdx < 0) {
+                    // No open tag yet — flush everything we have UNLESS the tail might be
+                    // the start of an open tag, in which case keep it buffered.
+                    val safe = buffer.length - (openTag.length - 1).coerceAtLeast(0)
+                    if (safe > 0) {
+                        val text = buffer.substring(0, safe)
+                        buffer.delete(0, safe)
+                        if (text.isNotEmpty()) out += UIMessagePart.Text(text)
+                    }
+                    break
+                }
+                if (openIdx > 0) {
+                    val pre = buffer.substring(0, openIdx)
+                    if (pre.isNotEmpty()) out += UIMessagePart.Text(pre)
+                }
+                buffer.delete(0, openIdx + openTag.length)
+                inToolCall = true
+            }
+            // We're inside a tool_call — wait for close tag.
+            val closeIdx = buffer.indexOf(closeTag)
+            if (closeIdx < 0) break
+            val body = buffer.substring(0, closeIdx).trim()
+            buffer.delete(0, closeIdx + closeTag.length)
+            inToolCall = false
+            val parsed = parseToolCallBody(body)
+            if (parsed != null) {
+                out += parsed
+                pendingFinishReason = "tool_calls"
+            } else {
+                // Malformed — surface as plain text so the user sees the model's intent.
+                out += UIMessagePart.Text("<tool_call>$body</tool_call>")
+            }
+        }
+        return out
+    }
+
+    fun flushPending(): List<UIMessagePart> {
+        if (buffer.isEmpty()) return emptyList()
+        val txt = buffer.toString()
+        buffer.clear()
+        return listOf(UIMessagePart.Text(txt))
+    }
+
+    fun consumePendingFinishReason(): String? {
+        val r = pendingFinishReason
+        pendingFinishReason = null
+        return r
+    }
+
+    private fun parseToolCallBody(body: String): UIMessagePart.Tool? = try {
+        val obj: JsonObject = Json.parseToJsonElement(body) as JsonObject
+        val name = (obj["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return null
+        val input = obj["input"]?.toString() ?: "{}"
+        UIMessagePart.Tool(
+            toolCallId = "aicore-tool-${System.nanoTime()}",
+            toolName = name,
+            input = input,
+            output = emptyList(),
+        )
+    } catch (_: Throwable) {
+        null
     }
 }
