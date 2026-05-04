@@ -598,7 +598,25 @@ class TelegramBotService : Service() {
 
     private suspend fun handleResetCommand(chatId: Long) {
         chatRepo.deleteByChatId(chatId)
-        try { client.sendMessage(chatId, "✓ Conversation reset.") } catch (_: Throwable) {}
+        // The reset itself is just an app-side state wipe (no LLM round-trip), but the user
+        // expects the bot to feel "present" right after - currently /new only emits the
+        // confirmation tick, then they have to send another message before hearing anything
+        // back. Tack a canned greeting onto the same reply with the active model's name so
+        // the bot gets to introduce itself in this fresh chat without spending tokens.
+        val s = settingsStore.settingsFlow.value
+        val assistant = s.getCurrentAssistant()
+        val effectiveModelId = assistant.chatModelId ?: s.chatModelId
+        val provider = s.providers.firstOrNull { p -> p.models.any { it.id == effectiveModelId } }
+        val model = provider?.models?.firstOrNull { it.id == effectiveModelId }
+        val modelName = model?.displayName?.takeIf { it.isNotBlank() }
+            ?: model?.modelId?.takeIf { it.isNotBlank() }
+            ?: "the active model"
+        val msg = """
+            ✓ Conversation reset.
+
+            Hi - fresh start. I'm running $modelName. What can I do for you?
+        """.trimIndent()
+        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
     }
 
     private suspend fun handleStopCommand(chatId: Long) {
