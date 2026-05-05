@@ -59,6 +59,20 @@ class CronExpressionParserTest {
     }
 
     @Test
+    fun `parses empty string returns failure`() {
+        val r = CronExpressionParser.parse("")
+        assertTrue("empty string must return failure", r.isFailure)
+    }
+
+    @Test
+    fun `rejects @every 0m, 0s, 0h`() {
+        listOf("@every 0m", "@every 0s", "@every 0h").forEach {
+            val r = CronExpressionParser.parse(it)
+            assertTrue("$it should return failure", r.isFailure)
+        }
+    }
+
+    @Test
     fun `nextExecution does not throw on never-firing expression`() {
         // Some impossible expressions parse but never fire (e.g. Feb 30).
         // We just want no exception leaking.
