@@ -29,6 +29,61 @@ class CronExpressionParserTest {
     }
 
     @Test
+    fun `rejects @every 30s — sub-minute not supported`() {
+        // Previously coerced to */1 * * * *; now correctly rejected.
+        val r = CronExpressionParser.parse("@every 30s")
+        assertTrue("@every 30s must return failure (sub-minute not supported)", r.isFailure)
+    }
+
+    @Test
+    fun `@every 60s produces every-minute cron`() {
+        val r = CronExpressionParser.parse("@every 60s")
+        assertTrue("@every 60s should parse successfully", r.isSuccess)
+        // 60s / 60 = 1 → */1 * * * *
+        val next1 = CronExpressionParser.nextExecution(
+            r.getOrThrow(),
+            ZonedDateTime.of(2026, 6, 1, 0, 0, 0, 0, ZoneId.of("UTC"))
+        )
+        assertNotNull(next1)
+        assertEquals("should fire at minute 1", 1, next1!!.minute)
+    }
+
+    @Test
+    fun `@every 3600s produces hourly cron`() {
+        val r = CronExpressionParser.parse("@every 3600s")
+        assertTrue("@every 3600s should parse successfully", r.isSuccess)
+        val basis = ZonedDateTime.of(2026, 6, 1, 0, 0, 0, 0, ZoneId.of("UTC"))
+        val next = CronExpressionParser.nextExecution(r.getOrThrow(), basis)
+        assertNotNull(next)
+        // 0 */1 * * * fires at the top of every hour
+        assertEquals("should fire at minute 0", 0, next!!.minute)
+        assertEquals("should advance by 1 hour", 1, next.hour)
+    }
+
+    @Test
+    fun `@every 7200s produces every-2-hours cron`() {
+        val r = CronExpressionParser.parse("@every 7200s")
+        assertTrue("@every 7200s should parse successfully", r.isSuccess)
+        val basis = ZonedDateTime.of(2026, 6, 1, 0, 0, 0, 0, ZoneId.of("UTC"))
+        val next = CronExpressionParser.nextExecution(r.getOrThrow(), basis)
+        assertNotNull(next)
+        assertEquals("should fire at minute 0", 0, next!!.minute)
+        assertEquals("should advance by 2 hours", 2, next.hour)
+    }
+
+    @Test
+    fun `@every 86400s produces daily-at-midnight cron`() {
+        val r = CronExpressionParser.parse("@every 86400s")
+        assertTrue("@every 86400s should parse successfully", r.isSuccess)
+        val basis = ZonedDateTime.of(2026, 6, 1, 0, 0, 0, 0, ZoneId.of("UTC"))
+        val next = CronExpressionParser.nextExecution(r.getOrThrow(), basis)
+        assertNotNull(next)
+        assertEquals("should fire at hour 0", 0, next!!.hour)
+        assertEquals("should fire at minute 0", 0, next.minute)
+        assertEquals("should advance by 1 day", 2, next.dayOfMonth)
+    }
+
+    @Test
     fun `parses standard nicknames`() {
         listOf("@hourly", "@daily", "@weekly", "@monthly", "@yearly").forEach {
             assertTrue("nickname $it should parse", CronExpressionParser.parse(it).isSuccess)

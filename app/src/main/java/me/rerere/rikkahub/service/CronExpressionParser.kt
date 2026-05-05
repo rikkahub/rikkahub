@@ -13,14 +13,20 @@ import java.util.LinkedHashMap
  *   - Duration aliases:  @every Nm | @every Ns | @every Nh
  *
  * @every is NOT a cron-utils feature; it is expanded to a 5-field equivalent:
- *   @every Xm  →  *\/X * * * *   (every X minutes, 1-59 clamped to 1)
- *   @every Xs  →  *\/(X/60) * * * *  if ≥60s, else *\/1 * * * *
- *   @every Xh  →  0 *\/X * * *   (every X hours, 1-23 clamped to 1)
+ *   @every Xm  →  *\/X * * * *        (every X minutes, 1..59)
+ *   @every Xs  bucketed by magnitude:
+ *               X < 60   → rejected   (sub-minute scheduling not supported)
+ *               X < 3600 → *\/(X/60) * * * *   (every N minutes)
+ *               X < 86400 → 0 *\/(X/3600) * * *  (every N hours, on the hour)
+ *               X <= 86400*31 → 0 0 *\/(X/86400) * *  (every N days at midnight)
+ *               X > 86400*31 → rejected (>31 days not expressible in 5-field cron)
+ *   @every Xh  →  0 *\/X * * *        (every X hours, 1..23)
  *
  * The cron definition used is a UNIX-flavored definition with all standard
  * nicknames explicitly enabled (the built-in CronType.UNIX omits them).
  *
- * Thread-safe: all cache reads and writes are guarded by synchronized(cache).
+ * Thread-safe: parse() performs the entire cache lookup and write under a single
+ * synchronized(cache) block, preserving === identity on cache hits.
  *
  * cron-utils handles DST natively when given a ZonedDateTime basis,
  * which is the entire reason we don't hand-roll this.
@@ -56,7 +62,16 @@ object CronExpressionParser {
 
     /**
      * Expand @every duration aliases into standard 5-field cron expressions.
-     * Returns null if [expr] is not an @every alias (caller should try normal parse).
+     * Returns null if [expr] is not an @every alias OR if the value is out of range
+     * (caller should treat null as a parse failure for @every forms).
+     *
+     * Bucketing for 's' suffix:
+     *   value < 1        → null  (reject zero / negative)
+     *   value < 60       → null  (sub-minute scheduling not supported)
+     *   value < 3600     → every N minutes: *\/(value/60) * * * *
+     *   value < 86400    → every N hours on the hour: 0 *\/(value/3600) * * *
+     *   value <= 86400*31 → every N days at midnight: 0 0 *\/(value/86400) * *
+     *   value > 86400*31 → null  (>31 days not expressible in 5-field cron)
      */
     private fun expandEvery(expr: String): String? {
         val trimmed = expr.trim()
@@ -65,9 +80,21 @@ object CronExpressionParser {
         val value = duration.dropLast(1).toLongOrNull() ?: return null
         if (value <= 0) return null   // reject @every 0m / 0s / 0h as invalid
         return when (duration.last()) {
-            's' -> {
-                val minutes = (value / 60).coerceAtLeast(1).coerceAtMost(59)
-                "*/$minutes * * * *"
+            's' -> when {
+                value < 60 -> null  // sub-minute not supported
+                value < 3600 -> {
+                    val minutes = (value / 60).coerceIn(1, 59)
+                    "*/$minutes * * * *"
+                }
+                value < 86400 -> {
+                    val hours = (value / 3600).coerceIn(1, 23)
+                    "0 */$hours * * *"
+                }
+                value <= 86400L * 31 -> {
+                    val days = (value / 86400).coerceIn(1, 31)
+                    "0 0 */$days * *"
+                }
+                else -> null  // >31 days not expressible in 5-field cron
             }
             'm' -> {
                 val minutes = value.coerceAtMost(59)
@@ -88,14 +115,22 @@ object CronExpressionParser {
      *
      * The cache is keyed by the original expression string, so [parse]("@every 30m")
      * and [parse]("@every 30m") return the same [Cron] instance (=== identity).
+     *
+     * Thread-safe: the entire cache lookup, expansion, and write are performed under a
+     * single synchronized(cache) block, guaranteeing === identity on cache hits with
+     * no TOCTOU race between two threads parsing the same expression simultaneously.
      */
     fun parse(expr: String): Result<Cron> {
-        synchronized(cache) { cache[expr] }?.let { return Result.success(it) }
-        return runCatching {
-            val effective = expandEvery(expr) ?: expr
-            val cron = parser.parse(effective).validate()
-            synchronized(cache) { cache[expr] = cron }
-            cron
+        synchronized(cache) {
+            cache[expr]?.let { return Result.success(it) }
+            return runCatching {
+                val effective = expandEvery(expr)
+                    ?: if (expr.trim().startsWith("@every ")) error("Unsupported @every value: $expr")
+                    else expr
+                val cron = parser.parse(effective).validate()
+                cache[expr] = cron
+                cron
+            }
         }
     }
 
