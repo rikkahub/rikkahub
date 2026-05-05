@@ -2,6 +2,8 @@ package me.rerere.rikkahub.data.ai.tools.local
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -103,5 +105,82 @@ class ScheduleJobToolValidationTest {
             put("timezone", "Mars/Olympus")
         }, knownTools)
         assertEquals("bad_timezone", r!!.code)
+    }
+
+    @Test
+    fun `too many actions rejected`() {
+        val r = ScheduleJobValidator.validate(buildJsonObject {
+            put("name", "x"); put("mode", "direct")
+            put("schedule_type", "once"); put("at_unix_ms", 100L)
+            put("actions", buildJsonArray {
+                repeat(51) {
+                    add(buildJsonObject {
+                        put("tool", "post_notification")
+                        put("args", buildJsonObject { put("title", "t"); put("body", "b") })
+                    })
+                }
+            })
+        }, knownTools)
+        assertEquals("too_many_actions", r!!.code)
+    }
+
+    @Test
+    fun `prompt too long rejected`() {
+        val r = ScheduleJobValidator.validate(buildJsonObject {
+            put("name", "x"); put("mode", "llm")
+            put("schedule_type", "cron"); put("cron_expression", "@hourly")
+            put("prompt", "a".repeat(4001))
+        }, knownTools)
+        assertEquals("prompt_too_long", r!!.code)
+    }
+
+    @Test
+    fun `prompt at limit accepted`() {
+        val r = ScheduleJobValidator.validate(buildJsonObject {
+            put("name", "x"); put("mode", "llm")
+            put("schedule_type", "cron"); put("cron_expression", "@hourly")
+            put("prompt", "a".repeat(4000))
+        }, knownTools)
+        assertNull(r)
+    }
+
+    @Test
+    fun `bounds past rejected`() {
+        val r = ScheduleJobValidator.validate(buildJsonObject {
+            put("name", "x"); put("mode", "llm"); put("prompt", "p")
+            put("schedule_type", "cron"); put("cron_expression", "@hourly")
+            put("end_at_unix_ms", 1L)  // epoch ms — always in the past
+        }, knownTools)
+        assertEquals("bounds_past", r!!.code)
+    }
+
+    @Test
+    fun `max_runs zero rejected`() {
+        val r = ScheduleJobValidator.validate(buildJsonObject {
+            put("name", "x"); put("mode", "llm"); put("prompt", "p")
+            put("schedule_type", "cron"); put("cron_expression", "@hourly")
+            put("max_runs", 0)
+        }, knownTools)
+        assertEquals("max_runs_invalid", r!!.code)
+    }
+
+    @Test
+    fun `bad catchup value rejected`() {
+        val r = ScheduleJobValidator.validate(buildJsonObject {
+            put("name", "x"); put("mode", "llm"); put("prompt", "p")
+            put("schedule_type", "cron"); put("cron_expression", "@hourly")
+            put("catchup", "never")
+        }, knownTools)
+        assertEquals("bad_catchup", r!!.code)
+    }
+
+    @Test
+    fun `bad tag uppercase rejected`() {
+        val r = ScheduleJobValidator.validate(buildJsonObject {
+            put("name", "x"); put("mode", "llm"); put("prompt", "p")
+            put("schedule_type", "cron"); put("cron_expression", "@hourly")
+            put("tags", buildJsonArray { add("HasUppercase") })
+        }, knownTools)
+        assertEquals("bad_tag", r!!.code)
     }
 }

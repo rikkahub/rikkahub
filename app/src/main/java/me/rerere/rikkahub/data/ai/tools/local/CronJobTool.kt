@@ -64,12 +64,18 @@ object ScheduleJobValidator {
             "llm" -> {
                 if (prompt.isNullOrBlank() || actions != null)
                     return ValidationError("mutual_exclusive", "mode='llm' requires prompt and forbids actions")
+                if (prompt.length > 4000)
+                    return ValidationError("prompt_too_long",
+                        "prompt capped at 4000 chars (got ${prompt.length})")
             }
             "direct" -> {
                 if (actions == null || prompt != null)
                     return ValidationError("mutual_exclusive", "mode='direct' requires actions and forbids prompt")
                 if (actions.isEmpty())
                     return ValidationError("empty_actions", "mode='direct' requires non-empty actions array")
+                if (actions.size > 50)
+                    return ValidationError("too_many_actions",
+                        "actions array capped at 50 (got ${actions.size})")
                 for ((idx, el) in actions.withIndex()) {
                     if (el !is JsonObject) return ValidationError("bad_action_shape", "action $idx is not an object")
                     val toolName = (el["tool"] as? JsonPrimitive)?.contentOrNull
@@ -303,7 +309,7 @@ fun deleteJobTool(
     },
     execute = { input ->
         val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull
-            ?: error("id is required")
+            ?: return@Tool textPart(errEnvelope("missing_id", "id is required"))
         scheduler.cancel(id)
         runRepo.deleteAllForJob(id)
         repo.deleteById(id)
@@ -321,10 +327,10 @@ fun pauseJobTool(repo: ScheduledJobRepository, scheduler: CronJobScheduler): Too
         )
     },
     execute = { input ->
-        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull ?: error("id is required")
-        val job = repo.getById(id) ?: return@Tool textPart(buildJsonObject {
-            put("error", "not_found"); put("id", id)
-        }.toString())
+        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull
+            ?: return@Tool textPart(errEnvelope("missing_id", "id is required"))
+        val job = repo.getById(id)
+            ?: return@Tool textPart(errEnvelope("not_found", "no job with id '$id'"))
         repo.update(job.copy(enabled = false))
         scheduler.cancel(id)
         textPart(buildJsonObject { put("success", true); put("id", id) }.toString())
@@ -341,10 +347,10 @@ fun resumeJobTool(repo: ScheduledJobRepository, scheduler: CronJobScheduler): To
         )
     },
     execute = { input ->
-        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull ?: error("id is required")
-        val job = repo.getById(id) ?: return@Tool textPart(buildJsonObject {
-            put("error", "not_found"); put("id", id)
-        }.toString())
+        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull
+            ?: return@Tool textPart(errEnvelope("missing_id", "id is required"))
+        val job = repo.getById(id)
+            ?: return@Tool textPart(errEnvelope("not_found", "no job with id '$id'"))
         val updated = job.copy(enabled = true)
         repo.update(updated)
         scheduler.schedule(updated)
@@ -365,10 +371,14 @@ fun triggerJobNowTool(
         )
     },
     execute = { input ->
-        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull ?: error("id is required")
-        repo.getById(id) ?: return@Tool textPart(buildJsonObject {
-            put("error", "not_found"); put("id", id)
-        }.toString())
+        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull
+            ?: return@Tool textPart(errEnvelope("missing_id", "id is required"))
+        val job = repo.getById(id)
+            ?: return@Tool textPart(errEnvelope("not_found", "no job with id '$id'"))
+        if (!job.enabled) {
+            return@Tool textPart(errEnvelope("job_disabled",
+                "job '$id' is paused; resume it with resume_job first"))
+        }
         scheduler.triggerNow(id)
         textPart(buildJsonObject {
             put("success", true)
@@ -378,7 +388,10 @@ fun triggerJobNowTool(
     },
 )
 
-fun getJobHistoryTool(runRepo: ScheduledJobRunRepository): Tool = Tool(
+fun getJobHistoryTool(
+    repo: ScheduledJobRepository,
+    runRepo: ScheduledJobRunRepository,
+): Tool = Tool(
     name = "get_job_history",
     description = "Return the most recent fires of a scheduled job, newest first.".trimIndent(),
     parameters = {
@@ -391,7 +404,10 @@ fun getJobHistoryTool(runRepo: ScheduledJobRunRepository): Tool = Tool(
         )
     },
     execute = { input ->
-        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull ?: error("id is required")
+        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull
+            ?: return@Tool textPart(errEnvelope("missing_id", "id is required"))
+        repo.getById(id)
+            ?: return@Tool textPart(errEnvelope("not_found", "no job with id '$id'"))
         val limit = (input.jsonObject["limit"] as? JsonPrimitive)?.intOrNull?.coerceIn(1, 100) ?: 20
         val rows = runRepo.getRecent(id, limit)
         textPart(buildJsonObject {
