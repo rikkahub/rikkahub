@@ -227,6 +227,9 @@ fun Route.conversationRoutes(
             val conversation = conversationRepo.getConversationById(uuid)
                 ?: throw NotFoundException("Conversation not found")
 
+            // Same rationale as ChatVM.moveConversationToAssistant — drop ChatScope grants
+            // because they were authorised under the previous assistant's behaviour.
+            me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList.clearChat(uuid)
             chatService.saveConversation(uuid, conversation.copy(assistantId = targetAssistantId))
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
@@ -315,7 +318,22 @@ fun Route.conversationRoutes(
         post("/{id}/tool-approval") {
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<ToolApprovalRequest>()
-            chatService.handleToolApproval(uuid, request.toolCallId, request.approved, request.reason, request.answer)
+            // Resolve the scope string to the enum. Default "once" preserves backwards
+            // compatibility with web clients that don't know about the broader scopes.
+            val scope = when (request.scope?.lowercase()) {
+                "always" -> me.rerere.rikkahub.service.ChatService.ApprovalScope.Always
+                "chat" -> me.rerere.rikkahub.service.ChatService.ApprovalScope.ChatScope
+                else -> me.rerere.rikkahub.service.ChatService.ApprovalScope.Once
+            }
+            chatService.handleToolApproval(
+                conversationId = uuid,
+                toolCallId = request.toolCallId,
+                approved = request.approved,
+                reason = request.reason,
+                answer = request.answer,
+                scope = scope,
+                toolName = request.toolName,
+            )
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
 

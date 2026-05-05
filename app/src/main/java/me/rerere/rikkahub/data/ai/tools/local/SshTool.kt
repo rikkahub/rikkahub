@@ -40,6 +40,19 @@ private const val PROBE_PER_NETWORK_TIMEOUT_MS = 2_500
 private const val SOCKET_CONNECT_TIMEOUT_MS = 10_000
 
 /**
+ * Caps on stdout / stderr returned to the LLM. Without these, `cat /var/log/syslog` /
+ * `journalctl` / `ls -R /` push megabytes into the next prompt, blowing the context
+ * budget on a single tool call. Mirrors the Termux tool's caps so behaviour is
+ * consistent across local and remote shell.
+ */
+private const val MAX_RETURNED_STDOUT = 8_000
+private const val MAX_RETURNED_STDERR = 2_000
+
+/** Truncate [s] to [max] chars and append a "[truncated; N bytes more]" suffix. */
+private fun cap(s: String, max: Int): String =
+    if (s.length > max) s.take(max) + "\n…[truncated; ${s.length - max} bytes more]" else s
+
+/**
  * Resolves [host] to an IPv4 address string. JSch's `Socket(addr, port)` does NOT implement
  * Happy Eyeballs — it sits on the IPv6 SYN until the connect timeout fires, even when the
  * server only listens on IPv4. Termux's OpenSSH races both stacks in parallel and never
@@ -311,16 +324,16 @@ internal fun runOnSession(session: Session, command: String, timeoutMs: Int): Js
                     "timeout_seconds, or detach the command (e.g. nohup ... & disown) so it " +
                     "runs in the background after your ssh exec returns. Partial stdout/stderr " +
                     "captured before the timeout is included.")
-                put("partial_stdout", stdout.toString(Charsets.UTF_8))
-                put("partial_stderr", stderr.toString(Charsets.UTF_8))
+                put("partial_stdout", cap(stdout.toString(Charsets.UTF_8), MAX_RETURNED_STDOUT))
+                put("partial_stderr", cap(stderr.toString(Charsets.UTF_8), MAX_RETURNED_STDERR))
             }
         }
         val exitCode = channel.exitStatus
         return buildJsonObject {
             put("success", exitCode == 0)
             put("exit_code", exitCode)
-            put("stdout", stdout.toString(Charsets.UTF_8))
-            put("stderr", stderr.toString(Charsets.UTF_8))
+            put("stdout", cap(stdout.toString(Charsets.UTF_8), MAX_RETURNED_STDOUT))
+            put("stderr", cap(stderr.toString(Charsets.UTF_8), MAX_RETURNED_STDERR))
         }
     } finally {
         try { channel.disconnect() } catch (_: Throwable) {}

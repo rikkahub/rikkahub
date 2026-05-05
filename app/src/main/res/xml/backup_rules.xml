@@ -1,12 +1,29 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Legacy auto-backup rules (API < 31). API 31+ uses
+   `data_extraction_rules.xml` instead. Keep both in sync — adding an entry
+   here without the corresponding exclusion in the new format leaves a hole
+   on Android 12+.
+
+   Default: nothing is backed up; we explicitly include only `files/upload/`.
+   Sensitive paths (Room DBs with SSH credentials, DataStore with tokens,
+   `known_hosts`) are excluded as defense-in-depth even though the
+   include-only mode already drops them.
 -->
 <full-backup-content>
   <include
     domain="file"
     path="upload/" />
+  <exclude
+    domain="database"
+    path="." />
+  <exclude
+    domain="sharedpref"
+    path="." />
+  <exclude
+    domain="file"
+    path="datastore/" />
+  <exclude
+    domain="file"
+    path="known_hosts" />
 </full-backup-content>

@@ -1,19 +1,39 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Cloud-backup + device-transfer rules (API 31+).
+
+   Default: nothing is backed up. We explicitly include only `files/upload/`
+   so the user's saved attachments survive a device move; everything else
+   stays on-device.
+
+   Why deny-by-default: this app stores LLM-agent state that includes
+   credentials we cannot afford to walk off the device. Specifically:
+     - SSH host secrets (passwords + private keys) live in the Room DB
+       under `databases/`. Plaintext today (encrypting at rest is queued).
+     - The Telegram bot token lives in `datastore/telegram_bot.preferences_pb`.
+     - LLM provider API keys live in the settings DataStore under
+       `datastore/`.
+     - `files/known_hosts` carries SSH host-key trust state — exfilling
+       this lets an attacker downgrade-attack you on next connect.
+
+   `<exclude>` is an explicit defence-in-depth even though the cloud-backup
+   block is empty (which already excludes-by-default) — anyone editing this
+   file later who adds an `<include domain="root" .../>` would otherwise
+   silently re-enable backup of these paths.
 -->
 <data-extraction-rules>
   <cloud-backup>
-    <!-- TODO: Use <include> and <exclude> to control what is backed up.
-    <include .../>
-    <exclude .../>
-    -->
+    <include domain="file" path="upload/" />
+    <exclude domain="database" />
+    <exclude domain="sharedpref" />
+    <exclude domain="file" path="datastore/" />
+    <exclude domain="file" path="known_hosts" />
   </cloud-backup>
-  <!--
   <device-transfer>
-      <include .../>
-      <exclude .../>
+    <include domain="file" path="upload/" />
+    <exclude domain="database" />
+    <exclude domain="sharedpref" />
+    <exclude domain="file" path="datastore/" />
+    <exclude domain="file" path="known_hosts" />
   </device-transfer>
-  -->
 </data-extraction-rules>

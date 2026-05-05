@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
@@ -170,6 +171,10 @@ private class CustomTtsStateImpl(
 
     override fun cleanup() {
         controller.dispose()
+        currentJob?.cancel()
         currentJob = null
+        // Cancel the parent scope so any future caller that adds a `scope.launch { … }`
+        // doesn't silently leak the launched job past the lifetime of this state.
+        scope.cancel()
     }
 }

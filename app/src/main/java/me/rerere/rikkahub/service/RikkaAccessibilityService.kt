@@ -10,6 +10,8 @@ import android.os.HandlerThread
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -42,6 +44,14 @@ class RikkaAccessibilityService : AccessibilityService() {
 
     private val _lastActions = MutableStateFlow<List<ActionLogEntry>>(emptyList())
     val lastActions = _lastActions.asStateFlow()
+
+    // Serialise overlapping gesture-dispatch callers. Each caller takes a ticket; the
+    // shared current-counter advances when a caller's `finally` runs. Both fields are
+    // INSTANCE-scoped (was a companion-static AtomicInteger pair previously) so a
+    // service-process restart resets them — without this, an aborted caller leaving its
+    // ticket unconsumed would deadlock every subsequent caller in the next bind cycle.
+    private val serializeGate = AtomicInteger(0)
+    private val gateCurrent = AtomicInteger(0)
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -88,8 +98,12 @@ class RikkaAccessibilityService : AccessibilityService() {
     suspend fun dispatchGestureAsync(gesture: GestureDescription): Boolean {
         val gate = serializeGate.incrementAndGet()
         try {
-            // Wait for our turn in the queue (serializes overlapping callers).
+            // Wait for our turn in the queue (serializes overlapping callers). The
+            // ensureActive() inside the spin lets `stopGeneration` actually break us out
+            // of a wait — without it, a caller stuck waiting for a never-arriving prior
+            // gate would ignore cancellation and burn power until the service died.
             while (gateCurrent.get() != gate - 1) {
+                currentCoroutineContext().ensureActive()
                 kotlinx.coroutines.delay(10)
             }
             val ok = withTimeoutOrNull(GESTURE_TIMEOUT_MS) {
@@ -223,9 +237,5 @@ class RikkaAccessibilityService : AccessibilityService() {
         @Volatile
         var instance: RikkaAccessibilityService? = null
             private set
-
-        // Used by dispatchGestureAsync to serialize overlapping callers without blocking threads.
-        private val serializeGate = AtomicInteger(0)
-        private val gateCurrent = AtomicInteger(0)
     }
 }
