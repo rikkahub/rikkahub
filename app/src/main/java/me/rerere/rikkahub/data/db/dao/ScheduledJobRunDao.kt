@@ -27,7 +27,7 @@ interface ScheduledJobRunDao {
      */
     @Query("DELETE FROM scheduled_job_runs WHERE jobId = :jobId AND id NOT IN " +
            "(SELECT id FROM scheduled_job_runs WHERE jobId = :jobId ORDER BY startedAtMs DESC LIMIT :keep)")
-    suspend fun trim(jobId: String, keep: Int = 100)
+    suspend fun trim(jobId: String, keep: Int)
 
     @Query("DELETE FROM scheduled_job_runs WHERE jobId = :jobId")
     suspend fun deleteAllForJob(jobId: String)

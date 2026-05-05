@@ -8,6 +8,6 @@ class ScheduledJobRunRepository(private val dao: ScheduledJobRunDao) {
     suspend fun getStranded(stalenessMs: Long) = dao.getStranded(stalenessMs)
     suspend fun insert(row: ScheduledJobRunEntity) = dao.insert(row)
     suspend fun update(row: ScheduledJobRunEntity) = dao.update(row)
-    suspend fun trim(jobId: String, keep: Int = 100) = dao.trim(jobId, keep)
+    suspend fun trim(jobId: String, keep: Int) = dao.trim(jobId, keep)
     suspend fun deleteAllForJob(jobId: String) = dao.deleteAllForJob(jobId)
 }
