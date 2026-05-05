@@ -10,7 +10,6 @@
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
   <uses-permission android:name="android.permission.VIBRATE" />
@@ -143,7 +142,11 @@
     <service
       android:name=".service.TelegramBotService"
       android:exported="false"
-      android:foregroundServiceType="dataSync" />
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="long-running Telegram bot long-poll loop" />
+    </service>
 
     <service
       android:name=".service.RikkaAccessibilityService"
