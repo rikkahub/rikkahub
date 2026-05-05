@@ -29,7 +29,7 @@ Every tool the agent can call, grouped by capability surface. Each entry lists: 
 
 - **`set_torch`** — flashlight on/off.
 - **`vibrate`** — pattern or duration. One of `pattern` or `duration_ms`, not both.
-- **`get_brightness`** / **`set_brightness`** — 0..255. Requires WRITE_SETTINGS.
+- **`get_brightness`** / **`set_brightness`** — 1..255 (the tool clamps below 1 because brightness=0 produces no visible change on most Android builds). For "lowest brightness" requests, pass `1`. Requires WRITE_SETTINGS.
 - **`get_volume`** / **`set_volume`** — per stream. Requires DND access.
 
 ## Media (Phase 1)
@@ -110,10 +110,34 @@ Termux:API, Termux:Boot, etc. are real installed packages but have **no launcher
 - **`ssh_upload`** / **`ssh_download`** — SFTP file transfer.
 - **`ssh_forget_host_key`** — recovery for "HostKey has been changed" after the user reinstalled a remote. Only call after the user explicitly confirms the remote is theirs.
 
-## Cron / scheduling
+## Cron / scheduled jobs (Phase 5)
 
-- **`schedule_job`** — create one-shot or recurring job. `interval_seconds` minimum 60. The cron prompt should explicitly say *"telegram_send_message(chat_id=…)"* if the result needs to reach a Telegram chat — the worker has no idea where to deliver otherwise.
-- **`list_jobs`** / **`pause_job`** / **`resume_job`** / **`delete_job`** — manage existing jobs.
+**Two modes, two timing types:**
+
+- `mode='llm'` — at fire time, your `prompt` is sent to a fresh headless conversation; the model decides what tools to call. Use this when reasoning is required ("if battery < 20%, message me", "summarize last hour of notifications").
+- `mode='direct'` — at fire time, the listed `actions[]` execute deterministically without the LLM. Free, fast, predictable. Use this for fixed side effects ("post 'good morning' every 8am").
+
+**Timing:**
+
+- `schedule_type='once'` — fires once at `at_unix_ms`, then auto-disables.
+- `schedule_type='cron'` — 5-field cron expression with aliases. Examples:
+  - `0 9 * * MON-FRI` — weekdays 9am
+  - `*/15 * * * *` — every 15 minutes
+  - `@every 30m` — every 30 minutes
+  - `@daily` — midnight every day
+  - `0 0 1 * *` — first of every month
+
+  Timezone defaults to the device's; pass IANA id via `timezone` to override.
+
+**Bounds (cron only):** `start_at_unix_ms`, `end_at_unix_ms`, `max_runs`.
+
+**Catchup** (default `fire_once`): `skip` / `fire_once` / `fire_all`. Controls what happens for windows missed during reboot.
+
+**Tools:**
+
+- `schedule_job`, `list_jobs`, `delete_job`, `pause_job`, `resume_job`
+- `trigger_job_now(id)` — fire immediately, doesn't disturb the schedule
+- `get_job_history(id, limit?)` — last N runs newest-first, with outcomes
 
 ## Telegram bot (LLM-side)
 

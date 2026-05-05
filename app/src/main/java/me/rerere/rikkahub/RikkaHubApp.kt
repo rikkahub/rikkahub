@@ -29,6 +29,7 @@ import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
@@ -54,6 +55,13 @@ class RikkaHubApp : Application() {
             modules(appModule, viewModelModule, dataSourceModule, repositoryModule)
         }
         this.createNotificationChannel()
+
+        // Restore any headless conversation IDs that survived a process kill; must run
+        // before any cron worker fires so mark/unmark are consistent.
+        HeadlessConversations.init(this)
+
+        // Sweep orphan headless conversations created by workers that were killed mid-execute.
+        sweepOrphanHeadlessConversations()
 
         // set cursor window size to 32MB
         DatabaseUtil.setCursorWindowSize(32 * 1024 * 1024)
@@ -100,6 +108,41 @@ class RikkaHubApp : Application() {
         incrementLaunchCount()
 
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
+    }
+
+    /**
+     * Cleans up orphan conversations left by cron workers that were killed mid-execute.
+     *
+     * When a worker is killed between HeadlessConversations.mark() and unmark(), the
+     * conversation ID remains in SharedPreferences. On the next app start we detect these
+     * IDs and delete the corresponding "[Scheduled]" conversations from the DB so they
+     * don't pollute the chat list.
+     *
+     * We clear the persisted set at the end regardless — if a conversation doesn't exist in
+     * DB there's nothing to clean up, and stale IDs only confuse future sweeps.
+     */
+    private fun sweepOrphanHeadlessConversations() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val orphanIds = HeadlessConversations.activeIds()
+                if (orphanIds.isEmpty()) return@runCatching
+                Log.i(TAG, "sweepOrphanHeadlessConversations: found ${orphanIds.size} candidate(s)")
+                val convRepo = get<me.rerere.rikkahub.data.repository.ConversationRepository>()
+                for (id in orphanIds) {
+                    runCatching {
+                        val conv = convRepo.getConversationById(id)
+                        if (conv != null && conv.title.startsWith("[Scheduled]")) {
+                            Log.i(TAG, "sweepOrphanHeadlessConversations: deleting orphan conv $id")
+                            convRepo.deleteConversation(conv)
+                        }
+                    }.onFailure { Log.w(TAG, "sweepOrphanHeadlessConversations: error for $id", it) }
+                }
+                HeadlessConversations.clearAll()
+                Log.i(TAG, "sweepOrphanHeadlessConversations: sweep complete")
+            }.onFailure {
+                Log.e(TAG, "sweepOrphanHeadlessConversations failed", it)
+            }
+        }
     }
 
     private fun incrementLaunchCount() {

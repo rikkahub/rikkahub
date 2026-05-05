@@ -157,6 +157,7 @@ class LocalTools(
     private val cameraResultBuffer: CameraResultBuffer,
     private val biometricResultBuffer: BiometricResultBuffer,
     private val scheduledJobRepository: me.rerere.rikkahub.data.repository.ScheduledJobRepository,
+    private val scheduledJobRunRepository: me.rerere.rikkahub.data.repository.ScheduledJobRunRepository,
     private val cronJobScheduler: me.rerere.rikkahub.service.CronJobScheduler,
     private val settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
     private val sshHostRepository: me.rerere.rikkahub.data.repository.SshHostRepository,
@@ -543,11 +544,14 @@ class LocalTools(
             tools.add(telegramDeleteCommandsTool(telegramBotPreferences, telegramBotClient))
         }
         if (options.contains(LocalToolOption.CronJobs)) {
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.scheduleJobTool(scheduledJobRepository, cronJobScheduler, settingsStore))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.scheduleJobTool(scheduledJobRepository, cronJobScheduler, settingsStore,
+                knownToolNamesProvider = { tools.map { it.name } }))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.listJobsTool(scheduledJobRepository))
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.deleteJobTool(scheduledJobRepository, cronJobScheduler))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.deleteJobTool(scheduledJobRepository, scheduledJobRunRepository, cronJobScheduler))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.pauseJobTool(scheduledJobRepository, cronJobScheduler))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.resumeJobTool(scheduledJobRepository, cronJobScheduler))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.triggerJobNowTool(scheduledJobRepository, cronJobScheduler))
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.getJobHistoryTool(scheduledJobRepository, scheduledJobRunRepository))
         }
         if (options.contains(LocalToolOption.ScreenAutomation)) {
             tools.add(tapTool())

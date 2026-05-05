@@ -10,4 +10,6 @@ class ScheduledJobRepository(private val dao: ScheduledJobDao) {
     suspend fun upsert(job: ScheduledJobEntity) = dao.upsert(job)
     suspend fun update(job: ScheduledJobEntity) = dao.update(job)
     suspend fun deleteById(id: String) = dao.deleteById(id)
+    suspend fun listFiltered(tag: String?, mode: String?, enabled: Boolean?): List<ScheduledJobEntity> =
+        dao.listFiltered(tag, mode, enabled)
 }

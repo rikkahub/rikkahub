@@ -30,4 +30,11 @@ interface ScheduledJobDao {
 
     @Query("DELETE FROM scheduled_jobs WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("SELECT * FROM scheduled_jobs WHERE " +
+           "(:tag IS NULL OR (',' || COALESCE(tags,'') || ',') LIKE '%,' || :tag || ',%') AND " +
+           "(:mode IS NULL OR mode = :mode) AND " +
+           "(:enabledOrNull IS NULL OR enabled = :enabledOrNull) " +
+           "ORDER BY createdAtMs DESC")
+    suspend fun listFiltered(tag: String?, mode: String?, enabledOrNull: Boolean?): List<ScheduledJobEntity>
 }
