@@ -302,6 +302,9 @@ dependencies {
     // SSH client (Mwiede fork — maintained, Android-friendly)
     implementation("com.github.mwiede:jsch:0.2.21")
 
+    // Cron utilities (expression parsing & validation)
+    implementation("com.cronutils:cron-utils:9.2.1")
+
     // Leak Canary
     // debugImplementation(libs.leakcanary.android)
 
