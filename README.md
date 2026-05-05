@@ -76,13 +76,46 @@ you can't forget you're in YOLO mode.
 
 ### Run jobs while you sleep
 
-Schedule one-off or recurring prompts. *"Every Monday morning, summarize my
-unread notifications and DM me."* The agent stores these jobs persistently —
-they survive reboots, app kills, and battery saver — and reports back through
-your Telegram chat or a system notification, whichever the prompt asks for.
+Schedule one-off or recurring jobs. *"Every Monday morning, summarize my
+unread notifications and DM me."* The agent stores these persistently — they
+survive reboots, app kills, and battery saver — and reports back through your
+Telegram chat, an Android notification, or a fixed action list, depending on
+how the prompt is phrased.
+
+Two modes:
+
+- **`mode='llm'`** — at fire time the prompt is sent to a fresh headless
+  conversation; the model decides what tools to call. Pick this when reasoning
+  is required (*"if battery is below 20%, message me"*).
+- **`mode='direct'`** — at fire time, a fixed list of tool calls runs
+  deterministically without invoking the LLM at all. Free, fast, predictable.
+  Pick this for known side effects (*"post 'good morning' every 8am"*,
+  *"screenshot every hour"*).
+
+Two timing types:
+
+- **`once`** — fires at a single absolute timestamp, then auto-disables.
+- **`cron`** — full 5-field UNIX cron expressions with ranges (`1-5`),
+  lists (`1,3,5`), steps (`*/15`), and aliases (`@hourly`, `@daily`, `@weekly`,
+  `@monthly`, `@yearly`, `@every 30m`, `@every 2h`, `@every 1d`).
+
+Plus per-job options: IANA `timezone`, `start_at_unix_ms` for delayed start,
+`end_at_unix_ms` for bounded windows, `max_runs` to auto-disable after N
+successful fires (counted from history, not a cached counter — replay-safe),
+and `catchup` policy (`skip` / `fire_once` default / `fire_all` capped at 20)
+for fires missed during reboot.
+
+Two extra LLM tools beyond the basics: **`trigger_job_now(id)`** fires a job
+immediately without disturbing the schedule, and **`get_job_history(id, limit)`**
+returns the last N runs with outcomes (`success`/`failed`/`timed_out`/
+`process_killed_replay`/`skipped_catchup`/`concurrent_skip`), timestamps, and
+the headless `conversation_id` for `llm`-mode runs.
+
 Scheduled jobs run in **headless** mode: tools auto-approve at fire time
-(you pre-authorised the schedule itself, with a clear warning, when the model
-called `schedule_job`). HARDLINE still applies inside cron.
+(you pre-authorised the schedule itself, with a clear warning that lists the
+exact actions, when the model called `schedule_job`). HARDLINE still applies
+inside cron — `rm -rf /` smuggled into a direct-mode action gets refused at
+both job-create time AND every fire.
 
 ### Operate your phone like you would
 
@@ -299,9 +332,22 @@ RikkaHub's existing WebServer page. The goal: nothing should feel bolted on.
 - Telegram bot (14 tools + 7 built-in slash commands + persistent custom
   commands + interactive `/model` picker + token-usage footer + HTML markdown
   rendering + sub-second streaming + token-revocation auto-disable + invalid-
-  token notification + exponential backoff on transient errors).
-- Persistent scheduled jobs (5 tools, WorkManager-backed). Survive reboots,
-  app kills, battery saver. Headless execution with hardline still enforced.
+  token notification + exponential backoff on transient errors). Runs as a
+  `specialUse` foreground service (no daily time cap, unlike `dataSync`'s
+  Android 14+ 6-hour limit which crashed the bot in earlier builds), with a
+  defense-in-depth periodic 30-min health probe that re-starts the service
+  if anything else (OEM aggressive task killers on Xiaomi/Samsung/Honor,
+  OOM kills, app standby) takes it down.
+- Persistent scheduled jobs — **7 LLM tools**, two modes (`llm` / `direct`),
+  two timing types (`once` / `cron`), full 5-field UNIX cron with nicknames +
+  `@every` aliases, IANA timezones, `start_at` / `end_at` bounds, `max_runs`,
+  catchup policy (`skip` / `fire_once` / `fire_all`), `trigger_job_now`,
+  `get_job_history` with run-history table (last 100 rows per job, FIFO).
+  Boot recovery includes catchup + stranded-row sweep with single aggregate
+  notification (no storm). Direct-mode actions HARDLINE-checked at create
+  time AND at every fire. Replay-safe `max_runs` derived from history count,
+  not a cached counter. WorkManager-backed; survives reboots, app kills,
+  battery saver. Headless execution with hardline still enforced.
 - Notification listener (5 tools + per-app whitelist + auto-forward to
   default Telegram chat + post-success dedup).
 - On-device Gemini Nano via AICore — opt-in (off by default).
@@ -320,8 +366,10 @@ RikkaHub's existing WebServer page. The goal: nothing should feel bolted on.
 
 **On the roadmap:** SMS send, NFC, USB, Wallpaper, Keystore, Infrared.
 Pattern-based dangerous-command detection layered on top of tool-name approval
-gating. SSH interactive shell. Cron full cron-syntax expressions. Translation
-pass for new English strings.
+gating. SSH interactive shell. MCP control tools. Sub-agents. Tasker-class
+workflows with conditional triggers. User-memory tools. External automation
+intent API for Tasker / MacroDroid integration. Translation pass for new
+English strings.
 
 ## Contributing
 
