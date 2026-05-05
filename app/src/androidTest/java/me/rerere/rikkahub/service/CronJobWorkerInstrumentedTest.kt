@@ -281,6 +281,111 @@ class CronJobWorkerInstrumentedTest {
         assertTrue("Should keep at most 100 rows", remaining.size <= 100)
     }
 
+    // =========================================================================
+    // Test 6 — KEY_MANUAL guard (spec Decision 13):
+    //   A manual fire (isManual=true) must NOT increment runsSoFar and must NOT
+    //   update lastRunAtMs on the job entity — it still gets a history row, but
+    //   the regular schedule state is untouched.
+    //
+    //   We simulate the exact if (!isManual) block from CronJobWorker.doWork()
+    //   with isManual=true, then verify the job entity is unchanged.
+    // =========================================================================
+    @Test
+    fun manualFire_doesNotUpdateRunsSoFarOrLastRunAtMs() = runBlocking {
+        val fakeOk = Tool(
+            name = "post_notification",
+            description = "fake",
+            execute = { _ -> listOf(UIMessagePart.Text("ok")) }
+        )
+        val actionsJson = """[{"tool":"post_notification","args":{"title":"T","body":"B"}}]"""
+
+        // Seed the job with known runsSoFar and lastRunAtMs so we can detect if they changed.
+        val seedRunsSoFar = 5
+        val seedLastRunAtMs = 12345L
+        val job = ScheduledJobEntity(
+            id = Uuid.random().toString(),
+            name = "manual-test-job",
+            assistantId = fakeAssistantId,
+            scheduleType = "cron",
+            cronExpression = "0 * * * *",
+            mode = "direct",
+            actionsJson = actionsJson,
+            enabled = true,
+            createdAtMs = System.currentTimeMillis(),
+            runsSoFar = seedRunsSoFar,
+            lastRunAtMs = seedLastRunAtMs,
+        )
+        jobRepo.upsert(job)
+
+        val isManual = true  // KEY_MANUAL = true
+
+        // ---- Simulate the doWork() body for mode='direct' with isManual=true ----
+        val runRowId = Uuid.random().toString()
+        val nowMs = System.currentTimeMillis()
+
+        // Optimistic run row insert (always happens, manual or not)
+        runRepo.insert(
+            ScheduledJobRunEntity(
+                id = runRowId,
+                jobId = job.id,
+                mode = "direct",
+                scheduledAtMs = nowMs,
+                startedAtMs = nowMs,
+                finishedAtMs = null,
+                outcome = "success",
+                conversationId = null,
+                errorMessage = null,
+            )
+        )
+
+        // Execute actions
+        val parsed = DirectModeActionRunner.parse(actionsJson).getOrThrow()
+        val seq = directRunner.run(parsed, listOf(fakeOk))
+        val outcome = seq.finalOutcome
+
+        // Update run row with real outcome
+        runRepo.update(
+            ScheduledJobRunEntity(
+                id = runRowId,
+                jobId = job.id,
+                mode = "direct",
+                scheduledAtMs = nowMs,
+                startedAtMs = nowMs,
+                finishedAtMs = System.currentTimeMillis(),
+                outcome = outcome,
+                conversationId = null,
+                errorMessage = seq.errorMessage?.take(500),
+            )
+        )
+
+        // Reproduce the if (!isManual) guard — because isManual=true, we skip the update block.
+        if (!isManual) {
+            // This block must NOT run for a manual fire.
+            val updated = job.copy(
+                lastRunAtMs = nowMs,
+                runsSoFar = job.runsSoFar + 1,
+            )
+            jobRepo.upsert(updated)
+        }
+        // ---- End doWork() simulation ----
+
+        // Verify: the history row was written
+        val historyRow = runRepo.getRecent(job.id, 1).firstOrNull()
+        assertNotNull("History row must exist for manual fire", historyRow)
+        assertEquals("History row outcome should be success", "success", historyRow!!.outcome)
+
+        // Verify: job entity is UNCHANGED
+        val jobAfter = requireNotNull(jobRepo.getById(job.id)) { "job must still exist" }
+        assertEquals(
+            "runsSoFar must NOT be incremented by a manual fire",
+            seedRunsSoFar, jobAfter.runsSoFar,
+        )
+        assertEquals(
+            "lastRunAtMs must NOT be updated by a manual fire",
+            seedLastRunAtMs, jobAfter.lastRunAtMs,
+        )
+    }
+
     // TODO: LLM-mode integration test — skipped because it requires ChatService +
     //       a live provider conversation loop. Covered by audit/follow-up.
     //

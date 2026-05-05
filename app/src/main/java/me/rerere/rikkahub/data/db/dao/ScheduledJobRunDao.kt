@@ -31,4 +31,16 @@ interface ScheduledJobRunDao {
 
     @Query("DELETE FROM scheduled_job_runs WHERE jobId = :jobId")
     suspend fun deleteAllForJob(jobId: String)
+
+    /** Most-recent run row for a job, or null if none exists. Used for replay-idempotency check. */
+    @Query("SELECT * FROM scheduled_job_runs WHERE jobId = :jobId ORDER BY startedAtMs DESC LIMIT 1")
+    suspend fun getMostRecent(jobId: String): ScheduledJobRunEntity?
+
+    /**
+     * Count of rows with outcome='success' for a job.
+     * Used as the authoritative source of max_runs progress — immune to replay race because
+     * the row is inserted optimistically and updated to 'success' atomically before we read.
+     */
+    @Query("SELECT COUNT(*) FROM scheduled_job_runs WHERE jobId = :jobId AND outcome = 'success'")
+    suspend fun countSuccessful(jobId: String): Int
 }

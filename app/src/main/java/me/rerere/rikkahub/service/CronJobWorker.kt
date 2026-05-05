@@ -118,7 +118,11 @@ class CronJobWorker(
             // don't bump runs_so_far or lastRunAtMs (per spec Decision 13). The regular
             // schedule continues unaffected.
             if (!isManual) {
-                val newRunsSoFar = if (outcome == "success") job.runsSoFar + 1 else job.runsSoFar
+                // Derive runsSoFar from the authoritative success-count query (post-update,
+                // so the final outcome is already committed) rather than incrementing the
+                // cached field — this avoids runsSoFar drift after a replay.
+                val newRunsSoFar = if (outcome == "success") runRepo.countSuccessful(job.id)
+                                   else job.runsSoFar
                 val maxReached = job.maxRuns != null && newRunsSoFar >= job.maxRuns
                 val updated = job.copy(
                     lastRunAtMs = nowMs,
@@ -138,9 +142,21 @@ class CronJobWorker(
         }
     }
 
-    private fun boundsExpired(job: ScheduledJobEntity, nowMs: Long): Boolean {
+    /**
+     * Checks whether a job has expired before executing.
+     *
+     * For max_runs we count actual 'success' rows in the DB rather than trusting
+     * job.runsSoFar — this makes max_runs immune to the replay race where the process is
+     * killed after the run row is inserted (outcome='success') but before repo.update()
+     * persists runsSoFar+1. On replay, countSuccessful() sees the existing success row and
+     * correctly reports the job as exhausted.
+     */
+    private suspend fun boundsExpired(job: ScheduledJobEntity, nowMs: Long): Boolean {
         if (job.endAtUnixMs != null && nowMs > job.endAtUnixMs) return true
-        if (job.maxRuns != null && job.runsSoFar >= job.maxRuns) return true
+        if (job.maxRuns != null) {
+            val successCount = runRepo.countSuccessful(job.id)
+            if (successCount >= job.maxRuns) return true
+        }
         return false
     }
 
@@ -173,6 +189,21 @@ class CronJobWorker(
     }
 
     private suspend fun runDirect(job: ScheduledJobEntity): Triple<String, String?, Uuid?> {
+        // Replay idempotency guard: if WorkManager replays this worker after a process kill,
+        // a run row for this job will already exist with a very recent startedAtMs.
+        // Treat any non-skip row created within the last 5 minutes as a duplicate and bail.
+        val nowMs = System.currentTimeMillis()
+        val lastRow = runRepo.getMostRecent(job.id)
+        if (lastRow != null
+            && lastRow.startedAtMs > nowMs - 5L * 60_000L
+            && lastRow.outcome != "concurrent_skip"
+            && lastRow.outcome != "skipped_catchup"
+        ) {
+            Log.w(TAG, "runDirect: suppressing likely WorkManager replay (last row ${lastRow.id}, " +
+                    "outcome=${lastRow.outcome}, age=${nowMs - lastRow.startedAtMs}ms)")
+            return Triple("process_killed_replay", "duplicate fire suppressed", null)
+        }
+
         val actionsJson = job.actionsJson ?: return Triple("failed", "missing_actions_for_direct_mode", null)
         val parsed = DirectModeActionRunner.parse(actionsJson).getOrElse {
             return Triple("failed", "actions_parse:${(it as? DirectModeActionRunner.ParseError)?.code ?: it.message}", null)
