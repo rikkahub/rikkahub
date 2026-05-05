@@ -50,6 +50,8 @@ object ToolApprovalDefaults {
         "delete_job",
         "pause_job",
         "resume_job",
+        "trigger_job_now",
+        "get_job_history",
 
         // UI manipulation through the AccessibilityService
         "tap",

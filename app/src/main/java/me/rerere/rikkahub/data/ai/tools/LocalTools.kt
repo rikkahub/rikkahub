@@ -544,8 +544,8 @@ class LocalTools(
             tools.add(telegramDeleteCommandsTool(telegramBotPreferences, telegramBotClient))
         }
         if (options.contains(LocalToolOption.CronJobs)) {
-            // T10-STUB: knownToolNamesProvider wired properly in T11
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.scheduleJobTool(scheduledJobRepository, cronJobScheduler, settingsStore) { emptyList() })
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.scheduleJobTool(scheduledJobRepository, cronJobScheduler, settingsStore,
+                knownToolNamesProvider = { tools.map { it.name } }))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.listJobsTool(scheduledJobRepository))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.deleteJobTool(scheduledJobRepository, scheduledJobRunRepository, cronJobScheduler))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.pauseJobTool(scheduledJobRepository, cronJobScheduler))
