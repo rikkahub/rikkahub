@@ -46,8 +46,10 @@ class RikkaNotificationListenerService : NotificationListenerService() {
     val recent = _recent.asStateFlow()
 
     // Tracks the last (key -> "title|text" hash) we forwarded so progressive updates of
-    // the same notification don't spam Telegram.
-    private val lastForwarded = HashMap<String, Int>()
+    // the same notification don't spam Telegram. Mutated from per-notification IO
+    // coroutines (one launched per onNotificationPosted), so it must be concurrent-safe;
+    // a plain HashMap here can ConcurrentModificationException on burst notifications.
+    private val lastForwarded = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     // Tracks the very last (package + title + text) we forwarded across ALL keys. Persistent
     // notifications (Termux, music players, etc.) sometimes flap between identical content
@@ -122,7 +124,6 @@ class RikkaNotificationListenerService : NotificationListenerService() {
 
         val signature = (entry.title + "|" + entry.text).hashCode()
         if (lastForwarded[entry.key] == signature) return  // identical update; skip
-        lastForwarded[entry.key] = signature
 
         // Global dedup: if the previous forward (any key) had the exact same package + title
         // + text within the last 5 minutes, skip. Catches Termux's persistent notification
@@ -132,8 +133,6 @@ class RikkaNotificationListenerService : NotificationListenerService() {
         if (globalSig == lastForwardedGlobalSig && (now - lastForwardedGlobalAtMs) < 5 * 60_000) {
             return
         }
-        lastForwardedGlobalSig = globalSig
-        lastForwardedGlobalAtMs = now
 
         val body = buildString {
             append("🔔 [").append(entry.label).append("] ")
@@ -146,6 +145,12 @@ class RikkaNotificationListenerService : NotificationListenerService() {
 
         try {
             telegramClient.sendMessage(chatId, body)
+            // Record dedup state ONLY AFTER successful send. Previously these were set
+            // before sendMessage, so a transient network error meant the user never saw
+            // that notification re-forwarded — the dedup map said "already done" forever.
+            lastForwarded[entry.key] = signature
+            lastForwardedGlobalSig = globalSig
+            lastForwardedGlobalAtMs = now
         } catch (e: Throwable) {
             Log.w(TAG, "auto-route failed for ${entry.packageName}", e)
         }

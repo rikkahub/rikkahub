@@ -250,53 +250,91 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         },
         extra = if (isPending && onToolApproval != null) {
             {
-                // Four-button row: Allow / Always Allow / Allow for this chat / Deny.
-                // Order matches the Telegram inline-keyboard layout so the user sees the
-                // same mental model on both surfaces.
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilledTonalIconButton(
-                        onClick = { onToolApproval(
-                            tool.toolCallId, true, "",
-                            me.rerere.rikkahub.service.ChatService.ApprovalScope.Once,
-                            tool.toolName,
-                        ) },
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Tick01,
-                            contentDescription = stringResource(R.string.chat_message_tool_approve),
-                            modifier = Modifier.size(14.dp),
+                // Per-row in-flight flag to debounce double-taps. Without this, two rapid
+                // clicks on Approve fire handleToolApproval twice — the second cancel()s
+                // the first's resume coroutine mid-flight, wastes the in-flight gen step,
+                // and can race the persisted state mutation. Keyed on toolCallId so a
+                // recomposition for a different tool doesn't carry the flag.
+                var inFlight by remember(tool.toolCallId) { mutableStateOf(false) }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // schedule_job is the one approval that AUTHORISES future autonomous
+                    // execution, not just one tool. Surface the consequence here so the
+                    // user knows what they're approving — every tool the cron prompt
+                    // invokes will run without prompts. (HARDLINE blocks still apply.)
+                    if (tool.toolName == "schedule_job") {
+                        Text(
+                            text = stringResource(R.string.chat_message_tool_schedule_job_warning),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    FilledTonalIconButton(
-                        onClick = { onToolApproval(
-                            tool.toolCallId, true, "",
-                            me.rerere.rikkahub.service.ChatService.ApprovalScope.Always,
-                            tool.toolName,
-                        ) },
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Text("∞", style = MaterialTheme.typography.labelMedium)
-                    }
-                    FilledTonalIconButton(
-                        onClick = { onToolApproval(
-                            tool.toolCallId, true, "",
-                            me.rerere.rikkahub.service.ChatService.ApprovalScope.ChatScope,
-                            tool.toolName,
-                        ) },
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Text("💬", style = MaterialTheme.typography.labelSmall)
-                    }
-                    FilledTonalIconButton(
-                        onClick = { showDenyDialog = true },
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Cancel01,
-                            contentDescription = stringResource(R.string.chat_message_tool_deny),
-                            modifier = Modifier.size(14.dp),
-                        )
+                    // Four-button row: Allow / Always Allow / Allow for this chat / Deny.
+                    // Order matches the Telegram inline-keyboard layout so the user sees the
+                    // same mental model on both surfaces.
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilledTonalIconButton(
+                            onClick = {
+                                if (inFlight) return@FilledTonalIconButton
+                                inFlight = true
+                                onToolApproval(
+                                    tool.toolCallId, true, "",
+                                    me.rerere.rikkahub.service.ChatService.ApprovalScope.Once,
+                                    tool.toolName,
+                                )
+                            },
+                            enabled = !inFlight,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.Tick01,
+                                contentDescription = stringResource(R.string.chat_message_tool_approve),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                        FilledTonalIconButton(
+                            onClick = {
+                                if (inFlight) return@FilledTonalIconButton
+                                inFlight = true
+                                onToolApproval(
+                                    tool.toolCallId, true, "",
+                                    me.rerere.rikkahub.service.ChatService.ApprovalScope.Always,
+                                    tool.toolName,
+                                )
+                            },
+                            enabled = !inFlight,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Text("∞", style = MaterialTheme.typography.labelMedium)
+                        }
+                        FilledTonalIconButton(
+                            onClick = {
+                                if (inFlight) return@FilledTonalIconButton
+                                inFlight = true
+                                onToolApproval(
+                                    tool.toolCallId, true, "",
+                                    me.rerere.rikkahub.service.ChatService.ApprovalScope.ChatScope,
+                                    tool.toolName,
+                                )
+                            },
+                            enabled = !inFlight,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Text("💬", style = MaterialTheme.typography.labelSmall)
+                        }
+                        FilledTonalIconButton(
+                            onClick = {
+                                if (inFlight) return@FilledTonalIconButton
+                                showDenyDialog = true
+                            },
+                            enabled = !inFlight,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.Cancel01,
+                                contentDescription = stringResource(R.string.chat_message_tool_deny),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
                     }
                 }
             }

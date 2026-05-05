@@ -235,10 +235,48 @@ fun telegramSendMessageTool(prefs: TelegramBotPreferences, client: TelegramBotCl
     }
 )
 
+/**
+ * Telegram Bot API hard caps for media uploads (https://core.telegram.org/bots/api#sending-files).
+ * Photos via sendPhoto: 10 MB. Anything larger via sendPhoto returns 413
+ * Request Entity Too Large after the upload completes — wasting bandwidth +
+ * battery. Documents via sendDocument: 50 MB.
+ *
+ * The 2 GB cap that some Telegram clients show is for the LOCAL Bot API
+ * server (self-hosted), not the public api.telegram.org endpoint we hit.
+ */
+private const val TG_BOT_PHOTO_CAP_BYTES = 10L * 1024L * 1024L
+private const val TG_BOT_DOC_CAP_BYTES = 50L * 1024L * 1024L
+
+private fun fileTooLargeEnvelope(
+    file: File,
+    capBytes: Long,
+    kind: String,
+): JsonObject = buildJsonObject {
+    put("error", "file_too_large_for_telegram_bot")
+    put("kind", kind)
+    put("path", file.absolutePath)
+    put("size_bytes", file.length())
+    put("cap_bytes", capBytes)
+    put(
+        "recovery",
+        "Telegram Bot API caps $kind uploads at ${capBytes / (1024 * 1024)} MB. The public " +
+            "api.telegram.org endpoint enforces this; uploading anyway returns 413. Options: " +
+            "(a) split with `split -b 45m file part-` then send each part as a separate " +
+            "document; (b) run a temporary HTTP server on the source machine and share the URL " +
+            "(e.g. `python3 -m http.server` over SSH-forwarded port); (c) upload to a cloud " +
+            "share (rclone, file.io, etc.) and send the link via telegram_send_message; (d) " +
+            "compress harder if the content is compressible (zip / tar.zst). Don't retry the " +
+            "same path."
+    )
+}
+
 /** Send a photo from a local file path. */
 fun telegramSendPhotoTool(prefs: TelegramBotPreferences, client: TelegramBotClient): Tool = Tool(
     name = "telegram_send_photo",
-    description = "Send a photo via the bot from a local file path. Caption is optional. chat_id defaults to the configured default chat.".trimIndent().replace("\n", " "),
+    description = ("Send a photo via the bot from a local file path. Caption is optional. " +
+        "chat_id defaults to the configured default chat. HARD CAP: 10 MB — Telegram Bot API " +
+        "rejects larger photos. For larger images use telegram_send_document (50 MB cap) or " +
+        "split / link to them.").trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -259,6 +297,12 @@ fun telegramSendPhotoTool(prefs: TelegramBotPreferences, client: TelegramBotClie
         if (!file.exists() || !file.isFile) {
             return@Tool textPart(buildJsonObject { put("error", "file not found: $path") })
         }
+        // Pre-flight size check so we don't waste an upload + battery on a request that will
+        // 413 at the end. Same-shape envelope as the document tool so the model can branch
+        // generically on { error: "file_too_large_for_telegram_bot" }.
+        if (file.length() > TG_BOT_PHOTO_CAP_BYTES) {
+            return@Tool textPart(fileTooLargeEnvelope(file, TG_BOT_PHOTO_CAP_BYTES, kind = "photo"))
+        }
         textPart(safeApi { buildJsonObject {
             put("success", true)
             put("result", client.sendPhoto(chatId, file, caption))
@@ -269,7 +313,12 @@ fun telegramSendPhotoTool(prefs: TelegramBotPreferences, client: TelegramBotClie
 /** Send a document (any file). */
 fun telegramSendDocumentTool(prefs: TelegramBotPreferences, client: TelegramBotClient): Tool = Tool(
     name = "telegram_send_document",
-    description = "Send a file as a document via the bot from a local file path. chat_id defaults to the configured default chat.".trimIndent().replace("\n", " "),
+    description = ("Send a file as a document via the bot from a local file path. " +
+        "chat_id defaults to the configured default chat. HARD CAP: 50 MB — Telegram Bot API " +
+        "rejects larger files. For files over 50 MB, split with `split -b 45m FILE part-`, " +
+        "send each part separately, then `cat part-* > FILE` on the receiver to reassemble. " +
+        "Or upload to a cloud share and send the link via telegram_send_message. Don't blindly " +
+        "retry the same large file — the cap doesn't get raised on retry.").trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -289,6 +338,13 @@ fun telegramSendDocumentTool(prefs: TelegramBotPreferences, client: TelegramBotC
         val file = File(path)
         if (!file.exists() || !file.isFile) {
             return@Tool textPart(buildJsonObject { put("error", "file not found: $path") })
+        }
+        // Pre-flight size check. Without this, large files get fully uploaded to
+        // api.telegram.org before the 413 response — wastes ~minutes of bandwidth + battery,
+        // and fragmented retries multiply the cost. Fail fast with a structured envelope so
+        // the model can pick a recovery path on the FIRST attempt instead of the second.
+        if (file.length() > TG_BOT_DOC_CAP_BYTES) {
+            return@Tool textPart(fileTooLargeEnvelope(file, TG_BOT_DOC_CAP_BYTES, kind = "document"))
         }
         textPart(safeApi { buildJsonObject {
             put("success", true)

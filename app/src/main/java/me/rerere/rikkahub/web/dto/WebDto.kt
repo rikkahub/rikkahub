@@ -27,6 +27,15 @@ data class ToolApprovalRequest(
     val approved: Boolean,
     val reason: String = "",
     val answer: String? = null,
+    /**
+     * Approval scope. "once" (default) approves only this specific call; "chat" grants
+     * "Allow for this chat" (in-memory until /new); "always" grants the persistent
+     * "Always Allow" written to DataStore. Required when [approved] is true and
+     * [toolName] is provided.
+     */
+    val scope: String? = null,
+    /** Tool name — required when [scope] != "once" so the persistent grant can key by name. */
+    val toolName: String? = null,
 )
 
 @Serializable

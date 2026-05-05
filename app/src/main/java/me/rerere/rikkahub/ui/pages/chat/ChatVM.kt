@@ -290,6 +290,12 @@ class ChatVM(
         viewModelScope.launch {
             val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
             val updatedConversation = conversationFull.copy(assistantId = targetAssistantId)
+            // Drop any "Allow for this chat" grants the user gave the previous assistant.
+            // The grants apply to a tool surface the new assistant may use very differently
+            // (different prompt, different tool list), and the user authorised them under
+            // the old persona's behaviour, not this one's. Persistent "Always Allow" grants
+            // stay (they were granted globally) but ChatScope is reset.
+            me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList.clearChat(conversation.id)
             if (conversation.id == _conversationId) {
                 chatService.saveConversation(_conversationId, updatedConversation)
                 settingsStore.updateAssistant(targetAssistantId)

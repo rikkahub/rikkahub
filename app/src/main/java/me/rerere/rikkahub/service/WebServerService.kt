@@ -99,7 +99,12 @@ class WebServerService : Service() {
     }
 
     private fun startObservingState() {
-        if (stateObserverJob != null) return
+        // Check `isActive`, not just non-null: after a previous observer finishes (server
+        // stopped → stopSelf → collect returns), the Job reference is still set but
+        // completed. With the old != null check, a fresh ACTION_START on the same service
+        // instance never re-observed. Tied to onDestroy cancelling the scope, this was
+        // safe in practice but the check should match what we actually mean.
+        if (stateObserverJob?.isActive == true) return
         stateObserverJob = serviceScope.launch {
             var wasRunning = false
             webServerManager.state.collect { state ->

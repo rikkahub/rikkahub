@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.rikkahub.service.AgentOverlay
 import me.rerere.rikkahub.service.RikkaAccessibilityService
 import kotlinx.datetime.TimeZone
@@ -20,7 +22,11 @@ import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
@@ -59,6 +65,68 @@ import kotlin.time.Clock
 
 private const val TAG = "GenerationHandler"
 
+/**
+ * Keys whose string values are sensitive enough that the raw value MUST NOT land in
+ * logcat. Tool args land in `Log.i` for debugging; without redaction, `save_ssh_host`'s
+ * `private_key` / `password` and `telegram_set_token`'s `token` would print verbatim
+ * — readable on debug builds, by other apps holding READ_LOGS on OEM-bugged ROMs, and
+ * by `bugreport`/`dumpsys`. The match is case-insensitive against the key name and
+ * applies regardless of nesting depth.
+ */
+private val SECRET_KEY_PATTERN: Regex =
+    Regex("(?:^|_)(password|passphrase|secret|token|apikey|api[_-]?key|privatekey|private[_-]?key|key)$",
+        RegexOption.IGNORE_CASE)
+
+/**
+ * Walk [element] and replace any string primitive whose KEY matches [SECRET_KEY_PATTERN]
+ * with the string `"***"`. Numbers, booleans, nulls, and non-secret strings pass through
+ * unchanged. Used only for the per-step "executing tool with args" log line.
+ */
+private fun redactSecrets(element: JsonElement, key: String? = null): JsonElement {
+    val isSecret = key != null && SECRET_KEY_PATTERN.containsMatchIn(key)
+    return when (element) {
+        is JsonPrimitive ->
+            if (isSecret && element.isString) JsonPrimitive("***") else element
+        is JsonObject -> JsonObject(element.mapValues { (k, v) -> redactSecrets(v, k) })
+        is JsonArray -> buildJsonArray { element.forEach { add(redactSecrets(it, key)) } }
+    }
+}
+
+/**
+ * Replace older tool-result `Image` parts with a small text elision so the same JPEGs
+ * aren't re-encoded into base64 on every subsequent step. We keep the
+ * [IMAGE_KEEP_LAST_N_TOOL_RESULTS] most-recent tool-result-bearing assistant messages
+ * verbatim and elide everything older. User uploads (`role=USER`) are NEVER elided —
+ * those are real input the model needs to reason over. Assistant-generated images
+ * (model image-gen output) are also kept verbatim as those are visible product, not
+ * intermediate reasoning state.
+ */
+private fun List<UIMessage>.ageOldToolImages(): List<UIMessage> {
+    var toolResultsWithImagesSeen = 0
+    return this.asReversed().map { msg ->
+        if (msg.role == MessageRole.USER) return@map msg
+        val hasImageInTool = msg.parts.any { p ->
+            p is UIMessagePart.Tool && p.output.any { it is UIMessagePart.Image }
+        }
+        if (!hasImageInTool) return@map msg
+        toolResultsWithImagesSeen++
+        if (toolResultsWithImagesSeen <= IMAGE_KEEP_LAST_N_TOOL_RESULTS) return@map msg
+        val newParts = msg.parts.map { part ->
+            if (part is UIMessagePart.Tool) {
+                val newOutput = part.output.map { o ->
+                    if (o is UIMessagePart.Image) {
+                        UIMessagePart.Text(
+                            "[image elided — original at ${o.url}; superseded by newer screenshots]"
+                        )
+                    } else o
+                }
+                part.copy(output = newOutput)
+            } else part
+        }
+        msg.copy(parts = newParts)
+    }.asReversed()
+}
+
 @Serializable
 sealed interface GenerationChunk {
     data class Messages(
@@ -93,6 +161,19 @@ private const val TURN_WALL_CLOCK_BUDGET_MS = 5L * 60L * 1000L
  * confused; six trips means it's not coming back.
  */
 private const val MAX_LOOP_GUARD_TRIPS_PER_TURN = 6
+
+/**
+ * Number of most-recent tool-result-bearing messages whose `Image` parts are kept
+ * verbatim in the prompt. Older tool-result images are replaced with a small text
+ * elision so the same JPEG isn't re-encoded into base64 on every step. Without this
+ * a screen-automation turn that takes 5 screenshots makes the provider re-pay
+ * ~1–2MB × 5 base64 encode + upload on every subsequent step.
+ *
+ * 2 is the smallest value that lets the model do "look at this screenshot, decide
+ * action; take new screenshot, compare" — needs both the previous and the current
+ * screenshot in context. Anything older has been superseded.
+ */
+private const val IMAGE_KEEP_LAST_N_TOOL_RESULTS = 2
 
 /**
  * Some read-only tools measure a real-time signal where re-calling after a TTL is
@@ -146,11 +227,35 @@ class GenerationHandler(
         // closure that reads ToolApprovalAllowList + ToolApprovalPreferences. Default
         // returns false so callers that don't care still get vanilla approval gating.
         isToolAutoApproved: suspend (toolName: String) -> Boolean = { false },
+        // Optional per-call addendum appended to the system prompt. Used by surfaces that
+        // need the model to know runtime context (e.g. "you're talking via Telegram, the
+        // chat_id is 12345") without polluting the user message body — without this the
+        // preamble is replayed in user history every turn, burning ~80 tokens × N turns.
+        systemAddendum: String? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
 
-        var messages: List<UIMessage> = messages
+        // Replay safety: scan the input messages for tools that were Approved + began
+        // execution but never produced output (process killed mid-execute). Without this
+        // pass, the loop below would treat them as "Approved, ready to run" and execute
+        // them AGAIN on replay — could double-charge a remote, duplicate a message send,
+        // re-overwrite a file. Flip them to Denied so the model sees a deterministic
+        // envelope and decides whether to retry deliberately.
+        var messages: List<UIMessage> = messages.map { msg ->
+            val newParts = msg.parts.map { part ->
+                if (part is UIMessagePart.Tool && part.isInterruptedAttempt) {
+                    Log.w(TAG, "replay: ${part.toolName} (${part.toolCallId}) had executionStartedAt set with empty output → Denied(interrupted_unknown_outcome)")
+                    part.copy(approvalState = ToolApprovalState.Denied(
+                        "interrupted_unknown_outcome: a previous attempt to execute this tool started " +
+                            "but did not complete (process killed mid-execute). The side effect MAY OR " +
+                            "MAY NOT have happened. Verify the target state before retrying — do not " +
+                            "blindly re-run the same call."
+                    ))
+                } else part
+            }
+            if (newParts == msg.parts) msg else msg.copy(parts = newParts)
+        }
 
         val turnStartMs = android.os.SystemClock.elapsedRealtime()
         var loopGuardTripCount = 0
@@ -206,43 +311,88 @@ class GenerationHandler(
                 it.canResumeExecution
             } ?: emptyList()
 
+            // Mixed-state guard: if the last message has tools STILL in Pending (waiting
+            // on user approval keyboard) but nothing canResumeExecution, the existing
+            // path would call generateInternal and start a brand-new assistant turn,
+            // orphaning the Pending tool. Bail out instead and let handleToolApproval
+            // re-enter when the user taps the keyboard.
+            if (pendingTools.isEmpty()) {
+                val lastHasPending = messages.lastOrNull()?.parts?.any { p ->
+                    p is UIMessagePart.Tool && p.isPending
+                } == true
+                if (lastHasPending) {
+                    Log.i(TAG, "generateText: last message has Pending tools; waiting for approval, not regenerating")
+                    break
+                }
+            }
+
             val toolsToProcess: List<UIMessagePart.Tool>
 
             // Skip generation if we have approved/denied tool calls to handle
             if (pendingTools.isEmpty()) {
-                generateInternal(
-                    assistant = assistant,
-                    settings = settings,
-                    messages = messages,
-                    onUpdateMessages = {
-                        messages = it.transforms(
-                            transformers = outputTransformers,
-                            context = context,
-                            model = model,
-                            assistant = assistant,
-                            settings = settings
-                        )
-                        emit(
-                            GenerationChunk.Messages(
-                                messages.visualTransforms(
-                                    transformers = outputTransformers,
-                                    context = context,
-                                    model = model,
-                                    assistant = assistant,
-                                    settings = settings
+                try {
+                    generateInternal(
+                        assistant = assistant,
+                        settings = settings,
+                        systemAddendum = systemAddendum,
+                        messages = messages,
+                        onUpdateMessages = {
+                            messages = it.transforms(
+                                transformers = outputTransformers,
+                                context = context,
+                                model = model,
+                                assistant = assistant,
+                                settings = settings
+                            )
+                            emit(
+                                GenerationChunk.Messages(
+                                    messages.visualTransforms(
+                                        transformers = outputTransformers,
+                                        context = context,
+                                        model = model,
+                                        assistant = assistant,
+                                        settings = settings
+                                    )
                                 )
                             )
-                        )
-                    },
-                    transformers = inputTransformers,
-                    model = model,
-                    providerImpl = providerImpl,
-                    provider = provider,
-                    tools = toolsInternal,
-                    memories = memories ?: emptyList(),
-                    stream = assistant.streamOutput,
-                    processingStatus = processingStatus,
-                )
+                        },
+                        transformers = inputTransformers,
+                        model = model,
+                        providerImpl = providerImpl,
+                        provider = provider,
+                        tools = toolsInternal,
+                        memories = memories ?: emptyList(),
+                        stream = assistant.streamOutput,
+                        processingStatus = processingStatus,
+                    )
+                } catch (t: Throwable) {
+                    // CancellationException is honoured verbatim — stopGeneration has its
+                    // own cancelToolByUser path that marks tools cancelled. We only need
+                    // to handle non-cancel failures here.
+                    if (t !is CancellationException) {
+                        // Server 5xx, JSON parse failure, OOM during chunk-merge, etc. Without
+                        // this transition, any tool already at Auto/Pending in the just-built
+                        // assistant message is stranded — the next user turn replays the
+                        // conversation with tool parts in an in-between state and downstream
+                        // filtering misbehaves. We mark them Denied with a generation_failed
+                        // envelope so the shape is deterministic on replay.
+                        val lastMsg = messages.lastOrNull()
+                        if (lastMsg != null) {
+                            val newParts = lastMsg.parts.map { part ->
+                                if (part is UIMessagePart.Tool &&
+                                    (part.approvalState is ToolApprovalState.Auto ||
+                                        part.approvalState is ToolApprovalState.Pending)) {
+                                    part.copy(approvalState = ToolApprovalState.Denied(
+                                        "generation_failed: ${t.javaClass.simpleName}: ${t.message.orEmpty()}"
+                                    ))
+                                } else part
+                            }
+                            messages = messages.dropLast(1) + lastMsg.copy(parts = newParts)
+                            emit(GenerationChunk.Messages(messages))
+                        }
+                    }
+                    throw t
+                }
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
                     context = context,
@@ -269,22 +419,15 @@ class GenerationHandler(
                     break
                 }
 
-                // Check for tools that need approval. Pre-resolve "is this tool name on the
-                // user's allow-list?" so the .map below stays synchronous (isToolAutoApproved
-                // is suspend; we can't call it from inside .map directly).
-                val autoApprovedToolNames = mutableSetOf<String>()
-                for (t in tools) {
-                    val toolDef = toolsInternal.find { it.name == t.toolName }
-                    if (
-                        toolDef?.needsApproval == true &&
-                        t.approvalState is ToolApprovalState.Auto &&
-                        isToolAutoApproved(t.toolName)
-                    ) {
-                        autoApprovedToolNames.add(t.toolName)
-                    }
-                }
+                // Imperative loop (was .map) so we can call the suspending
+                // [isToolAutoApproved] FRESH per-tool, not from a frozen pre-resolved set.
+                // Without this, a grant landing between the pre-resolve and the .map
+                // (user taps Always-Allow on tool X mid-iteration) gets ignored — X
+                // flips to Pending and a duplicate prompt is emitted even though X is
+                // now persisted-approved.
                 var hasPendingApproval = false
-                val updatedTools = tools.map { tool ->
+                val updatedTools = ArrayList<UIMessagePart.Tool>(tools.size)
+                for (tool in tools) {
                     val toolDef = toolsInternal.find { it.name == tool.toolName }
                     // HARDLINE check: certain command patterns (rm -rf /, mkfs, shutdown,
                     // fork bomb, …) are blocked unconditionally — even "Always Allow"
@@ -295,7 +438,7 @@ class GenerationHandler(
                     // envelope to the model without executing.
                     val hardlineReason = me.rerere.rikkahub.data.ai.tools
                         .HardlineCommandGuard.checkTool(tool.toolName, tool.input)
-                    when {
+                    val transformed = when {
                         hardlineReason != null && tool.approvalState is ToolApprovalState.Auto -> {
                             Log.w(TAG, "hardline-blocked ${tool.toolName}: $hardlineReason")
                             tool.copy(approvalState = ToolApprovalState.Denied(
@@ -305,13 +448,18 @@ class GenerationHandler(
                                     "should run it themselves in a terminal outside the agent."
                             ))
                         }
-                        // Tool needs approval AND user has pre-approved → leave as Auto so
-                        // the loop body executes it without prompting.
-                        toolDef?.needsApproval == true && tool.toolName in autoApprovedToolNames -> tool
-                        // Tool needs approval and state is Auto -> set to Pending
+                        // Tool needs approval and state is Auto:
                         toolDef?.needsApproval == true && tool.approvalState is ToolApprovalState.Auto -> {
-                            hasPendingApproval = true
-                            tool.copy(approvalState = ToolApprovalState.Pending)
+                            // Fresh per-tool auto-approval check (was a frozen pre-
+                            // resolved set). Costs a DataStore.first() per tool but tools
+                            // are typically <5 per turn so the latency is negligible, and
+                            // freshness matters for the YOLO toggle / mid-iteration grants.
+                            if (isToolAutoApproved(tool.toolName)) {
+                                tool  // leave as Auto so the executor runs it without prompting
+                            } else {
+                                hasPendingApproval = true
+                                tool.copy(approvalState = ToolApprovalState.Pending)
+                            }
                         }
                         // State is Pending -> keep waiting
                         tool.approvalState is ToolApprovalState.Pending -> {
@@ -321,6 +469,7 @@ class GenerationHandler(
 
                         else -> tool
                     }
+                    updatedTools.add(transformed)
                 }
 
                 // If any tools were updated to Pending, update the message and break
@@ -397,10 +546,20 @@ class GenerationHandler(
                         // through an entire model context (and the user's tokens) on the
                         // same screen.
                         val signature = tool.toolName + "::" + tool.input
+                        // "This turn" = since the most recent user message. Earlier
+                        // identical calls in PREVIOUS turns aren't the model flailing
+                        // now — they're history, and counting them produces a confusing
+                        // "you already called this 3 times in this turn" envelope after
+                        // a single fresh call.
+                        val turnStartIndex = messages.indexOfLast { it.role == MessageRole.USER }
+                        val turnSlice = messages.subList(
+                            (turnStartIndex + 1).coerceAtLeast(0),
+                            messages.size
+                        )
                         // Pair each prior matching tool with its parent message so we can
                         // tell HOW LONG AGO the most recent identical call ran (needed for
                         // the freshness-TTL bypass below).
-                        val priorMatching = messages.flatMap { msg ->
+                        val priorMatching = turnSlice.flatMap { msg ->
                             msg.parts.filterIsInstance<UIMessagePart.Tool>()
                                 .filter { it.isExecuted && it.toolName + "::" + it.input == signature }
                                 .map { it to msg }
@@ -457,9 +616,53 @@ class GenerationHandler(
                             val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
                                 ?: error("Tool ${tool.toolName} not found")
                             val args = json.parseToJsonElement(tool.input.ifBlank { "{}" })
-                            Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
-                            val result = toolDef.execute(args)
-                            executedTools += tool.copy(output = result)
+                            Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: ${redactSecrets(args)}")
+                            // Mark the tool as "execution started" BEFORE actually running.
+                            // ChatService persists this when it sees the chunk so a process
+                            // kill between mark-and-output leaves a clear breadcrumb on disk:
+                            // on replay we'll see Approved + executionStartedAt + empty output
+                            // and refuse to silently re-run. The mark survives via the
+                            // existing emit-and-persist plumbing — see ChatService chunk
+                            // handler's needsImmediatePersist branch.
+                            val markedTool = tool.copy(executionStartedAt = System.currentTimeMillis())
+                            run {
+                                val lastMsg = messages.lastOrNull()
+                                if (lastMsg != null) {
+                                    val markedParts = lastMsg.parts.map { p ->
+                                        if (p is UIMessagePart.Tool && p.toolCallId == tool.toolCallId) markedTool else p
+                                    }
+                                    messages = messages.dropLast(1) + lastMsg.copy(parts = markedParts)
+                                    emit(GenerationChunk.Messages(messages))
+                                }
+                            }
+                            // Hard-cap individual tool execution at the remaining wall-clock
+                            // budget so a single tool with its OWN long timeout (camera 5min,
+                            // ssh_exec timeout_seconds=300) can't carry the turn past the
+                            // global ${TURN_WALL_CLOCK_BUDGET_MS}ms cap. If the budget is
+                            // already blown when we start the tool, return a structured
+                            // wall-clock envelope instead of even attempting.
+                            val remainingMs = TURN_WALL_CLOCK_BUDGET_MS -
+                                (android.os.SystemClock.elapsedRealtime() - turnStartMs)
+                            val result = if (remainingMs <= 0L) {
+                                Log.w(TAG, "generateText: ${toolDef.name} skipped — wall-clock budget already exceeded")
+                                listOf(UIMessagePart.Text(json.encodeToString(buildJsonObject {
+                                    put("error", JsonPrimitive("tool_cancelled_wall_clock"))
+                                    put("detail", JsonPrimitive("turn budget exceeded before tool started"))
+                                })))
+                            } else {
+                                withTimeoutOrNull(remainingMs) { toolDef.execute(args) }
+                                    ?: run {
+                                        Log.w(TAG, "generateText: ${toolDef.name} cancelled — wall-clock budget exhausted mid-execution")
+                                        listOf(UIMessagePart.Text(json.encodeToString(buildJsonObject {
+                                            put("error", JsonPrimitive("tool_cancelled_wall_clock"))
+                                            put(
+                                                "detail",
+                                                JsonPrimitive("tool execution exceeded the ${TURN_WALL_CLOCK_BUDGET_MS / 1000}s turn budget")
+                                            )
+                                        })))
+                                    }
+                            }
+                            executedTools += markedTool.copy(output = result)
                         }.onFailure {
                             it.printStackTrace()
                             executedTools += tool.copy(
@@ -569,6 +772,7 @@ class GenerationHandler(
     private suspend fun generateInternal(
         assistant: Assistant,
         settings: Settings,
+        systemAddendum: String? = null,
         messages: List<UIMessage>,
         onUpdateMessages: suspend (List<UIMessage>) -> Unit,
         transformers: List<MessageTransformer>,
@@ -602,9 +806,17 @@ class GenerationHandler(
                     appendLine()
                     append(tool.systemPrompt(model, messages))
                 }
+
+                // Per-call surface-specific addendum (Telegram preamble, etc.). Lives in
+                // the system prompt so it's sent ONCE per generation instead of being
+                // baked into the user message body and replayed every turn.
+                if (!systemAddendum.isNullOrBlank()) {
+                    appendLine()
+                    append(systemAddendum)
+                }
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(messages.limitContext(assistant.contextMessageSize))
+            addAll(messages.limitContext(assistant.contextMessageSize).ageOldToolImages())
         }.transforms(
             transformers = transformers,
             context = context,

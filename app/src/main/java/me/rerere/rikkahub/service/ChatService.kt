@@ -29,8 +29,13 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
@@ -136,6 +141,35 @@ class ChatService(
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
+    /**
+     * Per-conversation mutex serialising state-mutating operations: handleToolApproval,
+     * stopGeneration, the chunk-handling save path, and explicit DB writes. Without this
+     * the audit reports identified multiple write races where a fresh approval mutation
+     * gets clobbered by a concurrent write from a stale snapshot. Generation chunks
+     * themselves are NOT held under this mutex — only the persist boundaries.
+     */
+    private val sessionMutexes = ConcurrentHashMap<Uuid, Mutex>()
+    private fun mutexFor(conversationId: Uuid): Mutex =
+        sessionMutexes.getOrPut(conversationId) { Mutex() }
+
+    /**
+     * Hydrate the in-memory session for [conversationId] from disk if it's currently
+     * blank. Used by entry points (callback handlers, approval handlers) that may be hit
+     * after a process restart with an empty session map — without this they read an
+     * empty Conversation, mutate it, and `saveConversation` then OVERWRITES the persisted
+     * state with empty content (silent data loss). Idempotent and cheap when the session
+     * is already populated.
+     */
+    suspend fun ensureHydrated(conversationId: Uuid) {
+        val session = getOrCreateSession(conversationId)
+        if (session.state.value.messageNodes.isEmpty()) {
+            val fromDb = conversationRepo.getConversationById(conversationId) ?: return
+            if (fromDb.messageNodes.isNotEmpty()) {
+                session.state.value = fromDb
+            }
+        }
+    }
+
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
     val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
@@ -211,6 +245,20 @@ class ChatService(
             _sessionsVersion.value++
             Log.i(TAG, "removeSession: $conversationId (remaining: ${sessions.size})")
         }
+    }
+
+    /**
+     * Force-drop the in-memory session for [conversationId] regardless of refcount /
+     * generation status. Used by /new in TelegramBotService to make sure a straggler
+     * coroutine writing back to the session can't resurrect the conversation after the
+     * user reset it. Safe to call when no session exists — no-op.
+     */
+    fun dropSession(conversationId: Uuid) {
+        val session = sessions.remove(conversationId) ?: return
+        session.cleanup()
+        sessionMutexes.remove(conversationId)
+        _sessionsVersion.value++
+        Log.i(TAG, "dropSession: $conversationId (remaining: ${sessions.size})")
     }
 
     // ---- 引用管理 ----
@@ -401,61 +449,104 @@ class ChatService(
         toolName: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
+        val convMutex = mutexFor(conversationId)
 
-        val job = appScope.launch {
-            try {
-                val conversation = session.state.value
-                val newApprovalState = when {
-                    answer != null -> ToolApprovalState.Answered(answer)
-                    approved -> ToolApprovalState.Approved
-                    else -> ToolApprovalState.Denied(reason)
-                }
-                // Record the broader-scope grant BEFORE we resume generation, so the
-                // GenerationHandler's auto-approval check sees the new entry on its next
-                // pass over the messages. Caller passes [toolName] when scope != Once.
-                if (approved && toolName != null) {
+        // Commit the broader-scope grant on a NonCancellable scope BEFORE the cancellable
+        // mutation block. Previous design ran grantAlways() inside the cancellable
+        // appScope.launch — a rapid second tap would cancel the first job and silently
+        // drop the persisted Always-Allow grant; the user thinks they granted it, the next
+        // prompt reappears. NonCancellable + before-launch-completion guarantees the write.
+        if (approved && toolName != null && scope != ApprovalScope.Once) {
+            appScope.launch(NonCancellable) {
+                runCatching {
                     when (scope) {
-                        ApprovalScope.Once -> Unit
                         ApprovalScope.ChatScope -> me.rerere.rikkahub.data.ai.tools
                             .ToolApprovalAllowList.grantForChat(conversationId, toolName)
                         ApprovalScope.Always -> toolApprovalPreferences.grantAlways(toolName)
+                        else -> Unit
+                    }
+                }.onFailure { Log.w(TAG, "approval grant write failed", it) }
+            }
+        }
+
+        val job = appScope.launch {
+            try {
+                convMutex.withLock {
+                    // Hydrate from disk if the in-memory session is empty (post-restart
+                    // path). Without this, the snapshot read below sees an empty
+                    // Conversation and the saveConversation downstream OVERWRITES the
+                    // persisted Pending tool with empty content — silent data loss.
+                    ensureHydrated(conversationId)
+
+                    // Wait for any prior generation job to actually finish writing before
+                    // we read state. cancelAndJoin (vs bare cancel) closes the race where
+                    // the prior coroutine emits one last chunk into `messages` between
+                    // our cancel call and our state.value read.
+                    session.getJob()?.let { runCatching { it.cancelAndJoin() } }
+
+                    val conversation = session.state.value
+                    val newApprovalState = when {
+                        answer != null -> ToolApprovalState.Answered(answer)
+                        approved -> ToolApprovalState.Approved
+                        else -> ToolApprovalState.Denied(reason)
+                    }
+
+                    // Update the tool approval state, but only on the SPECIFIC tool that
+                    // was approved AND only if it's still actually Pending. A racing
+                    // /stop or a concurrent decision could have already flipped it to
+                    // Denied(cancelled); we don't want to overwrite that with Approved.
+                    var foundActivePending = false
+                    val updatedNodes = conversation.messageNodes.map { node ->
+                        node.copy(
+                            messages = node.messages.map { msg ->
+                                msg.copy(
+                                    parts = msg.parts.map { part ->
+                                        if (part is UIMessagePart.Tool && part.toolCallId == toolCallId) {
+                                            if (part.isPending) {
+                                                foundActivePending = true
+                                                part.copy(approvalState = newApprovalState)
+                                            } else part
+                                        } else part
+                                    }
+                                )
+                            }
+                        )
+                    }
+                    if (!foundActivePending) {
+                        // Tool was already resolved (concurrent stop / dual-surface tap /
+                        // restart that hydrated a non-pending state). No-op the mutation.
+                        return@withLock
+                    }
+                    val updatedConversation = conversation.copy(messageNodes = updatedNodes)
+                    saveConversation(conversationId, updatedConversation)
+
+                    // Check if there are still pending tools across the conversation
+                    val hasPendingTools = updatedNodes.any { node ->
+                        node.currentMessage.parts.any { part ->
+                            part is UIMessagePart.Tool && part.isPending
+                        }
+                    }
+
+                    // Only continue generation when all pending tools are handled. Run
+                    // OUTSIDE the mutex (handleMessageComplete is a long-running flow
+                    // collect; holding the mutex through generation would block every
+                    // subsequent state mutation for the whole turn).
+                    if (!hasPendingTools) {
+                        // Release the mutex via early-returning from the withLock block,
+                        // then start generation. We can't `return@withLock` and then call
+                        // handleMessageComplete in the same coroutine without losing the
+                        // try/catch, so use a flag.
                     }
                 }
-
-                // Update the tool approval state
-                val updatedNodes = conversation.messageNodes.map { node ->
-                    node.copy(
-                        messages = node.messages.map { msg ->
-                            msg.copy(
-                                parts = msg.parts.map { part ->
-                                    when {
-                                        part is UIMessagePart.Tool && part.toolCallId == toolCallId -> {
-                                            part.copy(approvalState = newApprovalState)
-                                        }
-
-                                        else -> part
-                                    }
-                                }
-                            )
-                        }
-                    )
-                }
-                val updatedConversation = conversation.copy(messageNodes = updatedNodes)
-                saveConversation(conversationId, updatedConversation)
-
-                // Check if there are still pending tools
-                val hasPendingTools = updatedNodes.any { node ->
+                // Outside the mutex: kick off the resume generation if no tools remain pending.
+                val pendingNow = session.state.value.messageNodes.any { node ->
                     node.currentMessage.parts.any { part ->
                         part is UIMessagePart.Tool && part.isPending
                     }
                 }
-
-                // Only continue generation when all pending tools are handled
-                if (!hasPendingTools) {
+                if (!pendingNow) {
                     handleMessageComplete(conversationId)
                 }
-
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
                 addError(e, conversationId, title = context.getString(R.string.error_title_tool_approval))
@@ -508,13 +599,32 @@ class ChatService(
                 settings = settings,
                 model = model,
                 processingStatus = session.processingStatus,
+                // Read once per call so the surface that wrote the addendum (Telegram bot,
+                // anything else) gets its runtime context into the system prompt without
+                // having to plumb a parameter all the way through sendMessage. Returns null
+                // for in-app conversations that didn't register one.
+                systemAddendum = me.rerere.rikkahub.data.ai.tools
+                    .ConversationSystemAddendum.get(conversationId),
                 isToolAutoApproved = { toolName ->
-                    // "Allow for this chat" (in-memory, per-conversation) OR "Always Allow"
-                    // (DataStore-backed, across the whole app). The Once-grant lives in
-                    // the message itself as ToolApprovalState.Approved, so it's already
-                    // handled by the regular Pending → Approved transition.
-                    me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
-                        .isAllowedForChat(conversationId, toolName) ||
+                    // YOLO mode ("I AM STUPID" toggle in Settings → Tool approvals): every
+                    // tool auto-approves. User opted into this explicitly. HARDLINE still
+                    // blocks rm -rf / et al — that check runs BEFORE auto-approval in
+                    // GenerationHandler, so YOLO can't smuggle one through.
+                    //
+                    // Headless conversations (cron-driven) also auto-approve EVERY tool;
+                    // the user pre-authorised the schedule itself at job-creation time
+                    // and there's no UI surface to prompt at fire time.
+                    //
+                    // Otherwise: "Allow for this chat" (in-memory, per-conversation) OR
+                    // "Always Allow" (DataStore-backed, across the whole app). The
+                    // Once-grant lives in the message itself as
+                    // ToolApprovalState.Approved, so it's already handled by the regular
+                    // Pending → Approved transition.
+                    toolApprovalPreferences.currentYolo() ||
+                        me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+                            .isHeadless(conversationId) ||
+                        me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
+                            .isAllowedForChat(conversationId, toolName) ||
                         toolApprovalPreferences.current().contains(toolName)
                 },
                 messages = conversation.currentMessages.let {
@@ -551,12 +661,23 @@ class ChatService(
                         )
                     }
                     mcpManager.getAllAvailableTools().forEach { tool ->
+                        val mcpToolName = "mcp__" + tool.name
                         add(
                             Tool(
-                                name = "mcp__" + tool.name,
+                                name = mcpToolName,
                                 description = tool.description ?: "",
                                 parameters = { tool.inputSchema },
-                                needsApproval = tool.needsApproval,
+                                // MCP servers' tool surfaces are opaque to us — we can't
+                                // tell read from write or safe from destructive — so
+                                // every MCP call is approval-gated by default. The user
+                                // can grant Always-Allow per-tool to suppress prompts on
+                                // a known-safe MCP server. The HARDLINE floor still
+                                // applies via HardlineCommandGuard's `mcp__*` branch,
+                                // which scans every string arg for shell-content
+                                // patterns (rm -rf /, mkfs, shutdown, encoded payloads).
+                                needsApproval = me.rerere.rikkahub.data.ai.tools
+                                    .ToolApprovalDefaults.requiresApproval(mcpToolName) ||
+                                    tool.needsApproval,
                                 execute = {
                                     mcpManager.callTool(tool.name, it.jsonObject)
                                 },
@@ -588,6 +709,24 @@ class ChatService(
                             .updateCurrentMessages(chunk.messages)
                         updateConversation(conversationId, updatedConversation)
 
+                        // Persist immediately when a tool transitions to "execution
+                        // started but no output yet" — this writes the executionStartedAt
+                        // breadcrumb to disk so a process kill mid-execute leaves a clear
+                        // signal for the next replay (see GenerationHandler.kt's replay
+                        // safety pass: Approved + executionStartedAt + empty → Denied
+                        // interrupted_unknown_outcome). Without this, the marker stays in
+                        // memory only and replay can't distinguish "freshly approved,
+                        // never tried" from "interrupted mid-execute" → silent re-run.
+                        val needsImmediatePersist = chunk.messages.lastOrNull()?.parts?.any { p ->
+                            p is UIMessagePart.Tool &&
+                                p.executionStartedAt != null &&
+                                p.output.isEmpty() &&
+                                p.approvalState is ToolApprovalState.Approved
+                        } ?: false
+                        if (needsImmediatePersist) {
+                            saveConversation(conversationId, updatedConversation)
+                        }
+
                         // 如果应用不在前台，发送 Live Update 通知
                         if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
                             sendLiveUpdateNotification(conversationId, chunk.messages, senderName)
@@ -598,6 +737,18 @@ class ChatService(
         }.onFailure {
             // 取消 Live Update 通知
             cancelLiveUpdateNotification(conversationId)
+
+            // Persist the in-memory snapshot so the Auto/Pending → Denied transitions
+            // GenerationHandler did inside its try/catch (the "generation_failed" recovery
+            // path) survive a process restart. Without this, the failure path only
+            // updates memory and the persisted DB row keeps the stale Pending state
+            // forever — replay would re-run the loop against unrecoverable shape.
+            runCatching {
+                val final = getConversationFlow(conversationId).value
+                saveConversation(conversationId, final)
+            }.onFailure { saveErr ->
+                Log.w(TAG, "handleMessageComplete: failure-path save failed", saveErr)
+            }
 
             it.printStackTrace()
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
@@ -987,8 +1138,19 @@ class ChatService(
     }
 
     fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
-        val current = getConversationFlow(conversationId).value
-        updateConversation(conversationId, update(current))
+        // Atomic compare-and-set via StateFlow.update so two concurrent writers can't
+        // race on read-modify-write (each reading the SAME pre-state and overwriting
+        // each other). Also routes through checkFilesDelete so attached files keep
+        // being garbage-collected when removed from the conversation.
+        val session = getOrCreateSession(conversationId)
+        session.state.update { current ->
+            val next = update(current)
+            if (next.id != conversationId) current
+            else {
+                checkFilesDelete(next, current)
+                next
+            }
+        }
     }
 
     private fun checkFilesDelete(newConversation: Conversation, oldConversation: Conversation) {
@@ -1007,6 +1169,20 @@ class ChatService(
         val exists = conversationRepo.existsConversationById(conversation.id)
         if (!exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
             return // 新会话且为空时不保存
+        }
+        // Refuse to overwrite a non-empty stored row with an empty in-memory snapshot.
+        // This is the silent-data-loss guard: handleToolApproval / stopGeneration / etc.
+        // could be called against an unhydrated session (post-restart), build an empty
+        // updatedConversation, and call saveConversation. Without this guard we'd wipe
+        // the Pending tool the user was trying to approve.
+        if (exists && conversation.messageNodes.isEmpty()) {
+            val storedHasContent = runCatching {
+                conversationRepo.getConversationById(conversation.id)?.messageNodes?.isNotEmpty() == true
+            }.getOrDefault(false)
+            if (storedHasContent) {
+                Log.w(TAG, "saveConversation: refusing to overwrite non-empty $conversationId with empty snapshot — likely an unhydrated session")
+                return
+            }
         }
 
         val updatedConversation = conversation.copy()
@@ -1275,25 +1451,38 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
-        val job = sessions[conversationId]?.getJob() ?: return
-        job.cancel()
-        runCatching { job.join() }
+        val convMutex = mutexFor(conversationId)
+        // cancelAndJoin BEFORE the mutex so the cancelled coroutine can drain its own
+        // writes (which may try to acquire the same mutex via their save path).
+        sessions[conversationId]?.getJob()?.let { runCatching { it.cancelAndJoin() } }
 
-        val currentConversation = getConversationFlow(conversationId).value
-        val lastNode = currentConversation.messageNodes.lastOrNull() ?: return
-        val lastMessage = lastNode.currentMessage
-        val updatedMessage = lastMessage.finishPendingTools(::cancelToolByUser)
-        if (updatedMessage == lastMessage) {
-            return
+        convMutex.withLock {
+            // Hydrate from disk so we mark Pending tools cancelled even when the user
+            // hits /stop after a process restart (sessions map is empty post-restart;
+            // the old code returned early on the !sessions[id]?.getJob() check, leaving
+            // the persisted Pending tool stranded forever).
+            ensureHydrated(conversationId)
+
+            val currentConversation = getConversationFlow(conversationId).value
+            // Walk EVERY node, not just the last — Pending tools can appear on a non-last
+            // node after branching / regenerate. finishPendingTools is now scoped to
+            // tools that are NOT already in a terminal state, so a hardline-blocked
+            // Denied tool keeps its original reason rather than being relabeled as
+            // "cancelled by user".
+            var changed = false
+            val updatedNodes = currentConversation.messageNodes.map { node ->
+                node.copy(
+                    messages = node.messages.map { msg ->
+                        val updated = msg.finishPendingTools(::cancelToolByUser)
+                        if (updated !== msg) changed = true
+                        updated
+                    }
+                )
+            }
+            if (!changed) return@withLock
+
+            val updatedConversation = currentConversation.copy(messageNodes = updatedNodes)
+            saveConversation(conversationId, updatedConversation)
         }
-
-        val updatedConversation = currentConversation.copy(
-            messageNodes = currentConversation.messageNodes.dropLast(1) + lastNode.copy(
-                messages = lastNode.messages.map { message ->
-                    if (message.id == lastMessage.id) updatedMessage else message
-                }
-            )
-        )
-        saveConversation(conversationId, updatedConversation)
     }
 }

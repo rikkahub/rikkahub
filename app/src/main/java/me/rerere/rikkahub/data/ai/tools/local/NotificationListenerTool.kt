@@ -90,14 +90,46 @@ fun listActiveNotificationsTool(): Tool = Tool(
         Return notifications that are currently being shown by their owning apps (i.e. still
         in the system status bar / notification shade). Distinct from list_recent_notifications,
         which is the historical ring buffer. Use this when you specifically need to act on
-        something the user can see right now (e.g. dismiss it, click an action).
+        something the user can see right now (e.g. dismiss it, click an action). Use limit
+        (default 50, max 100), package_name (case-insensitive substring match), and
+        since_unix_ms (only entries posted after this) to narrow the result.
     """.trimIndent().replace("\n", " "),
-    parameters = { InputSchema.Obj(properties = buildJsonObject {}) },
-    execute = {
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("limit", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Cap on returned entries (default 50, max 100)")
+                })
+                put("package_name", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional case-insensitive substring filter against package or label")
+                })
+                put("since_unix_ms", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Only entries with post_time_ms >= this value")
+                })
+            }
+        )
+    },
+    execute = { input ->
+        val limit = input.jsonObject["limit"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 100) ?: 50
+        val pkgNeedle = input.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull?.lowercase()
+        val sinceMs = input.jsonObject["since_unix_ms"]?.jsonPrimitive?.longOrNull ?: 0L
         val payload = NotificationListenerHandle.withListener { svc ->
-            val active = svc.listActive()
+            val all = svc.listActive()
+            val filtered = all.asSequence()
+                .filter { it.postTimeMs >= sinceMs }
+                .filter {
+                    pkgNeedle == null ||
+                        it.packageName.lowercase().contains(pkgNeedle) ||
+                        it.label.lowercase().contains(pkgNeedle)
+                }
+                .toList()
+                .take(limit)
             buildJsonObject {
-                put("notifications", buildJsonArray { active.forEach { add(it.toJson()) } })
+                put("notifications", buildJsonArray { filtered.forEach { add(it.toJson()) } })
+                put("total_active", all.size)
             }
         }
         listOf(UIMessagePart.Text(payload.toString()))

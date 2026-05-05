@@ -9,15 +9,19 @@ package me.rerere.rikkahub.data.ai.tools
  * "Allow for this chat" allow-list, then the persistent "Always Allow" allow-list (in that
  * order); the prompt only fires when none of those let it through.
  *
+ * MCP-relayed tools (any name starting with `mcp__`) are gated separately at the
+ * GenerationHandler level — this set covers only locally-defined tools. See
+ * [requiresApproval] for the combined logic.
+ *
  * If you add a new LLM-callable tool, decide:
  *   - Is it side-effecting (writes to disk, runs shell, controls hardware, posts to a
  *     remote service, manipulates UI)? → add it here.
  *   - Is it a pure read (battery, location, screenshot, list-installed-apps)? → leave it
  *     out; the user doesn't need to be interrupted for "what's the brightness".
  *
- * Privacy-sensitive READS (contacts, sms, call log) are debatable. Today they're treated as
- * destructive (require approval) because reading PII off the device into an LLM context
- * deserves the same friction as a write does — the secret is leaving the device either way.
+ * Privacy-sensitive READS (contacts, sms, call log) ARE in here: reading PII off the
+ * device into an LLM context deserves the same friction as a write does — the secret
+ * is leaving the device either way.
  */
 object ToolApprovalDefaults {
 
@@ -56,10 +60,13 @@ object ToolApprovalDefaults {
         "click_node",
         "global_action",
         "launch_app",
+        "open_url",          // can dial tel:, draft mailto:, hand a URI to any app
+        "wake_screen",       // acquires wake lock, turns screen on at night
 
         // Privacy / hardware actuation
         "take_photo",
         "record_audio",
+        "speech_to_text",    // activates the microphone + uploads audio to recognizer
         "verify_fingerprint",
         "share",
         "set_torch",
@@ -69,6 +76,17 @@ object ToolApprovalDefaults {
         "play_media",
         "stop_media",
         "post_notification",
+
+        // Privacy reads — PII leaves the device into the model's context
+        "list_call_log",
+        "list_contacts",
+        "search_contacts",
+        "list_sms_inbox",
+        "search_sms",
+
+        // Notification listener side effects (read-only listing is free, mutating is not)
+        "dismiss_notification",
+        "notification_action_click",
 
         // Telegram outbound — the bot can DM other chats / change its own config
         "telegram_send_message",
@@ -85,5 +103,13 @@ object ToolApprovalDefaults {
         "telegram_delete_commands",
     )
 
-    fun requiresApproval(toolName: String): Boolean = toolName in ALWAYS_ASK
+    /**
+     * True if [toolName] requires approval. Local tools are looked up in [ALWAYS_ASK];
+     * MCP-relayed tools (`mcp__*`) are always gated because the MCP server's tool surface
+     * is opaque to us — we can't know which calls are destructive. An MCP server that
+     * exposes purely-read tools costs the user one approval per session via "Always
+     * Allow", which is a fair trade for the floor.
+     */
+    fun requiresApproval(toolName: String): Boolean =
+        toolName in ALWAYS_ASK || toolName.startsWith("mcp__")
 }

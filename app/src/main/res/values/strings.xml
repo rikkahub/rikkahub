@@ -315,6 +315,14 @@
   <string name="chat_message_tool_deny">Deny</string>
   <string name="chat_message_tool_deny_dialog_hint">Reason (optional)</string>
   <string name="chat_message_tool_deny_dialog_title">Deny Tool Execution</string>
+  <string name="chat_message_tool_schedule_job_warning">⏰ Scheduled jobs run autonomously without per-tool approval. Approving this lets the job run with full tool access whenever it fires. Hardline-blocked commands still cannot run.</string>
+  <string name="setting_page_tool_approvals_yolo_title">I AM STUPID — auto-approve everything</string>
+  <string name="setting_page_tool_approvals_yolo_on">🚨 ON. Every tool runs without prompting. Hardline blocks (rm -rf /, mkfs, shutdown …) still apply.</string>
+  <string name="setting_page_tool_approvals_yolo_off">Off. Side-effecting tools prompt for approval before running.</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_title">Turn off all approval prompts?</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_body">Every tool — local shell, SSH, file writes, screen automation, Telegram outbound, MCP — will run without asking you. The agent could send messages, run commands on remote hosts, take photos, write files, schedule jobs, all without confirmation.\n\nHARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block devices, fork bomb, encoded payload pipes — those keep blocking.\n\nThis is a foot-gun. Only enable if you trust the model + assistant config + your own prompts to behave responsibly.</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_confirm">Yes, I AM STUPID, enable</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_cancel">Keep approvals on</string>
   <string name="chat_message_tool_edit_memory">Updated memory</string>
   <string name="chat_message_tool_get_time">Get time info</string>
   <string name="chat_message_tool_scrape_prefix">Scrape website: %1$s</string>

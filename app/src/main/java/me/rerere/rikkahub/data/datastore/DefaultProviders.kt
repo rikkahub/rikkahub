@@ -22,11 +22,18 @@ val DEFAULT_AUTO_MODEL_ID = Uuid.parse("b7055fb4-39f9-4042-a88a-0d80ed76cf08")
 val DEFAULT_PROVIDERS = listOf(
     ProviderSetting.AICore(
         // On-device provider sits at the top of the list so the agent's primary surface for
-        // privacy-conscious / offline use is the first thing users see. Self-disables on
-        // devices without AICore beta — the requirement tags on the card make that clear.
+        // privacy-conscious / offline use is the first thing users see.
+        //
+        // OFF by default. The vast majority of users don't have a Pixel 8/9/10 with the
+        // AICore beta enrolled, and an enabled-but-broken provider at the top of the list
+        // is more confusing than a disabled-but-discoverable one. AICore-eligible users
+        // flip a single toggle on the provider card to turn it on. Existing users who
+        // already had it enabled keep their choice — PreferencesStore's merge only copies
+        // builtIn/description/shortDescription back from the defaults, not enabled.
+        enabled = false,
         builtIn = true,
         description = {
-            Text("Runs Gemini Nano on-device through Android AICore. Requires AICore beta on a supported Pixel device.")
+            Text("Runs Gemini Nano on-device through Android AICore. Off by default — flip the switch to enable. Requires AICore beta on a supported Pixel device.")
         },
         shortDescription = {
             Text("On-device — no API key, no network")

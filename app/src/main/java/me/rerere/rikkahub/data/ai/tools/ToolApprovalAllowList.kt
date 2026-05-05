@@ -35,4 +35,23 @@ object ToolApprovalAllowList {
         val prefix = "${conversationId}::"
         perChat.removeIf { it.startsWith(prefix) }
     }
+
+    /** Revoke a single (conversation, tool) grant — without blowing away the rest of the
+     *  conversation's allow-list. Used by the in-chat "revoke" affordance so the user can
+     *  back out of an accidental "Allow for this chat" tap on a destructive tool without
+     *  having to start a new conversation and lose context. */
+    fun revokeForChat(conversationId: Uuid, toolName: String) {
+        perChat.remove(key(conversationId, toolName))
+    }
+
+    /** Snapshot of every grant for [conversationId]. Used by the "what have I allowed?"
+     *  UI surface so it can render one row per active grant + a revoke button. */
+    fun listForChat(conversationId: Uuid): List<String> {
+        val prefix = "${conversationId}::"
+        return perChat.asSequence()
+            .filter { it.startsWith(prefix) }
+            .map { it.removePrefix(prefix) }
+            .sorted()
+            .toList()
+    }
 }
