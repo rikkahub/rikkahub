@@ -267,6 +267,40 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                         )
+                        // Surface mode-specific detail so the user sees WHAT will run.
+                        val jobInput = tool.inputAsJson()
+                        val mode = jobInput.getStringContent("mode")
+                        if (mode == "direct") {
+                            val actions = runCatching {
+                                (jobInput as? JsonObject)?.get("actions")
+                                    ?.jsonArray
+                            }.getOrNull()
+                            if (actions != null) {
+                                Column {
+                                    actions.forEachIndexed { i, el ->
+                                        val obj = el as? JsonObject
+                                        val toolName = obj?.get("tool")?.jsonPrimitive?.contentOrNull ?: "?"
+                                        val args = obj?.get("args")?.toString().orEmpty()
+                                        val truncatedArgs = if (args.length > 120) args.take(120) + "…" else args
+                                        Text(
+                                            text = "  ${i + 1}. $toolName $truncatedArgs",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (mode == "llm") {
+                            val prompt = jobInput.getStringContent("prompt").orEmpty()
+                            if (prompt.isNotEmpty()) {
+                                val truncatedPrompt = if (prompt.length > 200) prompt.take(200) + "…" else prompt
+                                Text(
+                                    text = truncatedPrompt,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
                     // Four-button row: Allow / Always Allow / Allow for this chat / Deny.
                     // Order matches the Telegram inline-keyboard layout so the user sees the

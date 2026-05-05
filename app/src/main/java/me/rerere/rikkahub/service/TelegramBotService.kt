@@ -1096,6 +1096,40 @@ class TelegramBotService : Service() {
                 append("Approving this lets the job run with full tool access whenever it ")
                 append("fires. Hardline-blocked commands (rm -rf /, mkfs, shutdown, …) still ")
                 append("cannot run.</i>")
+                // Surface mode-specific detail (mirrors the in-app approval card).
+                val jobInput = runCatching {
+                    kotlinx.serialization.json.Json.parseToJsonElement(tool.input.ifBlank { "{}" })
+                        .jsonObject
+                }.getOrNull()
+                val mode = jobInput?.get("mode")?.jsonPrimitive?.contentOrNull
+                when (mode) {
+                    "direct" -> {
+                        val actions = runCatching {
+                            (jobInput?.get("actions") as? kotlinx.serialization.json.JsonArray)
+                        }.getOrNull()
+                        if (actions != null && actions.isNotEmpty()) {
+                            append("\n\n<b>Actions:</b>")
+                            actions.forEachIndexed { i, el ->
+                                val obj = el as? JsonObject
+                                val toolName = obj?.get("tool")?.jsonPrimitive?.contentOrNull ?: "?"
+                                val args = obj?.get("args")?.toString().orEmpty()
+                                val truncatedArgs = if (args.length > 120) args.take(120) + "…" else args
+                                append("\n  ${i + 1}. <code>")
+                                append(TelegramHtmlRenderer.escape(toolName))
+                                append("</code> ")
+                                append(TelegramHtmlRenderer.escape(truncatedArgs))
+                            }
+                        }
+                    }
+                    "llm" -> {
+                        val prompt = jobInput?.get("prompt")?.jsonPrimitive?.contentOrNull ?: ""
+                        if (prompt.isNotEmpty()) {
+                            val truncatedPrompt = if (prompt.length > 200) prompt.take(200) + "…" else prompt
+                            append("\n\n<b>Prompt:</b> ")
+                            append(TelegramHtmlRenderer.escape(truncatedPrompt))
+                        }
+                    }
+                }
             }
         }
         val res = try {
