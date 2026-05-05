@@ -26,7 +26,34 @@ object CatchupPlanner {
     )
 
     fun plan(job: ScheduledJobEntity, lastRunMs: Long?, nowMs: Long): CatchupPlan {
-        if (job.scheduleType != "cron") return CatchupPlan(emptyList(), 0)
+        return when (job.scheduleType) {
+            "once" -> planOnce(job, nowMs)
+            "cron" -> planCron(job, lastRunMs, nowMs)
+            else   -> CatchupPlan(emptyList(), 0)
+        }
+    }
+
+    /**
+     * once-mode catchup: if the target time has passed and the job has never fired,
+     * enqueue it immediately (delay 0). No skipped rows — the fire actually happens,
+     * just late. If it already fired (lastRunAtMs != null), nothing to do.
+     */
+    private fun planOnce(job: ScheduledJobEntity, nowMs: Long): CatchupPlan {
+        val at = job.atUnixMs ?: return CatchupPlan(emptyList(), 0)
+        val alreadyFired = job.lastRunAtMs != null
+        if (alreadyFired) return CatchupPlan(emptyList(), 0)
+        return if (at < nowMs) {
+            // Missed once-fire — enqueue immediately. The worker writes a normal run row
+            // so the user sees the fire in history (just slightly late). No skipped rows
+            // because no windows were deliberately dropped.
+            CatchupPlan(listOf(0L), 0)
+        } else {
+            // Fire is still in the future; normal scheduler.schedule() will handle it.
+            CatchupPlan(emptyList(), 0)
+        }
+    }
+
+    private fun planCron(job: ScheduledJobEntity, lastRunMs: Long?, nowMs: Long): CatchupPlan {
         val expr = job.cronExpression ?: return CatchupPlan(emptyList(), 0)
         val cron = CronExpressionParser.parse(expr).getOrNull() ?: return CatchupPlan(emptyList(), 0)
         val zone = job.timezone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()

@@ -57,20 +57,28 @@ class CronBootReceiver : BroadcastReceiver(), KoinComponent {
     private suspend fun sweepStrandedRunRows(context: Context) {
         val cutoff = System.currentTimeMillis() - 30L * 60_000L
         val stranded = runRepo.getStranded(stalenessMs = cutoff)
+        if (stranded.isEmpty()) return
+
         for (row in stranded) {
             runRepo.update(row.copy(
                 finishedAtMs = System.currentTimeMillis(),
                 outcome = "process_killed_replay",
                 errorMessage = "worker terminated mid-execute",
             ))
-            // Per spec §6 notification policy: process_killed_replay posts a failure notification
-            // at detection time so the user knows their cron silently died.
-            val job = repo.getById(row.jobId) ?: continue
-            postFailureNotification(context, job.name, "process_killed_replay: worker terminated mid-execute")
         }
+
+        // Single aggregate notification per boot rather than one per stranded row.
+        val jobNames = stranded
+            .mapNotNull { row -> repo.getById(row.jobId)?.name }
+            .distinct()
+        val title = if (stranded.size == 1) "Scheduled job interrupted"
+                    else "${stranded.size} scheduled jobs interrupted"
+        val text = if (jobNames.size <= 3) jobNames.joinToString(", ")
+                   else jobNames.take(3).joinToString(", ") + ", and ${jobNames.size - 3} others"
+        postFailureNotification(context, title, text)
     }
 
-    private fun postFailureNotification(ctx: Context, jobName: String, errorMessage: String) {
+    private fun postFailureNotification(ctx: Context, title: String, text: String) {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         if (nm.getNotificationChannel(CronJobWorker.CHANNEL_ID) == null) {
             nm.createNotificationChannel(android.app.NotificationChannel(
@@ -78,13 +86,16 @@ class CronBootReceiver : BroadcastReceiver(), KoinComponent {
                 android.app.NotificationManager.IMPORTANCE_DEFAULT))
         }
         val builder = androidx.core.app.NotificationCompat.Builder(ctx, CronJobWorker.CHANNEL_ID)
-            .setContentTitle("Scheduled job failed")
-            .setContentText("$jobName: $errorMessage")
-            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText("$jobName: $errorMessage"))
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(text))
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setAutoCancel(true)
         try {
-            androidx.core.app.NotificationManagerCompat.from(ctx).notify(jobName.hashCode(), builder.build())
+            // Fixed notification ID so subsequent boots replace the prior aggregate
+            // notification rather than stacking up.
+            val aggregateNotifId = Int.MAX_VALUE - 100
+            androidx.core.app.NotificationManagerCompat.from(ctx).notify(aggregateNotifId, builder.build())
         } catch (_: SecurityException) { /* POST_NOTIFICATIONS not granted — fine */ }
     }
 
@@ -95,7 +106,23 @@ class CronBootReceiver : BroadcastReceiver(), KoinComponent {
             // Compute catchup plan based on the job's last fire vs now.
             val plan = CatchupPlanner.plan(job, lastRunMs = job.lastRunAtMs, nowMs = nowMs)
 
-            // Record skipped_catchup rows for windows we deliberately drop.
+            // Enqueue catchup fires FIRST, then write skipped rows.
+            // Write-order matters: if the process dies between enqueue and DB write,
+            // no orphan skipped_catchup rows exist for fires that never had a chance.
+            for ((idx, delayMs) in plan.fireDelaysMs.withIndex()) {
+                val req = OneTimeWorkRequestBuilder<CronJobWorker>()
+                    .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+                    .setInputData(Data.Builder().putString(CronJobWorker.KEY_JOB_ID, job.id).build())
+                    .build()
+                // Each catchup fire gets a distinct unique work name so they don't
+                // REPLACE-cancel each other.
+                wm.enqueueUniqueWork(
+                    "cron_job_${job.id}_catchup_$idx",
+                    ExistingWorkPolicy.REPLACE, req
+                )
+            }
+
+            // Record skipped_catchup rows for windows we deliberately drop (after enqueue).
             for (i in 0 until plan.skippedCatchupCount) {
                 runRepo.insert(ScheduledJobRunEntity(
                     id = kotlin.uuid.Uuid.random().toString(),
@@ -108,20 +135,6 @@ class CronBootReceiver : BroadcastReceiver(), KoinComponent {
                     conversationId = null,
                     errorMessage = null,
                 ))
-            }
-
-            // Enqueue the catchup fires (mode + delay come from the planner).
-            for ((idx, delayMs) in plan.fireDelaysMs.withIndex()) {
-                val req = OneTimeWorkRequestBuilder<CronJobWorker>()
-                    .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
-                    .setInputData(Data.Builder().putString(CronJobWorker.KEY_JOB_ID, job.id).build())
-                    .build()
-                // Each catchup fire gets a distinct unique work name so they don't
-                // REPLACE-cancel each other.
-                wm.enqueueUniqueWork(
-                    "cron_job_${job.id}_catchup_$idx",
-                    ExistingWorkPolicy.REPLACE, req
-                )
             }
 
             // Schedule the next REGULAR fire (does not interfere with catchups above).

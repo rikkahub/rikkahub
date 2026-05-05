@@ -14,6 +14,12 @@ class CatchupPlannerTest {
         catchup = catchup, createdAtMs = 0L,
     )
 
+    private fun onceJob(atUnixMs: Long, lastRunAtMs: Long? = null) = ScheduledJobEntity(
+        id = "j", name = "n", prompt = "p", assistantId = "a",
+        scheduleType = "once", atUnixMs = atUnixMs, createdAtMs = 0L,
+        lastRunAtMs = lastRunAtMs,
+    )
+
     private val z = ZoneId.of("UTC")
     private fun ms(d: Int, h: Int) = LocalDateTime.of(2026, 6, d, h, 0).atZone(z).toInstant().toEpochMilli()
 
@@ -70,5 +76,32 @@ class CatchupPlannerTest {
         )
         assertEquals(20, plan.fireDelaysMs.size)
         assertEquals(5, plan.skippedCatchupCount)
+    }
+
+    @Test
+    fun `once-mode missed past fire produces plan with delay-0 and no skipped rows`() {
+        val atMs = ms(1, 8)           // scheduled for June 1 08:00
+        val nowMs = ms(1, 10)         // now June 1 10:00 — already past
+        val plan = CatchupPlanner.plan(
+            job = onceJob(atUnixMs = atMs, lastRunAtMs = null),
+            lastRunMs = null,
+            nowMs = nowMs,
+        )
+        assertEquals(listOf(0L), plan.fireDelaysMs)
+        assertEquals(0, plan.skippedCatchupCount)
+    }
+
+    @Test
+    fun `once-mode already-fired returns empty plan`() {
+        val atMs = ms(1, 8)
+        val firedMs = ms(1, 8)        // was fired at its scheduled time
+        val nowMs = ms(1, 10)
+        val plan = CatchupPlanner.plan(
+            job = onceJob(atUnixMs = atMs, lastRunAtMs = firedMs),
+            lastRunMs = firedMs,
+            nowMs = nowMs,
+        )
+        assertEquals(0, plan.fireDelaysMs.size)
+        assertEquals(0, plan.skippedCatchupCount)
     }
 }
