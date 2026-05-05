@@ -78,6 +78,40 @@ class CronJobWorker(
                 return Result.success()
             }
 
+            // WorkManager-replay idempotency guard — runs BEFORE the optimistic insert,
+            // because the insert itself creates a row that would self-match the heuristic.
+            // A WorkManager replay re-fires the SAME enqueued work request, which means
+            // job.nextRunAtMs hasn't advanced (the prior worker died before persisting
+            // lastRunAtMs + scheduling the next fire). So a true replay's scheduledAtMs
+            // matches the prior row's scheduledAtMs exactly. A genuine subsequent fire
+            // (e.g. tick #2 of a 2-min cron) gets a NEW nextRunAtMs first, so the equality
+            // check fails and we proceed normally. Manual fires (trigger_job_now) skip this
+            // guard entirely so the user can always force a fresh fire.
+            val scheduledAtMs = job.nextRunAtMs ?: nowMs
+            if (!isManual) {
+                val priorRow = runRepo.getMostRecent(jobId)
+                if (priorRow != null
+                    && priorRow.scheduledAtMs == scheduledAtMs
+                    && priorRow.outcome != "concurrent_skip"
+                    && priorRow.outcome != "skipped_catchup"
+                ) {
+                    Log.w(TAG, "doWork: suppressing likely WorkManager replay for $jobId " +
+                            "(prior row ${priorRow.id} same scheduledAtMs=$scheduledAtMs outcome=${priorRow.outcome})")
+                    runRepo.insert(ScheduledJobRunEntity(
+                        id = runRowId,
+                        jobId = jobId,
+                        mode = job.mode,
+                        scheduledAtMs = scheduledAtMs,
+                        startedAtMs = nowMs,
+                        finishedAtMs = nowMs,
+                        outcome = "process_killed_replay",
+                        conversationId = null,
+                        errorMessage = "duplicate fire suppressed (prior run ${priorRow.id})",
+                    ))
+                    return Result.success()
+                }
+            }
+
             // Optimistic insert — outcome will be overwritten on completion.
             runRepo.insert(ScheduledJobRunEntity(
                 id = runRowId,
@@ -192,18 +226,6 @@ class CronJobWorker(
         // Replay idempotency guard: if WorkManager replays this worker after a process kill,
         // a run row for this job will already exist with a very recent startedAtMs.
         // Treat any non-skip row created within the last 5 minutes as a duplicate and bail.
-        val nowMs = System.currentTimeMillis()
-        val lastRow = runRepo.getMostRecent(job.id)
-        if (lastRow != null
-            && lastRow.startedAtMs > nowMs - 5L * 60_000L
-            && lastRow.outcome != "concurrent_skip"
-            && lastRow.outcome != "skipped_catchup"
-        ) {
-            Log.w(TAG, "runDirect: suppressing likely WorkManager replay (last row ${lastRow.id}, " +
-                    "outcome=${lastRow.outcome}, age=${nowMs - lastRow.startedAtMs}ms)")
-            return Triple("process_killed_replay", "duplicate fire suppressed", null)
-        }
-
         val actionsJson = job.actionsJson ?: return Triple("failed", "missing_actions_for_direct_mode", null)
         val parsed = DirectModeActionRunner.parse(actionsJson).getOrElse {
             return Triple("failed", "actions_parse:${(it as? DirectModeActionRunner.ParseError)?.code ?: it.message}", null)
