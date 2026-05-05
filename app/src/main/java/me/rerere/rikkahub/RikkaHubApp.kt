@@ -176,6 +176,12 @@ class RikkaHubApp : Application() {
                 if (cfg.isUsable) {
                     Log.i(TAG, "startTelegramBotIfEnabled: re-starting bot service")
                     me.rerere.rikkahub.service.TelegramBotService.start(this@RikkaHubApp)
+                    // Defense-in-depth against OEM aggressive task-killing: a 30-min
+                    // periodic health probe re-starts the service if anything killed it
+                    // outside our control. Idempotent — uses ExistingPeriodicWorkPolicy.KEEP.
+                    me.rerere.rikkahub.service.TelegramBotHealthWorker.schedule(this@RikkaHubApp)
+                } else {
+                    me.rerere.rikkahub.service.TelegramBotHealthWorker.cancel(this@RikkaHubApp)
                 }
             }.onFailure {
                 Log.e(TAG, "startTelegramBotIfEnabled failed", it)

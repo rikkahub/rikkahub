@@ -159,8 +159,15 @@ class TelegramBotService : Service() {
             ))
         }
         val notif = buildForegroundNotification()
+        // Android 14+ ties the runtime FGS type to the manifest declaration AND to a
+        // hard daily-budget cap depending on the type. We previously used DATA_SYNC, which
+        // caps at 6 hours/day per app — Telegram bot polling is intended to run
+        // indefinitely, so we'd hit ForegroundServiceDidNotStopInTimeException. SPECIAL_USE
+        // has no such cap (the manifest declares the subtype "long-running Telegram bot
+        // long-poll loop") and is the correct flavor for app-specific long-running work
+        // that doesn't fit any predefined Google category.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
             startForeground(NOTIF_ID, notif)
         }

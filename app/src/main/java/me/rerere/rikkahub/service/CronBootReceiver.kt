@@ -43,10 +43,13 @@ class CronBootReceiver : BroadcastReceiver(), KoinComponent {
                 sweepStrandedRunRows(context)
                 applyCatchupAndSchedule(context)
 
-                // Re-start Telegram bot if it was enabled (existing behavior).
+                // Re-start Telegram bot if it was enabled (existing behavior) AND
+                // re-arm the periodic health probe. Both are idempotent — the probe uses
+                // ExistingPeriodicWorkPolicy.KEEP so re-arming on every boot is harmless.
                 val cfg = try { telegramPrefs.current() } catch (_: Throwable) { null }
                 if (cfg != null && cfg.isUsable) {
                     me.rerere.rikkahub.service.TelegramBotService.start(context)
+                    me.rerere.rikkahub.service.TelegramBotHealthWorker.schedule(context)
                 }
             } finally {
                 pending.finish()
