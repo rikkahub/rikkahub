@@ -48,6 +48,8 @@ val appModule = module {
     single { BiometricResultBuffer() }
 
     single { ScheduledJobRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().scheduledJobDao()) }
+    single { me.rerere.rikkahub.data.repository.ScheduledJobRunRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().scheduledJobRunDao()) }
+    single { me.rerere.rikkahub.service.DirectModeActionRunner(get()) }
     single { CronJobScheduler(get(), get()) }
     single { SshHostRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().sshHostDao()) }
     single { TelegramChatRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().telegramChatDao()) }

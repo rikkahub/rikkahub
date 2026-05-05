@@ -661,6 +661,10 @@ fun Settings.getAssistantById(id: Uuid): Assistant? {
     return this.assistants.find { it.id == id }
 }
 
+fun Settings.findAssistantById(id: Uuid): Assistant? {
+    return this.assistants.firstOrNull { it.id == id }
+}
+
 fun Settings.getQuickMessagesOfAssistant(assistant: Assistant) =
     quickMessages.filter { it.id in assistant.quickMessageIds }
 

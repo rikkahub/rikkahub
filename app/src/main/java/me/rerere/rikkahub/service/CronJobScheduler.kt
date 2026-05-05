@@ -12,9 +12,6 @@ import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 
-// TODO: remove once T8 defines this on CronJobWorker.companion
-private const val KEY_MANUAL = "cron_job_manual"
-
 /**
  * Schedules / unschedules cron job executions via WorkManager. Each scheduled job has
  * a unique work name "cron_job_<id>" so we can deterministically replace or cancel its
@@ -55,7 +52,7 @@ class CronJobScheduler(
             .setInitialDelay(0L, TimeUnit.MILLISECONDS)
             .setInputData(Data.Builder()
                 .putString(CronJobWorker.KEY_JOB_ID, jobId)
-                .putBoolean(KEY_MANUAL, true)
+                .putBoolean(CronJobWorker.KEY_MANUAL, true)
                 .build())
             .build()
         wm.enqueueUniqueWork(manualWorkNameFor(jobId), ExistingWorkPolicy.REPLACE, req)
