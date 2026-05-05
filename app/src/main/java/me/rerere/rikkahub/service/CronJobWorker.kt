@@ -93,7 +93,7 @@ class CronJobWorker(
                     // every approval-gated tool flips to Pending and the worker stalls
                     // forever with no UI surface to grant approval.
                     HeadlessConversations.mark(conv.id)
-                    chatService.sendMessage(conv.id, listOf(UIMessagePart.Text(job.prompt)))
+                    chatService.sendMessage(conv.id, listOf(UIMessagePart.Text(job.prompt ?: "")))
 
                     // Best-effort: wait briefly so the worker stays alive long enough for ChatService
                     // to take ownership of the generation. Bounded by the worker's overall wall
