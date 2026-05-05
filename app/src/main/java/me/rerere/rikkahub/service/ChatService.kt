@@ -451,6 +451,16 @@ class ChatService(
         val session = getOrCreateSession(conversationId)
         val convMutex = mutexFor(conversationId)
 
+        // Snapshot the prior generation job BEFORE the appScope.launch below replaces it
+        // via setJob. session.setJob runs synchronously after launch returns; the launched
+        // body is dispatched and runs LATER (Dispatchers.Main posts to the looper). So
+        // calling session.getJob() inside the body would return THIS very job — and
+        // cancelAndJoin would self-cancel the resume coroutine: saveConversation's first
+        // suspend then throws CancellationException, the tool stays Pending, and the
+        // generation never resumes. The YOLO toggle masked this because auto-approval
+        // skips the Pending → handleToolApproval path entirely.
+        val priorGenerationJob = session.getJob()
+
         // Commit the broader-scope grant on a NonCancellable scope BEFORE the cancellable
         // mutation block. Previous design ran grantAlways() inside the cancellable
         // appScope.launch — a rapid second tap would cancel the first job and silently
@@ -481,8 +491,9 @@ class ChatService(
                     // Wait for any prior generation job to actually finish writing before
                     // we read state. cancelAndJoin (vs bare cancel) closes the race where
                     // the prior coroutine emits one last chunk into `messages` between
-                    // our cancel call and our state.value read.
-                    session.getJob()?.let { runCatching { it.cancelAndJoin() } }
+                    // our cancel call and our state.value read. Use the SNAPSHOT taken
+                    // before launch — see the comment on priorGenerationJob above.
+                    priorGenerationJob?.let { runCatching { it.cancelAndJoin() } }
 
                     val conversation = session.state.value
                     val newApprovalState = when {
