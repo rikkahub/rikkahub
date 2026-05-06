@@ -191,10 +191,14 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
         // whisper.cpp build does NOT — it silently produces empty output for OGA/Opus
         // (Telegram voice notes), MP3, etc. The robust path is to ALWAYS pre-convert
         // via ffmpeg first. ffmpeg is in Termux's default repos and tiny vs. whisper.
-        val baseName = "rikkahub_transcribe_${System.currentTimeMillis()}"
-        val convertedWav = "/data/data/com.termux/files/home/$baseName.wav"
-        val outputBase = "/data/data/com.termux/files/home/$baseName"
-        val outputTxt = "$outputBase.txt"
+        //
+        // Stable filename means ffmpeg's `-y` overwrites the previous WAV — no
+        // accumulation across calls. We deliberately do NOT try to delete it from
+        // our side after; java.io.File.delete fails cross-uid under Android's app
+        // sandbox (Termux's home is owned by Termux's uid, not ours), so the delete
+        // silently no-ops and we'd just be lying about cleanup. The next call
+        // overwrites in place.
+        val convertedWav = "/data/data/com.termux/files/home/rikkahub_transcribe_input.wav"
 
         // Verify ffmpeg is installed before we try to use it.
         val ffmpegCheck = runCommandCapture(
@@ -239,12 +243,17 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
             )
         }
 
+        // Run whisper-cli with `-nt` (--no-timestamps) and let it print to stdout.
+        // We deliberately DO NOT use `-otxt -of <file>` because the output file would
+        // be written under Termux's uid in /data/data/com.termux/files/... and our
+        // app's uid (different) cannot read it back via java.io.File — Android's
+        // cross-app sandbox blocks the read silently and we'd see `output_missing`
+        // even though the transcription succeeded. stdout is captured by the
+        // RUN_COMMAND broadcast result bundle and crosses uid boundaries cleanly.
         val whisperArgs = buildList {
             add("-m"); add(modelPath)
             add("-f"); add(convertedWav)
             add("--no-timestamps")
-            add("-otxt")
-            add("-of"); add(outputBase)
             if (language != null) {
                 add("-l"); add(language)
             }
@@ -276,23 +285,19 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
                     )
                 }
 
-                // Read the output .txt file whisper-cli wrote
-                val outFile = File(outputTxt)
-                if (!outFile.exists()) {
+                // Pull the transcript directly from whisper-cli's stdout. With
+                // --no-timestamps and no -otxt, whisper prints the plain transcript
+                // text to stdout (the diagnostic "whisper_init_..." lines all go to
+                // stderr). One transcript may span multiple lines for long audio;
+                // collapse leading/trailing whitespace but preserve internal newlines.
+                val transcript = transcribeResult.stdout.trim()
+                if (transcript.isEmpty()) {
                     return@Tool errEnv(
-                        "output_missing",
-                        "whisper-cli succeeded (exit 0) but did not write output to $outputTxt. stderr: ${transcribeResult.stderr.take(500)}"
+                        "empty_transcript",
+                        "whisper-cli succeeded (exit 0) but produced no output. " +
+                            "Likely the audio is silent, the model couldn't decode it, " +
+                            "or the language hint is wrong. stderr: ${transcribeResult.stderr.take(500)}"
                     )
-                }
-
-                val transcript = try {
-                    outFile.readText(Charsets.UTF_8).trim()
-                } catch (e: Throwable) {
-                    return@Tool errEnv("read_output_failed", "Could not read $outputTxt: ${e.message}")
-                } finally {
-                    // Clean up temp files (transcription txt + the converted WAV).
-                    try { outFile.delete() } catch (_: Throwable) {}
-                    try { File(convertedWav).delete() } catch (_: Throwable) {}
                 }
 
                 // Parse detected language from stderr ("auto-detected language: en") if present
