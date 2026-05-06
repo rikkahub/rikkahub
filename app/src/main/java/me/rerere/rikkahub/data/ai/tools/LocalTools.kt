@@ -38,7 +38,11 @@ import me.rerere.rikkahub.data.ai.tools.local.longPressTool
 import me.rerere.rikkahub.data.ai.tools.local.mediaScannerTool
 import me.rerere.rikkahub.data.ai.tools.local.micRecorderTool
 import me.rerere.rikkahub.data.ai.tools.local.notificationTool
+import me.rerere.rikkahub.data.ai.tools.local.getMediaStatusTool
+import me.rerere.rikkahub.data.ai.tools.local.pauseMediaTool
 import me.rerere.rikkahub.data.ai.tools.local.playMediaTool
+import me.rerere.rikkahub.data.ai.tools.local.resumeMediaTool
+import me.rerere.rikkahub.data.ai.tools.local.seekMediaTool
 import me.rerere.rikkahub.data.ai.tools.local.readSensorTool
 import me.rerere.rikkahub.data.ai.tools.local.readWindowTreeTool
 import me.rerere.rikkahub.data.ai.tools.local.scrollTool
@@ -481,8 +485,12 @@ class LocalTools(
             tools.add(setVolumeTool(context))
         }
         if (options.contains(LocalToolOption.MediaPlayer)) {
-            tools.add(playMediaTool(mediaPlayerHolder))
-            tools.add(stopMediaTool(mediaPlayerHolder))
+            tools.add(playMediaTool(context))
+            tools.add(stopMediaTool(context))
+            tools.add(pauseMediaTool(context))
+            tools.add(resumeMediaTool(context))
+            tools.add(seekMediaTool(context))
+            tools.add(getMediaStatusTool())
         }
         if (options.contains(LocalToolOption.MediaScanner)) {
             tools.add(mediaScannerTool(context))

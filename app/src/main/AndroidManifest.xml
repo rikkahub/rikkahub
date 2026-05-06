@@ -10,6 +10,7 @@
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
   <uses-permission android:name="android.permission.VIBRATE" />
@@ -147,6 +148,21 @@
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
         android:value="long-running Telegram bot long-poll loop" />
     </service>
+
+    <service
+      android:name=".service.MediaPlaybackService"
+      android:exported="false"
+      android:foregroundServiceType="mediaPlayback" />
+
+    <!-- Handles hardware media-button broadcasts (headset, Bluetooth) and routes them
+         to the active MediaSession via the AndroidX media-compat helper. -->
+    <receiver
+      android:name="androidx.media.session.MediaButtonReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MEDIA_BUTTON" />
+      </intent-filter>
+    </receiver>
 
     <service
       android:name=".service.RikkaAccessibilityService"
