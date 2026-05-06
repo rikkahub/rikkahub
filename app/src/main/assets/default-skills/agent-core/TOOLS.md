@@ -47,15 +47,37 @@ Every tool the agent can call, grouped by capability surface. Each entry lists: 
 - **`scan_media`** — tell Android's media scanner about new files so they show up in Gallery / Music.
 - **`download_file`** — fetch URL into Downloads via DownloadManager.
 - **`write_text_file`** — save text to a path. Defaults refuse if file exists.
+- **`whisper_status()`** — check whether whisper.cpp transcription is ready: Termux toggle
+  enabled, Termux app installed, whisper-cli on disk, model (.bin) present. Returns
+  `{termux_enabled_in_assistant, termux_app_installed, whisper_cli_installed, whisper_cli_path,
+  model_present, model_path, ready_to_transcribe, missing_steps[], install_commands}`.
+  Free/no approval. Call this BEFORE `transcribe_audio_file`.
 - **`transcribe_audio_file(path, language?)`** — transcribe speech in an audio file to text
   using whisper.cpp (via Termux). Accepts OGG/Opus (Telegram voice notes), WAV, MP3, M4A,
   FLAC. Returns `{success, text, language, audio_duration_sec, transcription_time_sec}`.
-  Requires Termux + `pkg install whisper.cpp` + a model file (see the `hint` in any
-  `whisper_model_missing` or `whisper_not_installed` error for the download command).
+  Requires Termux + whisper-cli + a model file.
   **NO HALLUCINATION RULE: `play_media` plays audio to the device speaker — it does NOT
   let the agent hear the content. When the user sends a voice note and asks what was said,
   ALWAYS call `transcribe_audio_file` to get the actual words. Never call `play_media` on a
   voice note and then fabricate a transcript — that is a hallucination.**
+
+**Audio transcription flow**
+
+When the user sends an audio file or voice note (or otherwise asks for transcription),
+the FIRST tool you should call is `whisper_status()`. It tells you whether Termux is
+enabled, whisper.cpp is installed, and a model is present. Three outcomes:
+
+1. `ready_to_transcribe: true` → call `transcribe_audio_file(path, language?)` directly.
+2. `termux_enabled_in_assistant: false` → tell the user the Termux toggle needs to be on
+   for this assistant in Settings → Local Tools. You cannot enable it for them.
+3. Anything else missing (whisper not installed, model missing) → tell the user what's
+   missing AND the install commands from `install_commands`. Ask for explicit confirmation
+   BEFORE running them. The whisper.cpp build takes ~5 minutes; the model download is
+   ~75 MB. Don't silently install.
+
+NEVER call `play_media` on an audio file as a substitute for transcription — that plays
+it through the user's speaker but does NOT give YOU the content. Hallucinating what was
+said is a serious failure.
 
 **Troubleshooting media:** if the user says "I can't hear anything" while a session
 is active, DO NOT call `play_media` — that restarts from 0 and loses the user's

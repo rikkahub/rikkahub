@@ -439,9 +439,16 @@ class TelegramBotService : Service() {
         // The previous design persisted the preamble inside `UIMessagePart.Text` so it
         // got replayed on every subsequent turn AND every agentic-loop step, burning
         // ~80 tokens × turn count of pure duplication.
+        // Detect audio-class attachments BEFORE building the preamble so we can inject the
+        // whisper_status hint in the same addendum. Voice / audio / video_note all count.
+        val hasAudioAttachment = m.attachments.any { att ->
+            att.kind == AttachmentKind.VOICE ||
+            att.kind == AttachmentKind.AUDIO ||
+            att.kind == AttachmentKind.VIDEO_NOTE
+        }
         me.rerere.rikkahub.data.ai.tools.ConversationSystemAddendum.set(
             convId,
-            buildAgentContextPreamble(cfg, m.chatId, wasCreated),
+            buildAgentContextPreamble(cfg, m.chatId, wasCreated, hasAudioAttachment),
         )
         // Download any inbound photos to the app cache and attach as UIMessagePart.Image so
         // the assistant's vision pipeline can see them (FileEncoder reads file:// only).
@@ -661,6 +668,7 @@ class TelegramBotService : Service() {
         cfg: me.rerere.rikkahub.data.telegram.TelegramBotConfig,
         chatId: Long,
         firstTurnOfChat: Boolean,
+        hasAudioAttachment: Boolean = false,
     ): String {
         val s = settingsStore.settingsFlow.value
         val assistant = s.getCurrentAssistant()
@@ -704,6 +712,14 @@ class TelegramBotService : Service() {
             if (recentLine.isNotEmpty()) append(recentLine)
             if (firstTurnOfChat) {
                 append("This is the first turn in this Telegram chat. Be concise; no need for a long welcome.\n")
+            }
+            if (hasAudioAttachment) {
+                append("AUDIO ATTACHMENT NOTE: this message includes a voice note or audio file. ")
+                append("Before promising transcription, call `whisper_status` once to check if ")
+                append("whisper.cpp is installed and a model is downloaded. If `ready_to_transcribe` ")
+                append("is false, tell the user what's missing and ask for confirmation BEFORE ")
+                append("running any install commands. The install can take 5+ minutes (build from ")
+                append("source) and downloads ~75 MB. Do not silently install — always ask first.\n")
             }
             append("]\n\n")
         }

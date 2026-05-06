@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
 import android.content.Context
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -9,6 +11,9 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import java.io.File
 
 // Whisper model paths that whisper-cli checks by default, in preference order.
@@ -166,9 +171,12 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
                 return@Tool errEnv("termux_error", whichResult.message)
         }
 
-        // --- 6. Locate a whisper model ---
-        val modelFile = findWhisperModel()
-        if (modelFile == null) {
+        // --- 6. Locate a whisper model via Termux shell ---
+        // We cannot use java.io.File for Termux paths — Termux's sandbox is owned by the
+        // Termux uid, not our app uid. File.isDirectory / listFiles always return false/null
+        // because the OS blocks cross-uid reads. Use a shell script instead.
+        val modelPath = findWhisperModelViaShell(context)
+        if (modelPath == null) {
             val searchedPaths = WHISPER_MODEL_SEARCH_PATHS.joinToString(", ")
             return@Tool listOf(UIMessagePart.Text(buildJsonObject {
                 put("error", "whisper_model_missing")
@@ -185,7 +193,7 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
         val outputTxt = "$outputBase.txt"
 
         val whisperArgs = buildList {
-            add("-m"); add(modelFile.absolutePath)
+            add("-m"); add(modelPath)
             add("-f"); add(path)
             add("--no-timestamps")
             add("-otxt")
@@ -257,7 +265,7 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
                     put("language", detectedLang)
                     if (durationSec != null) put("audio_duration_sec", durationSec)
                     put("transcription_time_sec", transcribeTimeMs / 1000.0)
-                    put("model", modelFile.name)
+                    put("model", modelPath.substringAfterLast('/'))
                 }.toString()))
             }
 
@@ -274,21 +282,146 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
 )
 
 /**
- * Walk [WHISPER_MODEL_SEARCH_PATHS] and return the first .bin file found, preferring
- * [PREFERRED_MODEL_NAME] (ggml-tiny.bin) when multiple models are present.
+ * Locate the first whisper model (.bin) across [WHISPER_MODEL_SEARCH_PATHS] by running
+ * a shell script inside Termux.
+ *
+ * This MUST be a shell-based probe — java.io.File reads on Termux paths silently fail
+ * because Termux's sandbox is owned by the Termux uid, not our app uid. The OS rejects
+ * cross-uid stat() calls so File.isDirectory / listFiles always return false / null even
+ * when the path exists and the file is there.
+ *
+ * Returns the absolute path string of the first suitable model, or null if none found
+ * (or if Termux is unreachable).
  */
-private fun findWhisperModel(): File? {
-    for (dirPath in WHISPER_MODEL_SEARCH_PATHS) {
-        val dir = File(dirPath)
-        if (!dir.isDirectory) continue
-        val bins = dir.listFiles { f -> f.isFile && f.name.endsWith(".bin") }
-            ?: continue
-        if (bins.isEmpty()) continue
-        // Prefer tiny model
-        return bins.firstOrNull { it.name == PREFERRED_MODEL_NAME } ?: bins.first()
+private suspend fun findWhisperModelViaShell(context: Context): String? {
+    val pathsShell = WHISPER_MODEL_SEARCH_PATHS.joinToString(" ") { "'${it.replace("'", "'\\''")}'" }
+    val script = """
+        for d in $pathsShell ; do
+            if [ -d "${'$'}d" ]; then
+                preferred="${'$'}d/$PREFERRED_MODEL_NAME"
+                if [ -f "${'$'}preferred" ]; then echo "${'$'}preferred"; exit 0; fi
+                first=${'$'}(ls "${'$'}d"/*.bin 2>/dev/null | head -1)
+                if [ -n "${'$'}first" ]; then echo "${'$'}first"; exit 0; fi
+            fi
+        done
+        echo MISSING
+    """.trimIndent()
+    val r = runCommandCapture(
+        ctx = context,
+        executable = "$TERMUX_BIN_DIR/bash",
+        arguments = arrayOf("-c", script),
+        workingDir = TERMUX_HOME_DIR,
+        timeoutMs = 5_000L,
+    )
+    return when (r) {
+        is CaptureResult.Success -> {
+            val out = r.stdout.trim()
+            if (out == "MISSING" || out.isEmpty()) null else out
+        }
+        else -> null
     }
-    return null
 }
+
+/**
+ * Diagnostic pre-flight tool that tells the LLM exactly what's set up for whisper
+ * transcription BEFORE it tries to transcribe anything. No approval needed — pure
+ * read-only probe.
+ *
+ * The LLM should call this FIRST when the user sends an audio file or asks for
+ * transcription.
+ */
+fun whisperStatusTool(context: Context, settingsStore: SettingsStore): Tool = Tool(
+    name = "whisper_status",
+    description = """
+        Check whether whisper.cpp transcription is ready to use. Returns a structured
+        report: whether Termux is enabled in this assistant, whether the Termux app is
+        installed and reachable, whether whisper-cli is on disk, and whether a model
+        (.bin) file is present. Also returns install commands for anything missing.
+        Call this BEFORE calling transcribe_audio_file, especially when the user sends
+        an audio or voice note. Takes no parameters.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject { })
+    },
+    needsApproval = false,
+    execute = { _ ->
+        val missingSteps = mutableListOf<String>()
+
+        // 1. Is Termux enabled in this assistant's local tools?
+        val assistant = settingsStore.settingsFlow.value.getCurrentAssistant()
+        val termuxEnabledInAssistant = assistant.localTools.contains(LocalToolOption.Termux)
+        if (!termuxEnabledInAssistant) missingSteps.add("enable_termux_toggle")
+
+        // 2. Is Termux app installed and permission granted?
+        val termuxState = TermuxIntegration.state(context)
+        val termuxAppInstalled = termuxState != TermuxIntegration.State.NOT_INSTALLED
+        if (!termuxAppInstalled) missingSteps.add("install_termux")
+
+        // 3. Probe whisper-cli via shell (only if Termux is reachable)
+        var whisperCliInstalled = false
+        var whisperCliPath: String? = null
+        var modelPresent = false
+        var modelPath: String? = null
+
+        if (termuxState == TermuxIntegration.State.READY) {
+            // Probe whisper-cli
+            val candidatesShell = WHISPER_CLI_CANDIDATES.joinToString(" ") { "'${it.replace("'", "'\\''")}'" }
+            val cliScript = """
+                for c in $candidatesShell ; do
+                    if [ -x "${'$'}c" ] ; then echo "FOUND:${'$'}c" ; exit 0 ; fi
+                done
+                p=${'$'}(which whisper-cli 2>/dev/null) ; if [ -n "${'$'}p" ] && [ -x "${'$'}p" ] ; then echo "FOUND:${'$'}p" ; exit 0 ; fi
+                p=${'$'}(which main 2>/dev/null) ; if [ -n "${'$'}p" ] && [ -x "${'$'}p" ] ; then echo "FOUND:${'$'}p" ; exit 0 ; fi
+                echo MISSING
+            """.trimIndent()
+            val cliResult = runCommandCapture(
+                ctx = context,
+                executable = "$TERMUX_BIN_DIR/bash",
+                arguments = arrayOf("-c", cliScript),
+                workingDir = TERMUX_HOME_DIR,
+                timeoutMs = 8_000L,
+            )
+            if (cliResult is CaptureResult.Success) {
+                val out = cliResult.stdout.trim()
+                if (out.startsWith("FOUND:")) {
+                    whisperCliInstalled = true
+                    whisperCliPath = out.removePrefix("FOUND:").trim()
+                }
+            }
+            if (!whisperCliInstalled) missingSteps.add("install_whisper")
+
+            // Probe model
+            val foundModel = findWhisperModelViaShell(context)
+            if (foundModel != null) {
+                modelPresent = true
+                modelPath = foundModel
+            } else {
+                missingSteps.add("download_model")
+            }
+        } else {
+            // Termux not reachable — add whisper + model steps too so the list is complete
+            missingSteps.add("install_whisper")
+            missingSteps.add("download_model")
+        }
+
+        val readyToTranscribe = termuxEnabledInAssistant && termuxAppInstalled && whisperCliInstalled && modelPresent
+
+        listOf(UIMessagePart.Text(buildJsonObject {
+            put("termux_enabled_in_assistant", termuxEnabledInAssistant)
+            put("termux_app_installed", termuxAppInstalled)
+            put("whisper_cli_installed", whisperCliInstalled)
+            if (whisperCliPath != null) put("whisper_cli_path", whisperCliPath) else put("whisper_cli_path", kotlinx.serialization.json.JsonNull)
+            put("model_present", modelPresent)
+            if (modelPath != null) put("model_path", modelPath) else put("model_path", kotlinx.serialization.json.JsonNull)
+            put("ready_to_transcribe", readyToTranscribe)
+            put("missing_steps", buildJsonArray { missingSteps.forEach { add(it) } })
+            put("install_commands", buildJsonObject {
+                put("build_whisper_from_source", "cd ~ && pkg install -y git cmake clang make && git clone https://github.com/ggerganov/whisper.cpp && cd whisper.cpp && cmake -B build && cmake --build build -j --config Release")
+                put("download_tiny_model", "mkdir -p ~/.cache/whisper-models && cd ~/.cache/whisper-models && wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin")
+            })
+        }.toString()))
+    }
+)
 
 private fun errEnv(code: String, detail: String): List<UIMessagePart> =
     listOf(UIMessagePart.Text(buildJsonObject {
