@@ -159,7 +159,7 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
                     return@Tool listOf(UIMessagePart.Text(buildJsonObject {
                         put("error", "whisper_not_installed")
                         put("detail", "whisper.cpp's whisper-cli (or 'main') was not found in PATH or in any known build location. Checked: ${WHISPER_CLI_CANDIDATES.joinToString(", ")}")
-                        put("hint", "Build from source in Termux: bash -c 'cd ~ && pkg install -y git cmake clang make && git clone https://github.com/ggerganov/whisper.cpp && cd whisper.cpp && cmake -B build && cmake --build build -j --config Release && mkdir -p ~/.cache/whisper-models && cd ~/.cache/whisper-models && wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin'")
+                        put("recovery", "STOP. Do NOT call termux_run_command, search_web, or any apt/pkg command from this turn. Call `whisper_status()` first — it returns the structured `install_commands` you need plus the user-facing missing_steps list. Then ask the user 'May I install whisper.cpp? It will take ~5 minutes and download ~75 MB' and wait for explicit confirmation BEFORE running anything. Never silently install.")
                     }.toString()))
                 }
             }
@@ -181,7 +181,7 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
             return@Tool listOf(UIMessagePart.Text(buildJsonObject {
                 put("error", "whisper_model_missing")
                 put("detail", "No whisper model (.bin) found in: $searchedPaths")
-                put("hint", "Download with: mkdir -p ~/.cache/whisper-models && cd ~/.cache/whisper-models && wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin")
+                put("recovery", "STOP. Call `whisper_status()` first to confirm what's missing — it returns the exact download command in `install_commands.download_tiny_model`. Then ask the user 'May I download the ~75 MB tiny model?' BEFORE running anything. Do not retry transcribe_audio_file with the same path; you'll just get this same error again.")
             }.toString()))
         }
 

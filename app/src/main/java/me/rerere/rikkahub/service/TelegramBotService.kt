@@ -714,12 +714,18 @@ class TelegramBotService : Service() {
                 append("This is the first turn in this Telegram chat. Be concise; no need for a long welcome.\n")
             }
             if (hasAudioAttachment) {
-                append("AUDIO ATTACHMENT NOTE: this message includes a voice note or audio file. ")
-                append("Before promising transcription, call `whisper_status` once to check if ")
-                append("whisper.cpp is installed and a model is downloaded. If `ready_to_transcribe` ")
-                append("is false, tell the user what's missing and ask for confirmation BEFORE ")
-                append("running any install commands. The install can take 5+ minutes (build from ")
-                append("source) and downloads ~75 MB. Do not silently install — always ask first.\n")
+                append("AUDIO ATTACHMENT — STRICT FLOW. This message has a voice note or audio file. ")
+                append("Your VERY FIRST tool call this turn must be `whisper_status()`. NOT termux_run_command, ")
+                append("NOT search_web, NOT transcribe_audio_file, NOT pkg/apt commands. Just whisper_status, once, ")
+                append("with no arguments. Read its response. ")
+                append("Then: if `ready_to_transcribe: true`, call `transcribe_audio_file(path)` with the saved path ")
+                append("from the inbox manifest above. ")
+                append("If `ready_to_transcribe: false`, tell the user EXACTLY what's missing (use the `missing_steps` ")
+                append("list verbatim) and quote the relevant entry from `install_commands` for them to confirm. ")
+                append("Do NOT begin installing on your own — the build takes ~5 minutes and downloads ~75 MB ")
+                append("on the user's data plan. Wait for an explicit yes before running install commands. ")
+                append("If a tool errors, READ THE ENVELOPE — the recovery field tells you what to do; do not ")
+                append("retry the same tool with different args or pivot to manual termux commands.\n")
             }
             append("]\n\n")
         }
