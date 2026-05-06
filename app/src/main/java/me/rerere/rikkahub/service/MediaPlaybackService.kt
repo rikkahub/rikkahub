@@ -310,7 +310,12 @@ class MediaPlaybackService : Service() {
     private fun requestAudioFocus(): Boolean {
         val focusListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
             when (focusChange) {
-                AudioManager.AUDIOFOCUS_LOSS -> stopPlayback()
+                // Permanent focus loss: PAUSE instead of stop. Stopping kills the
+                // foreground service entirely, which leaves the user with a dead
+                // session that subsequent seek_media / resume_media calls report as
+                // "no_session". Pausing keeps the session alive so the user can
+                // resume manually after whatever stole focus is done.
+                AudioManager.AUDIOFOCUS_LOSS -> pausePlayback()
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> pausePlayback()
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                     mediaPlayer?.setVolume(0.2f, 0.2f)
