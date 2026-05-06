@@ -90,6 +90,17 @@ object ToolApprovalDefaults {
         "dismiss_notification",
         "notification_action_click",
 
+        // File manager — all ops are side-effecting or read PII from arbitrary paths
+        "list_files",
+        "read_file",
+        "write_binary_file",
+        "delete_file",
+        "move_file",
+        "copy_file",
+        "create_directory",
+        "file_info",
+        "find_files",
+
         // Telegram outbound — the bot can DM other chats / change its own config
         "telegram_send_message",
         "telegram_send_photo",
