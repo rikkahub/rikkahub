@@ -1107,6 +1107,9 @@
   <string name="assistant_page_local_tools_termux_verify_props_missing">Termux did not respond. Open Termux and run: mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties — then force-stop Termux and reopen it.</string>
   <string name="assistant_page_local_tools_termux_verify_no_permission">RUN_COMMAND permission not granted. Toggle Termux off then on to retry the system prompt.</string>
   <string name="assistant_page_local_tools_termux_verify_unexpected">Termux replied but with unexpected output: %1$s</string>
+  <string name="assistant_page_local_tools_files_title">Files</string>
+  <string name="assistant_page_local_tools_files_desc">Read, write, list, search, copy, move, delete files.</string>
+  <string name="assistant_page_local_tools_section_files">File manager</string>
   <string name="setting_page_accessibility">Accessibility</string>
   <string name="setting_page_accessibility_desc">Status, recent actions, and screenshot diagnostics for the screen-automation service.</string>
   <string name="setting_page_accessibility_status_section">Status</string>

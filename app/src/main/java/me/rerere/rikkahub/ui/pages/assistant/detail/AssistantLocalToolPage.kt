@@ -624,6 +624,28 @@ private fun AssistantLocalToolContent(
         }
 
         Text(
+            text = stringResource(R.string.assistant_page_local_tools_section_files),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+        )
+        CardGroup {
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_files_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_files_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Files),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Files, it) }
+                    )
+                }
+            )
+        }
+
+        Text(
             text = stringResource(R.string.assistant_page_local_tools_section_network),
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.padding(start = 16.dp, top = 8.dp)
