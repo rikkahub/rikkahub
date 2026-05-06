@@ -34,10 +34,42 @@ Every tool the agent can call, grouped by capability surface. Each entry lists: 
 
 ## Media (Phase 1)
 
-- **`play_media`** / **`stop_media`** — play audio from file path or URL.
+- **`play_media`** — START a new playback session from position 0. Replaces any
+  existing session (DESTRUCTIVE). Optional `title`/`artist`/`album`/`artwork_uri`
+  populate the system media notification.
+- **`pause_media`** / **`resume_media`** — pause/resume the active session WITHOUT
+  losing position. Use `resume_media` (not `play_media`) to continue playback.
+- **`seek_media(position_ms)`** — jump within the active session. Works whether
+  playing or paused. Preserves play/pause state.
+- **`get_media_status`** — current track / position / duration / play-state.
+  Free / no approval needed.
+- **`stop_media`** — stop and dismiss the notification.
 - **`scan_media`** — tell Android's media scanner about new files so they show up in Gallery / Music.
 - **`download_file`** — fetch URL into Downloads via DownloadManager.
-- **`write_text_file`** — save arbitrary text to public Downloads.
+- **`write_text_file`** — save text to a path. Defaults refuse if file exists.
+
+**Troubleshooting media:** if the user says "I can't hear anything" while a session
+is active, DO NOT call `play_media` — that restarts from 0 and loses the user's
+position. Instead: `get_media_status` (is it actually playing?), `get_volume` and
+`get_audio_info` (volume / mute state), `set_volume` if needed. Only fall back to
+`play_media` if the session is genuinely gone.
+
+## File manager (new)
+
+- **`list_files(path, pattern?, recursive?, limit?)`** — directory listing with optional glob.
+- **`find_files(root, query, recursive?, limit?)`** — recursive name-substring search.
+- **`read_file(path, max_bytes?, encoding?)`** — text or binary read; auto-detects.
+- **`write_text_file(path, content, append?, overwrite?)`** — writes text. Default refuses if file exists. Pass `overwrite=true` to truncate or `append=true` to append.
+- **`write_binary_file(path, base64_content, overwrite?)`** — base64 → file.
+- **`copy_file(src, dst, overwrite?)`** / **`move_file(src, dst, overwrite?)`** — duplicate / rename.
+- **`create_directory(path)`** — mkdir -p semantics.
+- **`delete_file(path, recursive?)`** — refuses non-empty dirs without `recursive=true`.
+- **`file_info(path, include_hash?)`** — stat with optional sha256.
+
+System paths (`/system`, `/proc`, `/dev`, `/data/data/<other-apps>`) are blocked
+unconditionally with a `path_blocked` envelope. Path-traversal via `..` is
+canonicalized and blocked too. Prefer these tools over `termux_run_command` for
+file operations — faster, no shell needed, no Termux dependency.
 
 ## Personal data (Phase 2)
 

@@ -77,6 +77,10 @@ object ToolApprovalDefaults {
         "set_volume",
         "play_media",
         "stop_media",
+        "pause_media",
+        "resume_media",
+        "seek_media",
+        // get_media_status is read-only — no approval needed
         "post_notification",
 
         // Privacy reads — PII leaves the device into the model's context

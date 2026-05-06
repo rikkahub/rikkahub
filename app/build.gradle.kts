@@ -288,6 +288,9 @@ dependencies {
     // AndroidX Biometric (BiometricPrompt)
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
+    // AndroidX Media — MediaSessionCompat, MediaButtonReceiver, NotificationCompat.MediaStyle
+    implementation("androidx.media:media:1.7.0")
+
     // modules
     implementation(project(":ai"))
     implementation(project(":web"))
