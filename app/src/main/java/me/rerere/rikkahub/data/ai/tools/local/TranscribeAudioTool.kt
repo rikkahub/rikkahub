@@ -22,8 +22,23 @@ private val WHISPER_MODEL_SEARCH_PATHS = listOf(
     "/data/data/com.termux/files/home/.local/share/whisper",
 )
 
-// whisper-cli binary installed by Termux's whisper.cpp package
-private const val WHISPER_CLI_BIN = "/data/data/com.termux/files/usr/bin/whisper-cli"
+// Candidate locations of the whisper-cli binary, in priority order.
+// Built-from-source installs (`git clone whisper.cpp && cmake -B build && cmake --build build`)
+// typically place the binary in `~/whisper.cpp/build/bin/`. Older builds named the binary
+// `main` instead of `whisper-cli`. Some manual installs symlink into `~/.local/bin`.
+// We check explicit candidates BEFORE falling back to PATH so manual builds work even
+// without symlinking into Termux's $PATH.
+private val WHISPER_CLI_CANDIDATES = listOf(
+    // 1. Termux pkg install (when/if it lands)
+    "/data/data/com.termux/files/usr/bin/whisper-cli",
+    // 2. Built-from-source — current upstream binary name (post-rename)
+    "/data/data/com.termux/files/home/whisper.cpp/build/bin/whisper-cli",
+    // 3. Built-from-source — legacy binary name, still used by older checkouts
+    "/data/data/com.termux/files/home/whisper.cpp/build/bin/main",
+    "/data/data/com.termux/files/home/whisper.cpp/main",
+    // 4. User's local-bin symlink convention
+    "/data/data/com.termux/files/home/.local/bin/whisper-cli",
+)
 
 // The preferred model. tiny is the smallest (75 MB) and works offline.
 private const val PREFERRED_MODEL_NAME = "ggml-tiny.bin"
@@ -110,25 +125,38 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
         }
 
         // --- 5. Verify whisper-cli is installed ---
+        // Check every candidate path explicitly first, then fall back to PATH lookup.
+        // We use a single shell command that prints the first executable hit so we save
+        // round-trips. Format: "FOUND:<path>" or "MISSING".
+        val candidatesShell = WHISPER_CLI_CANDIDATES.joinToString(" ") { "'${it.replace("'", "'\\''")}'" }
+        val discoverScript = """
+            for c in $candidatesShell ; do
+                if [ -x "${'$'}c" ] ; then echo "FOUND:${'$'}c" ; exit 0 ; fi
+            done
+            p=${'$'}(which whisper-cli 2>/dev/null) ; if [ -n "${'$'}p" ] && [ -x "${'$'}p" ] ; then echo "FOUND:${'$'}p" ; exit 0 ; fi
+            p=${'$'}(which main 2>/dev/null) ; if [ -n "${'$'}p" ] && [ -x "${'$'}p" ] ; then echo "FOUND:${'$'}p" ; exit 0 ; fi
+            echo MISSING
+        """.trimIndent()
+
         val whichResult = runCommandCapture(
             ctx = context,
             executable = "$TERMUX_BIN_DIR/bash",
-            arguments = arrayOf("-c", "which whisper-cli 2>/dev/null || echo MISSING"),
+            arguments = arrayOf("-c", discoverScript),
             workingDir = TERMUX_HOME_DIR,
             timeoutMs = 10_000L,
         )
         val whisperBin = when (whichResult) {
             is CaptureResult.Success -> {
                 val out = whichResult.stdout.trim()
-                if (out == "MISSING" || out.isBlank() || whichResult.exitCode != 0) {
+                if (out.startsWith("FOUND:")) {
+                    out.removePrefix("FOUND:").trim()
+                } else {
                     return@Tool listOf(UIMessagePart.Text(buildJsonObject {
                         put("error", "whisper_not_installed")
-                        put("detail", "whisper.cpp is not installed in Termux. Run: pkg install whisper.cpp")
-                        put("hint", "After installation, also download a model: bash -c 'mkdir -p ~/.cache/whisper-models && cd ~/.cache/whisper-models && wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin'")
+                        put("detail", "whisper.cpp's whisper-cli (or 'main') was not found in PATH or in any known build location. Checked: ${WHISPER_CLI_CANDIDATES.joinToString(", ")}")
+                        put("hint", "Build from source in Termux: bash -c 'cd ~ && pkg install -y git cmake clang make && git clone https://github.com/ggerganov/whisper.cpp && cd whisper.cpp && cmake -B build && cmake --build build -j --config Release && mkdir -p ~/.cache/whisper-models && cd ~/.cache/whisper-models && wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin'")
                     }.toString()))
                 }
-                // Prefer the well-known bin path; fall back to what `which` resolved
-                if (File(WHISPER_CLI_BIN).exists()) WHISPER_CLI_BIN else out
             }
             is CaptureResult.Timeout ->
                 return@Tool errEnv("termux_timeout", "Timed out checking for whisper-cli. Ensure Termux is running and allow-external-apps=true is set.")
