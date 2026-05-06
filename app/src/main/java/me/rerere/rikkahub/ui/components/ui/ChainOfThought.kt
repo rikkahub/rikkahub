@@ -74,9 +74,15 @@ fun <T> ChainOfThought(
     steps: List<T>,
     collapsedVisibleCount: Int = 2,
     collapsedAdaptiveWidth: Boolean = false,
+    forceExpanded: Boolean = false,
     content: @Composable ChainOfThoughtScope.(T) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var userExpanded by remember { mutableStateOf(false) }
+    // forceExpanded overrides the user's collapse — used when one of the steps
+    // demands attention (e.g. a tool with a pending approval). Without this, on
+    // 3+ pending tool calls only the last 2 rows render and the first sits
+    // hidden under the "show more" arrow until the user notices and clicks it.
+    val expanded = userExpanded || forceExpanded
     val canCollapse = steps.size > collapsedVisibleCount
     val shouldFillCollapseControlWidth = expanded || !collapsedAdaptiveWidth
 
@@ -112,7 +118,7 @@ fun <T> ChainOfThought(
                                 }
                             )
                             .clip(MaterialTheme.shapes.small)
-                            .clickable { expanded = !expanded }
+                            .clickable { userExpanded = !expanded }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

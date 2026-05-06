@@ -67,3 +67,11 @@ val PermissionNotification = PermissionInfo(
     usage = { Text(stringResource(R.string.permission_notification_desc)) },
     required = true
 )
+
+@RequiresApi(37)
+val PermissionLocalNetwork = PermissionInfo(
+    permission = Manifest.permission.ACCESS_LOCAL_NETWORK,
+    displayName = { Text(stringResource(R.string.permission_local_network)) },
+    usage = { Text(stringResource(R.string.permission_local_network_desc)) },
+    required = true
+)

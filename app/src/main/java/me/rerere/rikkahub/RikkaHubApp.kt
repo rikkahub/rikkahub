@@ -233,6 +233,19 @@ class RikkaHubApp : Application() {
                         Log.w(TAG, "startWebServerIfEnabled: notification permission not granted, skipping")
                         return@launch
                     }
+                    // Android 17 (API 37) requires ACCESS_LOCAL_NETWORK to bind to LAN
+                    // interfaces. localhost-only mode does not need it because traffic stays
+                    // within the app's UID. Cherry-picked from upstream 80186f5d.
+                    if (Build.VERSION.SDK_INT >= 37 &&
+                        !settings.webServerLocalhostOnly &&
+                        ContextCompat.checkSelfPermission(
+                            this@RikkaHubApp,
+                            android.Manifest.permission.ACCESS_LOCAL_NETWORK
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Log.w(TAG, "startWebServerIfEnabled: local network permission not granted, skipping")
+                        return@launch
+                    }
                     val intent = Intent(this@RikkaHubApp, WebServerService::class.java).apply {
                         action = WebServerService.ACTION_START
                         putExtra(WebServerService.EXTRA_PORT, settings.webServerPort)

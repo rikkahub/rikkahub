@@ -8,6 +8,12 @@
   <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+  <!-- Android 17 (API 37) gates all local-network sockets behind this runtime
+       permission. Required by SSH (LAN hosts) and the web server (LAN access);
+       the runtime check is centralized in RikkaHubApp / SshTool / the toggle UI
+       and short-circuits to "always granted" on older API levels where the
+       permission doesn't exist. -->
+  <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -25,6 +31,16 @@
   <uses-permission android:name="android.permission.READ_CALL_LOG" />
   <uses-permission android:name="android.permission.READ_SMS" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <!-- Required so list_files / find_files / read_file can enumerate and read
+       files the app didn't create itself. Without this, scoped storage on
+       Android 11+ hides every pre-existing file from File.listFiles(), even
+       though stat() still works (which is why file_info appeared to work
+       while list_files returned only directories + own creations). Granted
+       via Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION when the
+       user toggles the Files tool on. -->
+  <uses-permission
+      android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+      tools:ignore="ScopedStorage" />
   <uses-permission android:name="android.permission.USE_BIOMETRIC" />
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <uses-permission

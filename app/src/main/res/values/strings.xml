@@ -522,6 +522,8 @@
   <string name="permission_go_to_settings">Go to Setting</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
+  <string name="permission_local_network">Local Network</string>
+  <string name="permission_local_network_desc">Required on Android 17+ for SSH and the LAN web server</string>
   <string name="permission_permanently_denied">Permanently Denied</string>
   <string name="permission_required">Required</string>
   <string name="photo">Photo</string>

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import android.Manifest
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -639,7 +640,11 @@ private fun AssistantLocalToolContent(
                 trailingContent = {
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.Files),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.Files, it) }
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Files, it) },
+                        // MANAGE_EXTERNAL_STORAGE is a special "appop" permission. Without it,
+                        // File.listFiles() on shared storage paths only returns subdirectories
+                        // and the app's own creations — every pre-existing file is hidden.
+                        requiresAllFilesAccess = true,
                     )
                 }
             )
@@ -661,7 +666,16 @@ private fun AssistantLocalToolContent(
                 trailingContent = {
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.Ssh),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.Ssh, it) }
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Ssh, it) },
+                        // Android 17 (API 37) blocks LAN socket access without
+                        // ACCESS_LOCAL_NETWORK. SSH is the canonical case — every
+                        // saved host lives on someone's WiFi/VPN. On older API
+                        // levels the permission doesn't exist; the request silently
+                        // no-ops since the manifest-declared permission isn't
+                        // dangerous-protection there.
+                        requiredRuntimePerms = if (Build.VERSION.SDK_INT >= 37) {
+                            listOf(android.Manifest.permission.ACCESS_LOCAL_NETWORK)
+                        } else emptyList(),
                     )
                 }
             )
@@ -750,6 +764,7 @@ private fun PermissionedSwitch(
     requiresDndAccess: Boolean = false,
     requiresAccessibilityService: Boolean = false,
     requiresNotificationListener: Boolean = false,
+    requiresAllFilesAccess: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val toaster = LocalToaster.current
@@ -798,6 +813,7 @@ private fun PermissionedSwitch(
                         requiresDndAccess -> PermissionHelper.hasDndAccess(ctx)
                         requiresAccessibilityService -> PermissionHelper.hasAccessibilityService(ctx)
                         requiresNotificationListener -> PermissionHelper.hasNotificationListener(ctx)
+                        requiresAllFilesAccess -> PermissionHelper.hasAllFilesAccess(ctx)
                         else -> false
                     }
                     pendingSpecialResume = false
@@ -809,6 +825,7 @@ private fun PermissionedSwitch(
                             requiresDndAccess -> "DND access"
                             requiresAccessibilityService -> "Accessibility service"
                             requiresNotificationListener -> "Notification access"
+                            requiresAllFilesAccess -> "All files access"
                             else -> ""
                         }
                         toaster.show(
@@ -859,6 +876,14 @@ private fun PermissionedSwitch(
                 }
             }
 
+            requiresAllFilesAccess -> {
+                if (PermissionHelper.hasAllFilesAccess(ctx)) {
+                    onCheckedChange(true)
+                } else {
+                    showDialog = true
+                }
+            }
+
             requiredRuntimePerms.isNotEmpty() -> {
                 if (PermissionHelper.hasRuntime(ctx, requiredRuntimePerms)) {
                     onCheckedChange(true)
@@ -877,13 +902,14 @@ private fun PermissionedSwitch(
     // raw List<String> for structural equality across recomps, so passing the list
     // directly invalidated this remember on every parent recomp.
     val permsKey = remember(requiredRuntimePerms) { requiredRuntimePerms.joinToString(",") }
-    val permissionMissing = remember(checked, resumeTrigger, permsKey, requiresWriteSettings, requiresDndAccess, requiresAccessibilityService, requiresNotificationListener) {
+    val permissionMissing = remember(checked, resumeTrigger, permsKey, requiresWriteSettings, requiresDndAccess, requiresAccessibilityService, requiresNotificationListener, requiresAllFilesAccess) {
         checked && when {
             requiredRuntimePerms.isNotEmpty() -> !PermissionHelper.hasRuntime(ctx, requiredRuntimePerms)
             requiresWriteSettings -> !PermissionHelper.hasWriteSettings(ctx)
             requiresDndAccess -> !PermissionHelper.hasDndAccess(ctx)
             requiresAccessibilityService -> !PermissionHelper.hasAccessibilityService(ctx)
             requiresNotificationListener -> !PermissionHelper.hasNotificationListener(ctx)
+            requiresAllFilesAccess -> !PermissionHelper.hasAllFilesAccess(ctx)
             else -> false
         }
     }
@@ -905,6 +931,7 @@ private fun PermissionedSwitch(
                         requiresDndAccess -> PermissionHelper.dndAccessIntent(ctx)
                         requiresAccessibilityService -> PermissionHelper.accessibilitySettingsIntent()
                         requiresNotificationListener -> PermissionHelper.notificationListenerSettingsIntent()
+                        requiresAllFilesAccess -> PermissionHelper.allFilesAccessIntent(ctx)
                         else -> null
                     }
                     if (intent != null) {

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
@@ -64,5 +65,25 @@ object PermissionHelper {
 
     fun notificationListenerSettingsIntent(): Intent =
         Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * "All files access" — gates File.listFiles() on shared storage paths like
+     * /storage/emulated/0/Download. Without it, scoped storage hides every
+     * pre-existing file (only subdirs and the calling app's own creations show
+     * up). Granted via the system "Allow access to manage all files" toggle.
+     * On API < 30 there's no scoped-storage gate to begin with, so we treat it
+     * as always-granted there.
+     */
+    fun hasAllFilesAccess(@Suppress("UNUSED_PARAMETER") ctx: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            true
+        }
+
+    fun allFilesAccessIntent(ctx: Context): Intent =
+        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            .setData("package:${ctx.packageName}".toUri())
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
