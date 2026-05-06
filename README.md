@@ -38,9 +38,12 @@ Tell it what to do. Walk away. It does it.
 > *"Take a screenshot every 30 minutes for the next 4 hours so I can see what I actually did all afternoon."*
 >
 > *"Watch my notifications. If anything from my boss comes in, forward it to Telegram. Quietly ignore the rest."*
+>
+> *"Use Termux to build me a webpage listing everything you can do — then open it in my browser."*
 
 Every line above is a real thing people set up in under a minute. The phone
-runs them itself, in the background, while you go live your life.
+runs them itself, in the background, while you go live your life. (Yes,
+including the last one. The agent really will write its own brochure.)
 
 RikkaHub Agent wires the LLM you already chat with into **60+ device tools** —
 taps, types, scrolls, schedules, runs shell commands, SSHes into servers,
