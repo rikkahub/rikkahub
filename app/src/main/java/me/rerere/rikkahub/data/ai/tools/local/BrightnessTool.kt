@@ -44,14 +44,16 @@ fun getBrightnessTool(context: Context): Tool = Tool(
 fun setBrightnessTool(context: Context): Tool = Tool(
     name = "set_brightness",
     description = """
-        Set the device's screen brightness (0-255). Requires WRITE_SETTINGS permission.
+        Set the device's screen brightness (1-255). Values below 1 are clamped to 1
+        because 0 produces no visible change on most Android builds. Requires
+        WRITE_SETTINGS permission.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("value", buildJsonObject {
                     put("type", "integer")
-                    put("description", "Target brightness, 0-255")
+                    put("description", "Target brightness, 1-255 (1 = lowest visible)")
                 })
             },
             required = listOf("value")
@@ -68,7 +70,7 @@ fun setBrightnessTool(context: Context): Tool = Tool(
                 )
             )
         }
-        val clamped = raw.coerceIn(0, 255)
+        val clamped = raw.coerceIn(1, 255)
         val payload = try {
             val cr = context.contentResolver
             Settings.System.putInt(
