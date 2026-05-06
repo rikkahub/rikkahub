@@ -439,9 +439,16 @@ class TelegramBotService : Service() {
         // The previous design persisted the preamble inside `UIMessagePart.Text` so it
         // got replayed on every subsequent turn AND every agentic-loop step, burning
         // ~80 tokens × turn count of pure duplication.
+        // Detect audio-class attachments BEFORE building the preamble so we can inject the
+        // whisper_status hint in the same addendum. Voice / audio / video_note all count.
+        val hasAudioAttachment = m.attachments.any { att ->
+            att.kind == AttachmentKind.VOICE ||
+            att.kind == AttachmentKind.AUDIO ||
+            att.kind == AttachmentKind.VIDEO_NOTE
+        }
         me.rerere.rikkahub.data.ai.tools.ConversationSystemAddendum.set(
             convId,
-            buildAgentContextPreamble(cfg, m.chatId, wasCreated),
+            buildAgentContextPreamble(cfg, m.chatId, wasCreated, hasAudioAttachment),
         )
         // Download any inbound photos to the app cache and attach as UIMessagePart.Image so
         // the assistant's vision pipeline can see them (FileEncoder reads file:// only).
@@ -661,6 +668,7 @@ class TelegramBotService : Service() {
         cfg: me.rerere.rikkahub.data.telegram.TelegramBotConfig,
         chatId: Long,
         firstTurnOfChat: Boolean,
+        hasAudioAttachment: Boolean = false,
     ): String {
         val s = settingsStore.settingsFlow.value
         val assistant = s.getCurrentAssistant()
@@ -704,6 +712,20 @@ class TelegramBotService : Service() {
             if (recentLine.isNotEmpty()) append(recentLine)
             if (firstTurnOfChat) {
                 append("This is the first turn in this Telegram chat. Be concise; no need for a long welcome.\n")
+            }
+            if (hasAudioAttachment) {
+                append("AUDIO ATTACHMENT — STRICT FLOW. This message has a voice note or audio file. ")
+                append("Your VERY FIRST tool call this turn must be `whisper_status()`. NOT termux_run_command, ")
+                append("NOT search_web, NOT transcribe_audio_file, NOT pkg/apt commands. Just whisper_status, once, ")
+                append("with no arguments. Read its response. ")
+                append("Then: if `ready_to_transcribe: true`, call `transcribe_audio_file(path)` with the saved path ")
+                append("from the inbox manifest above. ")
+                append("If `ready_to_transcribe: false`, tell the user EXACTLY what's missing (use the `missing_steps` ")
+                append("list verbatim) and quote the relevant entry from `install_commands` for them to confirm. ")
+                append("Do NOT begin installing on your own — the build takes ~5 minutes and downloads ~75 MB ")
+                append("on the user's data plan. Wait for an explicit yes before running install commands. ")
+                append("If a tool errors, READ THE ENVELOPE — the recovery field tells you what to do; do not ")
+                append("retry the same tool with different args or pivot to manual termux commands.\n")
             }
             append("]\n\n")
         }

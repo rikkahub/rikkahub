@@ -29,6 +29,7 @@ object ToolApprovalDefaults {
     val ALWAYS_ASK: Set<String> = setOf(
         // Shell / arbitrary code execution
         "termux_run_command",
+        "transcribe_audio_file",  // shells out to whisper-cli via Termux; reads arbitrary audio files
         "eval_javascript",
 
         // Remote shell (SSH)

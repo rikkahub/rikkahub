@@ -85,6 +85,8 @@ import me.rerere.rikkahub.data.ai.tools.local.sshExecSavedTool
 import me.rerere.rikkahub.data.ai.tools.local.sshExecTool
 import me.rerere.rikkahub.data.ai.tools.local.sshUploadTool
 import me.rerere.rikkahub.data.ai.tools.local.writeTextFileTool
+import me.rerere.rikkahub.data.ai.tools.local.transcribeAudioFileTool
+import me.rerere.rikkahub.data.ai.tools.local.whisperStatusTool
 import me.rerere.rikkahub.data.ai.tools.local.listFilesTool
 import me.rerere.rikkahub.data.ai.tools.local.readFileTool
 import me.rerere.rikkahub.data.ai.tools.local.writeBinaryFileTool
@@ -591,6 +593,13 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.Termux)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.termuxRunCommandTool(context))
+            // transcribe_audio_file shells out to whisper-cli via Termux's RUN_COMMAND
+            // service — it has a hard transitive dependency on Termux being present. No
+            // separate toggle; it lives under the Termux toggle.
+            tools.add(transcribeAudioFileTool(context))
+            // whisper_status is a free read-only pre-flight check — no approval needed.
+            // The LLM calls this BEFORE attempting transcription to know what's set up.
+            tools.add(whisperStatusTool(context, settingsStore))
         }
         if (options.contains(LocalToolOption.NotificationListener)) {
             tools.add(listRecentNotificationsTool())
