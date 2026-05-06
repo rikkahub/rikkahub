@@ -39,7 +39,9 @@ import me.rerere.rikkahub.data.db.entity.TelegramChatEntity
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.TelegramChatRepository
+import me.rerere.rikkahub.data.telegram.AttachmentKind
 import me.rerere.rikkahub.data.telegram.TelegramApiException
+import me.rerere.rikkahub.data.telegram.TelegramAttachment
 import me.rerere.rikkahub.data.telegram.TelegramBotClient
 import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import me.rerere.rikkahub.data.telegram.TelegramCallbackQuery
@@ -444,11 +446,24 @@ class TelegramBotService : Service() {
         // Download any inbound photos to the app cache and attach as UIMessagePart.Image so
         // the assistant's vision pipeline can see them (FileEncoder reads file:// only).
         val imageParts = downloadInboundPhotos(m.photoFileIds)
+
+        // Download non-photo attachments (documents, audio, video, voice, video_note) to
+        // /sdcard/Download/telegram_inbox/<chatId>/ and build a structured note for the LLM.
+        val downloadedAttachments = downloadInboundAttachments(m.chatId, m.attachments)
+        val attachmentNote = buildAttachmentNote(downloadedAttachments)
+
         val parts = buildList<UIMessagePart> {
             addAll(imageParts)
+            // Build the user-visible text combining the typed message and the attachment note.
+            val combinedText = when {
+                m.text.isNotEmpty() && attachmentNote.isNotEmpty() -> "${m.text}\n\n$attachmentNote"
+                attachmentNote.isNotEmpty() -> attachmentNote
+                m.text.isNotEmpty() -> m.text
+                else -> ""
+            }
             // Only emit a Text part when there is actual content; an empty text triggers
             // the "no reply" UX downstream and confuses the LLM.
-            if (m.text.isNotEmpty()) add(UIMessagePart.Text(m.text))
+            if (combinedText.isNotEmpty()) add(UIMessagePart.Text(combinedText))
             else if (imageParts.isNotEmpty()) add(UIMessagePart.Text("(photo)"))
         }
         // Snapshot the conversation BEFORE sending so the streaming render can ignore the
@@ -995,6 +1010,126 @@ class TelegramBotService : Service() {
             }
         }
         return out
+    }
+
+    /**
+     * Result of a single attachment download attempt.
+     *
+     * [savedPath] is set when the file was successfully downloaded. [skipReason] is set when we
+     * intentionally did NOT download (e.g. size cap) — the LLM still gets a note about the file.
+     * Both being null means an unexpected error occurred (logged separately; omitted from the note).
+     */
+    data class DownloadedAttachment(
+        val attachment: TelegramAttachment,
+        val savedPath: String?,
+        val skipReason: String?,
+    )
+
+    /**
+     * Download non-photo inbound attachments to /sdcard/Download/telegram_inbox/<chatId>/.
+     *
+     * Differences vs downloadInboundPhotos:
+     * - Saves to shared storage (not app cache) so the LLM can point file-manager / Termux at the paths.
+     * - Preserves original filenames (sanitized); falls back to tg-<ts>-<suffix>.<ext>.
+     * - Skips files > INBOUND_ATTACHMENT_SIZE_CAP_BYTES and surfaces a note instead.
+     * - Prunes files older than 24 h and caps total inbox size at 500 MB.
+     * - Handles filename collisions by appending a timestamp suffix before the extension.
+     */
+    private suspend fun downloadInboundAttachments(
+        chatId: Long,
+        attachments: List<TelegramAttachment>,
+    ): List<DownloadedAttachment> {
+        if (attachments.isEmpty()) return emptyList()
+
+        val inboxDir = java.io.File("/sdcard/Download/telegram_inbox/$chatId").apply { mkdirs() }
+
+        // Prune files older than 24 h.
+        val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
+        inboxDir.listFiles()?.forEach { f -> if (f.isFile && f.lastModified() < cutoff) f.delete() }
+
+        // Cap total inbox size at 500 MB — delete oldest first.
+        val allFiles = inboxDir.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() }?.toMutableList()
+        if (allFiles != null) {
+            var totalSize = allFiles.sumOf { it.length() }
+            for (f in allFiles) {
+                if (totalSize <= INBOUND_ATTACHMENT_INBOX_CAP_BYTES) break
+                totalSize -= f.length()
+                f.delete()
+            }
+        }
+
+        val out = mutableListOf<DownloadedAttachment>()
+        for (att in attachments) {
+            // Skip over-sized attachments without downloading.
+            if (att.sizeBytes != null && att.sizeBytes > INBOUND_ATTACHMENT_SIZE_CAP_BYTES) {
+                val sizeMb = att.sizeBytes / (1024.0 * 1024.0)
+                out.add(DownloadedAttachment(att, savedPath = null, skipReason = "exceeds 50 MB cap (${String.format("%.1f", sizeMb)} MB)"))
+                continue
+            }
+
+            try {
+                val info = client.getFile(att.fileId)
+                val filePath = info["file_path"]?.jsonPrimitive?.contentOrNull
+                if (filePath == null) {
+                    android.util.Log.w(TAG, "downloadInboundAttachments: no file_path for ${att.fileId}")
+                    continue
+                }
+                val ext = filePath.substringAfterLast('.', "bin")
+                val safeName = sanitizeAttachmentFilename(att.originalFileName, att.fileId, ext)
+                val dest = uniqueFile(inboxDir, safeName)
+                client.downloadFile(filePath, dest)
+                out.add(DownloadedAttachment(att, savedPath = dest.absolutePath, skipReason = null))
+                android.util.Log.i(TAG, "downloadInboundAttachments: saved ${dest.name} (${dest.length()} bytes)")
+            } catch (e: Throwable) {
+                android.util.Log.w(TAG, "downloadInboundAttachments: failed for ${att.fileId}", e)
+                // Don't add to out — error is silently skipped so other attachments still download.
+            }
+        }
+        return out
+    }
+
+    /**
+     * Build the structured attachment note that is appended to the user message text so the LLM
+     * sees a clear inventory of every file that arrived with this message.
+     *
+     * Format:
+     * ```
+     * [User attached N file(s) with this message:
+     * - documents/Invoice.pdf  (application/pdf, 1.2 MB) → saved to /sdcard/Download/telegram_inbox/123/Invoice.pdf
+     * - voice/voice.ogg  (audio/ogg, 30s, 0.3 MB) → saved to /sdcard/Download/telegram_inbox/123/voice.ogg
+     * - documents/huge.zip  (application/zip, 200 MB) → SKIPPED: exceeds 50 MB cap
+     * ]
+     * ```
+     */
+    private fun buildAttachmentNote(downloads: List<DownloadedAttachment>): String {
+        if (downloads.isEmpty()) return ""
+        val sb = StringBuilder()
+        sb.append("[User attached ${downloads.size} file(s) with this message:\n")
+        for (dl in downloads) {
+            val att = dl.attachment
+            val kindSlug = att.kind.name.lowercase()
+            val nameForDisplay = att.originalFileName ?: when (att.kind) {
+                AttachmentKind.VOICE -> "voice.ogg"
+                AttachmentKind.VIDEO_NOTE -> "video_note.mp4"
+                else -> "attachment"
+            }
+            val sizePart = att.sizeBytes?.let { bytes ->
+                val mb = bytes / (1024.0 * 1024.0)
+                if (mb >= 0.1) String.format("%.1f MB", mb) else String.format("%d KB", bytes / 1024)
+            }
+            val durPart = att.durationSec?.let { "${it}s" }
+            val mimePart = att.mimeType
+            val metaParts = listOfNotNull(mimePart, durPart, sizePart).joinToString(", ")
+            val destination = when {
+                dl.savedPath != null -> "saved to ${dl.savedPath}"
+                dl.skipReason != null -> "SKIPPED: ${dl.skipReason}"
+                else -> "download failed"
+            }
+            val metaSuffix = if (metaParts.isNotEmpty()) "  ($metaParts)" else ""
+            sb.append("- $kindSlug/$nameForDisplay$metaSuffix → $destination\n")
+        }
+        sb.append("]")
+        return sb.toString()
     }
 
     /** Telegram caps a single sendMessage at 4096 chars; split on newlines where possible. */
@@ -1784,6 +1919,14 @@ class TelegramBotService : Service() {
          *  some provider model_ids are too long to fit Telegram's 64-byte cap directly. */
         const val MODEL_CB_PREFIX: String = "mdl:"
 
+        /** Maximum file size for auto-downloading inbound non-photo attachments.
+         *  Telegram allows up to 2 GB; we cap at 50 MB to avoid surprise storage use. */
+        const val INBOUND_ATTACHMENT_SIZE_CAP_BYTES: Long = 50L * 1024 * 1024   // 50 MB
+
+        /** Total size cap for the per-chat attachment inbox. Oldest files are pruned when
+         *  this is exceeded. */
+        private const val INBOUND_ATTACHMENT_INBOX_CAP_BYTES: Long = 500L * 1024 * 1024  // 500 MB
+
         /** Max model buttons to render in a single picker. Beyond ~30 the inline keyboard
          *  starts feeling cluttered; the picker text tells the user to /model <substring>. */
         const val MODEL_PICKER_BUTTON_CAP: Int = 30
@@ -1952,4 +2095,54 @@ class TelegramBotService : Service() {
             context.stopService(Intent(context, TelegramBotService::class.java))
         }
     }
+}
+
+/**
+ * Sanitize a raw Telegram-supplied filename into a safe basename.
+ *
+ * Rules (applied in order):
+ * 1. Strip any directory separators (/ and \) so `../../etc/passwd` becomes `passwd`.
+ * 2. Strip leading dots to avoid hidden-file names.
+ * 3. Remove ASCII control characters (0x00–0x1F) and null bytes.
+ * 4. Trim whitespace from both ends.
+ * 5. Truncate to 200 characters preserving the file extension.
+ * 6. If the result is empty after sanitization, fall back to `tg-<timestamp>-<fileIdSuffix>.<ext>`.
+ */
+internal fun sanitizeAttachmentFilename(
+    raw: String?,
+    fileId: String,
+    fallbackExt: String,
+): String {
+    if (!raw.isNullOrBlank()) {
+        // 1. Take the last path component only (strip directory separators).
+        var name = raw.replace('\\', '/').substringAfterLast('/')
+        // 2. Strip leading dots.
+        name = name.trimStart('.')
+        // 3. Remove control characters.
+        name = name.filter { it.code > 0x1F }
+        // 4. Trim whitespace.
+        name = name.trim()
+        // 5. Truncate to 200 chars, preserving extension.
+        if (name.length > 200) {
+            val ext = if (name.contains('.')) ".${name.substringAfterLast('.')}" else ""
+            val base = name.substringBeforeLast('.').take(200 - ext.length)
+            name = "$base$ext"
+        }
+        if (name.isNotEmpty()) return name
+    }
+    // 6. Fallback.
+    return "tg-${System.currentTimeMillis()}-${fileId.takeLast(8)}.$fallbackExt"
+}
+
+/**
+ * Return a [java.io.File] in [dir] with [preferredName] that does not already exist.
+ * If a file with that name already exists, appends `-<timestamp>` before the extension.
+ */
+internal fun uniqueFile(dir: java.io.File, preferredName: String): java.io.File {
+    val candidate = java.io.File(dir, preferredName)
+    if (!candidate.exists()) return candidate
+    val ts = System.currentTimeMillis()
+    val ext = if (preferredName.contains('.')) ".${preferredName.substringAfterLast('.')}" else ""
+    val base = if (ext.isNotEmpty()) preferredName.substringBeforeLast('.') else preferredName
+    return java.io.File(dir, "$base-$ts$ext")
 }

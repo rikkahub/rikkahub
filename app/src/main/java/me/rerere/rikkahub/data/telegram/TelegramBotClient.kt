@@ -314,6 +314,23 @@ data class TelegramIncomingMessage(
     val senderId: Long?,
     val text: String,
     val photoFileIds: List<String> = emptyList(),
+    /** Non-photo attachments. Populated separately so callers can choose whether to
+     *  download them (we currently always do; future surfaces might prefer a metadata-only
+     *  prompt instead). */
+    val attachments: List<TelegramAttachment> = emptyList(),
+)
+
+/** Kind of a non-photo inbound Telegram attachment. */
+enum class AttachmentKind { DOCUMENT, AUDIO, VIDEO, VOICE, VIDEO_NOTE }
+
+/** Metadata for a single inbound non-photo attachment. */
+data class TelegramAttachment(
+    val fileId: String,
+    val kind: AttachmentKind,
+    val originalFileName: String?,      // null for voice/video_note (Telegram auto-names them)
+    val mimeType: String?,
+    val sizeBytes: Long?,
+    val durationSec: Int?,              // audio / video / voice / video_note only
 )
 
 /** Inline-keyboard button tap. We use these for tool-approval prompts only. */
@@ -353,13 +370,72 @@ fun parseIncoming(update: JsonObject): TelegramIncomingMessage? {
         ?.get("file_id")?.jsonPrimitive?.contentOrNull?.let { listOf(it) }
         ?: emptyList()
 
-    // Captions ride alongside photos. Plain-text messages use the "text" field.
+    // Extract non-photo attachments (document, audio, video, voice, video_note).
+    val attachments = buildList {
+        msg["document"]?.jsonObject?.let { doc ->
+            val fileId = doc["file_id"]?.jsonPrimitive?.contentOrNull ?: return@let
+            add(TelegramAttachment(
+                fileId = fileId,
+                kind = AttachmentKind.DOCUMENT,
+                originalFileName = doc["file_name"]?.jsonPrimitive?.contentOrNull,
+                mimeType = doc["mime_type"]?.jsonPrimitive?.contentOrNull,
+                sizeBytes = doc["file_size"]?.jsonPrimitive?.longOrNull,
+                durationSec = null,
+            ))
+        }
+        msg["audio"]?.jsonObject?.let { audio ->
+            val fileId = audio["file_id"]?.jsonPrimitive?.contentOrNull ?: return@let
+            add(TelegramAttachment(
+                fileId = fileId,
+                kind = AttachmentKind.AUDIO,
+                originalFileName = audio["file_name"]?.jsonPrimitive?.contentOrNull,
+                mimeType = audio["mime_type"]?.jsonPrimitive?.contentOrNull,
+                sizeBytes = audio["file_size"]?.jsonPrimitive?.longOrNull,
+                durationSec = audio["duration"]?.jsonPrimitive?.intOrNull,
+            ))
+        }
+        msg["video"]?.jsonObject?.let { video ->
+            val fileId = video["file_id"]?.jsonPrimitive?.contentOrNull ?: return@let
+            add(TelegramAttachment(
+                fileId = fileId,
+                kind = AttachmentKind.VIDEO,
+                originalFileName = video["file_name"]?.jsonPrimitive?.contentOrNull,
+                mimeType = video["mime_type"]?.jsonPrimitive?.contentOrNull,
+                sizeBytes = video["file_size"]?.jsonPrimitive?.longOrNull,
+                durationSec = video["duration"]?.jsonPrimitive?.intOrNull,
+            ))
+        }
+        msg["voice"]?.jsonObject?.let { voice ->
+            val fileId = voice["file_id"]?.jsonPrimitive?.contentOrNull ?: return@let
+            add(TelegramAttachment(
+                fileId = fileId,
+                kind = AttachmentKind.VOICE,
+                originalFileName = null,  // Telegram does not provide a user-visible name
+                mimeType = voice["mime_type"]?.jsonPrimitive?.contentOrNull,
+                sizeBytes = voice["file_size"]?.jsonPrimitive?.longOrNull,
+                durationSec = voice["duration"]?.jsonPrimitive?.intOrNull,
+            ))
+        }
+        msg["video_note"]?.jsonObject?.let { vn ->
+            val fileId = vn["file_id"]?.jsonPrimitive?.contentOrNull ?: return@let
+            add(TelegramAttachment(
+                fileId = fileId,
+                kind = AttachmentKind.VIDEO_NOTE,
+                originalFileName = null,
+                mimeType = "video/mp4",
+                sizeBytes = vn["file_size"]?.jsonPrimitive?.longOrNull,
+                durationSec = vn["duration"]?.jsonPrimitive?.intOrNull,
+            ))
+        }
+    }
+
+    // Captions ride alongside photos/documents/etc. Plain-text messages use the "text" field.
     val caption = msg["caption"]?.jsonPrimitive?.contentOrNull
     val plain = msg["text"]?.jsonPrimitive?.contentOrNull
     val text = caption ?: plain ?: ""
 
-    // Drop the update only if there is nothing actionable: neither text nor a photo.
-    if (text.isEmpty() && photoFileIds.isEmpty()) return null
+    // Drop the update only if there is nothing actionable: no text, no photos, no attachments.
+    if (text.isEmpty() && photoFileIds.isEmpty() && attachments.isEmpty()) return null
 
-    return TelegramIncomingMessage(updateId, messageId, chatId, senderId, text, photoFileIds)
+    return TelegramIncomingMessage(updateId, messageId, chatId, senderId, text, photoFileIds, attachments)
 }
