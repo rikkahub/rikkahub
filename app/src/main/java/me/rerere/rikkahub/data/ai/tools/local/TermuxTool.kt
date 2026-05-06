@@ -145,6 +145,15 @@ internal suspend fun runCommandCapture(
     workingDir: String,
     timeoutMs: Long = DEFAULT_CAPTURE_TIMEOUT_MS,
 ): CaptureResult {
+    // Mark Termux as freshly touched BEFORE we issue the broadcast. The notification
+    // listener uses this signal to suppress Termux's foreground-service notification
+    // updates (the "0 sessions, N tasks" pill) from auto-forwarding to Telegram while
+    // the agent is actively running shell commands. Without this, every internal
+    // runCommandCapture (whisper_status, transcribe_audio_file, etc.) makes Termux
+    // flap its notification and the listener forwards each flap to the user's chat.
+    // The touch here covers ALL callers of runCommandCapture, so individual tool
+    // factories don't have to remember to call it themselves.
+    me.rerere.rikkahub.data.ai.AgentTurnTracker.touchPackage(TERMUX_PACKAGE, "com.termux.api")
     val resultDeferred = CompletableDeferred<Bundle>()
     val resultAction = "${ctx.packageName}.TERMUX_RESULT_${UUID.randomUUID()}"
     val receiver = object : BroadcastReceiver() {

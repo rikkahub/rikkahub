@@ -185,16 +185,63 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
             }.toString()))
         }
 
-        // --- 7. Run whisper-cli ---
-        // whisper-cli writes its text output to <output_file>.txt when -otxt and -of are used.
-        // We derive a temp output path inside Termux home so whisper can write to it.
+        // --- 7. Pre-convert audio to 16 kHz mono WAV via ffmpeg, then run whisper-cli ---
+        // whisper.cpp's whisper-cli officially only decodes 16 kHz mono WAV. Some builds
+        // accept other formats via FFmpeg's libavformat at compile time, but Termux's
+        // whisper.cpp build does NOT — it silently produces empty output for OGA/Opus
+        // (Telegram voice notes), MP3, etc. The robust path is to ALWAYS pre-convert
+        // via ffmpeg first. ffmpeg is in Termux's default repos and tiny vs. whisper.
         val baseName = "rikkahub_transcribe_${System.currentTimeMillis()}"
+        val convertedWav = "/data/data/com.termux/files/home/$baseName.wav"
         val outputBase = "/data/data/com.termux/files/home/$baseName"
         val outputTxt = "$outputBase.txt"
 
+        // Verify ffmpeg is installed before we try to use it.
+        val ffmpegCheck = runCommandCapture(
+            ctx = context,
+            executable = "$TERMUX_BIN_DIR/bash",
+            arguments = arrayOf("-c", "command -v ffmpeg >/dev/null && echo OK || echo MISSING"),
+            workingDir = TERMUX_HOME_DIR,
+            timeoutMs = 5_000L,
+        )
+        val ffmpegPresent = ffmpegCheck is CaptureResult.Success &&
+            ffmpegCheck.stdout.trim() == "OK"
+        if (!ffmpegPresent) {
+            return@Tool listOf(UIMessagePart.Text(buildJsonObject {
+                put("error", "ffmpeg_missing")
+                put("detail", "ffmpeg is required to convert audio (OGG/Opus from Telegram, MP3, M4A, etc.) into the 16 kHz mono WAV that whisper-cli expects. Without ffmpeg, transcription returns empty output silently.")
+                put("recovery", "STOP. Tell the user 'ffmpeg is needed for audio conversion (~30 MB download). May I install it?' and wait for explicit confirmation. Then run: pkg install -y ffmpeg. Do NOT run apt or any install command before the user says yes.")
+            }.toString()))
+        }
+
+        // Convert input → 16 kHz mono signed-16 WAV. -y overwrites if a stale file exists.
+        val ffmpegCmd = listOf(
+            "ffmpeg", "-y",
+            "-i", path,
+            "-ar", "16000",
+            "-ac", "1",
+            "-c:a", "pcm_s16le",
+            convertedWav,
+        ).joinToString(" ") { arg -> "'${arg.replace("'", "'\\''")}'" }
+
+        val ffmpegResult = runCommandCapture(
+            ctx = context,
+            executable = "$TERMUX_BIN_DIR/bash",
+            arguments = arrayOf("-c", ffmpegCmd),
+            workingDir = TERMUX_HOME_DIR,
+            timeoutMs = 60_000L, // ffmpeg conversion of multi-minute audio
+        )
+        if (ffmpegResult !is CaptureResult.Success || ffmpegResult.exitCode != 0) {
+            val stderr = (ffmpegResult as? CaptureResult.Success)?.stderr?.take(500) ?: "(no stderr)"
+            return@Tool errEnv(
+                "ffmpeg_conversion_failed",
+                "ffmpeg failed to convert $path to 16kHz mono WAV. stderr: $stderr"
+            )
+        }
+
         val whisperArgs = buildList {
             add("-m"); add(modelPath)
-            add("-f"); add(path)
+            add("-f"); add(convertedWav)
             add("--no-timestamps")
             add("-otxt")
             add("-of"); add(outputBase)
@@ -243,8 +290,9 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
                 } catch (e: Throwable) {
                     return@Tool errEnv("read_output_failed", "Could not read $outputTxt: ${e.message}")
                 } finally {
-                    // Clean up temp file
+                    // Clean up temp files (transcription txt + the converted WAV).
                     try { outFile.delete() } catch (_: Throwable) {}
+                    try { File(convertedWav).delete() } catch (_: Throwable) {}
                 }
 
                 // Parse detected language from stderr ("auto-detected language: en") if present
