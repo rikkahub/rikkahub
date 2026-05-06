@@ -16,10 +16,17 @@ import java.io.IOException
 fun playMediaTool(context: Context): Tool = Tool(
     name = "play_media",
     description = """
-        Start playing audio from a file path or URL. Shows system media controls (lock screen,
-        notification, Bluetooth headset buttons). Optional metadata fields set the notification
-        title/artist/album. Replaces any audio currently playing from this tool.
-        Supports file://, content://, and https:// sources.
+        START A NEW PLAYBACK SESSION from position 0. Shows system media controls (lock
+        screen notification, Bluetooth headset buttons). Replaces any audio currently
+        playing from this tool — DESTRUCTIVE: existing session is stopped and the new
+        track starts from the beginning.
+        DO NOT use this to "fix" an active session that the user can't hear — that
+        loses the user's playback position. Use resume_media (continue paused), seek_media
+        (jump to position), set_volume (raise audio), or get_audio_info (diagnose) instead.
+        Only use play_media when starting a brand-new track or when the user explicitly
+        says "play X from the start".
+        Supports file://, content://, and https:// sources. Optional title/artist/album/
+        artwork_uri populate the notification metadata.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -129,7 +136,7 @@ fun pauseMediaTool(context: Context): Tool = Tool(
 
 fun resumeMediaTool(context: Context): Tool = Tool(
     name = "resume_media",
-    description = "Resume paused audio started by play_media.",
+    description = "Resume the active media session at its current position (after pause_media or after seek_media). Does NOT restart from 0 — preserves the playback position. Use this — not play_media — whenever continuing an existing session.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject { })
     },
@@ -156,7 +163,7 @@ fun resumeMediaTool(context: Context): Tool = Tool(
 
 fun seekMediaTool(context: Context): Tool = Tool(
     name = "seek_media",
-    description = "Seek to a position in the currently playing audio (milliseconds from start).",
+    description = "Jump to a specific position (milliseconds from start) in the active media session. Works whether playing or paused — preserves the play/pause state. Pair with resume_media if currently paused. NEVER use play_media to seek; that wipes the session and restarts from 0.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
