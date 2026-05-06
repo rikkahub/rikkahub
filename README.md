@@ -129,8 +129,35 @@ multi-step flows.
 
 Need the agent to check battery, read your location, send a notification, flick
 the torch on, adjust volume, scan WiFi, list contacts, or save a file?
-There's a tool for that — 47+ of them, all native Android, no third-party
+There's a tool for that — 60+ of them, all native Android, no third-party
 apps required. Each is opt-in per assistant.
+
+### Find and manage files
+
+The agent has a complete file-manager surface natively — list, search, read,
+write, copy, move, delete, mkdir, stat — 10 tools that don't require Termux
+or any shell access. Substring + glob search across `/sdcard` recursively in
+milliseconds. Read text or binary, hash files (sha256), append vs truncate
+vs refuse-on-overwrite — explicit and predictable.
+
+System paths (`/system`, `/proc`, `/dev`, `/data/data/<other-apps>`) are blocked
+unconditionally with a structured envelope, even on YOLO mode. Path-traversal
+via `..` is canonicalized and refused too — `write_text_file /sdcard/../system/x`
+won't sneak past the canonical-prefix check.
+
+*"Find any pdf I have anywhere on /sdcard, then read the first 1KB of each so
+you can summarize them."* — that's a `find_files` + N × `read_file` chain, no
+shell involved.
+
+### Music with proper system controls
+
+When the agent plays audio it surfaces to the OS as a real media session — the
+standard play/pause/stop/seek controls show up on the lock screen, in the
+notification shade, on Bluetooth headsets, on smart watches, and in the
+Now-Playing tile. The agent can `pause_media`, `resume_media`, `seek_media`,
+and `get_media_status` to query position / duration / track metadata. Audio
+focus is requested properly — when a phone call interrupts, playback pauses
+and resumes automatically afterward, like every other music app.
 
 ### SSH from your pocket
 
@@ -292,9 +319,12 @@ Everything new is opt-in, with three independent layers:
 3. **HARDLINE floor** — `rm -rf /`, `mkfs`, `dd of=/dev/sd…`, fork bombs,
    `shutdown`/`reboot`/`init 0|6`, raw block-device redirects, and known
    shell-eval bypass forms (`bash -c "…"`, `base64 -d | sh`, `printf '\xNN' | sh`,
-   `eval $(…)`) are blocked unconditionally. Always Allow doesn't override
-   them. Cron headless mode doesn't override them. **There is no UI for
-   bypassing HARDLINE** — that's the point.
+   `eval $(…)`) are blocked unconditionally for shell tools. The file-manager
+   tools have their own equivalent floor — `/system`, `/proc`, `/dev`, other
+   apps' `/data/data` sandboxes, and `..` traversal escaping shared storage are
+   all refused with `path_blocked`. Always Allow doesn't override either.
+   Cron headless mode doesn't either. **There is no UI for bypassing them** —
+   that's the point.
 
 The Telegram bot ignores everyone unless you explicitly allowlist their user
 id. The notification forwarder ships with an empty whitelist — nothing leaves
@@ -320,10 +350,23 @@ RikkaHub's existing WebServer page. The goal: nothing should feel bolted on.
 
 **Shipped:**
 
-- Android device tools (47+) covering battery, audio, telephony, WiFi, sensors,
+- Android device tools (60+) covering battery, audio, telephony, WiFi, sensors,
   storage, toast, notifications, share, torch, vibrate, brightness, volume,
   media, download, location, contacts, call log, SMS inbox, camera, mic,
   speech-to-text, fingerprint, app launcher, URL opener, wake screen.
+- **File manager (10 tools)**: `list_files` / `find_files` (recursive substring
+  + glob search) / `read_file` / `write_text_file` (with `append` and `overwrite`
+  modes) / `write_binary_file` / `copy_file` / `move_file` / `delete_file` /
+  `create_directory` / `file_info` (with optional sha256). Native `java.io.File`
+  API — no Termux dependency. Path-safety guard refuses system paths and
+  `..` traversal escaping shared storage.
+- **Music with system controls (4 new tools, MediaSession + foreground service)**:
+  `play_media` extended with title/artist/album/artwork_uri metadata; new
+  `pause_media`, `resume_media`, `seek_media`, `get_media_status`. Posts a
+  `MediaStyle` notification with play/pause/stop/seek, integrates with lock
+  screen, Bluetooth headsets, smart-watch controls. Uses `mediaPlayback`
+  foreground-service-type (Android 14+ exempt from time caps). Audio-focus
+  aware: pauses on phone calls and resumes after.
 - Screen automation (11 tools): tap, long-press, swipe, scroll, read window
   tree, find/click node, set text, global action, screenshot, wake screen.
 - SSH (8 tools) with parallel network probing, partial-file cleanup on SFTP
