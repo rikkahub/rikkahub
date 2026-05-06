@@ -1,459 +1,176 @@
 <div align="center">
-  <img src="docs/icon.png" alt="RikkaHub Agent" width="120" />
 
-  <h1>RikkaHub Agent</h1>
+<img src="docs/icon.png" width="96" height="96" alt="RikkaHub Agent" style="border-radius: 24px" />
 
-  <p><strong>Your Android phone, but it can actually <em>do</em> things.</strong></p>
+# RikkaHub Agent
 
-  <p>
-    A fork of <a href="https://github.com/rikkahub/rikkahub">RikkaHub</a> that turns the
-    beautiful native Android LLM chat client into a real on-device agent —
-    with optional Telegram remote control, scheduled jobs, SSH, screen automation,
-    deep device access, and a three-layer safety model (per-tool toggles,
-    per-call approval prompts, hardline floor). Pixel-perfect with the original UX.
-  </p>
+**Your phone, automated.**
 
-  <p>
-    <a href="https://github.com/rikkahub/rikkahub">Upstream</a> ·
-    <a href="https://github.com/ExTV/rikkahub-agent">This fork</a> ·
-    <a href="https://github.com/ExTV/rikkahub-agent/releases">Releases</a> ·
-    <a href="#getting-started">Getting started</a>
-  </p>
+A fork of [RikkaHub](https://github.com/rikkahub/rikkahub) that turns the native Android LLM chat client into a real on-device agent: 60+ device tools, scheduled jobs, SSH, screen automation, file manager, voice transcription, and a remote Telegram bot. All opt-in.
+
+<p>
+  <a href="https://github.com/ExTV/rikkahub-agent/releases"><img src="https://img.shields.io/github/v/release/ExTV/rikkahub-agent?include_prereleases&style=flat-square&label=release&color=blue" alt="Release" /></a>
+  <a href="https://github.com/ExTV/rikkahub-agent/releases"><img src="https://img.shields.io/github/downloads/ExTV/rikkahub-agent/total?style=flat-square&color=brightgreen" alt="Downloads" /></a>
+  <a href="https://github.com/ExTV/rikkahub-agent/stargazers"><img src="https://img.shields.io/github/stars/ExTV/rikkahub-agent?style=flat-square&color=yellow" alt="Stars" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ExTV/rikkahub-agent?style=flat-square" alt="License" /></a>
+  <img src="https://img.shields.io/badge/platform-Android%208%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android 8+" />
+</p>
+
+<a href="https://github.com/ExTV/rikkahub-agent/releases/latest"><strong>Download</strong></a> ·
+<a href="#-features"><strong>Features</strong></a> ·
+<a href="#-quick-start"><strong>Quick Start</strong></a> ·
+<a href="#-building-from-source"><strong>Build</strong></a>
+
 </div>
 
 ---
 
-## Your phone, finally automated
+## Why
 
-Tell it what to do. Walk away. It does it.
+Vanilla LLM chat apps can answer questions. They can't open your apps, send your messages, watch your notifications, run scheduled jobs, or SSH into your server. RikkaHub Agent can. Tell it what to do in plain language, walk away, and it runs in the background, on your phone, on your terms.
 
 > *"Every weekday at 9am, summarize my unread WhatsApp into one Telegram message."*
 >
 > *"If my home server's disk fills up, ping me."*
 >
-> *"Find the PDF on my phone that mentions 'invoice' and read me the first paragraph."*
+> *"Watch my notifications. If anything from my boss comes in, forward it to Telegram. Quietly ignore the rest."*
 >
-> *"Play music from my Downloads folder, with proper lock-screen controls."*
+> *"Find the PDF on my phone that mentions 'invoice' and read me the first paragraph."*
 >
 > *"Take a screenshot every 30 minutes for the next 4 hours so I can see what I actually did all afternoon."*
 >
-> *"Watch my notifications. If anything from my boss comes in, forward it to Telegram. Quietly ignore the rest."*
->
-> *"Use Termux to build me a webpage listing everything you can do — then open it in my browser."*
+> *"Use Termux to build me a webpage listing everything you can do, then open it in my browser."*
 
-Every line above is a real thing people set up in under a minute. The phone
-runs them itself, in the background, while you go live your life. (Yes,
-including the last one. The agent really will write its own brochure.)
+Each of those is a one-line setup. The phone runs them in the background while you live your life.
 
-RikkaHub Agent wires the LLM you already chat with into **60+ device tools** —
-taps, types, scrolls, schedules, runs shell commands, SSHes into servers,
-searches your files, watches notifications, plays music. Reachable from
-anywhere over Telegram. Runs in the background. Survives reboots.
+---
 
-All on your phone. Bring your own LLM provider, or run fully on-device with
-Gemini Nano — no cloud middleman, no usage limits, no data shovel. Every
-side-effecting action prompts before running. A **HARDLINE floor** that
-refuses `rm -rf /`, `shutdown`, fork bombs, system-path writes, and known
-shell-eval bypasses *unconditionally* — even on YOLO mode. The agent you can
-actually trust.
+## ✨ Features
 
-Turn nothing on, it's just RikkaHub — the same beautiful native chat client
-upstream ships. Flip switches, and it grows into a real assistant that lives
-in your pocket.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-## What can it do
+### Control your phone
 
-### Talk to it from anywhere — through Telegram
+Ask the AI to tap, swipe, scroll, type, take screenshots, open apps, turn the torch on, change brightness or volume, post a notification, vibrate, share something, or read your battery, WiFi, signal, location, sensors, contacts, and SMS. Over 60 tools, all built into Android, no extra apps required. Each one stays off until you flip it on.
 
-Set up a private Telegram bot in under a minute. From then on, you can chat with
-your AI assistant from any device, anywhere — and the assistant has full access
-to whatever tools you've enabled on your phone. It streams replies live as it
-thinks, summarizes which tools it used, posts a per-turn token-usage footer,
-and remembers your conversation across messages. Markdown bold / italic /
-code blocks render natively in Telegram. Built-in slash commands (`/new`,
-`/stop`, `/status`, `/model`, `/help`, `/ratelimit`) handle in single-digit
-milliseconds with no LLM round-trip. `/model` with no arg pops an interactive
-keyboard listing every configured model — tap to switch.
+</td>
+<td width="50%" valign="top">
 
-### Approve what the agent does, only when it matters
+### Telegram bot
 
-Side-effecting tools (shell, SSH, file writes, screen automation, Telegram
-outbound, notification action clicks, MCP server calls) prompt for approval
-before running. Each prompt offers four buttons: **Allow** for one call,
-**Allow for this chat** for the current conversation, **Always Allow** to
-persist across sessions, and **Deny**. Same UX in-app and over Telegram.
+Talk to your assistant from anywhere. Set up a private Telegram bot in a minute, then chat with it like a contact. Send a question, a photo, a PDF, or a voice note. It can run on your behalf while you're at work, while you sleep, or while you're driving. Approval prompts use simple Yes/No buttons in the chat.
 
-A **HARDLINE floor** sits below approval and blocks unconditionally: `rm -rf /`
-and system dirs (descendant paths included), `mkfs.*`, `dd of=/dev/sda`, fork
-bombs, `kill -1`, `shutdown` / `reboot` / `halt` / `poweroff` / `init 0|6` /
-`systemctl poweroff`, raw block-device redirects, and shell-eval bypass forms
-like `bash -c "shutdown"`, `base64 -d | sh`, `printf '\xNN' | sh`, `eval $(…)`.
-HARDLINE catches these in `termux_run_command`, `ssh_exec`, `ssh_exec_saved`,
-and any `mcp__*` tool — even if you've granted Always Allow on the parent tool.
+</td>
+</tr>
+<tr>
+<td valign="top">
 
-If you trust the agent fully, **Settings → Tool approvals → "I AM STUPID"**
-flips a global auto-approve switch (behind a confirm dialog) so nothing prompts
-ever again. The HARDLINE floor still applies. The page background goes red so
-you can't forget you're in YOLO mode.
+### Schedule anything
 
-### Run jobs while you sleep
+Set tasks to run on a schedule and forget about them. "Every Monday morning at 8", "every two hours", "next Friday at 3pm". The phone keeps everything running through reboots and battery saver. Pick how each task fires: let the AI think at the moment and decide what to do (good for "watch X and ping me if Y"), or pre-bake a fixed action that runs without using AI tokens (good for plain reminders).
 
-Schedule one-off or recurring jobs. *"Every Monday morning, summarize my
-unread notifications and DM me."* The agent stores these persistently — they
-survive reboots, app kills, and battery saver — and reports back through your
-Telegram chat, an Android notification, or a fixed action list, depending on
-how the prompt is phrased.
-
-Two modes:
-
-- **`mode='llm'`** — at fire time the prompt is sent to a fresh headless
-  conversation; the model decides what tools to call. Pick this when reasoning
-  is required (*"if battery is below 20%, message me"*).
-- **`mode='direct'`** — at fire time, a fixed list of tool calls runs
-  deterministically without invoking the LLM at all. Free, fast, predictable.
-  Pick this for known side effects (*"post 'good morning' every 8am"*,
-  *"screenshot every hour"*).
-
-Two timing types:
-
-- **`once`** — fires at a single absolute timestamp, then auto-disables.
-- **`cron`** — full 5-field UNIX cron expressions with ranges (`1-5`),
-  lists (`1,3,5`), steps (`*/15`), and aliases (`@hourly`, `@daily`, `@weekly`,
-  `@monthly`, `@yearly`, `@every 30m`, `@every 2h`, `@every 1d`).
-
-Plus per-job options: IANA `timezone`, `start_at_unix_ms` for delayed start,
-`end_at_unix_ms` for bounded windows, `max_runs` to auto-disable after N
-successful fires (counted from history, not a cached counter — replay-safe),
-and `catchup` policy (`skip` / `fire_once` default / `fire_all` capped at 20)
-for fires missed during reboot.
-
-Two extra LLM tools beyond the basics: **`trigger_job_now(id)`** fires a job
-immediately without disturbing the schedule, and **`get_job_history(id, limit)`**
-returns the last N runs with outcomes (`success`/`failed`/`timed_out`/
-`process_killed_replay`/`skipped_catchup`/`concurrent_skip`), timestamps, and
-the headless `conversation_id` for `llm`-mode runs.
-
-Scheduled jobs run in **headless** mode: tools auto-approve at fire time
-(you pre-authorised the schedule itself, with a clear warning that lists the
-exact actions, when the model called `schedule_job`). HARDLINE still applies
-inside cron — `rm -rf /` smuggled into a direct-mode action gets refused at
-both job-create time AND every fire.
-
-### Operate your phone like you would
-
-With a single permission grant, the agent can tap, swipe, scroll, type, take
-screenshots, and read what's on screen. Vision-capable models can actually see
-the screen and decide what to do next. Older screenshots in long automation
-turns are auto-elided from the model's context to keep token usage sane on
-multi-step flows.
-
-### Reach into your device
-
-Need the agent to check battery, read your location, send a notification, flick
-the torch on, adjust volume, scan WiFi, list contacts, or save a file?
-There's a tool for that — 60+ of them, all native Android, no third-party
-apps required. Each is opt-in per assistant.
+</td>
+<td valign="top">
 
 ### Find and manage files
 
-The agent has a complete file-manager surface natively — list, search, read,
-write, copy, move, delete, mkdir, stat — 10 tools that don't require Termux
-or any shell access. Substring + glob search across `/sdcard` recursively in
-milliseconds. Read text or binary, hash files (sha256), append vs truncate
-vs refuse-on-overwrite — explicit and predictable.
+The AI has its own file manager. Find files, read them, save new ones, copy, move, rename, delete. Same things you'd do in a regular file manager, except you describe what you want and it does it. "Find every PDF mentioning 'invoice' on my phone" works in one sentence. System folders that don't belong to you are off-limits, even if you ask.
 
-System paths (`/system`, `/proc`, `/dev`, `/data/data/<other-apps>`) are blocked
-unconditionally with a structured envelope, even on YOLO mode. Path-traversal
-via `..` is canonicalized and refused too — `write_text_file /sdcard/../system/x`
-won't sneak past the canonical-prefix check.
-
-*"Find any pdf I have anywhere on /sdcard, then read the first 1KB of each so
-you can summarize them."* — that's a `find_files` + N × `read_file` chain, no
-shell involved.
-
-### Music with proper system controls
-
-When the agent plays audio it surfaces to the OS as a real media session — the
-standard play/pause/stop/seek controls show up on the lock screen, in the
-notification shade, on Bluetooth headsets, on smart watches, and in the
-Now-Playing tile. The agent can `pause_media`, `resume_media`, `seek_media`,
-and `get_media_status` to query position / duration / track metadata. Audio
-focus is requested properly — when a phone call interrupts, playback pauses
-and resumes automatically afterward, like every other music app.
+</td>
+</tr>
+<tr>
+<td valign="top">
 
 ### SSH from your pocket
 
-Saved hosts, one-shot commands, file upload/download, proper host-key checking,
-parallel network probing for fast connect across WiFi + cellular. Stdout /
-stderr cap at 8 KB / 2 KB to keep huge log dumps from blowing the model's
-context. Ask the assistant to log into your server and tail a log — it does.
+Save your servers once and the AI can SSH into any of them on demand. Run a command, upload a file, pull down a backup, check disk space, tail a log. Works whether you're on WiFi or cell. Watch your home server from a coffee shop without opening a terminal.
 
-### Live notification awareness
+</td>
+<td valign="top">
 
-The agent can read incoming notifications and (optionally) auto-forward
-whitelisted apps to Telegram. WhatsApp pings, emails, calendar reminders —
-relayed and summarized while you're away from your phone. Dedup is recorded
-only after a successful Telegram send, so a transient network failure doesn't
-permanently mute that thread.
+### Termux + voice transcription
 
-### Termux integration
+If you have Termux installed, the AI can run real Linux commands on your phone: installing packages, building software, running scripts. On top of that, voice notes you send in Telegram get transcribed automatically. Everything runs on your phone, no cloud transcription, no API key, no internet needed.
 
-Run shell commands inside Termux *with output captured*, so the model can
-actually reason about what came back.
+</td>
+</tr>
+<tr>
+<td colspan="2" align="center" valign="top">
 
-### On-device inference (Pixel 8/9/10)
+### Safety + privacy
 
-First-class support for Gemini Nano via Android's AICore — runs entirely
-on-device, no API key, no network. Tool calling works on-device too. The
-provider ships **off by default**; AICore-eligible users flip a single toggle
-on the provider card to enable it.
+Three layers of protection, in order of strictness:
 
-### Privacy + integrity guards
+**Per-assistant toggles**. Every tool starts off. Flip on only what you want.
 
-- Tool-call args containing `password`, `private_key`, `passphrase`, `token`,
-  `api_key` etc. are redacted in logcat — raw secrets never land in
-  `adb logcat` or in `bugreport` dumps.
-- Backup rules exclude `databases/`, `sharedpref/`, `datastore/`, and
-  `known_hosts` — SSH credentials and the Telegram bot token don't get walked
-  off the device by Android cloud backup.
-- Telegram bot agent-context (model name, chat id) lives in the system prompt,
-  not the user message — older turns no longer replay ~80 tokens × N turns of
-  duplicate framing.
-- Tool execution is **idempotent across process kills**: if a tool started
-  but didn't finish (process died mid-execute), the post-restart replay shows
-  it as `Denied("interrupted_unknown_outcome")` instead of silently re-running.
-  No double-charged remotes, no double-sent messages.
+**Per-call approval**. Tools that change something on your phone ask before running. Allow once, for this chat, always, or deny.
 
-### A permission center that gets out of your way
+**HARDLINE floor**. A short list of genuinely dangerous commands (wipe everything, reboot, fork bombs, system file destruction, and known shell tricks to bypass the rule) is blocked unconditionally. Even if you accidentally tell the AI to do one of these, it won't.
 
-A dedicated Settings page lists every permission the app uses, classifies it,
-and gives you a one-tap button to grant it through the right system flow.
+Plus: passwords and API keys never make it into log files. The Telegram bot ignores everyone except people you put on its allowlist. Cloud backups skip your saved server credentials and bot token. The notification listener starts with an empty whitelist, so nothing leaves your phone until you pick the apps to forward.
 
-## Everything from upstream, untouched
+</td>
+</tr>
+</table>
 
-Material You design, multi-provider support (OpenAI / Google / Anthropic /
-compatible APIs), multimodal input, web access, MCP, Markdown rendering,
-message branching, search, prompt variables, QR import/export, agent
-customization, ChatGPT-style memory, AI translation, Silly Tavern character
-cards. All preserved exactly as upstream.
+---
 
-## Getting started
+## 🚀 Quick Start
 
-A brand-new install does *nothing extra* by default — it behaves exactly like
-vanilla RikkaHub until you opt in. Here's the order that actually works.
+1. **Install**: download the latest `*-universal-debug.apk` from [Releases](https://github.com/ExTV/rikkahub-agent/releases/latest). Allow install from unknown sources. Open.
+2. **Add an LLM provider**: Settings, then Providers, pick one, paste your API key. (Pixel 8/9/10 users can flip on the built-in **AICore** card for fully on-device Gemini Nano. No key, no network.)
+3. **Turn on what you want**: Settings, then Assistants, tap your assistant, then **Local Tools**, and flip the categories you want enabled.
+4. **(Optional) Telegram bot**: message [@BotFather](https://t.me/BotFather) with `/newbot` to get a bot token, then [@userinfobot](https://t.me/userinfobot) with `/start` to get your numeric Telegram user id. Then just say to the assistant in chat: *"Set up the Telegram bot. Token is `<your token>`. My user id is `<your id>`. Set me as the default chat. Enable it."* It'll handle the rest.
 
-### 1. Install the app
+If you don't turn anything on, the app behaves exactly like vanilla RikkaHub.
 
-**Recommended — download the APK** from the
-[Releases page](https://github.com/ExTV/rikkahub-agent/releases). Grab the
-latest `rikkahub-agent-*-universal-debug.apk`, allow install from unknown
-sources when prompted, and open it.
+---
 
-> **If you have an older agent-fork build installed, uninstall it first** —
-> the signing keys may differ between releases.
+## 📋 Requirements
 
-**Or build from source:**
+|              |                                                              |
+| ------------ | ------------------------------------------------------------ |
+| Architecture | arm64 or x86_64                                              |
+| Android      | 8.0+ (API 26), targets API 37                                |
+| Storage      | ~80 MB app                                                   |
+| LLM provider | OpenAI, Google, Anthropic, Ollama, or any OpenAI-compatible endpoint. OR Gemini Nano via AICore on Pixel 8/9/10+ |
+
+---
+
+## 🔧 Building from source
 
 ```bash
 git clone https://github.com/ExTV/rikkahub-agent.git
+
 cd rikkahub-agent
-./gradlew :app:installDebug
+
+./gradlew :app:installDebug   # build + install on a connected device
 ```
 
-You'll need a `google-services.json` at `app/google-services.json` — either
-your own from the Firebase console, or stub it out for local debug builds.
+---
 
-### 2. Add an LLM provider
+## 🙏 Credits
 
-First launch lands you in an empty chat. The app needs an LLM behind it
-before anything works.
+Stands on the shoulders of giants:
 
-Open **Settings → Providers**, pick a provider (OpenAI, Google Gemini,
-Anthropic, or any OpenAI-compatible endpoint), and paste your API key.
-Then choose a model from the chat header.
+| Project                                                              | Role                                                |
+| -------------------------------------------------------------------- | --------------------------------------------------- |
+| [RikkaHub](https://github.com/rikkahub/rikkahub)                     | The beautiful upstream chat client this forks       |
+| [cron-utils](https://github.com/jmrozanec/cron-utils)                | 5-field cron parser for the scheduler               |
+| [whisper.cpp](https://github.com/ggerganov/whisper.cpp)              | On-device speech-to-text via Termux                 |
+| [Termux](https://github.com/termux/termux-app)                       | Shell + package manager the agent uses for shell-out |
+| [JSch (mwiede fork)](https://github.com/mwiede/jsch)                 | Native SSH client                                   |
 
-> **Pixel 8 / 9 / 10 owners** can use the built-in **AICore** provider
-> instead — it runs Gemini Nano fully on-device, no API key, no network.
-> The AICore card ships with its switch **off**; flip it on once and pick a
-> Nano model from the chat header. AICore requires the AICore app from the
-> Play Store *and* enrolment in Google's GenAI Prompt-API early-access
-> program. See the
-> [latest release notes](https://github.com/ExTV/rikkahub-agent/releases/latest)
-> for the exact steps.
+This fork is unaffiliated with the upstream RikkaHub maintainers. All credit for the underlying chat client, provider abstraction, and UI design goes to the upstream team.
 
-At this point you have a normal RikkaHub chat. Everything below is opt-in.
+---
 
-### 3. Turn on the agent features you want
+## 📄 License
 
-The fork's extra abilities live behind per-assistant tool toggles.
-
-Open **Settings → Assistants → (tap your assistant) → Local Tools**. You'll
-see categorized switches: device info, hardware control, personal data,
-screen automation, SSH, Telegram bot, scheduled jobs, and more. Flip on
-only what you actually want.
-
-The first time the assistant uses a tool that needs a system permission
-(location, contacts, accessibility, notification access, etc.), Android
-will ask you to grant it. If you'd rather pre-grant everything in advance,
-open **Settings → Permissions** — every permission the app uses is listed
-there with a one-tap grant button.
-
-### 4. (Optional) Talk to your assistant from anywhere via Telegram
-
-If you enabled the **Telegram bot** tool in step 3, you can chat with your
-assistant remotely.
-
-1. Message [@BotFather](https://t.me/BotFather), send `/newbot`, follow the
-   prompts, and copy the **bot token**.
-2. Message [@userinfobot](https://t.me/userinfobot), send `/start`, and copy
-   your **numeric Telegram user id**.
-
-Now pick one of two paths:
-
-**Path A — let the assistant configure itself**
-
-Just chat with the assistant inside RikkaHub:
-
-> *Set up the Telegram bot. Token is `<your token>`. My user id is
-> `<your user id>`. Set me as the default chat. Enable the bot.*
-
-It'll handle the rest.
-
-**Path B — configure manually**
-
-Settings → **Telegram bot** → paste token → set default chat → add your user
-id to the allowlist → tap **Start**.
-
-DM your bot. You should get a reply. Reboots, app kills, battery saver —
-the bot survives all of them.
-
-## How the safety model works
-
-Everything new is opt-in, with three independent layers:
-
-1. **Per-tool category toggles** — every new tool starts **off** behind a
-   switch in each assistant's Local Tools page.
-2. **Per-call approval** — when an enabled tool is side-effecting (shell, SSH,
-   file writes, screen automation, Telegram outbound, MCP, notification action
-   clicks, privacy reads), each call prompts before running. You pick **Allow**,
-   **Allow for this chat**, **Always Allow**, or **Deny**. Same flow over
-   Telegram via inline keyboards.
-3. **HARDLINE floor** — `rm -rf /`, `mkfs`, `dd of=/dev/sd…`, fork bombs,
-   `shutdown`/`reboot`/`init 0|6`, raw block-device redirects, and known
-   shell-eval bypass forms (`bash -c "…"`, `base64 -d | sh`, `printf '\xNN' | sh`,
-   `eval $(…)`) are blocked unconditionally for shell tools. The file-manager
-   tools have their own equivalent floor — `/system`, `/proc`, `/dev`, other
-   apps' `/data/data` sandboxes, and `..` traversal escaping shared storage are
-   all refused with `path_blocked`. Always Allow doesn't override either.
-   Cron headless mode doesn't either. **There is no UI for bypassing them** —
-   that's the point.
-
-The Telegram bot ignores everyone unless you explicitly allowlist their user
-id. The notification forwarder ships with an empty whitelist — nothing leaves
-your phone until you pick the apps to forward. Permissions for sensitive
-surfaces (location, contacts, accessibility, notification access) are granted
-by you, on Android's terms, the first time a tool needs them.
-
-If you trust the agent fully and want zero prompts, **Settings → Tool
-approvals → "I AM STUPID"** flips a global auto-approve. HARDLINE still
-applies. The settings page shows a red banner whenever it's on so you can't
-forget.
-
-If you don't turn anything on, nothing changes from upstream behavior.
-
-## Design principles
-
-This fork is intentionally conservative about the UI. New features blend into
-existing settings pages using the same components, spacing, and typography.
-The single new top-level page (Telegram bot) follows the same pattern as
-RikkaHub's existing WebServer page. The goal: nothing should feel bolted on.
-
-## Status
-
-**Shipped:**
-
-- Android device tools (60+) covering battery, audio, telephony, WiFi, sensors,
-  storage, toast, notifications, share, torch, vibrate, brightness, volume,
-  media, download, location, contacts, call log, SMS inbox, camera, mic,
-  speech-to-text, fingerprint, app launcher, URL opener, wake screen.
-- **File manager (10 tools)**: `list_files` / `find_files` (recursive substring
-  + glob search) / `read_file` / `write_text_file` (with `append` and `overwrite`
-  modes) / `write_binary_file` / `copy_file` / `move_file` / `delete_file` /
-  `create_directory` / `file_info` (with optional sha256). Native `java.io.File`
-  API — no Termux dependency. Path-safety guard refuses system paths and
-  `..` traversal escaping shared storage.
-- **Music with system controls (4 new tools, MediaSession + foreground service)**:
-  `play_media` extended with title/artist/album/artwork_uri metadata; new
-  `pause_media`, `resume_media`, `seek_media`, `get_media_status`. Posts a
-  `MediaStyle` notification with play/pause/stop/seek, integrates with lock
-  screen, Bluetooth headsets, smart-watch controls. Uses `mediaPlayback`
-  foreground-service-type (Android 14+ exempt from time caps). Audio-focus
-  aware: pauses on phone calls and resumes after.
-- Screen automation (11 tools): tap, long-press, swipe, scroll, read window
-  tree, find/click node, set text, global action, screenshot, wake screen.
-- SSH (8 tools) with parallel network probing, partial-file cleanup on SFTP
-  failure, persistent host-key trust, stdout/stderr truncation, explicit
-  command-timeout envelopes.
-- Telegram bot (14 tools + 7 built-in slash commands + persistent custom
-  commands + interactive `/model` picker + token-usage footer + HTML markdown
-  rendering + sub-second streaming + token-revocation auto-disable + invalid-
-  token notification + exponential backoff on transient errors). Runs as a
-  `specialUse` foreground service (no daily time cap, unlike `dataSync`'s
-  Android 14+ 6-hour limit which crashed the bot in earlier builds), with a
-  defense-in-depth periodic 30-min health probe that re-starts the service
-  if anything else (OEM aggressive task killers on Xiaomi/Samsung/Honor,
-  OOM kills, app standby) takes it down.
-- Persistent scheduled jobs — **7 LLM tools**, two modes (`llm` / `direct`),
-  two timing types (`once` / `cron`), full 5-field UNIX cron with nicknames +
-  `@every` aliases, IANA timezones, `start_at` / `end_at` bounds, `max_runs`,
-  catchup policy (`skip` / `fire_once` / `fire_all`), `trigger_job_now`,
-  `get_job_history` with run-history table (last 100 rows per job, FIFO).
-  Boot recovery includes catchup + stranded-row sweep with single aggregate
-  notification (no storm). Direct-mode actions HARDLINE-checked at create
-  time AND at every fire. Replay-safe `max_runs` derived from history count,
-  not a cached counter. WorkManager-backed; survives reboots, app kills,
-  battery saver. Headless execution with hardline still enforced.
-- Notification listener (5 tools + per-app whitelist + auto-forward to
-  default Telegram chat + post-success dedup).
-- On-device Gemini Nano via AICore — opt-in (off by default).
-- Termux integration with capture mode + setup verification UI.
-- Default agent skill seeded on first launch.
-- **Tool-approval system**: 3-tier scopes (Once / Allow for chat / Always),
-  HARDLINE floor with 37 unit tests, MCP-tool argument scanning, in-app +
-  Telegram surfaces with parity, /stop and /new edit stale keyboards in place.
-- **"I AM STUPID" YOLO toggle** in Settings → Tool approvals for users who
-  trust the agent fully. HARDLINE still applies.
-- **Privacy + integrity**: secret redaction in logcat, backup rules excluding
-  credentials, system-prompt-instead-of-user-message agent context,
-  idempotency on Approved-but-unexecuted tool resume, per-conversation mutex
-  on state mutations, atomic StateFlow updates, hydration-from-disk on every
-  approval entry point so process kills don't leave dead-locked sessions.
-
-**On the roadmap:** SMS send, NFC, USB, Wallpaper, Keystore, Infrared.
-Pattern-based dangerous-command detection layered on top of tool-name approval
-gating. SSH interactive shell. MCP control tools. Sub-agents. Tasker-class
-workflows with conditional triggers. User-memory tools. External automation
-intent API for Tasker / MacroDroid integration. Translation pass for new
-English strings.
-
-## Contributing
-
-Feature work happens here. For bug fixes that affect upstream RikkaHub
-behavior, please open the PR on
-[rikkahub/rikkahub](https://github.com/rikkahub/rikkahub).
-
-This fork is unaffiliated with the original RikkaHub maintainers. All credit
-for the underlying chat client, provider abstraction, and UI design goes to
-the upstream team.
-
-## Sponsors (upstream)
+Inherited from [upstream](https://github.com/rikkahub/rikkahub), see [LICENSE](LICENSE).
 
 <div align="center">
-  <img src="app/src/main/assets/icons/aihubmix-color.svg" alt="Aihubmix" width="50" />
-  <p>Upstream sponsor — <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a>
-  for one-stop access to OpenAI, Claude, Gemini, DeepSeek, Qwen, and more.</p>
+<sub>Built by <a href="https://github.com/ExTV">@ExTV</a></sub>
 </div>
-
-## License
-
-[License](LICENSE) — inherited from upstream.
