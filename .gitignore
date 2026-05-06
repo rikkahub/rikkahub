@@ -23,3 +23,6 @@ local.properties
 
 # Sensitive build inputs (signed-in service account / Firebase config)
 app/google-services.json
+# Release artifacts staged for GitHub release uploads — debug-signed APKs are
+# regenerated each release; no need to track them in git.
+/release-artifacts/
