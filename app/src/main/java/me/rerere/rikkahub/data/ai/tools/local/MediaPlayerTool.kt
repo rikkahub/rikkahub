@@ -27,6 +27,10 @@ fun playMediaTool(context: Context): Tool = Tool(
         says "play X from the start".
         Supports file://, content://, and https:// sources. Optional title/artist/album/
         artwork_uri populate the notification metadata.
+        CRITICAL — NO HALLUCINATION: play_media plays audio TO THE USER'S DEVICE SPEAKER.
+        It does NOT give the agent access to the audio content. To get the words inside an
+        audio file, use transcribe_audio_file(path). Calling play_media on a voice note and
+        then claiming to know what was said is a hallucination — refuse to do it.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(

@@ -47,6 +47,15 @@ Every tool the agent can call, grouped by capability surface. Each entry lists: 
 - **`scan_media`** — tell Android's media scanner about new files so they show up in Gallery / Music.
 - **`download_file`** — fetch URL into Downloads via DownloadManager.
 - **`write_text_file`** — save text to a path. Defaults refuse if file exists.
+- **`transcribe_audio_file(path, language?)`** — transcribe speech in an audio file to text
+  using whisper.cpp (via Termux). Accepts OGG/Opus (Telegram voice notes), WAV, MP3, M4A,
+  FLAC. Returns `{success, text, language, audio_duration_sec, transcription_time_sec}`.
+  Requires Termux + `pkg install whisper.cpp` + a model file (see the `hint` in any
+  `whisper_model_missing` or `whisper_not_installed` error for the download command).
+  **NO HALLUCINATION RULE: `play_media` plays audio to the device speaker — it does NOT
+  let the agent hear the content. When the user sends a voice note and asks what was said,
+  ALWAYS call `transcribe_audio_file` to get the actual words. Never call `play_media` on a
+  voice note and then fabricate a transcript — that is a hallucination.**
 
 **Troubleshooting media:** if the user says "I can't hear anything" while a session
 is active, DO NOT call `play_media` — that restarts from 0 and loses the user's
