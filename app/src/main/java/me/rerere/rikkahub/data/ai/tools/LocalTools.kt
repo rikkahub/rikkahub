@@ -81,6 +81,15 @@ import me.rerere.rikkahub.data.ai.tools.local.sshExecSavedTool
 import me.rerere.rikkahub.data.ai.tools.local.sshExecTool
 import me.rerere.rikkahub.data.ai.tools.local.sshUploadTool
 import me.rerere.rikkahub.data.ai.tools.local.writeTextFileTool
+import me.rerere.rikkahub.data.ai.tools.local.listFilesTool
+import me.rerere.rikkahub.data.ai.tools.local.readFileTool
+import me.rerere.rikkahub.data.ai.tools.local.writeBinaryFileTool
+import me.rerere.rikkahub.data.ai.tools.local.deleteFileTool
+import me.rerere.rikkahub.data.ai.tools.local.moveFileTool
+import me.rerere.rikkahub.data.ai.tools.local.copyFileTool
+import me.rerere.rikkahub.data.ai.tools.local.createDirectoryTool
+import me.rerere.rikkahub.data.ai.tools.local.fileInfoTool
+import me.rerere.rikkahub.data.ai.tools.local.findFilesTool
 import me.rerere.rikkahub.data.ai.tools.local.dismissNotificationTool
 import me.rerere.rikkahub.data.ai.tools.local.listActiveNotificationsTool
 import me.rerere.rikkahub.data.ai.tools.local.listRecentNotificationsTool
@@ -148,6 +157,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("app_launcher")      data object AppLauncher       : LocalToolOption()
     @Serializable @SerialName("termux")            data object Termux            : LocalToolOption()
     @Serializable @SerialName("notification_listener") data object NotificationListener : LocalToolOption()
+    @Serializable @SerialName("files")               data object Files              : LocalToolOption()
 }
 
 class LocalTools(
@@ -580,6 +590,17 @@ class LocalTools(
             tools.add(dismissNotificationTool())
             tools.add(notificationActionClickTool())
             tools.add(notificationStatusTool(notificationListenerPreferences, telegramBotPreferences))
+        }
+        if (options.contains(LocalToolOption.Files)) {
+            tools.add(listFilesTool())
+            tools.add(readFileTool())
+            tools.add(writeBinaryFileTool())
+            tools.add(deleteFileTool())
+            tools.add(moveFileTool())
+            tools.add(copyFileTool())
+            tools.add(createDirectoryTool())
+            tools.add(fileInfoTool())
+            tools.add(findFilesTool())
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

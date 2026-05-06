@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -46,6 +47,10 @@ fun writeTextFileTool(context: Context): Tool = Tool(
                     put("type", "string")
                     put("description", "Optional MIME type. Defaults to text/plain; use text/markdown for .md, application/json for .json, etc.")
                 })
+                put("append", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "When true, append to an existing file rather than overwriting it. Defaults to false.")
+                })
             },
             required = listOf("filename", "content")
         )
@@ -56,6 +61,7 @@ fun writeTextFileTool(context: Context): Tool = Tool(
             ?: error("filename is required")
         val content = params["content"]?.jsonPrimitive?.contentOrNull
             ?: error("content is required")
+        val appendMode = params["append"]?.jsonPrimitive?.booleanOrNull ?: false
         val mime = params["mime_type"]?.jsonPrimitive?.contentOrNull?.takeIf { s -> s.isNotBlank() }
             ?: guessMime(rawName)
 
@@ -68,6 +74,9 @@ fun writeTextFileTool(context: Context): Tool = Tool(
         val bytes = content.toByteArray(Charsets.UTF_8)
 
         val payload = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // For MediaStore we create a new entry each time. In append mode we name it the
+            // same so Android may create "filename (1).txt" etc — acceptable UX since
+            // MediaStore doesn't expose an append-to-existing-entry API without raw DATA.
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, filename)
                 put(MediaStore.Downloads.MIME_TYPE, mime)
@@ -81,7 +90,11 @@ fun writeTextFileTool(context: Context): Tool = Tool(
                 buildJsonObject { put("error", "failed to create Downloads entry") }.toString()
             ))
             try {
-                context.contentResolver.openOutputStream(uri)?.use { os -> os.write(bytes) }
+                // "wa" = write append; "w" = write/truncate. Append only works if the
+                // MediaStore entry already exists on disk — for brand-new entries both
+                // modes produce the same result.
+                val mode = if (appendMode) "wa" else "w"
+                context.contentResolver.openOutputStream(uri, mode)?.use { os -> os.write(bytes) }
             } catch (e: Throwable) {
                 context.contentResolver.delete(uri, null, null)
                 return@Tool listOf(UIMessagePart.Text(
@@ -100,6 +113,7 @@ fun writeTextFileTool(context: Context): Tool = Tool(
                 put("uri", uri.toString())
                 put("bytes", bytes.size)
                 put("saved_to", "Downloads")
+                if (appendMode) put("appended", true)
             }
         } else {
             // Legacy 26-28 fallback. May fail without WRITE_EXTERNAL_STORAGE; we surface the error.
@@ -109,13 +123,14 @@ fun writeTextFileTool(context: Context): Tool = Tool(
                 )
                 downloads.mkdirs()
                 val out = File(downloads, filename)
-                out.writeBytes(bytes)
+                if (appendMode) out.appendBytes(bytes) else out.writeBytes(bytes)
                 buildJsonObject {
                     put("success", true)
                     put("filename", filename)
                     put("path", out.absolutePath)
                     put("bytes", bytes.size)
                     put("saved_to", "Downloads")
+                    if (appendMode) put("appended", true)
                 }
             } catch (e: Throwable) {
                 buildJsonObject { put("error", "write failed: ${e.message ?: "unknown"}") }
