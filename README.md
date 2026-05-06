@@ -23,21 +23,40 @@
 
 ---
 
-## The pitch
+## Your phone, finally automated
 
-Imagine telling your phone:
+Tell it what to do. Walk away. It does it.
 
-> *"Every weekday at 9am, check disk space on my server and message me on Telegram."*
+> *"Every weekday at 9am, summarize my unread WhatsApp into one Telegram message."*
+>
+> *"If my home server's disk fills up, ping me."*
+>
+> *"Find the PDF on my phone that mentions 'invoice' and read me the first paragraph."*
+>
+> *"Play music from my Downloads folder, with proper lock-screen controls."*
+>
+> *"Take a screenshot every 30 minutes for the next 4 hours so I can see what I actually did all afternoon."*
+>
+> *"Watch my notifications. If anything from my boss comes in, forward it to Telegram. Quietly ignore the rest."*
 
-And it just... does it. While you're at lunch. Without you opening the app.
+Every line above is a real thing people set up in under a minute. The phone
+runs them itself, in the background, while you go live your life.
 
-That's what this fork adds. The LLM you already chat with on your phone can now
-act on your device, talk to you over Telegram while you're away, run scheduled
-jobs in the background, and reach out to remote servers — all opt-in, all
-behind toggles you control.
+RikkaHub Agent wires the LLM you already chat with into **60+ device tools** —
+taps, types, scrolls, schedules, runs shell commands, SSHes into servers,
+searches your files, watches notifications, plays music. Reachable from
+anywhere over Telegram. Runs in the background. Survives reboots.
 
-Turn nothing on, and it behaves exactly like vanilla RikkaHub. Flip switches,
-and it grows into an agent.
+All on your phone. Bring your own LLM provider, or run fully on-device with
+Gemini Nano — no cloud middleman, no usage limits, no data shovel. Every
+side-effecting action prompts before running. A **HARDLINE floor** that
+refuses `rm -rf /`, `shutdown`, fork bombs, system-path writes, and known
+shell-eval bypasses *unconditionally* — even on YOLO mode. The agent you can
+actually trust.
+
+Turn nothing on, it's just RikkaHub — the same beautiful native chat client
+upstream ships. Flip switches, and it grows into a real assistant that lives
+in your pocket.
 
 ## What can it do
 
