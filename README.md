@@ -12,7 +12,6 @@ A fork of [RikkaHub](https://github.com/rikkahub/rikkahub) that turns the native
   <a href="https://github.com/ExTV/rikkahub-agent/releases"><img src="https://img.shields.io/github/v/release/ExTV/rikkahub-agent?include_prereleases&style=flat-square&label=release&color=blue" alt="Release" /></a>
   <a href="https://github.com/ExTV/rikkahub-agent/releases"><img src="https://img.shields.io/github/downloads/ExTV/rikkahub-agent/total?style=flat-square&color=brightgreen" alt="Downloads" /></a>
   <a href="https://github.com/ExTV/rikkahub-agent/stargazers"><img src="https://img.shields.io/github/stars/ExTV/rikkahub-agent?style=flat-square&color=yellow" alt="Stars" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/ExTV/rikkahub-agent?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/platform-Android%208%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android 8+" />
 </p>
 
@@ -140,6 +139,10 @@ If you don't turn anything on, the app behaves exactly like vanilla RikkaHub.
 ---
 
 ## 🔧 Building from source
+
+Requires the [bun](https://bun.sh) JavaScript runtime on PATH — the build chain
+runs `bun install` and `bun run build` in `web-ui/` to produce the in-app web
+UI bundle before packaging the APK.
 
 ```bash
 git clone https://github.com/ExTV/rikkahub-agent.git
