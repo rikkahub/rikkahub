@@ -184,6 +184,24 @@ object ToolApprovalDefaults {
         "send_sms_intent",
         "open_wifi_settings",
         "show_location_on_map",
+
+        // In-app browser write tools (Phase 21 / Pass 2). The browser can carry auth tokens
+        // in cookies, so anything that mutates page state OR runs JS is approval-gated. Read
+        // tools (open, current_url, screenshot, get_text, get_dom, get_links, back, forward,
+        // wait_for) are NOT in this set — reading text out of a page is the same trust level
+        // as taking a screenshot or reading any other LLM context. browser_done is the
+        // loop-control sentinel and never side-effects.
+        "browser_click",
+        "browser_type",
+        "browser_scroll",
+        "browser_submit",
+        "browser_select",
+        "browser_press_key",
+        "browser_eval_js",
+        // Composite click+read added in the token-cost optimisation pass — its click
+        // side carries the same trust footprint as plain browser_click, so it
+        // inherits the same approval gate.
+        "browser_click_and_read",
     )
 
     /**
@@ -203,6 +221,12 @@ object ToolApprovalDefaults {
         // the user reviews the URL / source-label + skill name.
         "skill_install_from_url",
         "skill_install_from_text",
+        // Phase 21 / Pass 2 — browser_eval_js runs arbitrary JavaScript in a real WebView
+        // with the user's cookies, localStorage, and authenticated fetch surface. Even
+        // after HARDLINE filters out shell-shaped strings + obvious dynamic-eval patterns,
+        // the residual surface is too broad to ever blanket-allow. Every invocation gets
+        // an explicit per-call approval card, no exceptions.
+        "browser_eval_js",
     )
 
     fun allowsAlwaysAllow(toolName: String): Boolean = toolName !in NO_ALWAYS_ALLOW

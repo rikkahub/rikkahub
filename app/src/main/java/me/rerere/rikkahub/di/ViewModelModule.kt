@@ -17,6 +17,7 @@ import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesVM
 import me.rerere.rikkahub.ui.pages.extensions.SkillDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.SkillsVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
+import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserViewModel
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
 import me.rerere.rikkahub.ui.pages.setting.doctor.DoctorViewModel
@@ -80,4 +81,5 @@ val viewModelModule = module {
     viewModelOf(::WorkflowsViewModel)
     viewModelOf(::ScheduledJobsViewModel)
     viewModelOf(::DoctorViewModel)
+    viewModelOf(::SettingBrowserViewModel)
 }

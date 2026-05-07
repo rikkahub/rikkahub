@@ -26,4 +26,9 @@
   <exclude
     domain="file"
     path="known_hosts" />
+  <!-- Pass 3: in-app browser profile. Cookies often carry auth tokens; under no
+       circumstance restore them onto a different device. -->
+  <exclude
+    domain="file"
+    path="browser-profile/" />
 </full-backup-content>

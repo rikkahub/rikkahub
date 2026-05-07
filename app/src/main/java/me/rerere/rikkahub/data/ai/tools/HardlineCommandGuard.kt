@@ -181,6 +181,20 @@ object HardlineCommandGuard {
             // positives are fine — an MCP tool whose legitimate-purpose arg happens to
             // contain a literal `rm -rf /` is too edge-case to design around.
             toolName.startsWith("mcp__") -> walkAndCheck(input)
+            // browser_eval_js: runs arbitrary JS in a real WebView with cookies, localStorage,
+            // and fetch — completely unlike eval_javascript (sandboxed QuickJS). This is the
+            // single highest-trust tool we ship, hence the dedicated HARDLINE arm + the
+            // NO_ALWAYS_ALLOW flag in ToolApprovalDefaults. Two checks:
+            //   (a) the model could try to chain an OS shell via fetch('http://localhost') /
+            //       sendBeacon — defence in depth, reuse the existing shell deny list.
+            //   (b) JS-specific exfiltration / privilege patterns (cookie writes, eval,
+            //       Function constructor, string-form setTimeout, data: script injection).
+            toolName == "browser_eval_js" -> {
+                val code = input["code"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                checkCommand(code)?.let { return it }
+                val matched = JS_HARDLINE_PATTERNS.firstOrNull { (rx, _) -> rx.containsMatchIn(code) }
+                matched?.second
+            }
             // eval_javascript: no shell to match. JS-side hardline patterns are out of
             // scope because QuickJS in this repo has no DOM / Node / fetch — realistic
             // blast radius is bounded to local CPU. Add JS rules here when the surface
@@ -188,6 +202,30 @@ object HardlineCommandGuard {
             else -> null
         }
     }
+
+    /**
+     * JS-specific hardline patterns for [BrowserToolDefaults.EVAL_JS]. Defence-in-depth
+     * against the most common exfiltration / RCE shapes. Conservative — false positives
+     * are fine; a model that legitimately needs to write document.cookie can use
+     * browser_type on a form field instead.
+     */
+    private val JS_HARDLINE_PATTERNS: List<Pair<Regex, String>> = listOf(
+        // Direct cookie writes. Reads (`document.cookie` on the right of an expression) are
+        // not blocked because they're useful for pages that pass auth via cookies.
+        Regex("""document\s*\.\s*cookie\s*=""", IGNORE_CASE) to "hardline:js_cookie_write",
+        // Dynamic-eval surfaces. eval("...") and new Function("...") let the model construct
+        // a payload at fire time that the static guard can't see ahead of time.
+        Regex("""\beval\s*\(""", IGNORE_CASE) to "hardline:js_eval",
+        Regex("""\bnew\s+Function\s*\(""", IGNORE_CASE) to "hardline:js_function_constructor",
+        // setTimeout / setInterval with a STRING first argument is a stealth-eval — the
+        // browser parses the string as code at trigger time. Function-literal callbacks
+        // (`setTimeout(()=>foo(), 1000)`) are fine and not matched here.
+        Regex("""\bsetTimeout\s*\(\s*['"`]""", IGNORE_CASE) to "hardline:js_settimeout_string",
+        Regex("""\bsetInterval\s*\(\s*['"`]""", IGNORE_CASE) to "hardline:js_setinterval_string",
+        // <script src="data:..."> — data-URI script injection, the canonical SOP-bypass
+        // payload. Same pattern works inside template strings inserted via innerHTML.
+        Regex("""<script\s+src\s*=\s*['"]?data:""", IGNORE_CASE) to "hardline:js_script_data_uri",
+    )
 
     /**
      * Walk a JSON element recursively. Run [checkCommand] on every string primitive we

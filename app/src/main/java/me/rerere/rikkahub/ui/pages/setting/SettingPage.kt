@@ -49,6 +49,7 @@ import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Clapping01
 import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Database02
+import me.rerere.hugeicons.stroke.Earth
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.hugeicons.stroke.Developer
 import me.rerere.hugeicons.stroke.GlobalSearch
@@ -275,6 +276,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Clock02, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_scheduled_jobs_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_scheduled_jobs)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingBrowser) },
+                        leadingContent = { Icon(HugeIcons.Earth, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_browser_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_browser)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingDoctor) },

@@ -941,6 +941,28 @@ private fun AssistantLocalToolContent(
         }
 
         Text(
+            text = stringResource(R.string.assistant_page_local_tools_section_browser),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+        )
+        CardGroup {
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_browser_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_browser_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Browser),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Browser, it) },
+                    )
+                }
+            )
+        }
+
+        Text(
             text = stringResource(R.string.assistant_page_local_tools_section_screen_automation),
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.padding(start = 16.dp, top = 8.dp)

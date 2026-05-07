@@ -175,6 +175,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("skill_import")        data object SkillImport        : LocalToolOption()
     @Serializable @SerialName("js_skills")           data object JsSkills           : LocalToolOption()
     @Serializable @SerialName("system_intents")      data object SystemIntents      : LocalToolOption()
+    @Serializable @SerialName("browser")             data object Browser            : LocalToolOption()
 }
 
 class LocalTools(
@@ -204,6 +205,11 @@ class LocalTools(
     private val skillManager: me.rerere.rikkahub.data.files.SkillManager,
     private val jsSkillRunner: me.rerere.rikkahub.skills.js.JsSkillRunner,
     private val skillSecretsStore: me.rerere.rikkahub.skills.js.SkillSecretsStore,
+    // Browser per-tool toggle store. Pass 2 reads a [snapshotBlocking] of the map so each
+    // tool factory gates its own registration on whether the user has flipped it on. Master
+    // toggle ([LocalToolOption.Browser]) acts as the group on/off; per-tool toggles act as
+    // a sub-allow-list. Both must be true for a tool to register.
+    private val browserPreferences: me.rerere.rikkahub.browser.BrowserPreferences,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -718,6 +724,24 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.workflow.tools.workflowDeleteTool(workflowRepository))
             tools.add(me.rerere.rikkahub.workflow.tools.workflowSetEnabledTool(workflowRepository))
             tools.add(me.rerere.rikkahub.workflow.tools.workflowRunTool(workflowEngine, workflowRepository))
+        }
+        if (options.contains(LocalToolOption.Browser)) {
+            // Per-tool registration. The user can grant only the tools they trust — read
+            // tools default ON, write tools default OFF (see BrowserToolDefaults.DEFAULT_ENABLED).
+            // snapshotBlocking() reads DataStore once; steady-state cost is microseconds because
+            // DataStore caches the latest Preferences instance after the first decode.
+            val browserPrefs = browserPreferences.snapshotBlocking()
+            me.rerere.rikkahub.browser.BrowserToolDefaults.ALL_TOOLS.forEach { name ->
+                if (browserPrefs[name] == true) {
+                    me.rerere.rikkahub.data.ai.tools.local.createBrowserTool(
+                        toolName = name,
+                        context = context,
+                        // Pass 3: thread the caller context so browser_open can pick the
+                        // foreground vs headless mode by reading HeadlessConversations.
+                        invocationContext = invocationContext,
+                    )?.let { tools.add(it) }
+                }
+            }
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

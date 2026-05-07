@@ -54,6 +54,14 @@ val appModule = module {
     single { SshHostRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().sshHostDao()) }
     single { TelegramChatRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().telegramChatDao()) }
     single { TelegramBotPreferences(get()) }
+    single { me.rerere.rikkahub.browser.BrowserPreferences(get()) }
+    // Pass 3: Telegram-bound screenshot streamer for headless browser mode. Bound to the
+    // [BrowserScreenshotStreamer] interface so [BrowserController.streamScreenshotIfHeadless]
+    // can resolve it lazily via Koin without taking a constructor dep — avoids a cycle
+    // through TelegramBotClient → TelegramBotPreferences → ... → LocalTools → controller.
+    single<me.rerere.rikkahub.browser.BrowserScreenshotStreamer> {
+        me.rerere.rikkahub.data.telegram.TelegramBrowserScreenshotStreamer(get(), get())
+    }
     single { me.rerere.rikkahub.data.preferences.ToolApprovalPreferences(get()) }
     single { TelegramBotClient { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") } }
     single { NotificationListenerPreferences(get()) }
@@ -140,7 +148,7 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {
@@ -214,6 +222,8 @@ val appModule = module {
             scheduledJobRunRepository = get(),
             conversationRepository = get(),
             database = get(),
+            // Pass 3: surface the browser write-tools-enabled INFO row + profile-dir AutoFix.
+            browserPreferences = get(),
         )
     }
 }
