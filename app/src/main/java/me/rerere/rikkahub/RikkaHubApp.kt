@@ -112,6 +112,15 @@ class RikkaHubApp : Application() {
         // every change. With zero enabled workflows, no receivers are registered.
         startWorkflowRegistry()
 
+        // Phase-17 stability — register a network-change monitor that evicts OkHttp's
+        // connection pool on every default-network transition. Fixes the post-Termux-
+        // interactive-session "Unable to resolve host …" bug: when the user opens
+        // Termux's terminal for `htop` the app backgrounds, Android may flip the
+        // network into a restricted state, and the JVM's negative DNS cache plus
+        // OkHttp's idle sockets keep the failure sticky after return. Eviction on the
+        // next onAvailable forces a fresh DNS lookup + new socket on the next request.
+        startNetworkChangeMonitor()
+
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
 
@@ -125,6 +134,15 @@ class RikkaHubApp : Application() {
             }.onFailure {
                 Log.e(TAG, "startWorkflowRegistry failed", it)
             }
+        }
+    }
+
+    private fun startNetworkChangeMonitor() {
+        runCatching {
+            val client = get<okhttp3.OkHttpClient>()
+            me.rerere.rikkahub.utils.NetworkChangeMonitor.start(this, client)
+        }.onFailure {
+            Log.w(TAG, "startNetworkChangeMonitor failed", it)
         }
     }
 

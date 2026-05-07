@@ -298,6 +298,7 @@ class SkillUrlImporter(
             .readTimeout(15, TimeUnit.SECONDS)
             .followRedirects(true)
             .build()
+            .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
     }
 }
 

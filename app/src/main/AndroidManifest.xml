@@ -3,6 +3,12 @@
   xmlns:tools="http://schemas.android.com/tools">
 
   <uses-permission android:name="android.permission.INTERNET" />
+  <!-- Required for ConnectivityManager.registerNetworkCallback (NetworkChangeMonitor)
+       which evicts the OkHttp connection pool on default-network changes. Fixes the
+       post-Termux-interactive-session DNS bug where the JVM negative-cached a transient
+       lookup failure during background and held onto it after return. Auto-granted (normal
+       permission) but declaring is required. -->
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
