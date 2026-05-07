@@ -85,6 +85,8 @@ import me.rerere.rikkahub.data.ai.tools.local.sshExecSavedTool
 import me.rerere.rikkahub.data.ai.tools.local.sshExecTool
 import me.rerere.rikkahub.data.ai.tools.local.sshUploadTool
 import me.rerere.rikkahub.data.ai.tools.local.writeTextFileTool
+import me.rerere.rikkahub.data.ai.tools.local.showImageTool
+import me.rerere.rikkahub.data.ai.tools.local.openFileTool
 import me.rerere.rikkahub.data.ai.tools.local.transcribeAudioFileTool
 import me.rerere.rikkahub.data.ai.tools.local.whisperStatusTool
 import me.rerere.rikkahub.data.ai.tools.local.listFilesTool
@@ -643,6 +645,8 @@ class LocalTools(
             tools.add(createDirectoryTool())
             tools.add(fileInfoTool())
             tools.add(findFilesTool())
+            tools.add(showImageTool(context))
+            tools.add(openFileTool(context))
         }
         if (options.contains(LocalToolOption.McpControl)) {
             tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpListTool(settingsStore, mcpManager))
