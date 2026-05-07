@@ -37,16 +37,7 @@ private fun pruneOldCacheScreenshots(dir: File) {
 
 fun takeScreenshotTool(context: Context): Tool = Tool(
     name = "take_screenshot",
-    description = """
-        Capture a screenshot of the device's current display via the AccessibilityService and
-        return it as an image attachment so you can see exactly what is on screen. The PNG is
-        saved to the device gallery at Pictures/RikkaHub/Screenshots/ (visible in the user's
-        Gallery / Files app and to other tools like list_files), and is also kept briefly in the
-        app cache so this tool's output can attach it as a vision input. The tool result's
-        'gallery_path' field tells you the absolute on-device path. Secure surfaces (banking
-        apps, DRM video, password fields) come back as a graceful error. Rate-limited by the OS
-        to ~1 per second.
-    """.trimIndent().replace("\n", " "),
+    description = "Capture the current display via AccessibilityService and return it as a vision attachment. PNG also saved to Pictures/RikkaHub/Screenshots/ — gallery_path in the result is the on-device absolute path. Secure surfaces (banking, DRM, password fields) error gracefully. OS-rate-limited to ~1/sec.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {

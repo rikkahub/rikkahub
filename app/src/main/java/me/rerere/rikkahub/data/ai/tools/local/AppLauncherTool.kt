@@ -157,15 +157,7 @@ fun launchAppTool(context: Context): Tool = Tool(
 
 fun listInstalledAppsTool(context: Context): Tool = Tool(
     name = "list_installed_apps",
-    description = """
-        List installed apps. Default mode shows apps with a launcher activity (the ones the
-        user sees in their app drawer). When `filter` is provided OR `include_no_launcher`
-        is true, ALSO returns service-only addons that have no launcher icon - critical for
-        detecting things like Termux:API (com.termux.api), Termux:Boot, etc., which are real
-        installed packages but have no app-drawer entry. Each row carries
-        {label, package, has_launcher}. Use this to discover the package name for launch_app
-        or to confirm a specific addon package is present.
-    """.trimIndent().replace("\n", " "),
+    description = "List installed apps as {label, package, has_launcher}. Default: launcher-visible only. With `filter` or `include_no_launcher=true`, also returns service-only addons (Termux:API, Termux:Boot, etc.) that have no app-drawer entry.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {

@@ -30,15 +30,7 @@ import java.io.File
  */
 fun openFileTool(context: Context): Tool = Tool(
     name = "open_file",
-    description = """
-        Open a file in the user's preferred OS viewer (Gallery for images, PDF reader for
-        PDFs, music player for audio, etc.). Backgrounds RikkaHub momentarily; the user
-        lands on the file in the destination app. Use this when the user wants to
-        actually read / edit / share a file rather than just see it inline. Path accepts
-        ~ for the workspace (e.g. ~/learnings/ERRORS.md) or any absolute path under
-        PathSafetyGuard's allowlist. Optional mime_type forces a specific viewer when the
-        file extension is ambiguous.
-    """.trimIndent().replace("\n", " "),
+    description = "Open a file in the user's OS viewer (Gallery / PDF reader / audio player / text editor). Backgrounds the app; user reads/edits in the destination app. Path accepts ~ or absolute. Optional mime_type forces a specific viewer when the extension is ambiguous.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {

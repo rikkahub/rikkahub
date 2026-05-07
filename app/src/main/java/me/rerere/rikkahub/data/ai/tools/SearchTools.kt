@@ -22,23 +22,9 @@ fun createSearchTools(settings: Settings): Set<Tool> {
             Tool(
                 name = "search_web",
                 description = """
-                    Search the web for up-to-date or specific information.
-                    Use this when the user asks for the latest news, current facts, or needs verification.
-                    Generate focused keywords and run multiple searches if needed.
-                    Today is ${LocalDate.now().toLocalString(true)}.
-
-                    Response format:
-                    - items[].id (short id), title, url, text
-
-                    Citations:
-                    - After using results, add `[citation,domain](id)` after the sentence.
-                    - Multiple citations are allowed.
-                    - If no results are cited, omit citations.
-
-                    Example:
-                    The capital of France is Paris. [citation,example.com](abc123)
-                    The population is about 2.1 million. [citation,example.com](abc123) [citation,example2.com](def456)
-                    """.trimIndent(),
+                    Search the web for up-to-date / specific info. Today: ${LocalDate.now().toLocalString(true)}.
+                    Returns items[].{id, title, url, text}. Cite each statement that uses a result with `[citation,domain](id)` after the sentence; omit citations when nothing was sourced.
+                """.trimIndent(),
                 parameters = {
                     val options = settings.searchServices.getOrElse(
                         index = settings.searchServiceSelected,

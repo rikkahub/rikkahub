@@ -55,14 +55,7 @@ internal object ScreenWaker {
 
 fun wakeScreenTool(context: Context): Tool = Tool(
     name = "wake_screen",
-    description = """
-        Turn the device's screen on if it is off. Uses a brief wake lock; CPU is not pinned
-        afterwards. Returns {success, was_off, woke, keyguard_locked, keyguard_secure}. If the
-        keyguard is locked AND secure (PIN/pattern/biometric), the user must unlock manually
-        - this tool does not bypass real locks. Use this BEFORE launch_app or any screen-
-        automation gesture when the screen has been off; otherwise the activity launches
-        invisibly behind the lock screen and your read_window_tree calls will see nothing.
-    """.trimIndent().replace("\n", " "),
+    description = "Turn the screen on. Brief wake lock, CPU not pinned. Call BEFORE launch_app / screen-automation when the screen is off — otherwise activities launch behind the lock screen and read_window_tree sees nothing. Doesn't bypass secure keyguards. Returns {success, was_off, woke, keyguard_locked, keyguard_secure}.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {

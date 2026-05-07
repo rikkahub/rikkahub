@@ -179,7 +179,7 @@ sealed class ProviderSetting {
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
         var baseUrl: String = "https://api.anthropic.com/v1",
-        var promptCaching: Boolean = false,
+        var promptCaching: Boolean = true,  // ~10% input rate on cache hits, near-pure win
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

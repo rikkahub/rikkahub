@@ -60,16 +60,7 @@ private const val PREFERRED_MODEL_NAME = "ggml-tiny.bin"
  */
 fun transcribeAudioFileTool(context: Context): Tool = Tool(
     name = "transcribe_audio_file",
-    description = """
-        Transcribe the speech in an audio file to text using whisper.cpp (Termux).
-        Accepts any format whisper.cpp can decode: OGG/Opus (Telegram voice notes),
-        WAV, MP3, M4A, FLAC. Returns the transcribed text, detected language, audio
-        duration, and transcription time. Requires whisper.cpp installed in Termux
-        (`pkg install whisper.cpp`) and a model file (see `hint` in the error envelope
-        if the model is missing). Path must be absolute and outside system directories.
-        IMPORTANT: do NOT use `play_media` to "hear" a voice note and then guess its
-        content — that is a hallucination. Use this tool to get the actual words.
-    """.trimIndent().replace("\n", " "),
+    description = "Transcribe speech in an audio file via whisper.cpp on Termux. Accepts OGG/Opus (Telegram voice notes), WAV, MP3, M4A, FLAC. Returns text + detected language + duration + transcription time. Needs whisper.cpp + a model — error envelope's `hint` field tells you which is missing. Path absolute or ~.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {

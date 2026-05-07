@@ -35,15 +35,7 @@ import java.io.File
  */
 fun showImageTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = Tool(
     name = "show_image",
-    description = """
-        Display an image file inline in the chat so the user actually sees it. Use this
-        when the user asks to see / preview an image at a known path on the device, after
-        you've located one via list_files / find_files, or after take_photo / take_screenshot
-        wrote a file you want to surface explicitly. Path accepts ~ for the agent workspace
-        (e.g. ~/screenshots/x.png) or any absolute path under PathSafetyGuard's allowlist.
-        Supported: PNG, JPEG, WebP, GIF, BMP. Returns the image as an attachment plus a
-        small JSON envelope with dimensions and size.
-    """.trimIndent().replace("\n", " "),
+    description = "Display an image file inline in the chat (Telegram: sends as a real photo). Use when the user wants to see an image at a known path, or after take_photo/take_screenshot to surface the result. Path accepts ~ or absolute. Supported: PNG, JPEG, WebP, GIF, BMP.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {

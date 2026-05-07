@@ -86,14 +86,7 @@ fun listRecentNotificationsTool(): Tool = Tool(
 
 fun listActiveNotificationsTool(): Tool = Tool(
     name = "list_active_notifications",
-    description = """
-        Return notifications that are currently being shown by their owning apps (i.e. still
-        in the system status bar / notification shade). Distinct from list_recent_notifications,
-        which is the historical ring buffer. Use this when you specifically need to act on
-        something the user can see right now (e.g. dismiss it, click an action). Use limit
-        (default 50, max 100), package_name (case-insensitive substring match), and
-        since_unix_ms (only entries posted after this) to narrow the result.
-    """.trimIndent().replace("\n", " "),
+    description = "Notifications currently in the status bar / shade (vs list_recent_notifications = historical ring buffer). Use when you need to act on something the user can see now (dismiss, click action). Filters: limit (default 50, max 100), package_name (case-insensitive substring), since_unix_ms.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {

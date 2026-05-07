@@ -55,14 +55,7 @@ internal fun defaultFilter(n: AccessibilityNodeInfo, depth: Int): Boolean {
 
 fun readWindowTreeTool(): Tool = Tool(
     name = "read_window_tree",
-    description = """
-        Return a snapshot of the active window's accessibility node tree. Default mode filters
-        to visible nodes that are clickable, scrollable, editable, or have non-empty text /
-        content description. Pass verbose=true to skip the filter (use sparingly — full trees
-        can be huge). max_nodes hard-caps the result (default 500, ceiling 2000). package_name
-        optionally limits the call to a specific foreground app and errors if the foreground
-        app does not match.
-    """.trimIndent().replace("\n", " "),
+    description = "Snapshot of the active window's a11y node tree. Default filters to visible nodes that are clickable / scrollable / editable / have text or content_description. verbose=true skips the filter (use sparingly). max_nodes caps result (default 500, max 2000). package_name optionally restricts + errors if the foreground app doesn't match.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {

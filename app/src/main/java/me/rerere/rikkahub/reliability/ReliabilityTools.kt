@@ -61,16 +61,7 @@ fun checkAppUpdatesTool(checker: GitHubReleaseChecker): Tool = Tool(
 
 fun generateBugReportTool(context: Context, builder: BugReportBuilder): Tool = Tool(
     name = "generate_bug_report",
-    description = """
-        Build a local bug-report ZIP for this app. Captures the last ~5000 lines of logcat
-        (with secrets redacted), the app version + device model + Android version, and a
-        README explaining what's NOT included (your conversations, tokens, hosts, memories
-        — none of these go in). Returns the absolute path to the ZIP and a content:// URI
-        suitable for sharing via Intent.ACTION_SEND.
-
-        Approval-required: writes a file to disk. Eligible for "Always Allow" — the file is
-        per-call and lives only in app cache (cleared by the OS on space pressure).
-    """.trimIndent(),
+    description = "Build a bug-report ZIP: last ~5000 lines of secret-redacted logcat + app/device/Android version + a README listing what's excluded (conversations, tokens, hosts, memories all stay private). Returns absolute path + content:// URI for ACTION_SEND share. File lives in app cache.",
     parameters = { InputSchema.Obj(properties = buildJsonObject {}, required = emptyList()) },
     needsApproval = true,
     execute = {
