@@ -550,11 +550,15 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         return when {
             jsonObject.containsKey("text") -> {
                 val thought = jsonObject["thought"]?.jsonPrimitive?.booleanOrNull ?: false
+                val thoughtSignature = jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull
                 val text = jsonObject["text"]?.jsonPrimitive?.content ?: ""
                 if (thought) UIMessagePart.Reasoning(
                     reasoning = text,
                     createdAt = Clock.System.now(),
-                    finishedAt = null
+                    finishedAt = null,
+                    metadata = thoughtSignature?.let {
+                        buildJsonObject { put("thoughtSignature", JsonPrimitive(it)) }
+                    },
                 ) else UIMessagePart.Text(text)
             }
 
@@ -616,16 +620,45 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     private fun JsonArrayBuilder.addModelMessage(message: UIMessage) {
         val groups = groupPartsByToolBoundary(message.parts)
         val partsBuffer = mutableListOf<JsonObject>()
+        // Forward thoughtSignature from any preceding Reasoning part to the next Tool
+        // part that doesn't already carry one. Gemini emits the signature on the thought
+        // (text + thought=true), but Reasoning parts are not sent back to Gemini in
+        // continuation requests — without forwarding, the next functionCall arrives
+        // unsigned and Gemini rejects with "Function call is missing a thought_signature
+        // in functionCall parts". Tracked across the message's parts list so cross-chunk
+        // streaming (thought in chunk N, functionCall in chunk N+1) still attaches the
+        // signature when the assistant message is finally serialized.
+        var carriedSig: String? = null
 
         for (group in groups) {
             when (group) {
                 is PartGroup.Content -> {
+                    // Track most recent reasoning signature for the next tool group.
+                    group.parts.forEach { part ->
+                        if (part is UIMessagePart.Reasoning) {
+                            part.metadata?.get("thoughtSignature")
+                                ?.jsonPrimitive?.contentOrNull
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { carriedSig = it }
+                        }
+                    }
                     group.parts.mapNotNull { it.toGooglePart() }.forEach { partsBuffer.add(it) }
                 }
 
                 is PartGroup.Tools -> {
                     // 添加 functionCall 到 parts 缓冲
-                    group.tools.forEach { partsBuffer.add(it.toFunctionCallPart()) }
+                    group.tools.forEach { tool ->
+                        val effective = if (
+                            tool.metadata?.get("thoughtSignature")?.jsonPrimitive?.contentOrNull.isNullOrBlank()
+                            && carriedSig != null
+                        ) {
+                            tool.copy(metadata = buildJsonObject {
+                                put("thoughtSignature", JsonPrimitive(carriedSig!!))
+                            })
+                        } else tool
+                        partsBuffer.add(effective.toFunctionCallPart())
+                    }
+                    carriedSig = null  // consumed by this tool group
 
                     // 输出 model 消息
                     add(buildJsonObject {
