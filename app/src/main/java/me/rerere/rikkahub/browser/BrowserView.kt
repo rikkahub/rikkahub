@@ -2,7 +2,9 @@ package me.rerere.rikkahub.browser
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.view.View
 import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
@@ -129,6 +131,10 @@ private fun WebViewHost(
     // configuration changes (the Activity declares `configChanges` so the system never
     // recreates us). Recreating per-recomp would reset history, scroll, and JS state.
     val webView = remember {
+        // Enable Chrome DevTools attachment for the WebView once per process. Costs
+        // nothing at runtime (debug builds enable it by default in many apps) but lets
+        // us attach `chrome://inspect` from a desktop browser when a page renders weird.
+        WebView.setWebContentsDebuggingEnabled(true)
         WebView(ctx).apply {
             settings.apply {
                 javaScriptEnabled = true
@@ -141,12 +147,26 @@ private fun WebViewHost(
                 loadWithOverviewMode = true
                 setSupportMultipleWindows(false)
                 javaScriptCanOpenWindowsAutomatically = false
-                mediaPlaybackRequiresUserGesture = true
+                // Match Chrome's default — most modern pages assume autoplay is allowed.
+                // Forcing user gesture made some news / video pages render blank because
+                // their player JS errored out before the layout settled.
+                mediaPlaybackRequiresUserGesture = false
                 builtInZoomControls = true
                 displayZoomControls = false
+                // Many HTTPS pages pull HTTP images / scripts (analytics, ads, fonts).
+                // The default NEVER_ALLOW silently blocks all of them, leaving white
+                // pages on a depressing number of mainstream sites. COMPATIBILITY_MODE
+                // is what stock Chrome ships and matches the user's expectation that
+                // "page works in Chrome → page works here".
+                mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 // User-Agent: leave the WebView default. Spec rationale: most bot detectors
                 // are happy with "looks like Chrome on Android"; modifying gives a worse signal.
             }
+            // Force the WebView onto a hardware layer. Compose's AndroidView interop has
+            // a known quirk where the WebView sometimes loses its hardware layer when
+            // hosted inside a Box and ends up rendering pages all-white. Setting it
+            // explicitly is cheap and idempotent.
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
             // Profile dir is informational — the global WebView databases live where the
             // WebView wants. We create the dir ourselves in BrowserActivity.onCreate so
