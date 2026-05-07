@@ -164,6 +164,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("termux")            data object Termux            : LocalToolOption()
     @Serializable @SerialName("notification_listener") data object NotificationListener : LocalToolOption()
     @Serializable @SerialName("files")               data object Files              : LocalToolOption()
+    @Serializable @SerialName("mcp_control")         data object McpControl         : LocalToolOption()
 }
 
 class LocalTools(
@@ -180,6 +181,7 @@ class LocalTools(
     private val telegramBotPreferences: me.rerere.rikkahub.data.telegram.TelegramBotPreferences,
     private val telegramBotClient: me.rerere.rikkahub.data.telegram.TelegramBotClient,
     private val notificationListenerPreferences: me.rerere.rikkahub.data.notifications.NotificationListenerPreferences,
+    private val mcpManager: me.rerere.rikkahub.data.ai.mcp.McpManager,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -618,6 +620,17 @@ class LocalTools(
             tools.add(createDirectoryTool())
             tools.add(fileInfoTool())
             tools.add(findFilesTool())
+        }
+        if (options.contains(LocalToolOption.McpControl)) {
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpListTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpGetTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpAddTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpUpdateTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpDeleteTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpSetEnabledTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpTestTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpListToolsTool(settingsStore, mcpManager))
+            tools.add(me.rerere.rikkahub.data.ai.mcp.control.mcpSetToolApprovalTool(settingsStore))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

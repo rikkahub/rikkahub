@@ -87,7 +87,7 @@ class McpManager(
                 .map { settings -> settings.mcpServers }
                 .collect { mcpServerConfigs ->
                     runCatching {
-                        Log.i(TAG, "update configs: $mcpServerConfigs")
+                        Log.i(TAG, "update configs: ${mcpServerConfigs.joinToString { redactConfigForLog(it) }}")
                         val newConfigs = mcpServerConfigs.filter { it.commonOptions.enable }
                         val currentConfigs = clients.keys.toList()
                         val (toAdd, toRemove) = currentConfigs.checkDifferent(
@@ -323,6 +323,27 @@ class McpManager(
         }
     }
 
+    /**
+     * Force a re-connect + tool re-sync for a single server identified by its id. Used by
+     * the LLM-callable `mcp_test` tool: tearing down the existing client and re-`addClient`ing
+     * gives us the same code path the initial connect uses, so a "test now" reflects exactly
+     * what the next reconnect would do. Also resets the per-server backoff counter — a
+     * successful manual test means the next genuine failure starts at the lowest delay
+     * instead of inheriting whatever the auto-reconnect ladder had wound up to.
+     *
+     * Returns the in-memory config the manager ended up with (so callers can read the
+     * fresh tool list), or null if no server with that id is currently registered.
+     */
+    suspend fun forceResync(serverId: Uuid): McpServerConfig? = withContext(Dispatchers.IO) {
+        val current = clients.keys.firstOrNull { it.id == serverId }
+            ?: settingsStore.settingsFlow.value.mcpServers.firstOrNull { it.id == serverId }
+            ?: return@withContext null
+        cancelReconnect(serverId)
+        reconnectAttempts[serverId] = 0
+        addClient(current)
+        clients.keys.firstOrNull { it.id == serverId }
+    }
+
     suspend fun removeClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
         cancelReconnect(config.id)
         val toRemove = clients.entries.filter { it.key.id == config.id }
@@ -448,6 +469,35 @@ class McpManager(
 
     fun getStatus(config: McpServerConfig): Flow<McpStatus> {
         return syncingStatus.map { it[config.id] ?: McpStatus.Idle }
+    }
+}
+
+/**
+ * Build a one-line summary of an MCP config that's safe to log. Uses the shared header
+ * redactor so secret values never reach logcat. Logging the full data class via toString
+ * (which is what `$mcpServerConfigs` would do) leaks every Authorization / X-Api-Key
+ * value verbatim — addressed in the Phase 10 audit pass.
+ */
+private fun redactConfigForLog(config: McpServerConfig): String {
+    val transport = when (config) {
+        is McpServerConfig.SseTransportServer -> "sse"
+        is McpServerConfig.StreamableHTTPServer -> "streamable_http"
+    }
+    val url = when (config) {
+        is McpServerConfig.SseTransportServer -> config.url
+        is McpServerConfig.StreamableHTTPServer -> config.url
+    }
+    val redactedHeaders = me.rerere.rikkahub.data.ai.mcp.control.McpHeaderRedactor
+        .redactHeaders(config.commonOptions.headers)
+    return buildString {
+        append("McpServer(id=").append(config.id)
+        append(", name='").append(config.commonOptions.name).append('\'')
+        append(", transport=").append(transport)
+        append(", url=").append(url)
+        append(", enabled=").append(config.commonOptions.enable)
+        append(", tools=").append(config.commonOptions.tools.size)
+        append(", headers=[").append(redactedHeaders.joinToString { "${it.first}=${it.second}" }).append("]")
+        append(")")
     }
 }
 

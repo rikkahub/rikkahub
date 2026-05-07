@@ -119,7 +119,31 @@ object ToolApprovalDefaults {
         "telegram_set_assistant",
         "telegram_set_commands",
         "telegram_delete_commands",
+
+        // MCP control — all side-effecting MCP tools require approval.
+        // mcp_add and mcp_update are also flagged with "no always-allow" below because a
+        // hostile MCP server can exfiltrate everything the LLM has access to and we want
+        // a per-call confirmation each time, not a one-shot blanket grant.
+        "mcp_add",
+        "mcp_update",
+        "mcp_delete",
+        "mcp_set_enabled",
+        "mcp_set_tool_approval",
     )
+
+    /**
+     * Tools whose approval prompt MUST drop the "Always Allow" button so the user has to
+     * confirm every single call. Reserved for tools that are inherently privilege-escalation
+     * surfaces — adding an MCP server is exactly that, since a hostile server can exfiltrate
+     * anything reachable through the assistant's tool set. Both in-app and Telegram surfaces
+     * read this set when rendering the keyboard.
+     */
+    val NO_ALWAYS_ALLOW: Set<String> = setOf(
+        "mcp_add",
+        "mcp_update",
+    )
+
+    fun allowsAlwaysAllow(toolName: String): Boolean = toolName !in NO_ALWAYS_ALLOW
 
     /**
      * True if [toolName] requires approval. Local tools are looked up in [ALWAYS_ASK];

@@ -1244,7 +1244,19 @@ class TelegramBotService : Service() {
         chatId: Long,
         tool: UIMessagePart.Tool,
     ) {
-        val argsPreview = formatArgsForDisplay(tool.input).ifEmpty { "(no args)" }
+        // MCP control tools render their args via a redacting helper so Authorization /
+        // X-Api-Key / Cookie values never reach the chat. Any tool the renderer doesn't
+        // recognise falls back to the generic args display.
+        val mcpRendered: String? = runCatching {
+            val parsed = kotlinx.serialization.json.Json.parseToJsonElement(
+                tool.input.ifBlank { "{}" }
+            ) as? kotlinx.serialization.json.JsonObject
+            parsed?.let {
+                me.rerere.rikkahub.data.ai.mcp.control.McpApprovalRenderer.render(tool.toolName, it)
+            }
+        }.getOrNull()
+        val argsPreview = mcpRendered
+            ?: formatArgsForDisplay(tool.input).ifEmpty { "(no args)" }
         val text = buildString {
             append("⚠️ <b>Permission required</b>\n\n")
             append("Tool: <code>")
@@ -1303,7 +1315,7 @@ class TelegramBotService : Service() {
                 chatId = chatId,
                 text = text,
                 parseMode = PARSE_MODE_HTML,
-                replyMarkup = buildApprovalKeyboard(tool.toolCallId),
+                replyMarkup = buildApprovalKeyboard(tool.toolCallId, tool.toolName),
             )
         } catch (e: Throwable) {
             android.util.Log.w(TAG, "approval prompt send failed", e)
@@ -1391,8 +1403,17 @@ class TelegramBotService : Service() {
         } catch (_: Throwable) {}
     }
 
-    /** Build the 2x2 inline keyboard the user taps to approve / deny a Pending tool. */
-    private fun buildApprovalKeyboard(toolCallId: String): JsonObject = buildJsonObject {
+    /**
+     * Build the 2x2 inline keyboard the user taps to approve / deny a Pending tool.
+     *
+     * Tool names in [me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults.NO_ALWAYS_ALLOW]
+     * (e.g. mcp_add / mcp_update — adding an MCP server is a privilege-escalation surface)
+     * collapse to a 3-button layout that drops "Always Allow", so the user has to confirm
+     * every single call.
+     */
+    private fun buildApprovalKeyboard(toolCallId: String, toolName: String? = null): JsonObject = buildJsonObject {
+        val allowAlways = toolName == null ||
+            me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults.allowsAlwaysAllow(toolName)
         put("inline_keyboard", buildJsonArray {
             // Row 1: positive scopes
             addJsonArray {
@@ -1400,9 +1421,11 @@ class TelegramBotService : Service() {
                     put("text", "✅ Allow")
                     put("callback_data", "$APPROVAL_CB_PREFIX${APPROVAL_CB_ONCE}:$toolCallId")
                 }
-                addJsonObject {
-                    put("text", "∞ Always Allow")
-                    put("callback_data", "$APPROVAL_CB_PREFIX${APPROVAL_CB_ALWAYS}:$toolCallId")
+                if (allowAlways) {
+                    addJsonObject {
+                        put("text", "∞ Always Allow")
+                        put("callback_data", "$APPROVAL_CB_PREFIX${APPROVAL_CB_ALWAYS}:$toolCallId")
+                    }
                 }
             }
             // Row 2: chat-scope + deny

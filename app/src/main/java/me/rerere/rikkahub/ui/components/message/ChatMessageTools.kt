@@ -302,9 +302,32 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                             }
                         }
                     }
+                    // MCP control tools: render args via the redacting helper so headers
+                    // like Authorization / X-Api-Key never appear plainly in the approval
+                    // card. Generic args display would leak them (audit finding).
+                    if (tool.toolName.startsWith("mcp_")) {
+                        val mcpRendered = runCatching {
+                            (arguments as? JsonObject)?.let {
+                                me.rerere.rikkahub.data.ai.mcp.control.McpApprovalRenderer
+                                    .render(tool.toolName, it)
+                            }
+                        }.getOrNull()
+                        if (!mcpRendered.isNullOrBlank()) {
+                            Text(
+                                text = mcpRendered,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     // Four-button row: Allow / Always Allow / Allow for this chat / Deny.
                     // Order matches the Telegram inline-keyboard layout so the user sees the
                     // same mental model on both surfaces.
+                    // Tools listed in ToolApprovalDefaults.NO_ALWAYS_ALLOW (e.g. mcp_add /
+                    // mcp_update — adding an MCP server is a privilege-escalation surface)
+                    // drop the Always-Allow button so each call requires fresh confirmation.
+                    val allowAlwaysButton = me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults
+                        .allowsAlwaysAllow(tool.toolName)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilledTonalIconButton(
                             onClick = {
@@ -325,20 +348,22 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                                 modifier = Modifier.size(14.dp),
                             )
                         }
-                        FilledTonalIconButton(
-                            onClick = {
-                                if (inFlight) return@FilledTonalIconButton
-                                inFlight = true
-                                onToolApproval(
-                                    tool.toolCallId, true, "",
-                                    me.rerere.rikkahub.service.ChatService.ApprovalScope.Always,
-                                    tool.toolName,
-                                )
-                            },
-                            enabled = !inFlight,
-                            modifier = Modifier.size(28.dp),
-                        ) {
-                            Text("∞", style = MaterialTheme.typography.labelMedium)
+                        if (allowAlwaysButton) {
+                            FilledTonalIconButton(
+                                onClick = {
+                                    if (inFlight) return@FilledTonalIconButton
+                                    inFlight = true
+                                    onToolApproval(
+                                        tool.toolCallId, true, "",
+                                        me.rerere.rikkahub.service.ChatService.ApprovalScope.Always,
+                                        tool.toolName,
+                                    )
+                                },
+                                enabled = !inFlight,
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Text("∞", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                         FilledTonalIconButton(
                             onClick = {
