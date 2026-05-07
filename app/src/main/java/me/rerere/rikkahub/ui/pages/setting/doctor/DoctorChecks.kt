@@ -20,6 +20,8 @@ import me.rerere.rikkahub.data.repository.ScheduledJobRunRepository
 import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import me.rerere.rikkahub.service.TelegramBotService
 import me.rerere.rikkahub.workflow.repository.WorkflowRepository
+import me.rerere.rikkahub.browser.BrowserPreferences
+import me.rerere.rikkahub.browser.BrowserToolDefaults
 import java.net.InetAddress
 import java.io.File
 
@@ -65,6 +67,9 @@ private object Capability {
     val AllFiles: Set<LocalToolOption> = setOf(
         LocalToolOption.Files,               // file_read / file_write to arbitrary paths
     )
+    val Browser: Set<LocalToolOption> = setOf(
+        LocalToolOption.Browser,             // 17 browser tools (in-app WebView)
+    )
 }
 
 /** Friendly name for the row's "needed by:" subtitle. */
@@ -81,6 +86,7 @@ private fun LocalToolOption.shortName(): String = when (this) {
     LocalToolOption.Workflows -> "Workflows"
     LocalToolOption.Notification -> "Notification"
     LocalToolOption.Files -> "Files"
+    LocalToolOption.Browser -> "Browser"
     else -> this::class.simpleName ?: "?"
 }
 
@@ -104,6 +110,11 @@ class DoctorChecks(
     private val scheduledJobRunRepository: ScheduledJobRunRepository,
     private val conversationRepository: ConversationRepository,
     private val database: AppDatabase,
+    // Pass 3: per-tool browser toggle store. Used by the browser write-tools-enabled INFO
+    // row so the user can spot-check which side-effecting tools are currently switched on.
+    // Optional + nullable so callers that don't construct this DoctorChecks via the DI
+    // graph (a few legacy tests) keep compiling — the row is silently skipped when null.
+    private val browserPreferences: BrowserPreferences? = null,
 ) {
     suspend fun runAll(): List<DoctorCheck> = withContext(Dispatchers.IO) {
         // Aggregate enabled tools across every assistant. A tool is "in use" if at least
@@ -119,6 +130,7 @@ class DoctorChecks(
             addAll(databaseChecks())
             addAll(networkChecks())
             addAll(termuxChecks(enabled))
+            addAll(browserChecks(enabled))
             addAll(maintenanceChecks())
             addAll(diagnosticsChecks(enabled))
         }
@@ -553,6 +565,88 @@ class DoctorChecks(
                     detail = if (runCommandPerm) "Granted — RikkaHub can dispatch shell commands to Termux."
                     else "Not granted. Re-toggle the Termux row in Local Tools to see the post-grant dialog.",
                     severity = if (runCommandPerm) Severity.OK else Severity.WARN,
+                )
+            )
+        }
+    }
+
+    // ----- Browser (Pass 3) ------------------------------------------------------------
+
+    /**
+     * Pass 3: Doctor rows for the in-app browser feature.
+     *  - `browser.profile_dir_writable` — the WebView profile lives at
+     *    `${filesDir}/browser-profile/`. The directory MUST exist + be writable for cookies
+     *    to persist across app restarts. AutoFix re-creates it on demand.
+     *  - `browser.write_tools_status` — informational live count of which write-tools the
+     *    user has switched on. Lets a user spot-check at a glance whether `browser_type`
+     *    is unintentionally enabled. INFO severity, no fix action.
+     *
+     * The category is [DoctorCategory.Permissions] per the spec ("Permissions / Services").
+     * Both rows are emitted regardless of master Browser-toggle state, but their severity
+     * downgrades to INFO when no assistant has [LocalToolOption.Browser] enabled (matches
+     * the existing capability-aware pattern used throughout the file).
+     */
+    private fun browserChecks(enabled: Set<LocalToolOption>): List<DoctorCheck> = buildList {
+        val needers = requirersOf(Capability.Browser, enabled)
+        val browserNeeded = needers.isNotEmpty()
+
+        // Row 1: profile dir writable (with AutoFix to mkdirs).
+        val profileDir = File(context.filesDir, "browser-profile")
+        val exists = runCatching { profileDir.exists() && profileDir.isDirectory }.getOrDefault(false)
+        val writable = exists && runCatching { profileDir.canWrite() }.getOrDefault(false)
+        val ok = exists && writable
+        add(
+            DoctorCheck(
+                id = "browser.profile_dir_writable",
+                category = DoctorCategory.Permissions,
+                label = "Browser profile directory",
+                detail = when {
+                    ok && browserNeeded -> "${profileDir.absolutePath} exists and is writable — cookies persist."
+                    ok -> "${profileDir.absolutePath} exists. Not required by any enabled tool."
+                    !exists && browserNeeded -> "Directory does not exist. Cookies and localStorage won't persist. Needed by: Browser."
+                    !exists -> "Directory does not exist. Not required by any enabled tool."
+                    !writable && browserNeeded -> "Directory exists but is not writable. Needed by: Browser."
+                    else -> "Directory exists but is not writable."
+                },
+                severity = when {
+                    ok -> Severity.OK
+                    browserNeeded -> Severity.WARN
+                    else -> Severity.INFO
+                },
+                fix = if (!ok && browserNeeded) FixAction.AutoFix(
+                    label = "Create directory",
+                    run = {
+                        val created = runCatching { profileDir.mkdirs() }.getOrDefault(false)
+                        val nowOk = profileDir.exists() && profileDir.canWrite()
+                        AutoFixResult(
+                            ok = nowOk,
+                            message = if (nowOk) "Created ${profileDir.absolutePath}."
+                            else if (created) "Directory created but still not writable — check storage permission."
+                            else "mkdirs() returned false; underlying storage may be read-only.",
+                        )
+                    },
+                ) else null,
+            )
+        )
+
+        // Row 2: write-tools live count (INFO only). Skipped silently if BrowserPreferences
+        // wasn't injected — the row is purely informational and the test harness paths
+        // that don't construct prefs shouldn't fail.
+        val prefs = browserPreferences
+        if (prefs != null) {
+            val snapshot = runCatching { prefs.snapshotBlocking() }.getOrDefault(BrowserToolDefaults.DEFAULT_ENABLED)
+            val onWriteTools = BrowserToolDefaults.WRITE_TOOLS.filter { snapshot[it] == true }
+            val detail = if (onWriteTools.isEmpty())
+                "Live count of side-effecting browser tools enabled: 0. None of the write tools are switched on."
+            else
+                "Live count of side-effecting browser tools enabled: ${onWriteTools.size} (${onWriteTools.joinToString(", ") { it.removePrefix("browser_") }})."
+            add(
+                DoctorCheck(
+                    id = "browser.write_tools_status",
+                    category = DoctorCategory.Permissions,
+                    label = "Browser write tools enabled",
+                    detail = detail,
+                    severity = Severity.INFO,
                 )
             )
         }

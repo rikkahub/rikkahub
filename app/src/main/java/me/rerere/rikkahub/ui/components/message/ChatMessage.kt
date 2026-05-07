@@ -359,7 +359,16 @@ private fun MessagePartsBlock(
             is MessagePartBlock.ContentBlock -> key(block.index) {
                 when (val part = block.part) {
                     is UIMessagePart.Text -> {
-                        SelectionContainer {
+                        // Pass 3: a Text part may carry a `rikkahub.webview` metadata
+                        // block emitted by a JS skill (Phase 20-audit). When present we
+                        // render a tap-to-open card that routes into BrowserActivity
+                        // instead of the standard markdown — "browser as the viewer."
+                        // The card returns true on render so we skip the markdown branch.
+                        // Only consider for non-user messages — user messages don't carry
+                        // this metadata.
+                        val renderedAsWebviewCard =
+                            role != MessageRole.USER && SkillWebviewCardOrNull(part)
+                        if (!renderedAsWebviewCard) SelectionContainer {
                             if (role == MessageRole.USER) {
                                 Surface(
                                     modifier = Modifier.animateContentSize(),

@@ -28,6 +28,8 @@
     <exclude domain="sharedpref" />
     <exclude domain="file" path="datastore/" />
     <exclude domain="file" path="known_hosts" />
+    <!-- Pass 3: WebView cookies + localStorage. Auth tokens MUST not walk off the device. -->
+    <exclude domain="file" path="browser-profile/" />
   </cloud-backup>
   <device-transfer>
     <include domain="file" path="upload/" />
@@ -35,5 +37,7 @@
     <exclude domain="sharedpref" />
     <exclude domain="file" path="datastore/" />
     <exclude domain="file" path="known_hosts" />
+    <!-- Pass 3: same reasoning as cloud-backup; never transfer browser auth state. -->
+    <exclude domain="file" path="browser-profile/" />
   </device-transfer>
 </data-extraction-rules>

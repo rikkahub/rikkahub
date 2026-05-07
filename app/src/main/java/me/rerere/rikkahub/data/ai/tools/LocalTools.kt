@@ -733,7 +733,13 @@ class LocalTools(
             val browserPrefs = browserPreferences.snapshotBlocking()
             me.rerere.rikkahub.browser.BrowserToolDefaults.ALL_TOOLS.forEach { name ->
                 if (browserPrefs[name] == true) {
-                    me.rerere.rikkahub.data.ai.tools.local.createBrowserTool(name, context)?.let { tools.add(it) }
+                    me.rerere.rikkahub.data.ai.tools.local.createBrowserTool(
+                        toolName = name,
+                        context = context,
+                        // Pass 3: thread the caller context so browser_open can pick the
+                        // foreground vs headless mode by reading HeadlessConversations.
+                        invocationContext = invocationContext,
+                    )?.let { tools.add(it) }
                 }
             }
         }
