@@ -145,7 +145,15 @@ private fun WebViewHost(
                 domStorageEnabled = true
                 @Suppress("DEPRECATION") // Removed in API 35 but the symbol is still here at compile time
                 databaseEnabled = true
-                allowFileAccess = false
+                // Phase 20D needs this — skill webview cards produce file:// URLs into
+                // the app's private data dir (resolveSkillWebviewUrl emits e.g.
+                // file:///data/data/.../skills/text-spinner/scripts/index.html?label=foo)
+                // and the SkillWebviewCard's "Open in browser" button asks BrowserActivity
+                // to load them. With this flag false the WebView returns ERR_ACCESS_DENIED
+                // and the entire skill→browser viewer route fails. Cross-origin protection
+                // still applies via the file:// unique-origin rule — http(s) pages can't
+                // read file:// content via fetch/XHR even with this flag on.
+                allowFileAccess = true
                 allowContentAccess = false
                 useWideViewPort = true
                 loadWithOverviewMode = true
