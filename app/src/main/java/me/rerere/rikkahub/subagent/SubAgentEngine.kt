@@ -42,11 +42,23 @@ private const val TAG = "SubAgentEngine"
  */
 class SubAgentEngine(
     private val registry: SubAgentRegistry,
-    private val chatService: ChatService,
     private val conversationRepo: ConversationRepository,
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
 ) {
+
+    /**
+     * [ChatService] is resolved lazily via Koin to break the construction cycle:
+     *   - [ChatService] constructor takes [LocalTools]
+     *   - [LocalTools] constructor takes [SubAgentEngine] (so subagent_dispatch can fire)
+     *   - [SubAgentEngine] needs [ChatService] only at dispatch time (sendMessage), so
+     *     eager constructor injection here would close the cycle.
+     * Same lazy-Koin pattern as [me.rerere.rikkahub.workflow.execution.WorkflowEngine.localTools].
+     * Verified post-DI-fix 2026-05-08 — installed APK reaches MainActivity without crash.
+     */
+    private val chatService: ChatService by lazy {
+        org.koin.java.KoinJavaComponent.getKoin().get<ChatService>()
+    }
 
     sealed class DispatchResult {
         data class Ok(val run: SubAgentRun) : DispatchResult()

@@ -80,7 +80,8 @@ val appModule = module {
     single {
         me.rerere.rikkahub.subagent.SubAgentEngine(
             registry = get(),
-            chatService = get(),
+            // chatService is resolved lazily inside SubAgentEngine to break the
+            // ChatService→LocalTools→SubAgentEngine→ChatService cycle. See SubAgentEngine kdoc.
             conversationRepo = get(),
             settingsStore = get(),
             appScope = get(),
