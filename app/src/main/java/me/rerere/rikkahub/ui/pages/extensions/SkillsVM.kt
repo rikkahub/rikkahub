@@ -13,9 +13,16 @@ import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.withTimeoutOrNull
+import me.rerere.rikkahub.skills.CatalogEntry
+import me.rerere.rikkahub.skills.SkillCatalog
 import me.rerere.rikkahub.skills.SkillUrlImporter
 import me.rerere.rikkahub.skills.SkillZipError
 import me.rerere.rikkahub.skills.SkillZipImporter
+import me.rerere.rikkahub.skills.loadCatalogFromAssets
 import java.util.LinkedHashMap
 import org.json.JSONArray
 import java.io.File
@@ -35,6 +42,18 @@ class SkillsVM(
     }
     private val _skills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val skills = _skills.asStateFlow()
+
+    /**
+     * Phase 19D — flow-derived snapshot of currently-installed skill names. The catalog
+     * sheet observes this so the "Install" / "Installed" button state stays in sync as
+     * the user (or LLM) installs / deletes skills.
+     */
+    val installedSkillNames = _skills
+        .map { list -> list.mapTo(mutableSetOf()) { it.name } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /** Phase 19D — bundled catalog. Loaded lazily on first access. */
+    val catalog: SkillCatalog by lazy { loadCatalogFromAssets(context) }
 
     init {
         loadSkills()
@@ -154,6 +173,40 @@ class SkillsVM(
                     onResult(false, t.message ?: "skill_import_unsupported_file_type")
                 }
             }
+        }
+    }
+
+    /**
+     * Phase 19D — install a skill from a [CatalogEntry].
+     *
+     * If the entry is `is_bundled = true`, this is a no-op (the skill is already on disk
+     * via [SkillManager.seedDefaultSkillsIfNeeded]) and we return success immediately so
+     * the UI flips its row to "Installed". Otherwise [CatalogEntry.sourceUrl] is fetched
+     * via [SkillUrlImporter.importFromUrl] under a 30-second hard timeout — same surface
+     * as the existing GitHub-URL import path, including HTML guard + format detector.
+     */
+    fun installFromCatalog(entry: CatalogEntry, onResult: (success: Boolean, message: String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (entry.isBundled) {
+                _skills.value = skillManager.listSkills()
+                withContext(Dispatchers.Main) { onResult(true, entry.name) }
+                return@launch
+            }
+            val url = entry.sourceUrl
+            if (url.isNullOrBlank()) {
+                withContext(Dispatchers.Main) { onResult(false, "skill_catalog_install_failed") }
+                return@launch
+            }
+            val result = withTimeoutOrNull(30_000) {
+                urlImporter.importFromUrl(url)
+            }
+            val (ok, msg) = when (result) {
+                null -> false to "skill_catalog_install_failed"
+                is SkillUrlImporter.Result.Ok -> true to result.metadata.name
+                is SkillUrlImporter.Result.Err -> false to result.detail
+            }
+            _skills.value = skillManager.listSkills()
+            withContext(Dispatchers.Main) { onResult(ok, msg) }
         }
     }
 

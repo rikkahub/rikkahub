@@ -989,6 +989,10 @@
   <string name="skill_detail_page_file_name_invalid">Invalid file name</string>
   <string name="skill_detail_page_new_file">New File</string>
   <string name="skill_detail_page_save">Save</string>
+  <string name="skill_catalog_install">Install</string>
+  <string name="skill_catalog_install_failed">Install failed: %s</string>
+  <string name="skill_catalog_installed">Installed</string>
+  <string name="skill_catalog_title">Featured skills</string>
   <string name="skill_import_from_file_label">Import from file</string>
   <string name="skill_import_from_file_picker_title">Choose a .md or .zip skill file</string>
   <string name="skill_import_missing_skill_md">No SKILL.md found inside the zip.</string>
