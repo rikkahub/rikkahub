@@ -1406,6 +1406,10 @@
   <string name="browser_address_bar_more">More options</string>
   <string name="browser_address_bar_stop_ai">Stop AI</string>
   <string name="browser_address_bar_placeholder">Search or type URL</string>
+  <string name="skill_webview_card_embedded">Embedded viewer</string>
+  <string name="skill_webview_card_direct">Direct viewer</string>
+  <string name="skill_webview_card_default_title">Open in a viewer</string>
+  <string name="skill_webview_card_open">Open in browser</string>
   <string name="browser_ai_stripe_idle">AI ready</string>
   <string name="browser_ai_stripe_active">AI: %1$s</string>
   <string name="browser_ai_stripe_expand">Show recent</string>

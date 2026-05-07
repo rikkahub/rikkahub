@@ -14,8 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.R
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -71,14 +73,17 @@ internal fun SkillWebviewCardOrNull(
             // a direct full-screen open. v1 always opens direct in BrowserActivity; the
             // label is informational.
             Text(
-                text = if (webview.iframe) "Embedded viewer" else "Direct viewer",
+                text = stringResource(
+                    if (webview.iframe) R.string.skill_webview_card_embedded
+                    else R.string.skill_webview_card_direct
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline,
             )
             // Title: the skill's "Open in a viewer" text (or whatever they returned). The
             // skill author writes this to be human-readable; we keep it as-is.
             Text(
-                text = part.text.ifBlank { "Open in a viewer" },
+                text = part.text.ifBlank { stringResource(R.string.skill_webview_card_default_title) },
                 style = MaterialTheme.typography.titleMedium,
             )
             // URL preview line — gives the user the destination before the tap.
@@ -105,7 +110,7 @@ internal fun SkillWebviewCardOrNull(
                         context.startActivity(BrowserActivity.intent(context, webview.url))
                     }
                 }) {
-                    Text("Open in browser")
+                    Text(stringResource(R.string.skill_webview_card_open))
                 }
             }
         }
