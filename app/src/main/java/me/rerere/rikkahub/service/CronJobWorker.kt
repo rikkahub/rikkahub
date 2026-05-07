@@ -236,7 +236,16 @@ class CronJobWorker(
         val settings = settingsStore.settingsFlow.first()
         val assistant = settings.findAssistantById(assistantUuid)
             ?: return Triple("failed", "assistant_not_found", null)
-        val tools = localTools.getTools(assistant.localTools)
+        // Headless context — sub-agent recursion guard fires from this dispatch path so
+        // a cron job's direct-mode action sequence cannot itself spawn a sub-agent.
+        val tools = localTools.getTools(
+            assistant.localTools,
+            me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
+                callerAssistantId = assistantUuid.toString(),
+                callerConversationId = null,  // direct-mode has no conversation
+                isHeadless = true,
+            ),
+        )
         val seq = directRunner.run(parsed, tools)
         return Triple(seq.finalOutcome, seq.errorMessage, null)
     }

@@ -402,12 +402,31 @@ class ChatService(
 
         val match = me.rerere.rikkahub.skills.FastPathRouter.route(userText) ?: return false
 
-        // Find the tool in the assistant's currently-registered surface. If the user's
-        // toggles don't include the underlying capability, fall through to the LLM (which
-        // will respond "I can't do that without the X tool").
-        val tools = localTools.getTools(assistant.localTools)
+        // Tool list construction is non-trivial on assistants with many enabled categories
+        // (allocates a fresh List<Tool> each call). Defer until AFTER a router match so the
+        // common no-match path stays at a single regex scan + an early return.
+        // Fast-path is gated on !isHeadless above; pass the caller context so any tools the
+        // router fires inherit the right assistant id (workflows / sub-agents / etc).
+        val tools = localTools.getTools(
+            assistant.localTools,
+            me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
+                callerAssistantId = assistant.id.toString(),
+                callerConversationId = conversationId.toString(),
+                isHeadless = false,  // gated above
+            ),
+        )
         val tool = tools.firstOrNull { it.name == match.toolName } ?: run {
             android.util.Log.d("FastPathRouter", "matched intent=${match.intent} but tool=${match.toolName} not registered for assistant; falling through")
+            return false
+        }
+
+        // Defence-in-depth — even though v1's intent set is read-only, run HARDLINE here so
+        // that adding a side-effecting intent later (e.g. "set brightness 50%") can't bypass
+        // the floor by routing around the LLM-tool-call path that normally enforces it.
+        val hardlineReason = me.rerere.rikkahub.data.ai.tools.HardlineCommandGuard
+            .checkTool(match.toolName, match.args.toString())
+        if (hardlineReason != null) {
+            android.util.Log.w("FastPathRouter", "hardline-blocked intent=${match.intent} tool=${match.toolName}: $hardlineReason; falling through to LLM")
             return false
         }
 
@@ -747,7 +766,18 @@ class ChatService(
                     if (settings.enableWebSearch) {
                         addAll(createSearchTools(settings))
                     }
-                    addAll(localTools.getTools(settings.getCurrentAssistant().localTools))
+                    // Pass the caller context so context-aware tools (subagent_dispatch
+                    // recursion guard, workflow_create authoring-id) can read the
+                    // calling conversation + assistant. isHeadless is read from
+                    // HeadlessConversations — true iff this is a cron / sub-agent /
+                    // workflow / external-automation flow.
+                    val invocationCtx = me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
+                        callerAssistantId = settings.getCurrentAssistant().id.toString(),
+                        callerConversationId = conversationId.toString(),
+                        isHeadless = me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+                            .isHeadless(conversationId),
+                    )
+                    addAll(localTools.getTools(settings.getCurrentAssistant().localTools, invocationCtx))
                     val assistant = settings.getCurrentAssistant()
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(

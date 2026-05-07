@@ -117,9 +117,11 @@ private fun AssistantLocalToolContent(
 
     var showTermuxPostGrantDialog by remember { mutableStateOf(false) }
     var showTelegramNoTokenDialog by remember { mutableStateOf(false) }
+    var showWorkflowsHintDialog by remember { mutableStateOf(false) }
     var termuxDialogShownThisVisit by remember { mutableStateOf(false) }
     var telegramDialogShownThisVisit by remember { mutableStateOf(false) }
     var cronToastShownThisVisit by remember { mutableStateOf(false) }
+    var workflowsDialogShownThisVisit by remember { mutableStateOf(false) }
 
     val cronHintText = stringResource(R.string.assistant_page_local_tools_cron_jobs_toast_hint)
     val termuxCommand = stringResource(R.string.assistant_page_local_tools_termux_postgrant_command)
@@ -170,6 +172,19 @@ private fun AssistantLocalToolContent(
             text = { Text(stringResource(R.string.assistant_page_local_tools_telegram_notoken_message)) },
             confirmButton = {
                 TextButton(onClick = { showTelegramNoTokenDialog = false }) {
+                    Text(stringResource(R.string.assistant_page_local_tools_dialog_dismiss))
+                }
+            },
+        )
+    }
+
+    if (showWorkflowsHintDialog) {
+        AlertDialog(
+            onDismissRequest = { showWorkflowsHintDialog = false },
+            title = { Text(stringResource(R.string.assistant_page_local_tools_workflows_hint_title)) },
+            text = { Text(stringResource(R.string.assistant_page_local_tools_workflows_hint_message)) },
+            confirmButton = {
+                TextButton(onClick = { showWorkflowsHintDialog = false }) {
                     Text(stringResource(R.string.assistant_page_local_tools_dialog_dismiss))
                 }
             },
@@ -865,7 +880,19 @@ private fun AssistantLocalToolContent(
                 trailingContent = {
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.Workflows),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.Workflows, it) }
+                        onCheckedChange = { newValue ->
+                            toggleLocalTool(LocalToolOption.Workflows, newValue)
+                            // Workflows depend on a mix of runtime grants the toggle itself
+                            // can't request (geofence needs background-location, notification
+                            // triggers need notification-listener, app-launch triggers need
+                            // accessibility, BT triggers need BLUETOOTH_CONNECT). Surface a
+                            // one-time hint at enable so the user knows what to grant when
+                            // they author a workflow whose trigger needs it.
+                            if (newValue && !workflowsDialogShownThisVisit) {
+                                workflowsDialogShownThisVisit = true
+                                showWorkflowsHintDialog = true
+                            }
+                        }
                     )
                 }
             )

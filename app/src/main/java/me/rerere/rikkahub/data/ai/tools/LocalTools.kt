@@ -454,7 +454,10 @@ class LocalTools(
         )
     }
 
-    fun getTools(options: List<LocalToolOption>): List<Tool> {
+    fun getTools(
+        options: List<LocalToolOption>,
+        invocationContext: ToolInvocationContext = ToolInvocationContext.EMPTY,
+    ): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
             tools.add(javascriptTool)
@@ -658,7 +661,11 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.reliability.generateBugReportTool(context, bugReportBuilder))
         }
         if (options.contains(LocalToolOption.SubAgents)) {
-            tools.add(me.rerere.rikkahub.subagent.subagentDispatchTool(subAgentEngine))
+            // Pass the caller context so the recursion guard inside SubAgentEngine.dispatch
+            // can fire — the dispatch tool itself can't read its own coroutine context, but
+            // ChatService / cron / workflow / external-automation know who's calling at the
+            // moment they construct the tool list.
+            tools.add(me.rerere.rikkahub.subagent.subagentDispatchTool(subAgentEngine, invocationContext))
             tools.add(me.rerere.rikkahub.subagent.subagentListTool(subAgentRegistry))
             tools.add(me.rerere.rikkahub.subagent.subagentGetTool(subAgentRegistry))
             tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry))
@@ -671,15 +678,20 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.skills.skillInstallFromTextTool(skillUrlImporter))
         }
         if (options.contains(LocalToolOption.Workflows)) {
+            // workflow_create persists the authoringAssistantId from [context] so the
+            // engine can resolve the right tool surface at fire time (not "any assistant
+            // with the Workflows toggle on", which is non-deterministic across UI reorder).
             tools.add(me.rerere.rikkahub.workflow.tools.workflowCreateTool(
                 workflowRepository,
                 knownToolNamesProvider = { tools.map { it.name } },
+                callerContext = invocationContext,
             ))
             tools.add(me.rerere.rikkahub.workflow.tools.workflowListTool(workflowRepository))
             tools.add(me.rerere.rikkahub.workflow.tools.workflowGetTool(workflowRepository))
             tools.add(me.rerere.rikkahub.workflow.tools.workflowUpdateTool(
                 workflowRepository,
                 knownToolNamesProvider = { tools.map { it.name } },
+                callerContext = invocationContext,
             ))
             tools.add(me.rerere.rikkahub.workflow.tools.workflowDeleteTool(workflowRepository))
             tools.add(me.rerere.rikkahub.workflow.tools.workflowSetEnabledTool(workflowRepository))

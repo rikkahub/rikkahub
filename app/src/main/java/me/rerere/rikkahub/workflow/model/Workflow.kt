@@ -54,6 +54,14 @@ data class WorkflowDefinition(
     val maxRunsPerDay: Int? = null,
     val createdAtMs: Long = System.currentTimeMillis(),
     val updatedAtMs: Long = System.currentTimeMillis(),
+    /**
+     * Stability fix (2026-05-07 audit) — UUID of the assistant that authored the workflow.
+     * The engine resolves the runtime tool surface from THIS specific assistant at fire
+     * time. If null (legacy rows pre-fix), the engine falls back to the previous
+     * "any assistant with the Workflows toggle on" heuristic with a Log.w. New workflows
+     * always have this set via the ToolInvocationContext propagation in workflow_create.
+     */
+    val authoringAssistantId: String? = null,
 )
 
 /**

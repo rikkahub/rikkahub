@@ -23,6 +23,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -178,8 +179,8 @@ fun WorkflowDetailScreen(
                 if (history.isEmpty()) {
                     Text(stringResource(R.string.setting_page_workflow_detail_history_empty))
                 } else {
-                    val (rel, _) = relativeStrings()
-                    val nowMs = remember { System.currentTimeMillis() }
+                    val rel = relativeStrings()
+                    val nowMs by rememberTickingNowMs()
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         for (r in history) {
                             val ago = formatRelativeAgo(r.firedAtMs, nowMs, rel)
@@ -285,8 +286,8 @@ private fun ActionRow(index: Int, action: WorkflowAction) {
 
 @Composable
 private fun StatsBlock(loaded: Loaded) {
-    val (rel, _) = relativeStrings()
-    val nowMs = remember { System.currentTimeMillis() }
+    val rel = relativeStrings()
+    val nowMs by rememberTickingNowMs()
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val lastRunText = loaded.entity.lastRunAtMs?.let {
             stringResource(R.string.setting_page_workflow_detail_stat_last_run, formatRelativeAgo(it, nowMs, rel))

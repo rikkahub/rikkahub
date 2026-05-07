@@ -1207,6 +1207,12 @@
   <string name="assistant_page_local_tools_skill_import_title">Skill import</string>
   <string name="assistant_page_local_tools_skill_import_desc">Let the assistant install skills from a URL OR from text it already has (e.g. fetched via SSH / curl / MCP for authenticated servers). Native, openclaw, and Hermes formats. Per-call approval required for every install (Always Allow is disabled — you review the source each time).</string>
 
+  <!-- Workflows toggle setup-hint (audit fix 2026-05-07). Many trigger types need extra
+       runtime permissions / system services — surface them at enable time so the user
+       isn\'t surprised that their geofence / notification / app-launch workflow never fires. -->
+  <string name="assistant_page_local_tools_workflows_hint_title">Workflows need extra setup</string>
+  <string name="assistant_page_local_tools_workflows_hint_message">Workflows are enabled. Some trigger types need permissions the toggle can\'t request:\n\n• Geofences (you arrive somewhere): Settings → Apps → RikkaHub → Permissions → Location → Allow all the time.\n• Notification arrives: Settings → Apps → Special access → Notification access → enable RikkaHub.\n• App launches/closes: Settings → Accessibility → enable RikkaHub.\n• Bluetooth connect/disconnect: grant BLUETOOTH_CONNECT when the system asks.\n\nSchedule, WiFi, headphones, power, screen on/off, and battery triggers work right out of the box. The assistant will flag any extra setup at the moment you author a workflow that needs it.</string>
+
   <!-- Phase 12 — Workflows. Top-level Settings page + detail screen + per-assistant
        toggle. Strings are grouped by surface. Translations deferred (English-only). -->
   <string name="assistant_page_local_tools_workflows_title">Workflows</string>

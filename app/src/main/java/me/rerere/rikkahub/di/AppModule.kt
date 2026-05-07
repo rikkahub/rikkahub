@@ -110,7 +110,11 @@ val appModule = module {
             localTools = get(),
             contextProvider = get(),
             actionRunner = get(),
-        )
+        ).also { engine ->
+            // Bridge for the repo to notify the engine on delete so the engine's per-workflow
+            // lock map doesn't leak. Lazy because both singletons have to exist first.
+            get<me.rerere.rikkahub.workflow.repository.WorkflowRepository>().bindEngine(engine)
+        }
     }
     single {
         me.rerere.rikkahub.workflow.trigger.TriggerRegistry(

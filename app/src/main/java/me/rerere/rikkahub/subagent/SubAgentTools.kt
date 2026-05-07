@@ -49,7 +49,11 @@ private fun encodeRun(run: SubAgentRun): kotlinx.serialization.json.JsonObject =
  * useful inside a sub-agent run).
  */
 
-fun subagentDispatchTool(engine: SubAgentEngine): Tool = Tool(
+fun subagentDispatchTool(
+    engine: SubAgentEngine,
+    callerContext: me.rerere.rikkahub.data.ai.tools.ToolInvocationContext =
+        me.rerere.rikkahub.data.ai.tools.ToolInvocationContext.EMPTY,
+): Tool = Tool(
     name = "subagent_dispatch",
     description = """
         Dispatch a focused sub-agent — a clean-context LLM run that returns a concise
@@ -86,6 +90,16 @@ fun subagentDispatchTool(engine: SubAgentEngine): Tool = Tool(
     },
     needsApproval = true,
     execute = { args ->
+        // Hard recursion guard — refuse the dispatch if the caller is itself a headless
+        // run (cron / workflow / external-automation / another sub-agent). The engine's
+        // own guard relies on a registered conversation id; cron / workflow direct-mode
+        // paths have no conversation so the engine guard wouldn't fire there. Catch it here.
+        if (callerContext.isHeadless) {
+            return@Tool errEnv(
+                "no_recursion",
+                "sub-agent dispatch is not allowed from inside a headless run (cron / workflow / sub-agent / external automation). Run the work inline instead.",
+            )
+        }
         val params = args.jsonObject
         val task = params["task"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool errEnv("invalid_task", "task is required")
@@ -102,14 +116,15 @@ fun subagentDispatchTool(engine: SubAgentEngine): Tool = Tool(
                 ?: SubAgentDefaults.DEFAULT_MAX_TRIPS,
             label = params["label"]?.jsonPrimitive?.contentOrNull,
         )
-        // The engine resolves parentAssistantId / parentChatId from the context the
-        // tool runs in. v1: we don't have a way to read those here without a thread-local
-        // / coroutine-context propagation layer (same gap noted in Phase 10's URL guard).
-        // Pass empty strings — the engine treats unknown parent as "no recursion check"
-        // and "not cancellable via /stop cascade", which is acceptable for v1 since the
-        // tool only registers in non-headless conversations.
-        val parentAssistantId = ""  // see kdoc note
-        val parentChatId: String? = null
+        // The engine's recursion guard checks `HeadlessConversations.isHeadless(parentChatId)`
+        // — if the calling conversation is itself headless (cron / sub-agent / workflow /
+        // external-automation) we refuse the dispatch. ToolInvocationContext propagation
+        // (added 2026-05-07 stability pass) gives us the calling conversation id at tool-
+        // construction time. Empty fallback is a no-knowledge sentinel — engine treats it
+        // as "not in a headless run" which is correct for the legacy registration paths
+        // that don't yet wire context (one-off / test).
+        val parentAssistantId = callerContext.callerAssistantId.orEmpty()
+        val parentChatId: String? = callerContext.callerConversationId
         when (val res = engine.dispatch(parentAssistantId, parentChatId, request)) {
             is SubAgentEngine.DispatchResult.Reject ->
                 return@Tool errEnv(res.error, res.detail)

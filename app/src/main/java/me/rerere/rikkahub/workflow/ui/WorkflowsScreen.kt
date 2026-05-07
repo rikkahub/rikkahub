@@ -20,7 +20,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -122,8 +126,8 @@ private fun WorkflowRow(
     onToggle: (Boolean) -> Unit,
     onTap: () -> Unit,
 ) {
-    val (rel, _) = relativeStrings()
-    val nowMs = remember { System.currentTimeMillis() }
+    val rel = relativeStrings()
+    val nowMs by rememberTickingNowMs()
     val triggerSummary = remember(loaded.definition) {
         oneLineTriggerSummary(loaded.definition)
     }
@@ -187,13 +191,28 @@ internal fun oneLineTriggerSummary(def: WorkflowDefinition): String = when (val 
 }
 
 @Composable
-internal fun relativeStrings(): Pair<RelativeTimeStrings, Unit> {
-    val s = RelativeTimeStrings(
-        justNow = stringResource(R.string.relative_time_just_now),
-        secondsAgo = stringResource(R.string.relative_time_seconds_ago),
-        minutesAgo = stringResource(R.string.relative_time_minutes_ago),
-        hoursAgo = stringResource(R.string.relative_time_hours_ago),
-        daysAgo = stringResource(R.string.relative_time_days_ago),
-    )
-    return s to Unit
+internal fun relativeStrings(): RelativeTimeStrings = RelativeTimeStrings(
+    justNow = stringResource(R.string.relative_time_just_now),
+    secondsAgo = stringResource(R.string.relative_time_seconds_ago),
+    minutesAgo = stringResource(R.string.relative_time_minutes_ago),
+    hoursAgo = stringResource(R.string.relative_time_hours_ago),
+    daysAgo = stringResource(R.string.relative_time_days_ago),
+)
+
+/**
+ * A [State<Long>] of the current wall-clock millis, refreshed every 30s while the calling
+ * Composable is in the composition. Used to keep "ran 2m ago" subtitles fresh without
+ * fully re-deriving every recomposition. The audit found the old `remember { now }` pattern
+ * silently froze the relative-time at the moment the row first composed.
+ */
+@Composable
+internal fun rememberTickingNowMs(): State<Long> {
+    val state = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            state.longValue = System.currentTimeMillis()
+            delay(30_000L)
+        }
+    }
+    return state
 }

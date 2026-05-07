@@ -92,6 +92,21 @@ class TriggerRegistry(
                 Log.w(TAG, "resync failed for family=${family.name}", it)
             }
         }
+        // Tell AppForegroundDispatcher whether any workflow currently needs foreground-app
+        // state — if zero, the accessibility service can short-circuit the volatile write on
+        // every TYPE_WINDOW_STATE_CHANGED event (heavy fan-in). Counts:
+        //  - workflows with app_launched / app_closed triggers
+        //  - workflows whose conditions reference foreground_app_is / foreground_app_in
+        val foregroundConsumerCount = enabled.count { wf ->
+            wf.trigger is me.rerere.rikkahub.workflow.model.TriggerSpec.AppLaunched
+                || wf.trigger is me.rerere.rikkahub.workflow.model.TriggerSpec.AppClosed
+                || wf.conditions.any {
+                    it is me.rerere.rikkahub.workflow.model.ConditionSpec.ForegroundAppIs
+                        || it is me.rerere.rikkahub.workflow.model.ConditionSpec.ForegroundAppIn
+                }
+        }
+        me.rerere.rikkahub.workflow.trigger.AppForegroundDispatcher
+            .setForegroundConsumerCount(foregroundConsumerCount)
     }
 
     /**

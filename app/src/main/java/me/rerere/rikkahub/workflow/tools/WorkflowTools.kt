@@ -36,6 +36,8 @@ import me.rerere.rikkahub.workflow.trigger.TriggerRegistry
 fun workflowCreateTool(
     repository: WorkflowRepository,
     knownToolNamesProvider: () -> List<String>,
+    callerContext: me.rerere.rikkahub.data.ai.tools.ToolInvocationContext =
+        me.rerere.rikkahub.data.ai.tools.ToolInvocationContext.EMPTY,
 ): Tool = Tool(
     name = "workflow_create",
     description = """
@@ -65,7 +67,14 @@ fun workflowCreateTool(
         when (parsed) {
             is WorkflowJson.ParseResult.Err -> errorResponse(parsed.error, parsed.detail)
             is WorkflowJson.ParseResult.Ok -> {
-                val def = parsed.definition
+                // Stamp the authoring assistant from the caller context — the engine reads
+                // this back at fire time to resolve the right tool surface deterministically.
+                // If the user-declared definition pre-set an authoringAssistantId we trust it
+                // (allows API-driven authoring); otherwise fall back to the calling assistant.
+                val def = parsed.definition.copy(
+                    authoringAssistantId = parsed.definition.authoringAssistantId
+                        ?: callerContext.callerAssistantId,
+                )
                 runCatching { repository.upsert(def) }.fold(
                     onSuccess = {
                         listOf(UIMessagePart.Text(buildJsonObject {
@@ -172,6 +181,8 @@ fun workflowGetTool(repository: WorkflowRepository): Tool = Tool(
 fun workflowUpdateTool(
     repository: WorkflowRepository,
     knownToolNamesProvider: () -> List<String>,
+    callerContext: me.rerere.rikkahub.data.ai.tools.ToolInvocationContext =
+        me.rerere.rikkahub.data.ai.tools.ToolInvocationContext.EMPTY,
 ): Tool = Tool(
     name = "workflow_update",
     description = """
@@ -197,9 +208,16 @@ fun workflowUpdateTool(
         when (parsed) {
             is WorkflowJson.ParseResult.Err -> errorResponse(parsed.error, parsed.detail)
             is WorkflowJson.ParseResult.Ok -> {
-                val def = parsed.definition
-                val existing = repository.getById(def.id)
-                    ?: return@Tool errorResponse("not_found", "no workflow with id=${def.id}; use workflow_create instead")
+                val existing = repository.getById(parsed.definition.id)
+                    ?: return@Tool errorResponse("not_found", "no workflow with id=${parsed.definition.id}; use workflow_create instead")
+                // Preserve the existing authoring assistant — workflow_update is for body
+                // edits, not for transferring ownership. If the LLM tries to change it,
+                // we ignore that and keep the original.
+                val def = parsed.definition.copy(
+                    authoringAssistantId = existing.definition.authoringAssistantId
+                        ?: parsed.definition.authoringAssistantId
+                        ?: callerContext.callerAssistantId,
+                )
                 runCatching { repository.upsert(def) }.fold(
                     onSuccess = {
                         listOf(UIMessagePart.Text(buildJsonObject {

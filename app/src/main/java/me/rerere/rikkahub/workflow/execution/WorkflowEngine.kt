@@ -68,6 +68,15 @@ class WorkflowEngine(
     }
 
     /**
+     * Drop the lock entry for a deleted workflow. Wired from
+     * [me.rerere.rikkahub.workflow.repository.WorkflowRepository.deleteCascading] so the
+     * lock map can't grow unbounded across heavy LLM-driven create/delete churn.
+     */
+    suspend fun forgetWorkflow(id: String) {
+        locksMutex.withLock { perWorkflowLocks.remove(id) }
+    }
+
+    /**
      * Trigger callback target. The registry hands every fire here. [matchSpec] is the
      * variant that fired — used for diagnostics; the workflow's own [WorkflowDefinition.trigger]
      * is the source of truth for its semantics.
@@ -94,6 +103,16 @@ class WorkflowEngine(
 
         if (!entity.enabled) {
             return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.SKIPPED_DISABLED, null, "")
+        }
+
+        // Trigger runtime pre-flight — surface "this trigger needs setup" as an explicit
+        // FAILED row in history so the user sees WHY the workflow doesn't fire instead of
+        // just "Never run". The audit found these were silently dying:
+        //  - geofence triggers without ACCESS_FINE_LOCATION + ACCESS_BACKGROUND_LOCATION
+        //  - notification_received without notification listener bound
+        //  - app_launched / app_closed without accessibility service running
+        triggerRuntimeCheck(def.trigger)?.let { reason ->
+            return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.FAILED, reason, "")
         }
 
         // Cooldown gate
@@ -125,25 +144,103 @@ class WorkflowEngine(
             }
         }
 
-        // Resolve assistant + tools — pick the first assistant with the Workflows toggle on.
-        // No fallback to a different assistant: if no assistant has the toggle, the workflow's
-        // action runner would resolve against an UNRELATED tool surface and silently behave
-        // differently from what the user authored. Mark the run FAILED with a stable reason
-        // so the user can re-enable Workflows on an assistant.
+        // Resolve assistant + tools. Prefer the persisted authoring assistant id (added by
+        // the audit-pass fix to remove "first matching assistant" non-determinism). If the
+        // workflow predates that fix (legacy null) OR the authoring assistant was deleted,
+        // fall back to "any assistant with Workflows toggle on" but log loudly — the user's
+        // intent might not match what we run.
         val settings = settingsStore.settingsFlow.first()
-        val authoringAssistant = settings.assistants.firstOrNull { asst ->
-            asst.localTools.any { it is me.rerere.rikkahub.data.ai.tools.LocalToolOption.Workflows }
+        val authoringAssistant = run {
+            val storedId = def.authoringAssistantId
+            val byId = if (storedId != null) {
+                settings.assistants.firstOrNull { it.id.toString() == storedId }
+            } else null
+            if (byId != null) {
+                byId
+            } else {
+                if (storedId != null) {
+                    Log.w(TAG, "fire: authoring assistant $storedId for workflow $workflowId no longer exists; falling back to first-with-Workflows")
+                }
+                settings.assistants.firstOrNull { asst ->
+                    asst.localTools.any { it is me.rerere.rikkahub.data.ai.tools.LocalToolOption.Workflows }
+                }
+            }
         }
         if (authoringAssistant == null) {
             return persistAndReturn(workflowId, firedAtMs, started, WorkflowRunStatus.FAILED,
                 "no_workflows_assistant", "")
         }
-        val tools = localTools.getTools(authoringAssistant.localTools)
+        // Headless context — sub-agent recursion guard fires from workflow-action
+        // dispatch so a workflow's actions can't spawn a sub-agent that re-fires another
+        // workflow_run that re-spawns ad infinitum.
+        val tools = localTools.getTools(
+            authoringAssistant.localTools,
+            me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
+                callerAssistantId = authoringAssistant.id.toString(),
+                callerConversationId = null,  // headless workflow fire — no conv
+                isHeadless = true,
+            ),
+        )
 
         // Execute the action sequence. ActionRunner enforces per-action timeout + HARDLINE.
         val result = actionRunner.run(def.actions, tools)
         val status = if (result.success) WorkflowRunStatus.SUCCESS else WorkflowRunStatus.FAILED
         return persistAndReturn(workflowId, firedAtMs, started, status, result.error, result.summary)
+    }
+
+    /**
+     * Pre-flight check for trigger types that depend on runtime state (a permission, a
+     * service binding, Play Services availability). Returns null if the trigger can fire,
+     * or a stable error code otherwise — the engine then records the fire as FAILED with
+     * that reason and the user sees a clear "missing setup" message in workflow_get history.
+     */
+    private fun triggerRuntimeCheck(trigger: me.rerere.rikkahub.workflow.model.TriggerSpec): String? {
+        val ctx = (this as Any).let {
+            // Static context lookup via Koin so we don't need to take it as a constructor arg
+            // (engine is shared across cron / sub-agent surfaces; minimising its DI surface
+            // is worth a tiny lookup cost on the rare-fire path).
+            org.koin.java.KoinJavaComponent.getKoin().get<android.content.Context>()
+        }
+        return when (trigger) {
+            is me.rerere.rikkahub.workflow.model.TriggerSpec.GeofenceEnter,
+            is me.rerere.rikkahub.workflow.model.TriggerSpec.GeofenceExit -> {
+                val fineGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                    ctx, android.Manifest.permission.ACCESS_FINE_LOCATION
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                val bgGranted = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    androidx.core.content.ContextCompat.checkSelfPermission(
+                        ctx, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } else true
+                when {
+                    !fineGranted -> "geofence_unavailable: ACCESS_FINE_LOCATION not granted — open Settings → Apps → RikkaHub → Permissions → Location and pick Allow all the time"
+                    !bgGranted -> "geofence_unavailable: ACCESS_BACKGROUND_LOCATION not granted — open Settings → Apps → RikkaHub → Permissions → Location and pick Allow all the time"
+                    else -> null
+                }
+            }
+            is me.rerere.rikkahub.workflow.model.TriggerSpec.NotificationReceived -> {
+                if (!me.rerere.rikkahub.data.ai.tools.local.NotificationListenerHandle.isBound()) {
+                    "notification_listener_not_enabled: enable the RikkaHub notification listener in Settings → Apps → Special access → Notification access"
+                } else null
+            }
+            is me.rerere.rikkahub.workflow.model.TriggerSpec.AppLaunched,
+            is me.rerere.rikkahub.workflow.model.TriggerSpec.AppClosed -> {
+                if (!me.rerere.rikkahub.data.ai.tools.local.AccessibilityServiceHandle.isRunning()) {
+                    "accessibility_not_enabled: enable the RikkaHub accessibility service in Settings → Accessibility (required for app_launched / app_closed triggers)"
+                } else null
+            }
+            is me.rerere.rikkahub.workflow.model.TriggerSpec.BluetoothDeviceConnected,
+            is me.rerere.rikkahub.workflow.model.TriggerSpec.BluetoothDeviceDisconnected -> {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                        ctx, android.Manifest.permission.BLUETOOTH_CONNECT
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (!granted) "bluetooth_connect_not_granted: BLUETOOTH_CONNECT runtime permission not granted — required on Android 12+ to read paired-device addresses"
+                    else null
+                } else null
+            }
+            else -> null
+        }
     }
 
     private suspend fun persistAndReturn(

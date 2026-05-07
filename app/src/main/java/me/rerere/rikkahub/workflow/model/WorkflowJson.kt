@@ -170,6 +170,8 @@ object WorkflowJson {
             maxRunsPerDay = maxRunsPerDay,
             createdAtMs = obj["created_at_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: now,
             updatedAtMs = now,
+            authoringAssistantId = obj["authoring_assistant_id"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.isNotBlank() },
         ))
     }
 
@@ -199,6 +201,9 @@ object WorkflowJson {
             }
             put("created_at_ms", JsonPrimitive(definition.createdAtMs.toString()))
             put("updated_at_ms", JsonPrimitive(definition.updatedAtMs.toString()))
+            if (definition.authoringAssistantId != null) {
+                put("authoring_assistant_id", JsonPrimitive(definition.authoringAssistantId))
+            }
         }
         return obj.toString()
     }
@@ -249,6 +254,8 @@ object WorkflowJson {
             maxRunsPerDay = maxRunsPerDay,
             createdAtMs = obj["created_at_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: now,
             updatedAtMs = obj["updated_at_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: now,
+            authoringAssistantId = obj["authoring_assistant_id"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.isNotBlank() },
         )
     }
 
