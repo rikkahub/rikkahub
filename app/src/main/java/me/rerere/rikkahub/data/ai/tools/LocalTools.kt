@@ -167,6 +167,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("mcp_control")         data object McpControl         : LocalToolOption()
     @Serializable @SerialName("external_automation") data object ExternalAutomation : LocalToolOption()
     @Serializable @SerialName("reliability")         data object Reliability        : LocalToolOption()
+    @Serializable @SerialName("sub_agents")          data object SubAgents          : LocalToolOption()
 }
 
 class LocalTools(
@@ -187,6 +188,8 @@ class LocalTools(
     private val externalAutomationConfig: me.rerere.rikkahub.automation.ExternalAutomationConfig,
     private val gitHubReleaseChecker: me.rerere.rikkahub.reliability.GitHubReleaseChecker,
     private val bugReportBuilder: me.rerere.rikkahub.reliability.BugReportBuilder,
+    private val subAgentEngine: me.rerere.rikkahub.subagent.SubAgentEngine,
+    private val subAgentRegistry: me.rerere.rikkahub.subagent.SubAgentRegistry,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -646,6 +649,12 @@ class LocalTools(
         if (options.contains(LocalToolOption.Reliability)) {
             tools.add(me.rerere.rikkahub.reliability.checkAppUpdatesTool(gitHubReleaseChecker))
             tools.add(me.rerere.rikkahub.reliability.generateBugReportTool(context, bugReportBuilder))
+        }
+        if (options.contains(LocalToolOption.SubAgents)) {
+            tools.add(me.rerere.rikkahub.subagent.subagentDispatchTool(subAgentEngine))
+            tools.add(me.rerere.rikkahub.subagent.subagentListTool(subAgentRegistry))
+            tools.add(me.rerere.rikkahub.subagent.subagentGetTool(subAgentRegistry))
+            tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry))
         }
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

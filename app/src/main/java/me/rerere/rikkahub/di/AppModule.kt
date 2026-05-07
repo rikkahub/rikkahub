@@ -75,8 +75,20 @@ val appModule = module {
     single { me.rerere.rikkahub.reliability.GitHubReleaseChecker(get()) }
     single { me.rerere.rikkahub.reliability.BugReportBuilder(get()) }
 
+    // Phase 11: Sub-agents
+    single { me.rerere.rikkahub.subagent.SubAgentRegistry() }
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        me.rerere.rikkahub.subagent.SubAgentEngine(
+            registry = get(),
+            chatService = get(),
+            conversationRepo = get(),
+            settingsStore = get(),
+            appScope = get(),
+        )
+    }
+
+    single {
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {

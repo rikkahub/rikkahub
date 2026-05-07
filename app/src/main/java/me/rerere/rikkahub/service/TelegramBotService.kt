@@ -1728,7 +1728,19 @@ class TelegramBotService : Service() {
         // approval iterations). Without this, the per-chat mutex stays held forever.
         turnJobs.remove(chatId)?.cancelAndJoin()
         cancelStaleApprovalKeyboards(chatId, reason = "/stop")
-        try { client.sendMessage(chatId, "🛑 Generation cancelled. Send a new message when you're ready.") } catch (_: Throwable) {}
+        // Phase 11: cascading /stop. Cancel every active sub-agent dispatched from this
+        // parent conversation. Spec hard constraint 8: "every model stops" — single tick.
+        val cancelledSubAgents = runCatching {
+            org.koin.java.KoinJavaComponent.getKoin()
+                .get<me.rerere.rikkahub.subagent.SubAgentRegistry>()
+                .cancelAllForParent(convId.toString())
+        }.getOrDefault(0)
+        val msg = if (cancelledSubAgents > 0) {
+            "🛑 Generation cancelled (also stopped $cancelledSubAgents sub-agent${if (cancelledSubAgents == 1) "" else "s"}). Send a new message when you're ready."
+        } else {
+            "🛑 Generation cancelled. Send a new message when you're ready."
+        }
+        try { client.sendMessage(chatId, msg) } catch (_: Throwable) {}
     }
 
     private suspend fun handleStatusCommand(chatId: Long) {

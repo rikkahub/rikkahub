@@ -142,6 +142,12 @@ object ToolApprovalDefaults {
         // gate so the user can review what's being created and decide whether to share.
         // check_app_updates is read-only and has no entry here.
         "generate_bug_report",
+
+        // Sub-agents — subagent_dispatch spawns an autonomous LLM run with the parent's
+        // tool surface. Approval-required so the user sees the task + tools before
+        // delegation happens. list / get / cancel are read-only or user-controlling and
+        // have no entry here.
+        "subagent_dispatch",
     )
 
     /**
