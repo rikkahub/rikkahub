@@ -40,6 +40,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.formatRelativeAgo
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.workflow.model.WorkflowAction
@@ -125,6 +126,50 @@ fun WorkflowDetailScreen(
                 colors = CustomColors.topBarColors,
             )
         },
+        // Sticky bottom bar — keeps Run-now / Edit / Delete reachable as history grows.
+        bottomBar = {
+            androidx.compose.material3.Surface(
+                tonalElevation = 3.dp,
+                color = CustomColors.topBarColors.containerColor,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                ) {
+                    Button(onClick = {
+                        scope.launch {
+                            val outcome = vm.runNow(currentLoaded.entity.id)
+                            history = vm.history(currentLoaded.entity.id)
+                            loaded = vm.get(currentLoaded.entity.id)
+                            snackbarHostState.showSnackbar(
+                                ctx.getString(R.string.setting_page_workflow_detail_run_now_done, outcome.status.name)
+                            )
+                        }
+                    }) {
+                        Text(stringResource(R.string.setting_page_workflow_detail_run_now))
+                    }
+                    TextButton(onClick = {
+                        nav.navigate(Screen.Chat(
+                            id = kotlin.uuid.Uuid.random().toString(),
+                            text = ctx.getString(
+                                R.string.setting_page_workflow_detail_edit_prefill,
+                                currentLoaded.entity.name,
+                            ).base64Encode(),
+                        ))
+                    }) {
+                        Text(stringResource(R.string.setting_page_workflow_detail_edit))
+                    }
+                    TextButton(onClick = { showDeleteConfirm = true }) {
+                        Text(
+                            stringResource(R.string.setting_page_workflow_detail_delete),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
@@ -191,46 +236,8 @@ fun WorkflowDetailScreen(
                     }
                 }
             }
-            // Footer buttons
-            item {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                ) {
-                    Button(onClick = {
-                        scope.launch {
-                            val outcome = vm.runNow(currentLoaded.entity.id)
-                            history = vm.history(currentLoaded.entity.id)
-                            loaded = vm.get(currentLoaded.entity.id)
-                            snackbarHostState.showSnackbar(
-                                ctx.getString(R.string.setting_page_workflow_detail_run_now_done, outcome.status.name)
-                            )
-                        }
-                    }) {
-                        Text(stringResource(R.string.setting_page_workflow_detail_run_now))
-                    }
-                    TextButton(onClick = {
-                        // Edit-in-chat: deep-link to a fresh chat with a pre-filled prompt.
-                        // Chat(id="") is the existing convention for "new conversation" — see
-                        // RouteActivity's Screen.Chat default elsewhere in nav.
-                        nav.navigate(Screen.Chat(
-                            id = "",
-                            text = ctx.getString(
-                                R.string.setting_page_workflow_detail_edit_prefill,
-                                currentLoaded.entity.name,
-                            ),
-                        ))
-                    }) {
-                        Text(stringResource(R.string.setting_page_workflow_detail_edit))
-                    }
-                    TextButton(onClick = { showDeleteConfirm = true }) {
-                        Text(
-                            stringResource(R.string.setting_page_workflow_detail_delete),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
+            // Run now / Edit / Delete moved to the Scaffold's bottomBar so they stay
+            // pinned and visible regardless of how long the history grows.
         }
     }
 }

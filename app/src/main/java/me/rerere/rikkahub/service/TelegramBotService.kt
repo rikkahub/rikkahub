@@ -76,9 +76,11 @@ class TelegramBotService : Service() {
     private val conversationRepo: ConversationRepository by inject()
     private val chatRepo: TelegramChatRepository by inject()
     private val settingsStore: SettingsStore by inject()
+    private val doctorChecks: me.rerere.rikkahub.ui.pages.setting.doctor.DoctorChecks by inject()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
+    private var externalGenPumpJob: Job? = null
 
     /**
      * Per-chat serialization for non-built-in messages. The poll loop launches each
@@ -111,6 +113,21 @@ class TelegramBotService : Service() {
      */
     private val turnJobs = java.util.concurrent.ConcurrentHashMap<Long, Job>()
 
+    /**
+     * Conversations whose generation pump is currently being driven by an active
+     * [handleIncoming] (i.e. a real Telegram-incoming-message turn). Used by the external
+     * generation-done listener to AVOID double-pumping: when handleIncoming finishes a
+     * turn, it streams the final text to Telegram itself, so the listener must skip.
+     *
+     * The listener fires for the OTHER case: a generation that wasn't kicked off by an
+     * inbound Telegram message — e.g. the [SubAgentEngine.notifyParentIfBackground] wake
+     * message, where a sub-agent finished and posted a synthetic user message into the
+     * parent's conversation. Without this listener, the parent's LLM responds silently
+     * to the wake — its reply lands in the in-app chat history but never reaches Telegram.
+     */
+    private val activeHandleIncomingConvs: java.util.concurrent.ConcurrentHashMap.KeySetView<Uuid, Boolean> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet<Uuid>()
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -140,6 +157,16 @@ class TelegramBotService : Service() {
         // (and any time the BUILT_IN_COMMANDS list changes between releases). Idempotent
         // and cheap; failures are logged but not fatal.
         scope.launch { registerBuiltInCommandsWithTelegram() }
+        // External generation-done pump: when a chat-mapped conversation finishes a
+        // generation that wasn't kicked off by handleIncoming (e.g. a sub-agent wake), push
+        // the assistant's reply text to Telegram so the user sees it without polling.
+        // GUARDED — onStartCommand runs many times in a session (service revive, APK
+        // reinstall during dev, bot re-toggle). Without this guard, every call spawns a
+        // fresh listener; each generationDoneFlow emit triggers ALL listeners; the chat
+        // gets N duplicate replies for one sub-agent wake.
+        if (externalGenPumpJob?.isActive != true) {
+            externalGenPumpJob = scope.launch { listenForExternalGenerationCompletions() }
+        }
         isRunning = true
         // START_NOT_STICKY: don't auto-revive; revival without a fresh foreground ticket would
         // crash with the same exception. The boot receiver, RikkaHubApp.onCreate, and the user
@@ -316,6 +343,54 @@ class TelegramBotService : Service() {
         val shift = (consecutiveErrors - 1).coerceAtMost(20)
         val computed = base shl shift
         return computed.coerceAtMost(cap)
+    }
+
+    /**
+     * Long-lived listener for generations completing on chat-mapped conversations that
+     * AREN'T currently being pumped by [handleIncoming]. Without this, sub-agent wake
+     * messages — posted via [SubAgentEngine.notifyParentIfBackground] →
+     * `chatService.sendMessage(parentConvId, …)` — kick off a generation in the parent's
+     * Telegram conversation, but its assistant reply never reaches Telegram because
+     * handleIncoming isn't running for that turn.
+     *
+     * The listener stays alive for the lifetime of the foreground service. Errors are
+     * logged but do not break the loop — a single bad emit shouldn't kill our pump.
+     */
+    private suspend fun listenForExternalGenerationCompletions() {
+        chatService.generationDoneFlow.collect { convId ->
+            // Skip if handleIncoming is driving this turn — it streams + finalises the
+            // assistant text to Telegram on its own.
+            if (convId in activeHandleIncomingConvs) return@collect
+            // Find the chat this conv is bound to. If none, the conv isn't a Telegram
+            // conv; nothing to do.
+            val mapping = runCatching { chatRepo.getByConversationId(convId.toString()) }
+                .getOrNull() ?: return@collect
+
+            // Harvest the most-recent assistant text. Mirrors SubAgentEngine.harvestFinalText
+            // but pulls from the live in-memory state when available so we get whatever the
+            // last gen actually produced (DB write may lag a few hundred ms behind).
+            val text = runCatching {
+                val conv = chatService.getConversationFlow(convId).value
+                val selected = conv.messageNodes.mapNotNull { it.messages.getOrNull(it.selectIndex) }
+                val lastAssistant = selected.lastOrNull { it.role.name.equals("assistant", ignoreCase = true) }
+                lastAssistant?.parts
+                    ?.filterIsInstance<me.rerere.ai.ui.UIMessagePart.Text>()
+                    ?.joinToString("\n") { it.text }
+                    ?.trim()
+                    .orEmpty()
+            }.getOrDefault("")
+
+            if (text.isBlank()) {
+                android.util.Log.i(TAG, "external-gen-pump: convId=$convId → empty assistant text, skipping")
+                return@collect
+            }
+            runCatching {
+                sendChunked(mapping.chatId, text, replyTo = null)
+                android.util.Log.i(TAG, "external-gen-pump: convId=$convId → pushed ${text.length} chars to Telegram chat ${mapping.chatId}")
+            }.onFailure {
+                android.util.Log.w(TAG, "external-gen-pump: send failed for convId=$convId", it)
+            }
+        }
     }
 
     /**
@@ -506,6 +581,10 @@ class TelegramBotService : Service() {
         // empty Conversation, and the toolCallId lookup would return null ("tool no
         // longer active"). Released in finally regardless of how we exit.
         chatService.addConversationReference(convId)
+        // Mark this conv as "Telegram-pumped right now" so the external generation-done
+        // listener doesn't ALSO push a copy of the assistant text — handleIncoming
+        // already streams + finalises it on its own.
+        activeHandleIncomingConvs.add(convId)
         // Tools we've already prompted for in this turn — tracked so a single tool call
         // doesn't get a second approval bubble if the loop re-enters before the user
         // resolves it.
@@ -612,6 +691,7 @@ class TelegramBotService : Service() {
             android.util.Log.w(TAG, "handleIncoming: generation flow ended with error", e)
         } finally {
             chatService.removeConversationReference(convId)
+            activeHandleIncomingConvs.remove(convId)
         }
 
         val finalReply = renderAssistantStream(convId, finalizing = true, baselineMessageCount)
@@ -619,23 +699,30 @@ class TelegramBotService : Service() {
 
         when {
             finalReply.isBlank() -> {
-                // The model called tool(s) but emitted no final user-facing text. The OLD
-                // wording ("no reply text - tool ran but produced no message") read like
-                // the bot froze; users hit /stop assuming it broke. Reword to honest +
-                // actionable so the user knows what to do next. Observed 2026-05-05 with
-                // a model that silently stopped after take_screenshot instead of chaining
-                // to telegram_send_photo. Also add a debug log distinguishing
-                // finish_reason=stop with no content from a stream error so future
-                // diagnoses don't conflate the two.
+                // The model called tool(s) but emitted no final user-facing text. We try
+                // to RESCUE useful artifacts before falling back to a textual hint:
+                //   - take_screenshot / take_photo wrote a file the user almost certainly
+                //     wanted to see — auto-send the photo to Telegram with a caption that
+                //     makes the rescue obvious. Without this, "show me the screenshot"
+                //     produces a take_screenshot call but no telegram_send_photo and the
+                //     user just sees "(model didn't reply)" — burying the file they asked
+                //     for behind a generic fallback string.
                 android.util.Log.i(
                     TAG,
                     "handleIncoming: empty final reply (model finished with no text after tool calls) chat=${m.chatId}",
                 )
-                val fallback = "(model called tools but didn't reply — try saying \"continue\" or switch model with /model)"
-                if (placeholderId != null) {
-                    try { client.editMessageText(m.chatId, placeholderId, fallback) } catch (_: Throwable) {}
-                } else {
-                    try { client.sendMessage(m.chatId, fallback) } catch (_: Throwable) {}
+                val rescued = tryRescueImageFromTurn(convId, baselineMessageCount, m.chatId)
+                if (!rescued) {
+                    val fallback = "(model called tools but didn't reply — try saying \"continue\", switch model with /model, or reset with /new)"
+                    if (placeholderId != null) {
+                        try { client.editMessageText(m.chatId, placeholderId, fallback) } catch (_: Throwable) {}
+                    } else {
+                        try { client.sendMessage(m.chatId, fallback) } catch (_: Throwable) {}
+                    }
+                } else if (placeholderId != null) {
+                    // We rescued the photo into a fresh Telegram message — clean up the
+                    // placeholder so the chat doesn't show a leftover "thinking…" line.
+                    try { client.deleteMessage(m.chatId, placeholderId) } catch (_: Throwable) {}
                 }
             }
             placeholderId != null && finalReply.length <= MAX_CHARS -> {
@@ -1475,6 +1562,8 @@ class TelegramBotService : Service() {
         cfg: me.rerere.rikkahub.data.telegram.TelegramBotConfig,
         cq: TelegramCallbackQuery,
     ) {
+        val cbStartMs = System.currentTimeMillis()
+        android.util.Log.i(TAG, "cb:${cq.callbackQueryId} START data=${cq.data} chat=${cq.chatId}")
         val sender = cq.senderId ?: return
         if (sender !in cfg.whitelist && cq.chatId !in cfg.whitelist) {
             android.util.Log.w(TAG, "handleCallbackQuery: dropping non-whitelisted sender=$sender chat=${cq.chatId}")
@@ -1552,6 +1641,15 @@ class TelegramBotService : Service() {
                 }
             }
 
+            // Ack the tap FIRST so Telegram's button spinner clears immediately. If we
+            // ack only after handleToolApproval (which cancels prior generation, mutates
+            // state, and triggers a fresh resume — non-trivial latency) the spinner sits
+            // for the full mutation duration; the tap looks unregistered and the user
+            // double-taps.
+            val ackStart = System.currentTimeMillis()
+            client.answerCallbackQuery(cq.callbackQueryId, label)
+            android.util.Log.i(TAG, "cb:${cq.callbackQueryId} ACKED in ${System.currentTimeMillis() - ackStart} ms (total ${System.currentTimeMillis() - cbStartMs} ms since START)")
+
             chatService.handleToolApproval(
                 conversationId = convId,
                 toolCallId = toolCallId,
@@ -1560,26 +1658,36 @@ class TelegramBotService : Service() {
                 scope = scope,
                 toolName = toolName,
             )
-
-            // Ack the tap (otherwise the spinner sits on the button forever) and rewrite
-            // the approval prompt in place so the chat history shows what was decided.
-            client.answerCallbackQuery(cq.callbackQueryId, label)
-            try {
-                val newText = buildString {
-                    append("<b>")
-                    append(TelegramHtmlRenderer.escape(label))
-                    append("</b>\n")
-                    append("Tool: <code>")
-                    append(TelegramHtmlRenderer.escape(toolName))
-                    append("</code>")
+            // Fire the edit on a separate coroutine so handleCallbackQuery returns
+            // immediately. Without this, the second tap arriving on a different card was
+            // hitting Telegram's per-chat rate limit because edit-A was still in flight
+            // while ack-B was being requested. The Mutex(toolCallId) is per-tool-call so
+            // releasing it here is safe — there are no more state-sensitive operations.
+            val newText = buildString {
+                append("<b>")
+                append(TelegramHtmlRenderer.escape(label))
+                append("</b>\n")
+                append("Tool: <code>")
+                append(TelegramHtmlRenderer.escape(toolName))
+                append("</code>")
+            }
+            // The local `scope` here is the ApprovalScope from the destructured Triple
+            // above — needs the qualified field reference to dispatch on the bot's scope.
+            this@TelegramBotService.scope.launch {
+                try {
+                    val editStart = System.currentTimeMillis()
+                    client.editMessageText(cq.chatId, cq.messageId, newText, parseMode = PARSE_MODE_HTML)
+                    android.util.Log.i(TAG, "cb:${cq.callbackQueryId} EDITED in ${System.currentTimeMillis() - editStart} ms (total ${System.currentTimeMillis() - cbStartMs} ms since START)")
+                } catch (e: Throwable) {
+                    android.util.Log.w(TAG, "cb:${cq.callbackQueryId} EDIT FAILED: ${e.message ?: e::class.simpleName}", e)
                 }
-                client.editMessageText(cq.chatId, cq.messageId, newText, parseMode = PARSE_MODE_HTML)
-            } catch (_: Throwable) {}
+            }
             ApprovalPromptRegistry.clear(toolCallId)
             // Drop the per-toolCallId mutex once we've acted on it. Successive taps would
             // hit the isPending early-out anyway, but no need to keep the entry around.
             approvalMutexes.remove(toolCallId)
         }
+        android.util.Log.i(TAG, "cb:${cq.callbackQueryId} END after ${System.currentTimeMillis() - cbStartMs} ms")
     }
 
     /**
@@ -1606,6 +1714,7 @@ class TelegramBotService : Service() {
             "/status" -> { handleStatusCommand(m.chatId); true }
             "/model" -> { handleModelCommand(m.chatId, arg); true }
             "/ratelimit" -> { handleRateLimitCommand(m.chatId, arg); true }
+            "/doctor" -> { handleDoctorCommand(m.chatId); true }
             else -> false
         }
         if (handled) {
@@ -1932,6 +2041,93 @@ class TelegramBotService : Service() {
     }
 
     /**
+     * Rescue an image artifact (take_screenshot / take_photo) when the model called the
+     * tool but forgot to chain into telegram_send_photo. Returns true if we actually
+     * dispatched a photo to Telegram, false if there was nothing to rescue.
+     *
+     * Looks at the most recent assistant message's tool calls, finds the latest one whose
+     * output JSON has `success: true` and a `gallery_path` (or `file_path`) pointing at an
+     * existing local image file. Sends that file via the Telegram Bot API with a caption
+     * that explains the rescue.
+     */
+    private suspend fun tryRescueImageFromTurn(
+        convId: kotlin.uuid.Uuid,
+        baselineMessageCount: Int,
+        chatId: Long,
+    ): Boolean {
+        val lastAssistant = runCatching {
+            val conv = chatService.getConversationFlow(convId).value
+            conv.currentMessages.drop(baselineMessageCount)
+                .lastOrNull { it.role == MessageRole.ASSISTANT }
+        }.getOrNull() ?: return false
+        val tools = lastAssistant.parts.filterIsInstance<UIMessagePart.Tool>()
+        if (tools.isEmpty()) return false
+        // Walk newest-first so if the model took multiple screenshots we send the last one.
+        for (tool in tools.reversed()) {
+            if (tool.toolName !in setOf("take_screenshot", "take_photo")) continue
+            val outText = tool.output.filterIsInstance<UIMessagePart.Text>()
+                .joinToString("") { it.text }
+            val parsed = runCatching {
+                kotlinx.serialization.json.Json.parseToJsonElement(outText)
+                    as? kotlinx.serialization.json.JsonObject
+            }.getOrNull() ?: continue
+            val ok = parsed["success"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() == true
+            if (!ok) continue
+            val path = parsed["gallery_path"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.isNotBlank() && !it.startsWith("(") }
+                ?: parsed["file_path"]?.jsonPrimitive?.contentOrNull
+                ?: continue
+            val file = java.io.File(path)
+            if (!file.exists() || !file.isFile) continue
+            val caption = if (tool.toolName == "take_screenshot")
+                "📸 (rescued — model took the screenshot but didn't reply with a description)"
+            else
+                "📸 (rescued — model captured the photo but didn't reply with a description)"
+            return runCatching {
+                client.sendPhoto(chatId, file, caption)
+                android.util.Log.i(TAG, "tryRescueImageFromTurn: sent ${tool.toolName} artifact to chat=$chatId path=$path")
+                true
+            }.getOrElse {
+                android.util.Log.w(TAG, "tryRescueImageFromTurn: sendPhoto failed", it)
+                false
+            }
+        }
+        return false
+    }
+
+    /**
+     * /doctor — run all DoctorChecks and stream the formatted report back to Telegram.
+     * Same data the in-app Doctor screen renders; useful when the user is remote and only
+     * has Telegram. Runs the checks inline (so cron/foreground tools see the same Conext).
+     */
+    private suspend fun handleDoctorCommand(chatId: Long) {
+        try { client.sendChatAction(chatId, "typing") } catch (_: Throwable) {}
+        val results = runCatching { doctorChecks.runAll() }.getOrElse {
+            try {
+                client.sendMessage(
+                    chatId,
+                    "🩺 Doctor failed to run: ${it::class.simpleName}: ${it.message ?: "(no message)"}",
+                )
+            } catch (_: Throwable) {}
+            return
+        }
+        val report = me.rerere.rikkahub.ui.pages.setting.doctor.DoctorReport.format(results)
+        // Chunk on raw text and send each chunk wrapped in <pre>...</pre> for monospace
+        // rendering. Skip sendChunked's markdown→HTML pass (it would mangle the report's
+        // existing layout); use the HTML parse mode directly with our own escaping.
+        val chunks = chunk(report, MAX_CHARS - 16)  // leave room for the <pre> wrapper
+        for (c in chunks) {
+            val html = "<pre>${me.rerere.rikkahub.data.telegram.TelegramHtmlRenderer.escape(c)}</pre>"
+            runCatching {
+                client.sendMessage(chatId, html, parseMode = PARSE_MODE_HTML)
+            }.onFailure {
+                // Fallback to plain text if HTML send fails for any reason.
+                runCatching { client.sendMessage(chatId, c) }
+            }
+        }
+    }
+
+    /**
      * Push the canonical built-in command list to Telegram + any custom commands the LLM
      * has previously persisted via telegram_set_commands. Called once on bot service
      * start. Without merging the custom commands here, every app restart would silently
@@ -2157,6 +2353,7 @@ class TelegramBotService : Service() {
             "status" to "Show service state, current model, assistant, and rate limit",
             "model" to "Show or switch the chat model. Usage: /model [name]",
             "ratelimit" to "Show or set the assistant's max output tokens. Usage: /ratelimit [number|clear]",
+            "doctor" to "Run app diagnostics — perms, services, DB, network, Termux",
         )
 
         /** Set whenever the service is alive AND its long-poll loop is running. */

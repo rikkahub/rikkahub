@@ -11,6 +11,9 @@ interface TelegramChatDao {
     @Query("SELECT * FROM telegram_chats WHERE chatId = :chatId LIMIT 1")
     suspend fun getByChatId(chatId: Long): TelegramChatEntity?
 
+    @Query("SELECT * FROM telegram_chats WHERE conversationId = :conversationId LIMIT 1")
+    suspend fun getByConversationId(conversationId: String): TelegramChatEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(row: TelegramChatEntity)
 

@@ -132,7 +132,14 @@ fun CardGroup(
     title: (@Composable () -> Unit)? = null,
     content: @Composable CardGroupScope.() -> Unit,
 ) {
-    val scope = CardGroupScope()
+    // Cache the scope across recompositions instead of allocating a fresh CardGroupScope
+    // + N CardGroupItem records every time the parent recomposes. On dense pages (the
+    // Local Tools toggle list has 30+ rows) the per-tap allocation churn raced the
+    // Switch's 150ms thumb-slide for main-thread frames and animations dropped to a
+    // visible <10 fps. Reusing the scope and clearing its items in place avoids the
+    // churn without changing the public DSL.
+    val scope = remember { CardGroupScope() }
+    scope.items.clear()
     scope.content()
 
     Column(modifier = modifier) {
