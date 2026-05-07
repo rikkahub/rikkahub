@@ -995,6 +995,11 @@
   <string name="skill_import_path_traversal">Zip contains an unsafe path; refusing to extract.</string>
   <string name="skill_import_unsupported_file_type">Unsupported file. Use a .md file or a .zip with SKILL.md inside.</string>
   <string name="skill_import_zip_too_large">Zip is too large (cap 20 MB / 200 files).</string>
+  <string name="skill_tester_prompt_placeholder">Type a prompt to test this skill…</string>
+  <string name="skill_tester_run">Run</string>
+  <string name="skill_tester_running">Running skill…</string>
+  <string name="skill_tester_timeout_error">Timed out after 2 minutes. The skill is still running in the background.</string>
+  <string name="skill_tester_title">Test %s</string>
   <string name="skills_page_add_title">Add Skill</string>
   <string name="skills_page_delete_message">Are you sure you want to delete "%s"? This action cannot be undone.</string>
   <string name="skills_page_delete_title">Delete Skill</string>

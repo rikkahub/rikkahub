@@ -95,6 +95,17 @@ val appModule = module {
         )
     }
 
+    // Phase 19B: Skill isolation tester. Eager construction is safe here — ChatService
+    // doesn't reach back into SkillTestRunner anywhere, so no DI cycle.
+    single {
+        me.rerere.rikkahub.skills.SkillTestRunner(
+            chatService = get(),
+            skillManager = get(),
+            conversationRepo = get(),
+            settingsStore = get(),
+        )
+    }
+
     // Phase 18: JS skills (run_js + secrets store)
     single { me.rerere.rikkahub.skills.js.JsSkillRunner(get()) }
     single { me.rerere.rikkahub.skills.js.SkillSecretsStore(get()) }
