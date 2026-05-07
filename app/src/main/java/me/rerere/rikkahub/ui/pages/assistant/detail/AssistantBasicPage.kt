@@ -400,6 +400,24 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_fast_path_router))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_fast_path_router_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.fastPathRouterEnabled,
+                        onCheckedChange = {
+                            onUpdate(assistant.copy(fastPathRouterEnabled = it))
+                        }
+                    )
+                }
+            )
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_thinking_budget))
                 },
             ) {

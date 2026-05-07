@@ -170,6 +170,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("sub_agents")          data object SubAgents          : LocalToolOption()
     @Serializable @SerialName("cost_guards")         data object CostGuards         : LocalToolOption()
     @Serializable @SerialName("workflows")           data object Workflows          : LocalToolOption()
+    @Serializable @SerialName("skill_import")        data object SkillImport        : LocalToolOption()
 }
 
 class LocalTools(
@@ -195,6 +196,7 @@ class LocalTools(
     private val conversationRepo: me.rerere.rikkahub.data.repository.ConversationRepository,
     private val workflowRepository: me.rerere.rikkahub.workflow.repository.WorkflowRepository,
     private val workflowEngine: me.rerere.rikkahub.workflow.execution.WorkflowEngine,
+    private val skillUrlImporter: me.rerere.rikkahub.skills.SkillUrlImporter,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -663,6 +665,10 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.CostGuards)) {
             tools.add(me.rerere.rikkahub.costguards.checkTokenUsageTool(settingsStore, conversationRepo))
+        }
+        if (options.contains(LocalToolOption.SkillImport)) {
+            tools.add(me.rerere.rikkahub.skills.skillInstallFromUrlTool(skillUrlImporter))
+            tools.add(me.rerere.rikkahub.skills.skillInstallFromTextTool(skillUrlImporter))
         }
         if (options.contains(LocalToolOption.Workflows)) {
             tools.add(me.rerere.rikkahub.workflow.tools.workflowCreateTool(

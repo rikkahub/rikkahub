@@ -87,6 +87,13 @@ val appModule = module {
         )
     }
 
+    // Phase 16: Skill URL-import
+    single {
+        me.rerere.rikkahub.skills.SkillUrlImporter(
+            skillManager = get<me.rerere.rikkahub.data.files.SkillManager>(),
+        )
+    }
+
     // Phase 12: Workflows
     single {
         me.rerere.rikkahub.workflow.repository.WorkflowRepository(
@@ -114,7 +121,7 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
 
     single {

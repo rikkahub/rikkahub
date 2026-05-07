@@ -349,16 +349,25 @@ class ChatService(
                 val currentConversation = session.state.value
 
                 // 添加消息到列表
-                val newConversation = currentConversation.copy(
+                val withUser = currentConversation.copy(
                     messageNodes = currentConversation.messageNodes + UIMessage(
                         role = MessageRole.USER,
                         parts = processedContent,
                     ).toMessageNode(),
                 )
-                saveConversation(conversationId, newConversation)
+                saveConversation(conversationId, withUser)
 
-                // 开始补全
-                if (answer) {
+                // Phase 16 — fast-path router. If the assistant has it enabled and the user's
+                // message matches a deterministic intent, run the matching tool and inject the
+                // result as a synthetic assistant message — skipping the LLM entirely.
+                // Conservative: any match failure (tool throws, no result) falls back to the
+                // normal LLM path. Headless conversations and non-text messages are skipped.
+                val routedHandled = if (answer)
+                    tryFastPathRoute(conversationId, processedContent, withUser)
+                else false
+
+                // 开始补全 — only if router didn't handle the turn
+                if (answer && !routedHandled) {
                     handleMessageComplete(conversationId)
                 }
 
@@ -369,6 +378,84 @@ class ChatService(
             }
         }
         session.setJob(job)
+    }
+
+    /**
+     * Phase 16 — fast-path router entry. Returns `true` if the router successfully handled
+     * the turn (synthesised an assistant message and stored it) so the caller knows to skip
+     * the normal LLM dispatch. Returns `false` to fall through.
+     */
+    private suspend fun tryFastPathRoute(
+        conversationId: Uuid,
+        userParts: List<UIMessagePart>,
+        afterUserSave: me.rerere.rikkahub.data.model.Conversation,
+    ): Boolean {
+        // Headless paths (cron / sub-agent / external-automation / workflow) must always go
+        // through the LLM — the fast-path is a per-user-turn optimisation, not a system-flow.
+        if (me.rerere.rikkahub.data.ai.tools.HeadlessConversations.isHeadless(conversationId)) return false
+
+        val assistant = settingsStore.settingsFlow.value.getCurrentAssistant()
+        if (!assistant.fastPathRouterEnabled) return false
+
+        val userText = userParts.filterIsInstance<UIMessagePart.Text>().joinToString(" ") { it.text }.trim()
+        if (userText.isBlank()) return false
+
+        val match = me.rerere.rikkahub.skills.FastPathRouter.route(userText) ?: return false
+
+        // Find the tool in the assistant's currently-registered surface. If the user's
+        // toggles don't include the underlying capability, fall through to the LLM (which
+        // will respond "I can't do that without the X tool").
+        val tools = localTools.getTools(assistant.localTools)
+        val tool = tools.firstOrNull { it.name == match.toolName } ?: run {
+            android.util.Log.d("FastPathRouter", "matched intent=${match.intent} but tool=${match.toolName} not registered for assistant; falling through")
+            return false
+        }
+
+        val rendered: String = try {
+            val out = tool.execute(match.args)
+            val rawText = out.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+            val parsed = runCatching {
+                kotlinx.serialization.json.Json.parseToJsonElement(rawText).jsonObject
+            }.getOrNull()
+            val formatted = if (match.format != null && parsed != null) {
+                runCatching { match.format.invoke(parsed) }.getOrNull()
+            } else null
+            // Fall back to raw text if formatter throws or produces nothing.
+            formatted?.takeIf { it.isNotBlank() } ?: rawText
+        } catch (t: Throwable) {
+            android.util.Log.w("FastPathRouter", "tool ${match.toolName} threw, falling back to LLM", t)
+            me.rerere.rikkahub.skills.FastPathRouterLog.record(
+                me.rerere.rikkahub.skills.FastPathRouterLog.Entry(
+                    whenMs = System.currentTimeMillis(),
+                    intent = match.intent,
+                    toolName = match.toolName,
+                    userText = userText.take(120),
+                    resultPreview = "tool threw: ${t.message?.take(80)}",
+                    skippedLlm = false,
+                )
+            )
+            return false
+        }
+
+        // Inject synthetic assistant message into the conversation.
+        val withAssistant = afterUserSave.copy(
+            messageNodes = afterUserSave.messageNodes + UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Text(rendered)),
+            ).toMessageNode(),
+        )
+        saveConversation(conversationId, withAssistant)
+        me.rerere.rikkahub.skills.FastPathRouterLog.record(
+            me.rerere.rikkahub.skills.FastPathRouterLog.Entry(
+                whenMs = System.currentTimeMillis(),
+                intent = match.intent,
+                toolName = match.toolName,
+                userText = userText.take(120),
+                resultPreview = rendered.take(200),
+                skippedLlm = true,
+            )
+        )
+        return true
     }
 
     private fun preprocessUserInputParts(parts: List<UIMessagePart>): List<UIMessagePart> {

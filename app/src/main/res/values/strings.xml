@@ -1196,6 +1196,17 @@
   <string name="setting_page_notifications_action_ago_minutes">%1$dm ago</string>
   <string name="setting_page_notifications_action_ago_hours">%1$dh ago</string>
 
+  <!-- Phase 16 — Fast-path router toggle (per-assistant). Lives inline in the basic
+       assistant settings page; the audit-log of recent matches is logcat-only in v1. -->
+  <string name="assistant_page_fast_path_router">Fast-path router</string>
+  <string name="assistant_page_fast_path_router_desc">Skip the LLM for high-confidence requests like \"what\'s my battery\", \"what time is it\", or \"list workflows\". The matching tool runs directly and you get an instant answer. Conservative — anything ambiguous still goes to the model. Logged to logcat (tag: FastPathRouter).</string>
+
+  <!-- Phase 16 — Skill import toggle. Privilege-escalation-adjacent (skills can carry
+       arbitrary tool calls), so per-call approval is mandatory and Always-Allow is
+       forbidden. -->
+  <string name="assistant_page_local_tools_skill_import_title">Skill import</string>
+  <string name="assistant_page_local_tools_skill_import_desc">Let the assistant install skills from a URL OR from text it already has (e.g. fetched via SSH / curl / MCP for authenticated servers). Native, openclaw, and Hermes formats. Per-call approval required for every install (Always Allow is disabled — you review the source each time).</string>
+
   <!-- Phase 12 — Workflows. Top-level Settings page + detail screen + per-assistant
        toggle. Strings are grouped by surface. Translations deferred (English-only). -->
   <string name="assistant_page_local_tools_workflows_title">Workflows</string>

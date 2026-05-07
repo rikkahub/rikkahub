@@ -106,6 +106,22 @@ Tell the AI "when X happens, do Y" and it builds the automation. Triggers cover 
 </td>
 </tr>
 <tr>
+<td valign="top">
+
+### Skills
+
+Reusable playbooks the AI can follow. Four built-in skills out of the box: auto-reply (read incoming messages, draft replies, send), morning briefing (calendar + weather + comms summary), smart-forward (catch a notification, forward the gist to a contact), notification-summarise-and-act (group, summarise, suggest next steps). All skills are plain markdown — edit them in-app. Install more from a URL or pipe them in from your own server (openclaw and Hermes formats both supported, with tool-name auto-mapping).
+
+</td>
+<td valign="top">
+
+### Fast-path router
+
+Skip the AI entirely for simple things. Ask "what's my battery", "what time is it", "list my workflows" — the matching tool runs directly and you get an answer in milliseconds, no token cost. Conservative on purpose: anything ambiguous still goes to the model. Off by default; enable per-assistant in Settings → Assistants → (assistant) → Basic.
+
+</td>
+</tr>
+<tr>
 <td colspan="2" align="center" valign="top">
 
 ### Safety + privacy

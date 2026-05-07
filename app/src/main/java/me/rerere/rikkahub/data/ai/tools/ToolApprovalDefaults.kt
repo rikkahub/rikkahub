@@ -158,6 +158,13 @@ object ToolApprovalDefaults {
         "workflow_delete",
         "workflow_set_enabled",
         "workflow_run",
+
+        // Skill import (Phase 16) — pulls a markdown / JSON skill from an arbitrary URL
+        // (or from raw text the LLM already fetched via ssh / curl / MCP) and installs
+        // it. Whatever is in the skill rides along with the assistant's tool surface,
+        // so this is privilege-escalation-adjacent. NO_ALWAYS_ALLOW below.
+        "skill_install_from_url",
+        "skill_install_from_text",
     )
 
     /**
@@ -170,6 +177,13 @@ object ToolApprovalDefaults {
     val NO_ALWAYS_ALLOW: Set<String> = setOf(
         "mcp_add",
         "mcp_update",
+        // Phase 16 — skill_install_from_url + skill_install_from_text. The skill body is
+        // fetched from an arbitrary URL (or supplied as raw text via any other tool, e.g.
+        // ssh_exec / termux_run_command for authenticated servers) and installed against
+        // the assistant's tool surface. We require per-call approval every single time so
+        // the user reviews the URL / source-label + skill name.
+        "skill_install_from_url",
+        "skill_install_from_text",
     )
 
     fun allowsAlwaysAllow(toolName: String): Boolean = toolName !in NO_ALWAYS_ALLOW
