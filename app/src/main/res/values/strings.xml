@@ -1331,5 +1331,83 @@
   <string name="relative_time_minutes_ago">%1$dm ago</string>
   <string name="relative_time_hours_ago">%1$dh ago</string>
   <string name="relative_time_days_ago">%1$dd ago</string>
+
+  <!-- Browser feature: Settings entry, Settings page, BrowserActivity chrome. -->
+  <string name="setting_page_browser">Browser</string>
+  <string name="setting_page_browser_desc">AI-driven web browser and skill viewer.</string>
+
+  <string name="assistant_page_local_tools_section_browser">Browser</string>
+  <string name="assistant_page_local_tools_browser_title">Browser</string>
+  <string name="assistant_page_local_tools_browser_desc">AI-driven web browser. 17 individually-togglable tools — configure read/write access in Settings → Browser.</string>
+
+  <string name="setting_browser_title">Browser</string>
+  <string name="setting_browser_section_browser">Browser</string>
+  <string name="setting_browser_open">Open browser</string>
+  <string name="setting_browser_open_desc">Launch the browser to about:blank — useful to log in once before letting the AI take over.</string>
+  <string name="setting_browser_clear_data">Clear browsing data</string>
+  <string name="setting_browser_clear_data_desc">Wipe cookies, local storage, and cached pages. Per-tool toggles are kept.</string>
+  <string name="setting_browser_clear_data_confirm_title">Clear browsing data?</string>
+  <string name="setting_browser_clear_data_confirm_body">This clears all cookies, local storage, and cached pages. You will need to re-log in to any site the AI was using.</string>
+  <string name="setting_browser_clear_data_confirm">Clear</string>
+  <string name="setting_browser_clear_data_done">Browsing data cleared.</string>
+
+  <string name="setting_browser_tools_enabled_title">Tools enabled</string>
+  <string name="setting_browser_category_read">Read</string>
+  <string name="setting_browser_category_write">Write</string>
+  <string name="setting_browser_category_loop_control">Loop control</string>
+
+  <string name="setting_browser_tool_open_title">Open URL</string>
+  <string name="setting_browser_tool_open_desc">Navigate to a URL.</string>
+  <string name="setting_browser_tool_current_url_title">Current URL</string>
+  <string name="setting_browser_tool_current_url_desc">Read the page\'s URL and title.</string>
+  <string name="setting_browser_tool_screenshot_title">Screenshot</string>
+  <string name="setting_browser_tool_screenshot_desc">Capture the visible viewport.</string>
+  <string name="setting_browser_tool_get_text_title">Get text</string>
+  <string name="setting_browser_tool_get_text_desc">Extract readable text from the page.</string>
+  <string name="setting_browser_tool_get_dom_title">Get DOM</string>
+  <string name="setting_browser_tool_get_dom_desc">Extract simplified HTML from the page.</string>
+  <string name="setting_browser_tool_get_links_title">Get links</string>
+  <string name="setting_browser_tool_get_links_desc">List all link URLs and labels.</string>
+  <string name="setting_browser_tool_back_title">Back</string>
+  <string name="setting_browser_tool_back_desc">Navigate back in browser history.</string>
+  <string name="setting_browser_tool_forward_title">Forward</string>
+  <string name="setting_browser_tool_forward_desc">Navigate forward in browser history.</string>
+  <string name="setting_browser_tool_wait_for_title">Wait for element</string>
+  <string name="setting_browser_tool_wait_for_desc">Pause until a CSS selector appears.</string>
+  <string name="setting_browser_tool_click_title">Click</string>
+  <string name="setting_browser_tool_click_desc">Click an element.</string>
+  <string name="setting_browser_tool_type_title">Type</string>
+  <string name="setting_browser_tool_type_desc">Type into an input field.</string>
+  <string name="setting_browser_tool_scroll_title">Scroll</string>
+  <string name="setting_browser_tool_scroll_desc">Scroll the page.</string>
+  <string name="setting_browser_tool_submit_title">Submit</string>
+  <string name="setting_browser_tool_submit_desc">Submit a form.</string>
+  <string name="setting_browser_tool_select_title">Select</string>
+  <string name="setting_browser_tool_select_desc">Choose a value in a &lt;select&gt;.</string>
+  <string name="setting_browser_tool_press_key_title">Press key</string>
+  <string name="setting_browser_tool_press_key_desc">Synthesize a keyboard event.</string>
+  <string name="setting_browser_tool_eval_js_title">Run JavaScript</string>
+  <string name="setting_browser_tool_eval_js_desc">Execute arbitrary JS in the page (HARDLINE-checked).</string>
+  <string name="setting_browser_tool_done_title">Browser-done</string>
+  <string name="setting_browser_tool_done_desc">Let the AI signal it has finished a task.</string>
+
+  <string name="setting_browser_section_defaults">Defaults &amp; limits</string>
+  <string name="setting_browser_search_engine">Search engine</string>
+  <string name="setting_browser_search_engine_desc">DuckDuckGo (default) — switching takes effect once browser_search ships.</string>
+  <string name="setting_browser_per_tool_timeout">Per-tool timeout</string>
+  <string name="setting_browser_per_tool_timeout_value">30 s</string>
+  <string name="setting_browser_single_task_timeout">Single-task timeout</string>
+  <string name="setting_browser_single_task_timeout_value">5 min</string>
+
+  <string name="browser_address_bar_close">Close browser</string>
+  <string name="browser_address_bar_back">Browser back</string>
+  <string name="browser_address_bar_forward">Browser forward</string>
+  <string name="browser_address_bar_refresh">Refresh page</string>
+  <string name="browser_address_bar_more">More options</string>
+  <string name="browser_address_bar_stop_ai">Stop AI</string>
+  <string name="browser_ai_stripe_idle">AI ready</string>
+  <string name="browser_ai_stripe_active">AI: %1$s</string>
+  <string name="browser_ai_stripe_expand">Show recent</string>
+  <string name="browser_ai_stripe_collapse">Hide</string>
 </resources>
 

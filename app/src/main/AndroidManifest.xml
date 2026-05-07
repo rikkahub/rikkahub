@@ -170,6 +170,17 @@
       android:excludeFromRecents="true"
       android:theme="@style/Theme.Rikkahub.ToolHost" />
 
+    <!-- In-app Browser Activity. Hosts the WebView the LLM drives via the browser_*
+         tools. INTERNET is already declared at the top of this manifest; nothing else
+         needed at install time. configChanges keeps the WebView alive across rotation
+         and keyboard show/hide so the AI doesn't lose its session mid-task. -->
+    <activity
+      android:name=".browser.BrowserActivity"
+      android:exported="false"
+      android:configChanges="screenSize|orientation|keyboardHidden"
+      android:hardwareAccelerated="true"
+      android:theme="@style/Theme.Rikkahub" />
+
     <!-- Phase 13: External Automation Intent API. Exported activity that accepts
          RUN_TASK / RUN_CHAT intents from Tasker / MacroDroid / Locale / app callers.
          Translucent + NoTitleBar so trusted-caller fires don't flash a window. The

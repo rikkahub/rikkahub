@@ -175,6 +175,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("skill_import")        data object SkillImport        : LocalToolOption()
     @Serializable @SerialName("js_skills")           data object JsSkills           : LocalToolOption()
     @Serializable @SerialName("system_intents")      data object SystemIntents      : LocalToolOption()
+    @Serializable @SerialName("browser")             data object Browser            : LocalToolOption()
 }
 
 class LocalTools(
