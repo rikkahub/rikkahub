@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-07",
+  "skills": [
+    {
+      "name": "auto-reply",
+      "title": "Auto-reply",
+      "description": "Reply to a contact's notifications via the messaging app on screen.",
+      "category": "automation",
+      "license": "Apache-2.0",
+      "size_kb": 4,
+      "compatibility": "any",
+      "is_bundled": true
+    },
+    {
+      "name": "morning-briefing",
+      "title": "Morning Briefing",
+      "description": "Reads weather, calendar, and unread email at wake-up.",
+      "category": "productivity",
+      "license": "Apache-2.0",
+      "size_kb": 4,
+      "compatibility": "any",
+      "is_bundled": true
+    },
+    {
+      "name": "smart-forward",
+      "title": "Smart Forward",
+      "description": "Catch a notification, summarise, forward to another contact.",
+      "category": "automation",
+      "license": "Apache-2.0",
+      "size_kb": 4,
+      "compatibility": "any",
+      "is_bundled": true
+    },
+    {
+      "name": "notification-summarise-and-act",
+      "title": "Notification Summary",
+      "description": "Read recent notifications, group by app, summarise, suggest actions.",
+      "category": "productivity",
+      "license": "Apache-2.0",
+      "size_kb": 5,
+      "compatibility": "any",
+      "is_bundled": true
+    }
+  ]
+}

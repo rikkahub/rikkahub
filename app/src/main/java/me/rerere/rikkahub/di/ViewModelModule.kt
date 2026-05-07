@@ -66,7 +66,13 @@ val viewModelModule = module {
     viewModelOf(::DeveloperVM)
     viewModelOf(::PromptVM)
     viewModelOf(::QuickMessagesVM)
-    viewModelOf(::SkillsVM)
+    viewModel<SkillsVM> {
+        SkillsVM(
+            context = get(),
+            skillManager = get(),
+            urlImporter = get(),
+        )
+    }
     viewModelOf(::SkillDetailVM)
     viewModelOf(::FavoriteVM)
     viewModelOf(::SearchVM)

@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.extensions
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,22 +14,28 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +51,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.text.font.FontWeight
+import com.composables.icons.lucide.Globe
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.X
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
@@ -53,6 +65,7 @@ import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.skills.CatalogEntry
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -71,6 +84,7 @@ fun SkillsPage() {
     val context = LocalContext.current
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
+    var showCatalog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
 
     Scaffold(
@@ -78,6 +92,14 @@ fun SkillsPage() {
             LargeFlexibleTopAppBar(
                 title = { Text(stringResource(R.string.skills_page_title)) },
                 navigationIcon = { BackButton() },
+                actions = {
+                    IconButton(onClick = { showCatalog = true }) {
+                        Icon(
+                            imageVector = Lucide.Globe,
+                            contentDescription = stringResource(R.string.skill_catalog_title),
+                        )
+                    }
+                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
@@ -159,6 +181,25 @@ fun SkillsPage() {
         )
     }
 
+    // Phase 19C — local-file picker. Lifted to screen scope so the launcher survives
+    // dialog dismiss/recreate (per Compose docs: `rememberLauncherForActivityResult`
+    // belongs at the highest stable composable, NOT inside a dialog body).
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            vm.importFromLocalFile(uri) { success, message ->
+                showImportDialog = false
+                if (success) {
+                    toaster.show(context.getString(R.string.skills_page_import_success, message))
+                } else {
+                    val key = mapImportErrorKeyToString(context, message)
+                    toaster.show(context.getString(R.string.skills_page_import_failed, key))
+                }
+            }
+        }
+    }
+
     if (showImportDialog) {
         ImportSkillDialog(
             onDismiss = { showImportDialog = false },
@@ -171,6 +212,14 @@ fun SkillsPage() {
                         toaster.show(context.getString(R.string.skills_page_import_failed, message))
                     }
                 }
+            },
+            onPickFile = {
+                openDocumentLauncher.launch(arrayOf(
+                    "text/markdown",
+                    "text/plain",
+                    "application/zip",
+                    "application/octet-stream",
+                ))
             },
         )
     }
@@ -187,6 +236,138 @@ fun SkillsPage() {
         onDismiss = { deleteTarget = null },
     ) {
         Text(stringResource(R.string.skills_page_delete_message, deleteTarget?.name ?: ""))
+    }
+
+    if (showCatalog) {
+        val installedNames by vm.installedSkillNames.collectAsStateWithLifecycle()
+        FeaturedCatalogSheet(
+            entries = vm.catalog.skills,
+            installedNames = installedNames,
+            onInstall = { entry, onDone ->
+                vm.installFromCatalog(entry) { success, message ->
+                    if (success) {
+                        toaster.show(context.getString(R.string.skills_page_import_success, message))
+                    } else {
+                        val key = mapImportErrorKeyToString(context, message)
+                        toaster.show(context.getString(R.string.skill_catalog_install_failed, key))
+                    }
+                    onDone()
+                }
+            },
+            onDismiss = { showCatalog = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FeaturedCatalogSheet(
+    entries: List<CatalogEntry>,
+    installedNames: Set<String>,
+    onInstall: (CatalogEntry, onResult: () -> Unit) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var installing by remember { mutableStateOf<Set<String>>(emptySet()) }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.7f)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.skill_catalog_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(Lucide.X, contentDescription = stringResource(R.string.cancel))
+                }
+            }
+            if (entries.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.skills_page_empty_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    items(entries, key = { it.name }) { entry ->
+                        CatalogRow(
+                            entry = entry,
+                            installed = entry.name in installedNames,
+                            installing = entry.name in installing,
+                            onInstall = {
+                                installing = installing + entry.name
+                                onInstall(entry) {
+                                    installing = installing - entry.name
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CatalogRow(
+    entry: CatalogEntry,
+    installed: Boolean,
+    installing: Boolean,
+    onInstall: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "${entry.category} · ${entry.sizeKb} KB",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            Text(
+                text = entry.title,
+                style = MaterialTheme.typography.titleSmallEmphasized,
+            )
+            Text(
+                text = entry.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+            )
+            FilledTonalButton(
+                onClick = onInstall,
+                enabled = !installed && !installing,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+            ) {
+                Text(
+                    when {
+                        installed -> stringResource(R.string.skill_catalog_installed)
+                        installing -> stringResource(R.string.skill_tester_running)
+                        else -> stringResource(R.string.skill_catalog_install)
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -329,6 +510,7 @@ private fun AddSkillDialog(
 private fun ImportSkillDialog(
     onDismiss: () -> Unit,
     onConfirm: (repoUrl: String) -> Unit,
+    onPickFile: () -> Unit,
 ) {
     var url by rememberSaveable { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -354,6 +536,16 @@ private fun ImportSkillDialog(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // Phase 19C — secondary action that defers to the screen-level file
+                // launcher. The dialog passes through; SkillsPage handles the SAF
+                // OpenDocument result and routes to the VM.
+                OutlinedButton(
+                    onClick = onPickFile,
+                    enabled = !loading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.skill_import_from_file_label))
+                }
                 if (loading) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -383,4 +575,23 @@ private fun ImportSkillDialog(
             TextButton(onClick = onDismiss, enabled = !loading) { Text(stringResource(R.string.cancel)) }
         },
     )
+}
+
+/**
+ * Map a VM-emitted error key (one of the `skill_import_*` resource names) to its
+ * localized string. We use this rather than passing string-resource IDs out of the VM
+ * because the VM has no `Context` callback path for stringResource lookups.
+ */
+private fun mapImportErrorKeyToString(context: android.content.Context, key: String): String {
+    return when (key) {
+        "skill_import_unsupported_file_type" ->
+            context.getString(R.string.skill_import_unsupported_file_type)
+        "skill_import_missing_skill_md" ->
+            context.getString(R.string.skill_import_missing_skill_md)
+        "skill_import_path_traversal" ->
+            context.getString(R.string.skill_import_path_traversal)
+        "skill_import_zip_too_large" ->
+            context.getString(R.string.skill_import_zip_too_large)
+        else -> key  // already a free-form message (e.g. importer's "html_response" detail)
+    }
 }
