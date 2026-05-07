@@ -99,6 +99,12 @@ class RikkaHubApp : Application() {
         // auto-revive it after a process kill; we need to bring it back ourselves.
         startTelegramBotIfEnabled()
 
+        // Initialise the agent's `~` workspace at /data/data/<pkg>/files/workspace/.
+        // Tools resolve `~` and `~/foo` paths to this dir, giving the LLM a stable
+        // sandbox for `.learnings/`, scratch files, and skill state without scoped-
+        // storage friction. Termux-style: private, persistent, OS-blessed.
+        me.rerere.rikkahub.data.ai.tools.local.AgentWorkspace.init(this)
+
         // Copy any default skills bundled in assets/default-skills/* into the user's skills
         // dir on first launch. SkillManager guards via a per-skill .seeded sentinel so this
         // is a one-time install — user edits / deletes are respected on subsequent launches.

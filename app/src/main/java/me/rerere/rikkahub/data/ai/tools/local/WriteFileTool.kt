@@ -66,10 +66,11 @@ fun writeTextFileTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = To
     execute = { input ->
         val params: JsonObject = input.jsonObject
 
-        val path = params["path"]?.jsonPrimitive?.contentOrNull
-        if (path.isNullOrBlank()) {
-            return@Tool errEnvelope("missing_path", "path is required (absolute path)")
+        val rawPath = params["path"]?.jsonPrimitive?.contentOrNull
+        if (rawPath.isNullOrBlank()) {
+            return@Tool errEnvelope("missing_path", "path is required (absolute path or ~/...)")
         }
+        val path = AgentWorkspace.expand(rawPath)
         val content = params["content"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool errEnvelope("missing_content", "content is required")
 
@@ -81,6 +82,9 @@ fun writeTextFileTool(@Suppress("UNUSED_PARAMETER") context: Context): Tool = To
         }
 
         val file = File(path)
+        // Auto-mkdir parent for tilde-rooted writes — the agent shouldn't have to call
+        // create_directory before writing to a fresh ~/learnings/ERRORS.md.
+        if (rawPath.startsWith("~/")) file.parentFile?.mkdirs()
 
         if (file.exists() && !append && !overwrite) {
             return@Tool errEnvelope(

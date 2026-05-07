@@ -88,14 +88,15 @@ fun transcribeAudioFileTool(context: Context): Tool = Tool(
     needsApproval = true,
     execute = { input ->
         val params = input.jsonObject
-        val path = params["path"]?.jsonPrimitive?.contentOrNull
+        val rawPath = params["path"]?.jsonPrimitive?.contentOrNull
         val language = params["language"]?.jsonPrimitive?.contentOrNull
             ?.takeIf { it.isNotBlank() && it != "auto" }
 
         // --- 1. Path required ---
-        if (path.isNullOrBlank()) {
-            return@Tool errEnv("missing_path", "path is required (absolute path to an audio file)")
+        if (rawPath.isNullOrBlank()) {
+            return@Tool errEnv("missing_path", "path is required (absolute path to an audio file, or ~/...)")
         }
+        val path = AgentWorkspace.expand(rawPath)
 
         // --- 2. Path safety ---
         PathSafetyGuard.check(path)?.let { v ->
