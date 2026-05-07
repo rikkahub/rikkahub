@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RikkaHub Agent · Tell your phone what to do.</title>
+  <meta name="description" content="A native Android LLM agent with 60+ device tools, SSH, scheduled jobs, screen automation, file manager, and a remote Telegram bot. All opt-in. Open source." />
+  <meta name="theme-color" content="#1a1b26" />
+  <meta name="color-scheme" content="dark" />
+
+  <meta property="og:title" content="RikkaHub Agent · Tell your phone what to do." />
+  <meta property="og:description" content="A native Android LLM agent with 60+ device tools, SSH, cron, file manager, and a Telegram bot. Open source. Android 8+." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://extv.github.io/rikkahub-agent/" />
+  <meta property="og:image" content="https://raw.githubusercontent.com/ExTV/rikkahub-agent/master/docs/icon.png" />
+  <meta property="og:image:width" content="512" />
+  <meta property="og:image:height" content="512" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="RikkaHub Agent" />
+  <meta name="twitter:description" content="Tell your phone what to do. It does it." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/ExTV/rikkahub-agent/master/docs/icon.png" />
+
+  <link rel="icon" type="image/png" href="icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "RikkaHub Agent",
+    "applicationCategory": "ProductivityApplication",
+    "operatingSystem": "Android 8+",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "url": "https://extv.github.io/rikkahub-agent/",
+    "downloadUrl": "https://github.com/ExTV/rikkahub-agent/releases/latest",
+    "description": "On-device LLM agent for Android with 60+ device tools, SSH, scheduled jobs, file manager, and a Telegram bot.",
+    "author": { "@type": "Person", "name": "ExTV", "url": "https://github.com/ExTV" }
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Tokyo Night palette + glow accents ────────────── */
+    :root {
+      --bg:         #1a1b26;
+      --bg-dark:    #16161e;
+      --bg-card:    #1f2335;
+      --bg-card2:   #24283b;
+      --bg-elev:    #2a2f47;
+      --border:     #292e42;
+      --border-soft:#222536;
+      --text:       #c0caf5;
+      --text-dim:   #a9b1d6;
+      --muted:      #7982b0;
+      --green:      #9ece6a;
+      --green-soft: #b9e08c;
+      --green-dim:  #1e3319;
+      --green-glow: rgba(158, 206, 106, 0.22);
+      --blue:       #7aa2f7;
+      --cyan:       #7dcfff;
+      --cyan-glow:  rgba(125, 207, 255, 0.18);
+      --yellow:     #e0af68;
+      --red:        #f7768e;
+      --purple:     #bb9af7;
+      --purple-glow:rgba(187, 154, 247, 0.16);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    html, body { background: var(--bg); }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      line-height: 1.6;
+      letter-spacing: -0.005em;
+      -webkit-font-smoothing: antialiased;
+      font-feature-settings: 'cv11','ss01';
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* ── ambient page background ───────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(900px 500px at 12% -10%, var(--green-glow), transparent 60%),
+        radial-gradient(700px 500px at 92% 6%, var(--purple-glow), transparent 65%),
+        radial-gradient(800px 600px at 50% 110%, var(--cyan-glow), transparent 70%);
+      opacity: 0.9;
+    }
+
+    body > * { position: relative; z-index: 1; }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { color: var(--cyan); }
+
+    code, pre, .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+    /* ── reveal on scroll ──────────────────────────────── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 0.7s cubic-bezier(0.2,0.7,0.2,1), transform 0.7s cubic-bezier(0.2,0.7,0.2,1);
+    }
+    .reveal.in { opacity: 1; transform: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal, .reveal.in { opacity: 1; transform: none; transition: none; }
+      *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; }
+      html { scroll-behavior: auto; }
+    }
+
+    /* ── NAV ───────────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.6rem;
+      height: 60px;
+      background: rgb(22 22 30 / 0.65);
+      backdrop-filter: blur(18px) saturate(140%);
+      -webkit-backdrop-filter: blur(18px) saturate(140%);
+      border-bottom: 1px solid transparent;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    nav.scrolled {
+      background: rgb(22 22 30 / 0.85);
+      border-bottom-color: var(--border);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .nav-logo:hover { color: var(--text); }
+
+    .nav-logo-img {
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
+      box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06), 0 0 24px var(--green-glow);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.7rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.42rem 0.95rem;
+      border-radius: 6px;
+      background: var(--green);
+      color: var(--bg-dark);
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.2s;
+    }
+
+    .nav-cta:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px var(--green-glow);
+    }
+
+    /* ── BUTTONS ───────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.7rem 1.35rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.2s, border-color 0.15s;
+      font-family: inherit;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+
+    .btn-primary {
+      background: var(--green);
+      color: var(--bg-dark);
+      box-shadow: 0 0 0 1px rgb(255 255 255 / 0.05), 0 8px 24px -8px var(--green-glow);
+    }
+    .btn-primary:hover {
+      background: var(--green-soft);
+      box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 14px 32px -10px var(--green-glow);
+    }
+
+    .btn-ghost {
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      background: rgb(31 35 53 / 0.4);
+      backdrop-filter: blur(8px);
+    }
+    .btn-ghost:hover {
+      border-color: var(--muted);
+      color: var(--text);
+      background: rgb(31 35 53 / 0.7);
+    }
+
+    /* ── HERO ──────────────────────────────────────────── */
+    #hero {
+      padding: 6.5rem 1.5rem 5rem;
+      max-width: 1100px;
+      margin: 0 auto;
+      position: relative;
+      text-align: center;
+    }
+
+    .hero-glow {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1100px;
+      height: 600px;
+      pointer-events: none;
+      background: radial-gradient(closest-side, var(--green-glow), transparent 70%);
+      filter: blur(40px);
+      opacity: 0.85;
+      z-index: 0;
+      animation: pulse 8s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
+      50%      { opacity: 0.95; transform: translateX(-50%) scale(1.05); }
+    }
+
+    .hero-inner { position: relative; z-index: 1; }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.32rem 0.85rem;
+      border-radius: 999px;
+      background: rgb(31 35 53 / 0.6);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      letter-spacing: 0;
+      margin-bottom: 1.6rem;
+    }
+
+    .hero-pill .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: blink 2s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 60%, 100% { opacity: 1; }
+      30%           { opacity: 0.3; }
+    }
+
+    h1 {
+      font-size: clamp(2.8rem, 7vw, 5rem);
+      font-weight: 800;
+      line-height: 1.02;
+      letter-spacing: -0.045em;
+      text-wrap: balance;
+      margin-bottom: 1.6rem;
+      color: var(--text);
+    }
+
+    h1 em {
+      font-style: normal;
+      background: linear-gradient(120deg, var(--green) 0%, var(--cyan) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 24px rgba(158, 206, 106, 0.3));
+    }
+
+    .hero-sub {
+      font-size: 1.08rem;
+      color: var(--text-dim);
+      max-width: 1020px;
+      margin: 0 auto 2.4rem;
+      text-wrap: pretty;
+      line-height: 1.7;
+    }
+
+    .hero-sub strong { color: var(--text); font-weight: 600; }
+
+    .hero-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 1.6rem;
+    }
+
+    .hero-trust {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0;
+    }
+
+    .hero-trust .sep { color: var(--border); }
+
+    /* ── HERO TERMINAL MOCKUP ──────────────────────────── */
+    .hero-terminal {
+      max-width: 760px;
+      margin: 4rem auto 0;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 30px 80px -20px rgba(0,0,0,0.5),
+                  0 0 0 1px rgb(255 255 255 / 0.02),
+                  0 0 60px -15px var(--green-glow);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .term-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.7rem 1rem;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .term-dots { display: flex; gap: 0.4rem; }
+    .term-dot { width: 11px; height: 11px; border-radius: 50%; }
+    .term-dot.r { background: #ff5f57; }
+    .term-dot.y { background: #febc2e; }
+    .term-dot.g { background: #28c840; }
+
+    .term-title {
+      flex: 1;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+      letter-spacing: 0;
+    }
+
+    .term-body {
+      padding: 1.4rem 1.6rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.86rem;
+      line-height: 1.85;
+      text-align: left;
+      color: var(--text-dim);
+      overflow-x: auto;
+    }
+
+    .term-line { white-space: pre-wrap; }
+    .term-prompt { color: var(--green); user-select: none; }
+    .term-user   { color: var(--cyan); }
+    .term-tool   { color: var(--yellow); }
+    .term-ok     { color: var(--green); }
+    .term-info   { color: var(--muted); }
+    .term-out    { color: var(--text); }
+
+    .term-cursor {
+      display: inline-block;
+      width: 9px;
+      height: 1em;
+      vertical-align: -0.2em;
+      background: var(--cyan);
+      animation: caret 1.05s steps(2) infinite;
+      margin-left: 2px;
+    }
+    @keyframes caret { 50% { opacity: 0; } }
+
+    /* ── SECTIONS ──────────────────────────────────────── */
+    section { padding: 6rem 1.5rem; position: relative; }
+
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    .section-label {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--purple);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 0.7rem;
+      padding: 0.18rem 0.7rem;
+      background: rgba(187, 154, 247, 0.08);
+      border: 1px solid rgba(187, 154, 247, 0.2);
+      border-radius: 999px;
+    }
+
+    h2 {
+      font-size: clamp(1.9rem, 3.6vw, 2.8rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.6rem;
+      color: var(--text);
+      line-height: 1.15;
+    }
+
+    .section-sub {
+      color: var(--text-dim);
+      max-width: 640px;
+      font-size: 1.05rem;
+      text-wrap: pretty;
+      margin-bottom: 3rem;
+      line-height: 1.65;
+    }
+
+    /* ── STATS STRIP ───────────────────────────────────── */
+    #stats {
+      padding: 0 1.5rem 5rem;
+    }
+
+    .stats-row {
+      max-width: 980px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+      align-items: center;
+      gap: 1rem;
+      padding: 2rem 1.5rem;
+      background: rgb(31 35 53 / 0.5);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      backdrop-filter: blur(8px);
+    }
+
+    .stat { text-align: center; }
+    .stat-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 600;
+      background: linear-gradient(135deg, var(--green) 0%, var(--cyan) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+    .stat-label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+      font-weight: 500;
+      letter-spacing: 0.005em;
+    }
+    .stat-sep {
+      width: 1px;
+      height: 40px;
+      background: var(--border);
+    }
+
+    @media (max-width: 720px) {
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .stats-row .stat-sep { display: none; }
+      .stats-row .stat { padding: 0.8rem 0; }
+    }
+
+    /* ── USE CASES ─────────────────────────────────────── */
+    #usecases { padding-top: 0; }
+
+    .quote-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1rem;
+    }
+
+    .quote-card {
+      background: rgb(31 35 53 / 0.5);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.4rem 1.5rem 1.4rem 3.2rem;
+      font-size: 0.96rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+      position: relative;
+      transition: border-color 0.2s, transform 0.2s, background 0.2s;
+      backdrop-filter: blur(8px);
+    }
+
+    .quote-card:hover {
+      border-color: rgba(158, 206, 106, 0.5);
+      background: rgb(36 40 59 / 0.7);
+      transform: translateY(-2px);
+    }
+
+    .quote-mark {
+      position: absolute;
+      top: 0.65rem;
+      left: 1.2rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.9rem;
+      color: var(--green);
+      opacity: 0.55;
+      line-height: 1;
+    }
+
+    .quote-card em {
+      color: var(--text);
+      font-style: normal;
+      font-weight: 500;
+    }
+
+    /* ── FEATURES (bento) ──────────────────────────────── */
+    #features {
+      background:
+        radial-gradient(900px 400px at 80% 10%, rgba(125, 207, 255, 0.06), transparent 60%),
+        var(--bg);
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .feature-card {
+      background: rgb(31 35 53 / 0.7);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      transition: border-color 0.2s, background 0.2s, transform 0.2s;
+      backdrop-filter: blur(8px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(400px 300px at var(--mx, 50%) var(--my, 0%), rgba(158, 206, 106, 0.06), transparent 65%);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover::after { opacity: 1; }
+
+    .feature-card:hover {
+      border-color: rgba(158, 206, 106, 0.35);
+      background: rgb(36 40 59 / 0.85);
+      transform: translateY(-2px);
+    }
+
+    .feature-card.span-2 { grid-column: span 2; }
+
+    .feature-icon {
+      width: 42px;
+      height: 42px;
+      background: var(--green-dim);
+      border: 1px solid rgba(158, 206, 106, 0.25);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 0.5rem;
+      color: var(--green);
+      box-shadow: 0 0 18px -6px var(--green-glow);
+    }
+
+    .feature-card h3 {
+      font-size: 1.08rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .feature-card p {
+      font-size: 0.94rem;
+      color: var(--text-dim);
+      line-height: 1.65;
+    }
+
+    .feature-card.span-2 h3 { font-size: 1.22rem; }
+    .feature-card.span-2 p  { font-size: 0.99rem; }
+
+    .feature-card code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82em;
+      background: var(--bg-card2);
+      color: var(--cyan);
+      padding: 0.12em 0.4em;
+      border-radius: 4px;
+    }
+
+    .feature-card strong { color: var(--text); font-weight: 600; }
+
+    @media (max-width: 900px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .feature-card.span-2 { grid-column: span 2; }
+    }
+    @media (max-width: 600px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .feature-card.span-2 { grid-column: span 1; }
+    }
+
+    /* ── QUICK START (premium terminal) ────────────────── */
+    #quickstart {
+      background: var(--bg);
+    }
+
+    .qs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr;
+      gap: 3rem;
+      align-items: start;
+    }
+
+    @media (max-width: 820px) {
+      .qs-grid { grid-template-columns: 1fr; gap: 2rem; }
+    }
+
+    .qs-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .qs-step {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      padding: 1rem 1.1rem;
+      background: rgb(31 35 53 / 0.4);
+      border: 1px solid var(--border-soft);
+      border-radius: 10px;
+      transition: border-color 0.2s, background 0.2s, transform 0.2s;
+    }
+
+    .qs-step:hover {
+      border-color: var(--border);
+      background: rgb(31 35 53 / 0.7);
+      transform: translateX(2px);
+    }
+
+    .qs-step-num {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      color: var(--bg-dark);
+      font-size: 0.78rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px -4px var(--green-glow);
+    }
+
+    .qs-step p { font-size: 0.97rem; color: var(--text-dim); line-height: 1.55; }
+    .qs-step strong { color: var(--text); font-weight: 600; }
+    .qs-step a { color: var(--cyan); }
+    .qs-step code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82em;
+      background: var(--bg-card2);
+      color: var(--cyan);
+      padding: 0.12em 0.4em;
+      border-radius: 4px;
+    }
+
+    /* terminal in QS */
+    .qs-terminal {
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 30px 60px -20px rgba(0,0,0,0.4), 0 0 40px -10px var(--cyan-glow);
+      overflow: hidden;
+      align-self: start;
+      position: sticky;
+      top: 80px;
+    }
+
+    @media (max-width: 820px) { .qs-terminal { position: static; } }
+
+    .qs-tabs {
+      display: flex;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .qs-tab {
+      padding: 0.7rem 1.1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      letter-spacing: 0;
+    }
+
+    .qs-tab:hover { color: var(--text-dim); background: rgb(255 255 255 / 0.02); }
+
+    .qs-tab[aria-selected="true"] {
+      color: var(--green);
+      border-bottom-color: var(--green);
+    }
+
+    .qs-tab-panel {
+      display: none;
+      padding: 1.4rem 1.6rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.83rem;
+      line-height: 1.95;
+      color: var(--text-dim);
+      overflow-x: auto;
+    }
+
+    .qs-tab-panel[data-active="true"] { display: block; }
+
+    .qs-tab-panel pre { white-space: pre-wrap; }
+
+    .c-prompt  { color: var(--green); user-select: none; }
+    .c-user    { color: var(--cyan); }
+    .c-comment { color: var(--muted); }
+    .c-cmd     { color: var(--text); }
+    .c-flag    { color: var(--yellow); }
+    .c-str     { color: var(--green-soft); }
+
+    /* ── CTA ───────────────────────────────────────────── */
+    #cta {
+      padding: 6rem 1.5rem;
+      text-align: center;
+      background: var(--bg);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cta-card {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 4rem 2rem;
+      border-radius: 20px;
+      background:
+        radial-gradient(800px 400px at 50% -20%, rgba(158, 206, 106, 0.18), transparent 60%),
+        linear-gradient(180deg, rgb(36 40 59 / 0.7) 0%, rgb(31 35 53 / 0.5) 100%);
+      border: 1px solid var(--border);
+      box-shadow: 0 30px 70px -20px rgba(0,0,0,0.5), 0 0 0 1px rgb(255 255 255 / 0.02);
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(12px);
+    }
+
+    .cta-card::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 20px;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(158, 206, 106, 0.4), transparent 40%, transparent 60%, rgba(125, 207, 255, 0.3));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+              mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .cta-card h2 {
+      font-size: clamp(1.9rem, 4vw, 3rem);
+      margin-bottom: 1rem;
+    }
+
+    .cta-card p {
+      color: var(--text-dim);
+      font-size: 1.08rem;
+      max-width: 520px;
+      margin: 0 auto 2rem;
+      line-height: 1.6;
+    }
+
+    .cta-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+
+    /* ── FAQ ───────────────────────────────────────────── */
+    #faq {
+      background:
+        radial-gradient(700px 350px at 20% 80%, rgba(187, 154, 247, 0.05), transparent 60%),
+        var(--bg);
+    }
+
+    .faq-list {
+      max-width: 820px;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgb(31 35 53 / 0.5);
+      backdrop-filter: blur(8px);
+    }
+
+    details {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+
+    details[open] { background: rgb(36 40 59 / 0.7); }
+    details:last-child { border-bottom: none; }
+
+    summary {
+      padding: 1.2rem 1.6rem;
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--text);
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      transition: color 0.15s;
+      letter-spacing: -0.005em;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+    summary:hover { color: var(--cyan); }
+
+    summary::after {
+      content: '';
+      display: block;
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237982b0' stroke-width='2' stroke-linecap='round'><path d='M12 5v14M5 12h14'/></svg>");
+      transition: transform 0.25s ease;
+    }
+
+    details[open] summary::after { transform: rotate(45deg); }
+
+    .faq-answer {
+      padding: 0 1.6rem 1.4rem;
+      font-size: 0.95rem;
+      color: var(--text-dim);
+      line-height: 1.75;
+      max-width: 720px;
+    }
+
+    .faq-answer code {
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      padding: 0.1em 0.4em;
+      border-radius: 4px;
+      font-size: 0.85em;
+      color: var(--cyan);
+    }
+
+    /* ── FOOTER ────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 4rem 1.5rem 2.5rem;
+      background: var(--bg-dark);
+    }
+
+    .footer-grid {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr;
+      gap: 2.5rem;
+      margin-bottom: 3rem;
+    }
+
+    @media (max-width: 760px) {
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 460px) {
+      .footer-grid { grid-template-columns: 1fr; }
+    }
+
+    .footer-brand {
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+    }
+
+    .footer-brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .footer-brand-logo img {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+    }
+
+    .footer-brand p {
+      font-size: 0.86rem;
+      color: var(--muted);
+      line-height: 1.55;
+      max-width: 280px;
+    }
+
+    .footer-col h4 {
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      letter-spacing: 0.14em;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      margin-bottom: 1rem;
+    }
+
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 0.55rem; }
+
+    .footer-col a {
+      font-size: 0.88rem;
+      color: var(--muted);
+      transition: color 0.15s;
+    }
+
+    .footer-col a:hover { color: var(--text); text-decoration: none; }
+
+    .footer-bottom {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding-top: 1.6rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .footer-bottom a { color: var(--muted); }
+    .footer-bottom a:hover { color: var(--text-dim); }
+
+    /* ── BACK TO TOP ───────────────────────────────────── */
+    #to-top {
+      position: fixed;
+      bottom: 1.4rem;
+      right: 1.4rem;
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: rgb(31 35 53 / 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s, transform 0.2s, color 0.15s, border-color 0.15s;
+      z-index: 50;
+    }
+
+    #to-top.show { opacity: 1; pointer-events: auto; }
+    #to-top:hover { color: var(--green); border-color: var(--muted); transform: translateY(-2px); }
+
+    /* ── RESPONSIVE TWEAKS ─────────────────────────────── */
+    @media (max-width: 720px) {
+      nav { padding: 0 1rem; }
+      nav .nav-links { display: none; }
+      #hero { padding-top: 4.5rem; padding-bottom: 3rem; }
+      .hero-terminal { margin-top: 2.5rem; font-size: 0.78rem; }
+      section { padding: 4rem 1.2rem; }
+      .footer-grid { gap: 1.8rem; }
+    }
+
+    @media (max-width: 480px) {
+      .term-body { padding: 1rem 1.1rem; font-size: 0.74rem; }
+      h1 { font-size: 2.6rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="https://github.com/ExTV/rikkahub-agent" class="nav-logo">
+    <img src="icon.png" alt="" class="nav-logo-img" />
+    <span>RikkaHub Agent</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#quickstart">Quick start</a></li>
+    <li><a href="#faq">FAQ</a></li>
+    <li><a href="https://github.com/ExTV/rikkahub-agent">GitHub</a></li>
+  </ul>
+  <a href="https://github.com/ExTV/rikkahub-agent/releases/latest" class="nav-cta">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Download
+  </a>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-inner">
+    <span class="hero-pill"><span class="dot"></span>Open source · Built for Android</span>
+    <h1>Tell it once.<br /><em>Walk away.</em></h1>
+    <p class="hero-sub">
+      A fork of <a href="https://github.com/rikkahub/rikkahub">RikkaHub</a> that turns the native Android LLM chat client into a real on-device agent.<br />
+      <strong>60+ device tools</strong>, scheduled jobs, SSH, screen automation, file manager, and a remote Telegram bot.<br />
+      All opt-in. Tell it what to do in plain language; it runs in the background, on your phone, on your terms.
+    </p>
+    <div class="hero-actions">
+      <a href="https://github.com/ExTV/rikkahub-agent/releases/latest" class="btn btn-primary">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download APK
+      </a>
+      <a href="https://github.com/ExTV/rikkahub-agent" class="btn btn-ghost">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
+    <div class="hero-trust">
+      <span>Android 8+</span>
+      <span class="sep">/</span>
+      <span>ARM64 · x86_64</span>
+      <span class="sep">/</span>
+      <span>AGPLv3</span>
+      <span class="sep">/</span>
+      <span>No telemetry</span>
+    </div>
+  </div>
+
+</section>
+
+<!-- STATS -->
+<section id="stats">
+  <div class="stats-row reveal">
+    <div class="stat">
+      <div class="stat-num">60+</div>
+      <div class="stat-label">device tools</div>
+    </div>
+    <div class="stat-sep"></div>
+    <div class="stat">
+      <div class="stat-num">5+</div>
+      <div class="stat-label">LLM providers</div>
+    </div>
+    <div class="stat-sep"></div>
+    <div class="stat">
+      <div class="stat-num">3</div>
+      <div class="stat-label">approval layers</div>
+    </div>
+    <div class="stat-sep"></div>
+    <div class="stat">
+      <div class="stat-num">100%</div>
+      <div class="stat-label">on your phone</div>
+    </div>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section id="usecases">
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">In your words</span>
+      <h2>One sentence. Your phone takes it from there.</h2>
+      <p class="section-sub">Each of these is a one-line setup. The phone runs them in the background while you live your life.</p>
+    </div>
+
+    <div class="quote-grid">
+      <div class="quote-card reveal"><span class="quote-mark">"</span><em>Every weekday at 9am, summarize my unread WhatsApp into one Telegram message.</em></div>
+      <div class="quote-card reveal"><span class="quote-mark">"</span><em>If my home server's disk fills up, ping me.</em></div>
+      <div class="quote-card reveal"><span class="quote-mark">"</span><em>Watch my notifications. If anything from my boss comes in, forward it to Telegram. Quietly ignore the rest.</em></div>
+      <div class="quote-card reveal"><span class="quote-mark">"</span><em>Find the PDF on my phone that mentions 'invoice' and read me the first paragraph.</em></div>
+      <div class="quote-card reveal"><span class="quote-mark">"</span><em>Take a screenshot every 30 minutes for the next 4 hours so I can see what I actually did all afternoon.</em></div>
+      <div class="quote-card reveal"><span class="quote-mark">"</span><em>Use Termux to build me a webpage listing everything you can do, then open it in my browser.</em></div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">Features</span>
+      <h2>Everything an agent should have.</h2>
+      <p class="section-sub">Six pillars, every one of them off by default until you turn it on.</p>
+    </div>
+
+    <div class="features-grid">
+
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="3"/><circle cx="12" cy="18" r="0.6" fill="currentColor"/></svg>
+        </div>
+        <h3>Control your phone</h3>
+        <p>Tap, swipe, scroll, screenshots, open apps, torch, brightness, volume, notifications, vibrate, share. Plus read battery, WiFi, signal, location, sensors, contacts, and SMS. <strong>60+ tools</strong>, all built into Android, no extra apps required.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8l3 3-3 3M14 14h3"/></svg>
+        </div>
+        <h3>SSH from your pocket</h3>
+        <p>Save your servers once and the AI can SSH into any of them on demand. Run a command, upload a file, pull down a backup, tail a log. Key-based auth, saved hosts, approval gating on first connect and destructive commands.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <h3>Schedule anything</h3>
+        <p>"Every Monday at 8", "every two hours", "next Friday at 3pm". Jobs survive reboots and battery saver. Choose AI-at-runtime decisions, or pre-bake a fixed action that runs without using AI tokens.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        </div>
+        <h3>Telegram bot</h3>
+        <p>Talk to your assistant from anywhere. Set up a private bot with <code>@BotFather</code>, then chat with it like a contact. Voice notes, photos, PDFs all work; voice gets transcribed locally via whisper.cpp. Inline approval buttons. Allowlist-only.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h3>Find &amp; manage files</h3>
+        <p>Built-in file manager the AI can drive. <em>"Find every PDF mentioning 'invoice' on my phone"</em> works in one sentence. Read, save, copy, move, rename, delete. System folders are off-limits, even if you ask.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        </div>
+        <h3>Safety in three layers</h3>
+        <p><strong>Per-assistant toggles</strong> — every tool starts off. <strong>Per-call approval</strong> — Allow once, this chat, always, or deny. <strong>HARDLINE floor</strong> — wipe-everything, fork bombs, and shell tricks to bypass the rule are blocked unconditionally.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- QUICK START -->
+<section id="quickstart">
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">Quick start</span>
+      <h2>Up and running in under a minute.</h2>
+      <p class="section-sub">No configuration needed for chat. Tools and the bot are opt-in once the app is open.</p>
+    </div>
+
+    <div class="qs-grid">
+      <div class="qs-steps reveal">
+        <div class="qs-step">
+          <div class="qs-step-num">1</div>
+          <p><strong>Install.</strong> Download the latest <code>*-universal-debug.apk</code> from <a href="https://github.com/ExTV/rikkahub-agent/releases/latest">Releases</a>, allow install from unknown sources, open.</p>
+        </div>
+        <div class="qs-step">
+          <div class="qs-step-num">2</div>
+          <p><strong>Add an LLM provider.</strong> Settings → Providers → pick one → paste API key. Pixel 8/9/10 users can flip on the built-in <strong>AICore</strong> card for fully on-device Gemini Nano.</p>
+        </div>
+        <div class="qs-step">
+          <div class="qs-step-num">3</div>
+          <p><strong>Turn on what you want.</strong> Settings → Assistants → tap your assistant → <strong>Local Tools</strong> → flip the categories you want enabled.</p>
+        </div>
+        <div class="qs-step">
+          <div class="qs-step-num">4</div>
+          <p><strong>(Optional) Telegram bot.</strong> Get a token from <a href="https://t.me/BotFather">@BotFather</a>, your numeric id from <a href="https://t.me/userinfobot">@userinfobot</a>, then say in chat: <em>"Set up the Telegram bot. Token …. My user id …. Set me as default chat. Enable it."</em></p>
+        </div>
+        <div class="qs-step">
+          <div class="qs-step-num">5</div>
+          <p><strong>Just talk to it.</strong> If you don't turn anything on, the app behaves exactly like vanilla RikkaHub.</p>
+        </div>
+      </div>
+
+      <div class="qs-terminal reveal">
+        <div class="qs-tabs" role="tablist">
+          <button class="qs-tab" role="tab" aria-selected="true" data-tab="prompts">› try it</button>
+          <button class="qs-tab" role="tab" aria-selected="false" data-tab="build">$ build it</button>
+        </div>
+        <div class="qs-tab-panel" data-tab="prompts" data-active="true">
+<pre><span class="c-comment"># Things to ask, once tools are on:</span>
+
+<span class="c-prompt">› </span><span class="c-user">"Find every PDF on my phone that mentions
+  'invoice' and read me the first paragraph."</span>
+
+<span class="c-prompt">› </span><span class="c-user">"Every weekday at 9am, summarize my unread
+  WhatsApp into one Telegram message."</span>
+
+<span class="c-prompt">› </span><span class="c-user">"SSH into home-server and ping me if any
+  partition is over 90% full."</span>
+
+<span class="c-prompt">› </span><span class="c-user">"Watch my notifications. If anything from
+  my boss comes in, forward it to Telegram."</span></pre>
+        </div>
+        <div class="qs-tab-panel" data-tab="build" data-active="false">
+<pre><span class="c-comment"># Build the APK yourself</span>
+<span class="c-prompt">$ </span><span class="c-cmd">git clone</span> <span class="c-str">https://github.com/ExTV/rikkahub-agent.git</span>
+<span class="c-prompt">$ </span><span class="c-cmd">cd</span> rikkahub-agent
+<span class="c-prompt">$ </span><span class="c-cmd">./gradlew</span> :app:installDebug
+
+<span class="c-comment"># Requirements:</span>
+<span class="c-comment">#   - Android SDK 37</span>
+<span class="c-comment">#   - JDK 17</span>
+<span class="c-comment">#   - bun (for the in-app web UI bundle)</span>
+
+<span class="c-comment"># Run unit tests</span>
+<span class="c-prompt">$ </span><span class="c-cmd">./gradlew</span> :app:testDebugUnitTest</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta">
+  <div class="cta-card reveal">
+    <h2>Put your phone to work.</h2>
+    <p>Free, open source, runs entirely on your device. The hard part is deciding what to delegate first.</p>
+    <div class="cta-actions">
+      <a href="https://github.com/ExTV/rikkahub-agent/releases/latest" class="btn btn-primary">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download the latest APK
+      </a>
+      <a href="https://github.com/ExTV/rikkahub-agent" class="btn btn-ghost">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        Source on GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="container">
+    <div class="reveal" style="text-align: center;">
+      <span class="section-label">FAQ</span>
+      <h2>Common questions</h2>
+      <p class="section-sub" style="margin: 0 auto 3rem;">If something isn't covered here, open an issue on GitHub.</p>
+    </div>
+
+    <div class="faq-list reveal">
+
+      <details>
+        <summary>Does this require root?</summary>
+        <div class="faq-answer">
+          No. RikkaHub Agent uses standard Android permissions and accessibility-service APIs. No root, no Magisk, no custom ROM. Some advanced tools (notification listener, screen automation) need a one-tap permission grant in Settings; everything else is runtime permissions.
+        </div>
+      </details>
+
+      <details>
+        <summary>Is my data sent anywhere?</summary>
+        <div class="faq-answer">
+          Only to the LLM provider <em>you</em> pick. If you choose <strong>AICore</strong> on a Pixel 8/9/10, inference is fully on-device and nothing leaves the phone. Passwords and API keys are never written to log files. Cloud backups skip your saved server credentials and Telegram bot token.
+        </div>
+      </details>
+
+      <details>
+        <summary>What LLM providers work?</summary>
+        <div class="faq-answer">
+          OpenAI, Google, Anthropic, Ollama, and any OpenAI-compatible endpoint (Groq, Mistral, OpenRouter, vLLM, llama.cpp, LM Studio, etc.). Plus <strong>AICore</strong> for on-device Gemini Nano on Pixel 8/9/10+.
+        </div>
+      </details>
+
+      <details>
+        <summary>How are dangerous tools handled?</summary>
+        <div class="faq-answer">
+          Three layers, strictest last. <strong>(1)</strong> Every tool category starts off — you flip on only what you want, per assistant. <strong>(2)</strong> Consequential tools (SSH commands, file deletes, app launches, sending messages) prompt you before running, with Allow once / this chat / always / Deny. <strong>(3)</strong> A short <code>HARDLINE</code> list (wipe everything, reboot, fork bombs, system file destruction, and shell tricks to bypass the rule) is blocked unconditionally — even if you tell the AI to do one of these, it won't.
+        </div>
+      </details>
+
+      <details>
+        <summary>Do scheduled jobs survive reboot or battery saver?</summary>
+        <div class="faq-answer">
+          Yes. Jobs are persisted and restored after reboot, and the cron service runs as a foreground service so Doze and battery saver don't kill it. Each job stores its prompt + assistant + trigger, so behavior is reproducible across runs.
+        </div>
+      </details>
+
+      <details>
+        <summary>How is this different from vanilla RikkaHub?</summary>
+        <div class="faq-answer">
+          Upstream <a href="https://github.com/rikkahub/rikkahub">RikkaHub</a> is a beautiful native LLM chat client. This fork keeps that UI down to the pixel and adds the agent layer: 60+ device tools, SSH, cron, Telegram bot, notification listener, file manager, screen automation, and the three-layer approval gate. If you don't enable any of the new features, the app behaves exactly like vanilla RikkaHub.
+        </div>
+      </details>
+
+      <details>
+        <summary>Is this affiliated with the upstream RikkaHub team?</summary>
+        <div class="faq-answer">
+          No. This is an independent fork. All credit for the chat client, provider abstraction, and UI design goes to <a href="https://github.com/Re-ovo">Re-ovo</a> and the upstream contributors. Issues with the agent layer should be filed here, not upstream.
+        </div>
+      </details>
+
+      <details>
+        <summary>What do the APKs in Releases mean?</summary>
+        <div class="faq-answer">
+          Releases ship a single <code>*-universal-debug.apk</code> per version — debug-signed for ease of install, ARM64 + x86_64 + ARMv7 in one file. Each release is tagged <code>vX.Y.Z-agent.N</code> where the upstream RikkaHub version is <code>vX.Y.Z</code> and <code>N</code> is the agent revision on top.
+        </div>
+      </details>
+
+      <details>
+        <summary>License?</summary>
+        <div class="faq-answer">
+          AGPLv3, inherited from upstream. See the <a href="https://github.com/ExTV/rikkahub-agent/blob/master/LICENSE">LICENSE</a> file for the full text and the upstream segmented dual-licensing terms.
+        </div>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-grid">
+    <div class="footer-brand">
+      <div class="footer-brand-logo">
+        <img src="icon.png" alt="" />
+        <span>RikkaHub Agent</span>
+      </div>
+      <p>An on-device LLM agent for Android. Open source. Tell it what to do; it does it.</p>
+    </div>
+
+    <div class="footer-col">
+      <h4>Project</h4>
+      <ul>
+        <li><a href="https://github.com/ExTV/rikkahub-agent">GitHub</a></li>
+        <li><a href="https://github.com/ExTV/rikkahub-agent/releases">Releases</a></li>
+        <li><a href="https://github.com/ExTV/rikkahub-agent/issues">Issues</a></li>
+        <li><a href="https://github.com/ExTV/rikkahub-agent/blob/master/LICENSE">License</a></li>
+      </ul>
+    </div>
+
+    <div class="footer-col">
+      <h4>Built on</h4>
+      <ul>
+        <li><a href="https://github.com/rikkahub/rikkahub">RikkaHub (upstream)</a></li>
+        <li><a href="https://github.com/mwiede/jsch">JSch · SSH</a></li>
+        <li><a href="https://github.com/jmrozanec/cron-utils">cron-utils</a></li>
+        <li><a href="https://github.com/ggerganov/whisper.cpp">whisper.cpp</a></li>
+      </ul>
+    </div>
+
+    <div class="footer-col">
+      <h4>Author</h4>
+      <ul>
+        <li><a href="https://github.com/ExTV">@ExTV on GitHub</a></li>
+        <li><a href="https://github.com/ExTV/Podroid">Podroid</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <span>© 2026 ExTV · AGPLv3</span>
+  </div>
+</footer>
+
+<button id="to-top" aria-label="Back to top" title="Back to top">
+  <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+
+<script>
+  // ── nav scrolled state ─────────────────────────────────
+  (function() {
+    var nav = document.getElementById('nav');
+    var toTop = document.getElementById('to-top');
+    function onScroll() {
+      var y = window.scrollY || window.pageYOffset;
+      nav.classList.toggle('scrolled', y > 12);
+      toTop.classList.toggle('show', y > 600);
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  })();
+
+  // ── back-to-top ────────────────────────────────────────
+  document.getElementById('to-top').addEventListener('click', function() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // ── reveal-on-scroll ───────────────────────────────────
+  (function() {
+    if (!('IntersectionObserver' in window)) {
+      document.querySelectorAll('.reveal').forEach(function(el) { el.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+    document.querySelectorAll('.reveal').forEach(function(el) { io.observe(el); });
+  })();
+
+  // ── feature card spotlight ─────────────────────────────
+  document.querySelectorAll('.feature-card').forEach(function(card) {
+    card.addEventListener('pointermove', function(e) {
+      var r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+      card.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+    });
+  });
+
+  // ── quick-start tabs ───────────────────────────────────
+  (function() {
+    var tabs = document.querySelectorAll('.qs-tab');
+    var panels = document.querySelectorAll('.qs-tab-panel');
+    tabs.forEach(function(t) {
+      t.addEventListener('click', function() {
+        var name = t.dataset.tab;
+        tabs.forEach(function(o) { o.setAttribute('aria-selected', o === t ? 'true' : 'false'); });
+        panels.forEach(function(p) { p.dataset.active = (p.dataset.tab === name) ? 'true' : 'false'; });
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>
